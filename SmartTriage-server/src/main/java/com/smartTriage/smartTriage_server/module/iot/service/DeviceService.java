@@ -1,0 +1,463 @@
+package com.smartTriage.smartTriage_server.module.iot.service;
+
+import com.smartTriage.smartTriage_server.common.enums.DeviceStatus;
+import com.smartTriage.smartTriage_server.common.exception.DuplicateResourceException;
+import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
+import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
+import com.smartTriage.smartTriage_server.module.hospital.service.HospitalService;
+import com.smartTriage.smartTriage_server.module.iot.dto.*;
+import com.smartTriage.smartTriage_server.module.iot.entity.DeviceSession;
+import com.smartTriage.smartTriage_server.module.iot.entity.IoTDevice;
+import com.smartTriage.smartTriage_server.module.iot.mapper.IoTMapper;
+import com.smartTriage.smartTriage_server.module.iot.repository.DeviceSessionRepository;
+import com.smartTriage.smartTriage_server.module.iot.repository.IoTDeviceRepository;
+import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
+import com.smartTriage.smartTriage_server.module.visit.service.VisitService;
+import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.security.SecureRandom;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * DeviceService — manages IoT device lifecycle and monitoring sessions.
+ *
+ * Responsibilities:
+ * - Device registration and API key provisioning
+ * - Device authentication (API key lookup)
+ * - Heartbeat processing
+ * - Monitoring session management (start / stop / query)
+ * - Device status transitions
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class DeviceService {
+
+    private final IoTDeviceRepository deviceRepository;
+    private final DeviceSessionRepository sessionRepository;
+    private final HospitalService hospitalService;
+    private final VisitService visitService;
+    private final RealTimeEventPublisher eventPublisher;
+
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
+    // ====================================================================
+    // DEVICE REGISTRATION
+    // ====================================================================
+
+    /**
+     * Register a new IoT device. Generates a unique API key for device
+     * authentication.
+     */
+    @Transactional
+    public DeviceResponse registerDevice(RegisterDeviceRequest request) {
+        // Check serial number uniqueness
+        deviceRepository.findBySerialNumberAndIsActiveTrue(request.getSerialNumber())
+                .ifPresent(d -> {
+                    throw new DuplicateResourceException("IoTDevice", "serialNumber", request.getSerialNumber());
+                });
+
+        Hospital hospital = hospitalService.findHospitalOrThrow(request.getHospitalId());
+
+        String apiKey = generateApiKey();
+
+        IoTDevice device = IoTDevice.builder()
+                .serialNumber(request.getSerialNumber())
+                .deviceName(request.getDeviceName())
+                .deviceType(request.getDeviceType())
+                .hospital(hospital)
+                .apiKey(apiKey)
+                .status(DeviceStatus.REGISTERED)
+                .firmwareVersion(request.getFirmwareVersion())
+                .macAddress(request.getMacAddress())
+                .location(request.getLocation())
+                .heartbeatTimeoutSeconds(
+                        request.getHeartbeatTimeoutSeconds() != null
+                                ? request.getHeartbeatTimeoutSeconds()
+                                : 30)
+                .dataIntervalSeconds(
+                        request.getDataIntervalSeconds() != null
+                                ? request.getDataIntervalSeconds()
+                                : 5)
+                .notes(request.getNotes())
+                .build();
+
+        device = deviceRepository.save(device);
+
+        log.info("IoT device registered: {} (Serial: {}, Hospital: {}, Type: {})",
+                device.getDeviceName(), device.getSerialNumber(),
+                hospital.getName(), device.getDeviceType());
+
+        // Return with API key visible (only time it's returned in full)
+        DeviceResponse response = IoTMapper.toResponse(device);
+        response.setApiKey(apiKey);
+        return response;
+    }
+
+    // ====================================================================
+    // DEVICE POWER ON / OFF (admin activates the physical device)
+    // ====================================================================
+
+    /**
+     * Simulate powering on a device.
+     * Sets status → ONLINE, battery 100 %, good WiFi RSSI, and a fresh heartbeat.
+     */
+    @Transactional
+    public DeviceResponse powerOnDevice(UUID deviceId) {
+        IoTDevice device = findDeviceOrThrow(deviceId);
+
+        if (device.getStatus() != DeviceStatus.REGISTERED
+                && device.getStatus() != DeviceStatus.OFFLINE) {
+            throw new IllegalStateException(
+                    "Device " + device.getSerialNumber() + " is already powered on. " +
+                            "Current status: " + device.getStatus());
+        }
+
+        device.setStatus(DeviceStatus.ONLINE);
+        device.setBatteryLevel(100);
+        device.setWifiRssi(-40); // strong signal
+        device.setLastHeartbeatAt(Instant.now());
+        device = deviceRepository.save(device);
+
+        log.info("Device {} powered ON by admin", device.getSerialNumber());
+        publishDeviceStatus(device);
+        return IoTMapper.toResponse(device);
+    }
+
+    /**
+     * Simulate powering off a device. Ends any active session first.
+     */
+    @Transactional
+    public DeviceResponse powerOffDevice(UUID deviceId) {
+        IoTDevice device = findDeviceOrThrow(deviceId);
+
+        if (device.getStatus() == DeviceStatus.REGISTERED
+                || device.getStatus() == DeviceStatus.OFFLINE
+                || device.getStatus() == DeviceStatus.DECOMMISSIONED) {
+            throw new IllegalStateException(
+                    "Device " + device.getSerialNumber() + " is not currently powered on. " +
+                            "Current status: " + device.getStatus());
+        }
+
+        // If it's monitoring, end the active session first
+        if (device.getStatus() == DeviceStatus.MONITORING) {
+            stopMonitoringForDevice(deviceId, "Device powered off");
+        }
+
+        device.setStatus(DeviceStatus.OFFLINE);
+        device.setBatteryLevel(null);
+        device.setWifiRssi(null);
+        device = deviceRepository.save(device);
+
+        log.info("Device {} powered OFF by admin", device.getSerialNumber());
+        publishDeviceStatus(device);
+        return IoTMapper.toResponse(device);
+    }
+
+    // ====================================================================
+    // DEVICE AUTHENTICATION
+    // ====================================================================
+
+    /**
+     * Authenticate a device by its API key. Returns the device entity or throws.
+     * Called on every incoming data stream request.
+     */
+    public IoTDevice authenticateDevice(String apiKey) {
+        return deviceRepository.findByApiKeyAndIsActiveTrue(apiKey)
+                .orElseThrow(() -> new ResourceNotFoundException("IoTDevice", "apiKey", "***"));
+    }
+
+    // ====================================================================
+    // HEARTBEAT
+    // ====================================================================
+
+    /**
+     * Process a heartbeat from a device. Updates last seen timestamp and status.
+     */
+    @Transactional
+    public void processHeartbeat(IoTDevice device, String ipAddress) {
+        // Re-fetch to get the latest version (avoids optimistic lock conflicts
+        // when the built-in simulator or another source updates the same device)
+        IoTDevice fresh = deviceRepository.findById(device.getId())
+                .orElse(device);
+
+        fresh.setLastHeartbeatAt(Instant.now());
+        if (ipAddress != null) {
+            fresh.setIpAddress(ipAddress);
+        }
+
+        // If device was REGISTERED or OFFLINE, bring it ONLINE
+        if (fresh.getStatus() == DeviceStatus.REGISTERED
+                || fresh.getStatus() == DeviceStatus.OFFLINE) {
+            fresh.setStatus(DeviceStatus.ONLINE);
+            log.info("Device {} came online", fresh.getSerialNumber());
+        }
+
+        deviceRepository.save(fresh);
+
+        // Notify frontend of device status change
+        publishDeviceStatus(fresh);
+    }
+
+    // ====================================================================
+    // MONITORING SESSION MANAGEMENT
+    // ====================================================================
+
+    /**
+     * Start a monitoring session — link a device to a patient's visit.
+     * Only one active session per device is allowed.
+     */
+    @Transactional
+    public DeviceSessionResponse startMonitoring(StartMonitoringRequest request) {
+        IoTDevice device = findDeviceOrThrow(request.getDeviceId());
+        Visit visit = visitService.findVisitOrThrow(request.getVisitId());
+
+        // Validate: device must be ONLINE (not already MONITORING or OFFLINE)
+        if (device.getStatus() != DeviceStatus.ONLINE
+                && device.getStatus() != DeviceStatus.REGISTERED) {
+            throw new IllegalStateException(
+                    "Device " + device.getSerialNumber() + " is not available for monitoring. " +
+                            "Current status: " + device.getStatus());
+        }
+
+        // Validate: no active session on this device
+        // If device is ONLINE but has a stale active session (e.g., after server
+        // restart
+        // or simulator toggle), auto-close it instead of blocking the new assignment.
+        sessionRepository.findByDeviceIdAndSessionActiveTrueAndIsActiveTrue(device.getId())
+                .ifPresent(staleSession -> {
+                    if (device.getStatus() == DeviceStatus.ONLINE
+                            || device.getStatus() == DeviceStatus.REGISTERED) {
+                        // Device was reset/restarted — close the orphaned session
+                        log.warn("Auto-closing stale session {} for device {} (device status: {})",
+                                staleSession.getId(), device.getSerialNumber(), device.getStatus());
+                        staleSession.setSessionActive(false);
+                        staleSession.setEndedAt(Instant.now());
+                        staleSession.setEndReason("Auto-closed: device was reset");
+                        sessionRepository.save(staleSession);
+                    } else {
+                        throw new IllegalStateException(
+                                "Device " + device.getSerialNumber() +
+                                        " already has an active monitoring session for visit " +
+                                        staleSession.getVisit().getVisitNumber());
+                    }
+                });
+
+        // Validate: no active session on this visit from another device
+        sessionRepository.findByVisitIdAndSessionActiveTrueAndIsActiveTrue(visit.getId())
+                .ifPresent(s -> {
+                    throw new IllegalStateException(
+                            "Visit " + visit.getVisitNumber() +
+                                    " is already being monitored by device " +
+                                    s.getDevice().getSerialNumber());
+                });
+
+        // Create session
+        DeviceSession session = DeviceSession.builder()
+                .device(device)
+                .visit(visit)
+                .startedAt(Instant.now())
+                .sessionActive(true)
+                .startedByName(request.getStartedByName())
+                .build();
+
+        session = sessionRepository.save(session);
+
+        // Re-fetch device to get latest version (avoids conflict with concurrent
+        // heartbeats)
+        IoTDevice freshDevice = deviceRepository.findByIdAndIsActiveTrue(device.getId())
+                .orElse(device);
+        freshDevice.setStatus(DeviceStatus.MONITORING);
+        deviceRepository.save(freshDevice);
+
+        log.info("Monitoring started: Device {} -> Visit {} (Session: {})",
+                freshDevice.getSerialNumber(), visit.getVisitNumber(), session.getId());
+
+        // Notify frontend of device status change
+        publishDeviceStatus(freshDevice);
+
+        return IoTMapper.toResponse(session);
+    }
+
+    /**
+     * Stop a monitoring session.
+     */
+    @Transactional
+    public DeviceSessionResponse stopMonitoring(UUID sessionId, String endedByName, String reason) {
+        DeviceSession session = sessionRepository.findByIdAndIsActiveTrue(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("DeviceSession", "id", sessionId));
+
+        if (!session.isSessionActive()) {
+            throw new IllegalStateException("Session is already ended");
+        }
+
+        session.endSession(endedByName, reason != null ? reason : "Manual stop");
+        session = sessionRepository.save(session);
+
+        // Re-fetch device to avoid version conflict with concurrent heartbeats,
+        // then return device to ONLINE
+        IoTDevice device = session.getDevice();
+        IoTDevice freshDevice = deviceRepository.findByIdAndIsActiveTrue(device.getId())
+                .orElse(device);
+        freshDevice.setStatus(DeviceStatus.ONLINE);
+        deviceRepository.save(freshDevice);
+
+        log.info("Monitoring stopped: Device {} | Visit {} | Reason: {} | " +
+                "Readings: {} (rejected: {}) | Alerts: {} | Retriages: {}",
+                freshDevice.getSerialNumber(), session.getVisit().getVisitNumber(),
+                reason, session.getTotalReadings(), session.getRejectedReadings(),
+                session.getAlertsGenerated(), session.getRetriagesTriggered());
+
+        // Notify frontend of device → ONLINE status
+        publishDeviceStatus(freshDevice);
+
+        return IoTMapper.toResponse(session);
+    }
+
+    /**
+     * Stop monitoring by device ID (used when device disconnects).
+     */
+    @Transactional
+    public void stopMonitoringForDevice(UUID deviceId, String reason) {
+        sessionRepository.findByDeviceIdAndSessionActiveTrueAndIsActiveTrue(deviceId)
+                .ifPresent(session -> {
+                    session.endSession("System", reason);
+                    sessionRepository.save(session);
+                    log.info("Session auto-closed for device {} — {}",
+                            session.getDevice().getSerialNumber(), reason);
+                });
+    }
+
+    // ====================================================================
+    // DEVICE QUERIES
+    // ====================================================================
+
+    public DeviceResponse getDevice(UUID deviceId) {
+        IoTDevice device = findDeviceOrThrow(deviceId);
+        UUID activeVisitId = sessionRepository
+                .findByDeviceIdAndSessionActiveTrueAndIsActiveTrue(deviceId)
+                .map(s -> s.getVisit().getId())
+                .orElse(null);
+        return IoTMapper.toResponse(device, activeVisitId);
+    }
+
+    public Page<DeviceResponse> getDevicesByHospital(UUID hospitalId, Pageable pageable) {
+        Page<IoTDevice> devicePage = deviceRepository
+                .findByHospitalIdAndIsActiveTrueOrderByDeviceNameAsc(hospitalId, pageable);
+
+        // Batch-fetch all active sessions for this hospital so we can populate
+        // activeVisitId
+        List<DeviceSession> activeSessions = sessionRepository
+                .findByDeviceHospitalIdAndSessionActiveTrueAndIsActiveTrue(hospitalId);
+
+        // Build a quick lookup: deviceId → visitId
+        java.util.Map<UUID, UUID> deviceToVisit = new java.util.HashMap<>();
+        for (DeviceSession s : activeSessions) {
+            deviceToVisit.put(s.getDevice().getId(), s.getVisit().getId());
+        }
+
+        return devicePage.map(device -> IoTMapper.toResponse(device, deviceToVisit.get(device.getId())));
+    }
+
+    public List<DeviceResponse> getAvailableDevices(UUID hospitalId) {
+        return deviceRepository.findAvailableDevices(hospitalId)
+                .stream()
+                .map(IoTMapper::toResponse)
+                .toList();
+    }
+
+    public List<DeviceSessionResponse> getActiveSessions(UUID hospitalId) {
+        return sessionRepository
+                .findByDeviceHospitalIdAndSessionActiveTrueAndIsActiveTrue(hospitalId)
+                .stream()
+                .map(IoTMapper::toResponse)
+                .toList();
+    }
+
+    public DeviceSessionResponse getSession(UUID sessionId) {
+        DeviceSession session = sessionRepository.findByIdAndIsActiveTrue(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("DeviceSession", "id", sessionId));
+        return IoTMapper.toResponse(session);
+    }
+
+    public Page<DeviceSessionResponse> getSessionHistory(UUID visitId, Pageable pageable) {
+        return sessionRepository
+                .findByVisitIdAndIsActiveTrueOrderByStartedAtDesc(visitId, pageable)
+                .map(IoTMapper::toResponse);
+    }
+
+    /**
+     * Mark a device as offline (called by the heartbeat scheduler).
+     */
+    @Transactional
+    public void markDeviceOffline(IoTDevice device) {
+        device.setStatus(DeviceStatus.OFFLINE);
+        deviceRepository.save(device);
+        log.warn("Device {} marked OFFLINE (heartbeat timeout)", device.getSerialNumber());
+
+        // Notify frontend of device → OFFLINE status
+        publishDeviceStatus(device);
+    }
+
+    /**
+     * Get all devices that have missed their heartbeat deadline.
+     */
+    public List<IoTDevice> findStaleDevices() {
+        // Each device has its own timeout, but we use a reasonable global cutoff
+        Instant cutoff = Instant.now().minusSeconds(60);
+        return deviceRepository.findStaleDevices(cutoff);
+    }
+
+    // ====================================================================
+    // INTERNAL
+    // ====================================================================
+
+    public IoTDevice findDeviceOrThrow(UUID id) {
+        return deviceRepository.findByIdAndIsActiveTrue(id)
+                .orElseThrow(() -> new ResourceNotFoundException("IoTDevice", "id", id));
+    }
+
+    public DeviceSession findActiveSessionForDevice(UUID deviceId) {
+        return sessionRepository
+                .findByDeviceIdAndSessionActiveTrueAndIsActiveTrue(deviceId)
+                .orElse(null);
+    }
+
+    /**
+     * Publish device status change to the WebSocket topic for the hospital.
+     */
+    private void publishDeviceStatus(IoTDevice device) {
+        try {
+            eventPublisher.publishDeviceStatusChange(
+                    device.getHospital().getId(),
+                    java.util.Map.of(
+                            "deviceId", device.getId().toString(),
+                            "serialNumber", device.getSerialNumber(),
+                            "deviceName", device.getDeviceName(),
+                            "status", device.getStatus().name(),
+                            "timestamp", Instant.now().toString()));
+        } catch (Exception e) {
+            log.warn("Failed to publish device status change: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Generate a cryptographically secure API key.
+     * Format: "st_dev_" + 48 random bytes base64url encoded
+     */
+    private String generateApiKey() {
+        byte[] randomBytes = new byte[48];
+        SECURE_RANDOM.nextBytes(randomBytes);
+        return "st_dev_" + Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+    }
+}

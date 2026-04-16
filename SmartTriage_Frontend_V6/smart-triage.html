@@ -1,0 +1,2033 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Triage — Precision. Compassion.</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            forest:  '#0c4a6e',
+            emerald: '#0369a1',
+            mint:    '#0284c7',
+            sage:    '#06b6d4',
+            fern:    '#22d3ee',
+            dew:     '#67e8f9',
+            void:    '#020b14',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+  <!-- Three.js UMD -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <!-- GSAP + ScrollTrigger -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: auto; }
+
+    /* ── Theme variables ── */
+    :root {
+      --bg:          #020b14;
+      --bg2:         #041525;
+      --fg:          #ffffff;
+      --fg-muted:    rgba(255,255,255,0.55);
+      --fg-faint:    rgba(255,255,255,0.30);
+      --border:      rgba(2,132,199,0.22);
+      --border-hi:   rgba(6,182,212,0.45);
+      --card-bg:     rgba(12,74,110,0.12);
+      --card-bg-hi:  rgba(12,74,110,0.22);
+      --pill-bg:     rgba(2,132,199,0.15);
+      --nav-bg:      rgba(2,11,20,0.78);
+      --glow-l:      rgba(12,74,110,0.28);
+      --feat-bg:     rgba(12,74,110,0.08);
+      --feat-bg-hi:  rgba(12,74,110,0.20);
+      --shadow-col:  rgba(0,0,0,0.55);
+      --cursor-col:  rgba(2,132,199,0.08);
+      --footer-fg:   rgba(255,255,255,0.28);
+    }
+    html.light {
+      --bg:          #f0f7fd;
+      --bg2:         #e6f1fc;
+      --fg:          #0d1f2d;
+      --fg-muted:    rgba(13,25,45,0.62);
+      --fg-faint:    rgba(13,25,45,0.38);
+      --border:      rgba(2,132,199,0.20);
+      --border-hi:   rgba(2,132,199,0.45);
+      --card-bg:     rgba(255,255,255,0.65);
+      --card-bg-hi:  rgba(255,255,255,0.90);
+      --pill-bg:     rgba(2,132,199,0.12);
+      --nav-bg:      rgba(240,247,254,0.88);
+      --glow-l:      rgba(6,182,212,0.14);
+      --feat-bg:     rgba(255,255,255,0.55);
+      --feat-bg-hi:  rgba(255,255,255,0.85);
+      --shadow-col:  rgba(0,0,0,0.12);
+      --cursor-col:  rgba(2,132,199,0.06);
+      --footer-fg:   rgba(13,25,45,0.40);
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+      transition: background 0.4s, color 0.4s;
+    }
+
+    /* ─── Fixed 3D canvas ─── */
+    #three-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      transition: opacity 0.4s;
+    }
+    /* ── Light-mode background gradient ── */
+    html.light body {
+      background: linear-gradient(160deg, #e8f3fd 0%, #f4f9fd 40%, #eaf2fd 100%);
+    }
+
+    /* ─── Scrollable content layers ─── */
+    #scroll-root {
+      position: relative;
+      z-index: 10;
+    }
+
+    .section-panel {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      position: relative;
+    }
+
+    /* ─── Grain overlay ─── */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      opacity: 0.35;
+    }
+
+    /* ─── Glassmorphism card ─── */
+    .glass-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 1.25rem;
+    }
+
+    /* ─── Nav ─── */
+    #nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      padding: 1.25rem 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--nav-bg);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      transition: background 0.4s;
+    }
+    #nav .logo-text {
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #0284c7, #67e8f9);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    #nav .nav-links a {
+      color: var(--fg-muted);
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 500;
+      margin-left: 2rem;
+      transition: color 0.2s;
+    }
+    #nav .nav-links a:hover { color: #0284c7; }
+
+    /* ── Theme toggle button ── */
+    #theme-toggle {
+      display: flex; align-items: center; justify-content: center;
+      margin-left: 1.25rem;
+      width: 2.1rem; height: 2.1rem;
+      border-radius: 50%;
+      border: 1px solid var(--border-hi);
+      background: var(--pill-bg);
+      cursor: pointer;
+      color: #0284c7;
+      transition: background 0.3s, border-color 0.3s;
+      flex-shrink: 0;
+    }
+    #theme-toggle:hover { background: var(--card-bg-hi); }
+    .nav-cta {
+      background: linear-gradient(135deg, #0c4a6e, #0369a1);
+      border: 1px solid #0369a1;
+      color: #fff !important;
+      padding: 0.55rem 1.35rem;
+      border-radius: 0.6rem;
+      font-weight: 600 !important;
+      transition: opacity 0.2s !important;
+    }
+    .nav-cta:hover { opacity: 0.85; }
+
+    /* ─── Progress bar ─── */
+    #progress-bar {
+      position: fixed;
+      top: 0; left: 0;
+      height: 2px;
+      background: linear-gradient(90deg, #0c4a6e, #0284c7, #67e8f9);
+      z-index: 200;
+      transform-origin: left;
+      transform: scaleX(0);
+    }
+
+    /* ─── Section label pills ─── */
+    .section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 1rem;
+      background: var(--pill-bg);
+      border: 1px solid var(--border-hi);
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #0284c7;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+    }
+    .section-label .dot {
+      width: 6px; height: 6px;
+      background: #0284c7;
+      border-radius: 50%;
+      animation: pulse-dot 1.8s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.4; transform: scale(0.7); }
+    }
+
+    /* ─── Headline ─── */
+    .hero-headline {
+      font-size: clamp(2.6rem, 6vw, 5rem);
+      font-weight: 900;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+    }
+    .hero-headline .accent {
+      background: linear-gradient(135deg, #0284c7 0%, #67e8f9 60%, #0284c7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .section-headline {
+      font-size: clamp(2rem, 4.5vw, 3.8rem);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.025em;
+    }
+    .section-headline .accent {
+      background: linear-gradient(135deg, #0284c7, #67e8f9);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* ─── Stats row ─── */
+    .stat-val {
+      font-size: 2.5rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #0284c7, #67e8f9);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.03em;
+    }
+
+    /* ─── Holographic badge ─── */
+    .holo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1.1rem;
+      border-radius: 0.75rem;
+      background: rgba(27, 67, 50, 0.35);
+      border: 1px solid rgba(82, 183, 136, 0.5);
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #67e8f9;
+    }
+    .holo-badge svg { color: #0284c7; }
+
+    /* ─── Scroll indicator ─── */
+    .scroll-hint {
+      position: absolute;
+      bottom: 2.5rem; left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      opacity: 0.5;
+      animation: bounce-hint 2s ease-in-out infinite;
+    }
+    .scroll-hint span { font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: #06b6d4; }
+    @keyframes bounce-hint {
+      0%,100% { transform: translateX(-50%) translateY(0); }
+      50%      { transform: translateX(-50%) translateY(8px); }
+    }
+
+    /* ─── Feature list ─── */
+    .feature-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: 1rem 1.25rem;
+      border-radius: 0.85rem;
+      background: var(--feat-bg);
+      border: 1px solid var(--border);
+      transition: border-color 0.25s, background 0.25s;
+    }
+    .feature-item:hover {
+      border-color: var(--border-hi);
+      background: var(--feat-bg-hi);
+    }
+    .feature-icon {
+      flex-shrink: 0;
+      width: 2.2rem; height: 2.2rem;
+      border-radius: 0.5rem;
+      background: linear-gradient(135deg, #0c4a6e, #0369a1);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem;
+    }
+
+    /* ─── Cursor glow ─── */
+    #cursor-glow {
+      position: fixed;
+      width: 380px; height: 380px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--cursor-col) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 2;
+      transform: translate(-50%, -50%);
+      transition: left 0.12s ease-out, top 0.12s ease-out;
+    }
+
+    /* ─── Section radial gradient backdrop ─── */
+    .section-glow-left {
+      background: radial-gradient(ellipse 65% 80% at 15% 50%, var(--glow-l) 0%, transparent 70%);
+    }
+    .section-glow-right {
+      background: radial-gradient(ellipse 65% 80% at 85% 50%, var(--glow-l) 0%, transparent 70%);
+    }
+
+    /* ─── Fade-in on scroll ─── */
+    .reveal { opacity: 0; transform: translateY(36px); }
+
+    /* ─── Footer ─── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 2.5rem;
+      text-align: center;
+      color: var(--footer-fg);
+      font-size: 0.82rem;
+    }
+    footer span { color: #0284c7; }
+
+    /* ─── Light-mode body text overrides ─── */
+    html.light .text-white\/55 { color: var(--fg-muted) !important; }
+    html.light .text-white\/45 { color: var(--fg-faint)  !important; }
+    html.light .text-white\/50 { color: var(--fg-muted)  !important; }
+    html.light .text-white\/90 { color: var(--fg)        !important; }
+    html.light .text-white\/75 { color: var(--fg-muted)  !important; }
+    html.light .holo-badge { background: rgba(2,132,199,0.10); border-color: rgba(2,132,199,0.35); color: #1B5E36; }
+    html.light .nav-cta { background: linear-gradient(135deg,#1B5E36,#2D9A60) !important; }
+
+    /* ─── CTA two-column layout ─── */
+    .cta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: center;
+      text-align: left;
+    }
+    .cta-visual {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+    }
+    .cta-stats-row {
+      display: flex;
+      gap: 2rem;
+      justify-content: center;
+      width: 100%;
+    }
+    .cta-stat-card {
+      flex: 1;
+      padding: 1.1rem 0.8rem;
+      border-radius: 1rem;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      text-align: center;
+      backdrop-filter: blur(8px);
+    }
+    @media (max-width: 768px) {
+      .cta-grid { grid-template-columns: 1fr; text-align: center; }
+      .cta-visual { display: none; }
+    }
+
+    /* ─── Stripe-style animations ─── */
+    /* Feature-item hover lift */
+    .feature-item {
+      transition: border-color 0.25s, background 0.25s, transform 0.22s, box-shadow 0.22s;
+    }
+    .feature-item:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 28px rgba(2,132,199,0.13);
+    }
+    /* Feature icon bounce on parent hover */
+    .feature-item:hover .feature-icon {
+      animation: icon-bounce 0.45s cubic-bezier(0.34,1.56,0.64,1) both;
+    }
+    @keyframes icon-bounce {
+      0%   { transform: scale(1); }
+      45%  { transform: scale(1.22); }
+      100% { transform: scale(1); }
+    }
+    /* Ambient gradient blob drift */
+    .st-blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(100px);
+      pointer-events: none;
+      z-index: 0;
+      will-change: transform;
+    }
+    /* CTA stat-card hover lift */
+    .cta-stat-card {
+      transition: transform 0.22s, box-shadow 0.22s, border-color 0.22s;
+      position: relative; overflow: hidden; will-change: transform;
+    }
+    .cta-stat-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 36px rgba(2,132,199,0.15);
+      border-color: var(--border-hi);
+    }
+
+    /* ─── Hero stat cards ─── */
+    #hero-stat-cards { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .hero-stat-card {
+      position: relative;
+      padding: 1rem 1.25rem 0.85rem;
+      border-radius: 1rem;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      min-width: 130px;
+      overflow: hidden;
+      cursor: default;
+      will-change: transform;
+      transition: border-color 0.3s, box-shadow 0.3s, transform 0.22s;
+    }
+    .hero-stat-card::before {
+      content: ''; position: absolute; inset: 0; border-radius: inherit;
+      background: radial-gradient(
+        220px circle at var(--mx,50%) var(--my,50%),
+        rgba(6,182,212,0.22) 0%, transparent 70%
+      );
+      opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 0;
+    }
+    .hero-stat-card:hover::before { opacity: 1; }
+    .hero-stat-card > * { position: relative; z-index: 1; }
+    .hero-stat-card.is-hovered { animation: border-breathe 1.6s ease-in-out infinite; }
+    .hsc-top { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; }
+    .hsc-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: #0284c7; flex-shrink: 0;
+      animation: ping-dot 1.8s ease-in-out infinite;
+    }
+    .hsc-label {
+      font-size: 0.68rem; letter-spacing: 0.07em; color: var(--fg-muted);
+      text-transform: uppercase; font-weight: 600;
+    }
+    .hsc-spark { width: 100%; height: 22px; margin-top: 0.5rem; display: block; overflow: visible; }
+    .hsc-line {
+      stroke-width: 1.5; fill: none;
+      stroke-dasharray: 300; stroke-dashoffset: 300;
+    }
+    .hsc-line.drawn { animation: draw-line 1.8s cubic-bezier(0.4,0,0.2,1) forwards; }
+
+    /* ─── Feature item: position:relative needed for pseudo-layers ─── */
+    .feature-item { position: relative; }
+
+    /* ─── Card scan-line ─── */
+    .card-scan {
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 1.5px;
+      background: linear-gradient(90deg, transparent 0%, #0284c7 40%, #67e8f9 55%, transparent 100%);
+      transform: scaleX(0); transform-origin: left;
+      pointer-events: none; z-index: 3; opacity: 0;
+    }
+    .feature-item:hover .card-scan,
+    .hero-stat-card:hover .card-scan { animation: scan-sweep 0.7s ease forwards; }
+    @keyframes scan-sweep {
+      0%  { transform: scaleX(0); opacity: 1; }
+      75% { transform: scaleX(1); opacity: 0.9; }
+      100%{ transform: scaleX(1); opacity: 0; }
+    }
+
+    /* ─── Shared border breathe ─── */
+    @keyframes border-breathe {
+      0%,100% { box-shadow: 0 0 0 1px rgba(6,182,212,0.35), 0 8px 28px rgba(2,132,199,0.12); }
+      50%      { box-shadow: 0 0 0 1px rgba(6,182,212,0.85), 0 8px 28px rgba(6,182,212,0.25), 0 0 24px rgba(6,182,212,0.10); }
+    }
+    .feature-item.is-hovered  { animation: border-breathe 1.6s ease-in-out infinite !important; }
+    .cta-stat-card.is-hovered { animation: border-breathe 1.6s ease-in-out infinite !important; }
+
+    /* ─── Live ping-dot ─── */
+    @keyframes ping-dot {
+      0%,100% { box-shadow: 0 0 0 0 rgba(6,182,212,0.5); transform: scale(1); }
+      50%      { box-shadow: 0 0 0 5px rgba(6,182,212,0); transform: scale(1.25); }
+    }
+
+    /* ─── Sparkline draw ─── */
+    @keyframes draw-line { to { stroke-dashoffset: 0; } }
+
+    /* ─── Feature icon pulse ring on hover ─── */
+    .feature-icon { position: relative; overflow: visible; }
+    .feature-icon::after {
+      content: ''; position: absolute; inset: -3px; border-radius: 0.65rem;
+      border: 1.5px solid rgba(6,182,212,0);
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .feature-item:hover .feature-icon::after {
+      border-color: rgba(6,182,212,0.6);
+      box-shadow: 0 0 12px rgba(6,182,212,0.4);
+      animation: icon-ring-pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes icon-ring-pulse {
+      0%,100% { box-shadow: 0 0 6px rgba(6,182,212,0.35); }
+      50%      { box-shadow: 0 0 18px rgba(6,182,212,0.70); }
+    }
+
+    /* ─── Stat-card spotlight ─── */
+    .cta-stat-card::before {
+      content: ''; position: absolute; inset: 0; border-radius: inherit;
+      background: radial-gradient(
+        260px circle at var(--mx,50%) var(--my,50%),
+        rgba(6,182,212,0.20) 0%, transparent 70%
+      );
+      opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 0;
+    }
+    .cta-stat-card:hover::before { opacity: 1; }
+    .cta-stat-card > * { position: relative; z-index: 1; }
+    .cta-stat-card:hover .stat-val { animation: stat-num-glow 1.3s ease-in-out infinite; }
+    @keyframes stat-num-glow {
+      0%,100% { filter: drop-shadow(0 0 5px  rgba(6,182,212,0.35)); }
+      50%      { filter: drop-shadow(0 0 18px rgba(6,182,212,0.80)); }
+    }
+
+    /* ─── Badge glow ─── */
+    .holo-badge { transition: box-shadow 0.3s; }
+
+    /* ─── Live Triage Feed panel ─── */
+    .triage-live-panel {
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 1.25rem;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      overflow: hidden;
+      box-shadow: 0 4px 40px rgba(0,0,0,0.25);
+    }
+    .tlp-header {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.9rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      background: rgba(12,74,110,0.18);
+    }
+    .tlp-live-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 0 0 rgba(34,197,94,0.6);
+      animation: tlp-ping 1.6s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    @keyframes tlp-ping {
+      0%   { box-shadow: 0 0 0 0   rgba(34,197,94,0.6); }
+      70%  { box-shadow: 0 0 0 7px rgba(34,197,94,0.0); }
+      100% { box-shadow: 0 0 0 0   rgba(34,197,94,0.0); }
+    }
+    .tlp-title {
+      font-size: 0.8rem; font-weight: 700; color: var(--fg);
+      letter-spacing: 0.04em; flex: 1;
+    }
+    .tlp-clock {
+      font-size: 0.72rem; font-variant-numeric: tabular-nums;
+      color: var(--fg-muted); font-weight: 500;
+    }
+    .tlp-entries { padding: 0.35rem 0; min-height: 220px; }
+    .tlp-entry {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.55rem 1.25rem;
+      transition: background 0.25s;
+      animation: tlp-slide-in 0.4s cubic-bezier(0.34,1.4,0.64,1) both;
+    }
+    .tlp-entry.leaving {
+      animation: tlp-slide-out 0.35s ease forwards;
+    }
+    @keyframes tlp-slide-in {
+      from { opacity: 0; transform: translateX(-14px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes tlp-slide-out {
+      to   { opacity: 0; transform: translateX(14px); }
+    }
+    .tlp-entry:hover { background: var(--feat-bg-hi); }
+    .tlp-priority {
+      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    }
+    .tlp-priority.pulse-anim { animation: tlp-pulse-ring 1.5s ease-in-out infinite; }
+    @keyframes tlp-pulse-ring {
+      0%,100% { box-shadow: 0 0 0 0 currentColor; }
+      50%      { box-shadow: 0 0 0 5px transparent; }
+    }
+    .tlp-id {
+      font-size: 0.78rem; font-weight: 600;
+      color: var(--fg); font-variant-numeric: tabular-nums;
+      width: 4.5rem; flex-shrink: 0;
+    }
+    .tlp-badge {
+      font-size: 0.66rem; font-weight: 700; letter-spacing: 0.07em;
+      text-transform: uppercase; padding: 0.18rem 0.55rem;
+      border-radius: 9999px; flex-shrink: 0;
+    }
+    .tlp-status {
+      flex: 1; font-size: 0.72rem; color: var(--fg-muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tlp-age {
+      font-size: 0.68rem; color: var(--fg-faint);
+      font-variant-numeric: tabular-nums; flex-shrink: 0;
+    }
+    .tlp-footer {
+      border-top: 1px solid var(--border);
+      padding: 0.75rem 1.25rem 0.9rem;
+    }
+    .tlp-dist {
+      display: flex; height: 6px; border-radius: 9999px;
+      overflow: hidden; gap: 2px; margin-bottom: 0.55rem;
+    }
+    .tlp-dist-bar {
+      height: 100%; border-radius: 9999px;
+      transition: flex 0.8s cubic-bezier(0.4,0,0.2,1);
+    }
+    .tlp-legend {
+      display: flex; gap: 0.9rem; flex-wrap: wrap;
+    }
+    .tlp-legend span {
+      display: flex; align-items: center; gap: 0.3rem;
+      font-size: 0.67rem; color: var(--fg-muted);
+    }
+    .tlp-leg-dot {
+      width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Progress bar -->
+<div id="progress-bar"></div>
+
+<!-- Cursor glow -->
+<div id="cursor-glow"></div>
+
+<!-- Fixed 3D canvas -->
+<canvas id="three-canvas"></canvas>
+
+<!-- ─── NAV ─── -->
+<nav id="nav">
+  <div class="logo-text">Smart Triage</div>
+  <div class="nav-links" style="display:flex;align-items:center;">
+    <a href="#section-hero">Home</a>
+    <a href="#section-sats">SATS Audit</a>
+    <a href="#section-report">Reports</a>
+    <a href="/dashboard" class="nav-cta">Launch Dashboard →</a>
+    <button id="theme-toggle" title="Toggle light / dark mode" aria-label="Toggle theme">
+      <!-- Moon icon (visible in dark mode) -->
+      <svg id="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>
+      <!-- Sun icon (visible in light mode, hidden by default) -->
+      <svg id="icon-sun"  width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    </button>
+  </div>
+</nav>
+
+<!-- ─── SCROLLABLE CONTENT ─── -->
+<div id="scroll-root">
+
+  <!-- ══════════════ SECTION 1 — HERO ══════════════ -->
+  <section id="section-hero" class="section-panel" style="min-height:100vh;">
+    <div class="absolute inset-0 section-glow-left pointer-events-none"></div>
+    <div class="w-full max-w-7xl mx-auto px-6 lg:px-12 pt-28 pb-20">
+      <div class="max-w-2xl reveal" id="hero-content">
+        <div class="section-label">
+          <span class="dot"></span>
+          Emergency Triage Platform
+        </div>
+        <h1 class="hero-headline mb-6">
+          Triage with<br/>
+          <span class="accent">Precision.</span><br/>
+          Care with<br/>
+          <span class="accent">Compassion.</span>
+        </h1>
+        <p class="text-white/55 text-lg leading-relaxed mb-8 max-w-xl">
+          AI-powered clinical triage built for the Rwandan healthcare system.
+          WHO-regulated, offline-ready, and designed for every second that counts.
+        </p>
+        <div class="flex flex-wrap gap-4 mb-10">
+          <a href="/dashboard" class="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl font-700 text-white"
+             style="background:linear-gradient(135deg,#0c4a6e,#0369a1);border:1px solid #0369a1;font-weight:700;text-decoration:none;">
+            Open Dashboard
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </a>
+          <button onclick="document.getElementById('section-sats').scrollIntoView({behavior:'smooth'})"
+                  class="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl font-600 glass-card text-white/75"
+                  style="font-weight:600;cursor:pointer;">
+            See How It Works
+          </button>
+        </div>
+        <div id="hero-stat-cards">
+          <div class="hero-stat-card" id="hsc-0">
+            <div class="card-scan"></div>
+            <div class="hsc-top">
+              <span class="hsc-dot" style="background:#0284c7"></span>
+              <span class="hsc-label">Clinical accuracy</span>
+            </div>
+            <div class="stat-val">99.8%</div>
+            <svg class="hsc-spark" viewBox="0 0 80 22" preserveAspectRatio="none">
+              <polyline class="hsc-line" id="hsc-line-0" style="stroke:#0284c7"
+                points="0,18 8,14 16,16 24,9 32,13 40,5 50,11 60,7 70,9 80,5"/>
+            </svg>
+          </div>
+          <div class="hero-stat-card" id="hsc-1">
+            <div class="card-scan"></div>
+            <div class="hsc-top">
+              <span class="hsc-dot" style="background:#06b6d4"></span>
+              <span class="hsc-label">Time saved</span>
+            </div>
+            <div class="stat-val">60%</div>
+            <svg class="hsc-spark" viewBox="0 0 80 22" preserveAspectRatio="none">
+              <polyline class="hsc-line" id="hsc-line-1" style="stroke:#06b6d4"
+                points="0,20 10,16 20,12 28,17 38,9 48,14 56,7 66,11 76,5 80,6"/>
+            </svg>
+          </div>
+          <div class="hero-stat-card" id="hsc-2">
+            <div class="card-scan"></div>
+            <div class="hsc-top">
+              <span class="hsc-dot" style="background:#67e8f9"></span>
+              <span class="hsc-label">Patients triaged</span>
+            </div>
+            <div class="stat-val">2 000+</div>
+            <svg class="hsc-spark" viewBox="0 0 80 22" preserveAspectRatio="none">
+              <polyline class="hsc-line" id="hsc-line-2" style="stroke:#67e8f9"
+                points="0,19 10,15 22,13 30,16 42,10 52,13 62,7 72,9 80,4"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="scroll-hint">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+      <span>Scroll</span>
+    </div>
+  </section>
+
+  <!-- Spacer so mascot has time to settle -->
+  <div style="height:30vh;"></div>
+
+  <!-- ══════════════ SECTION 2 — SATS AUDIT ══════════════ -->
+  <section id="section-sats" class="section-panel" style="min-height:100vh;">
+    <div class="absolute inset-0 section-glow-right pointer-events-none"></div>
+    <div class="w-full max-w-7xl mx-auto px-6 lg:px-12 py-20">
+      <!-- Text on LEFT, mascot moves RIGHT in 3D -->
+      <div class="max-w-xl reveal" id="sats-content">
+        <div class="section-label">
+          <span class="dot"></span>
+          WHO-Regulated Standards
+        </div>
+        <h2 class="section-headline mb-5">
+          <span class="accent">mSATS</span> Standards.<br/>
+          AI-Audited Clinical<br/>Accuracy.
+        </h2>
+        <p class="text-white/55 text-base leading-relaxed mb-8">
+          Every triage decision validated against WHO-regulated mSATS protocols.
+          Zero manual calculation errors. Complete digital audit trail ready for inspection.
+        </p>
+        <div class="space-y-3 mb-8">
+          <div class="feature-item">
+            <div class="feature-icon">🩺</div>
+            <div>
+              <div class="text-sm font-600 text-white/90" style="font-weight:600;">Automatic TEWS Scoring</div>
+              <div class="text-xs text-white/45 mt-0.5">Adult & paediatric scores computed in real-time</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">📋</div>
+            <div>
+              <div class="text-sm font-600 text-white/90" style="font-weight:600;">Live Compliance Monitoring</div>
+              <div class="text-xs text-white/45 mt-0.5">Flags protocol deviations before they become incidents</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🔒</div>
+            <div>
+              <div class="text-sm font-600 text-white/90" style="font-weight:600;">Tamper-Proof Audit Log</div>
+              <div class="text-xs text-white/45 mt-0.5">Immutable timestamps on every clinical action</div>
+            </div>
+          </div>
+        </div>
+        <div class="holo-badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          WHO Certified · HIPAA Compliant · Offline-Ready
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Spacer -->
+  <div style="height:20vh;"></div>
+
+  <!-- ══════════════ SECTION 3 — MIDNIGHT REPORT ══════════════ -->
+  <section id="section-report" class="section-panel" style="min-height:100vh;">
+    <div class="absolute inset-0 section-glow-left pointer-events-none"></div>
+    <div class="w-full max-w-7xl mx-auto px-6 lg:px-12 py-20 flex justify-end">
+      <!-- Text on RIGHT, mascot moves LEFT in 3D -->
+      <div class="max-w-xl reveal" id="report-content">
+        <div class="section-label">
+          <span class="dot"></span>
+          Automated Reporting
+        </div>
+        <h2 class="section-headline mb-5">
+          The Midnight<br/>
+          <span class="accent">Report.</span><br/>
+          1-Second Summaries.
+        </h2>
+        <p class="text-white/55 text-base leading-relaxed mb-8">
+          Automated shift summaries generated the moment the clock strikes midnight.
+          No more manual paperwork. No more late-night data entry. Every nurse goes home on time.
+        </p>
+        <div class="space-y-3 mb-8">
+          <div class="feature-item">
+            <div class="feature-icon">⚡</div>
+            <div>
+              <div class="text-sm font-600 text-white/90" style="font-weight:600;">Instant Report Generation</div>
+              <div class="text-xs text-white/45 mt-0.5">Shift summary compiled in under 1 second</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">📊</div>
+            <div>
+              <div class="text-sm font-600 text-white/90" style="font-weight:600;">Visual Analytics Dashboard</div>
+              <div class="text-xs text-white/45 mt-0.5">Patient flow, triage distribution, wait-time trends</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🔄</div>
+            <div>
+              <div class="text-sm font-600 text-white/90" style="font-weight:600;">Seamless Handover</div>
+              <div class="text-xs text-white/45 mt-0.5">Incoming staff briefed instantly with zero ambiguity</div>
+            </div>
+          </div>
+        </div>
+        <a href="/dashboard" class="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl font-700 text-white"
+           style="background:linear-gradient(135deg,#0c4a6e,#0369a1);border:1px solid #0369a1;font-weight:700;text-decoration:none;">
+          View Live Reports
+          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Spacer -->
+  <div style="height:20vh;"></div>
+
+  <!-- ══════════════ CTA ══════════════ -->
+  <section class="section-panel" style="min-height:70vh;">
+    <div class="absolute inset-0 section-glow-left pointer-events-none"></div>
+    <div class="w-full max-w-7xl mx-auto px-6 lg:px-12 py-24 reveal" id="cta-content">
+      <div class="cta-grid">
+
+        <!-- LEFT: Text + CTA -->
+        <div>
+          <div class="section-label">
+            <span class="dot"></span>Ready to Deploy
+          </div>
+          <h2 class="hero-headline mb-5">
+            Every second<br/>
+            <span class="accent">counts.</span>
+          </h2>
+          <p class="text-white/55 text-lg leading-relaxed mb-8" style="max-width:38ch;">
+            Join Rwanda's most advanced emergency department.
+            Precision built into every tap, every triage, every life saved.
+          </p>
+          <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+            <a href="/dashboard" class="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl text-base font-700 text-white"
+               style="background:linear-gradient(135deg,#0c4a6e,#0369a1);border:1px solid rgba(6,182,212,0.5);font-weight:700;text-decoration:none;box-shadow:0 0 32px rgba(2,132,199,0.30);">
+              Open Smart Triage
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </a>
+            <a href="#section-hero" class="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl text-base glass-card"
+               style="font-weight:600;text-decoration:none;color:var(--fg-muted);">
+              Back to top
+            </a>
+          </div>
+        </div>
+
+        <!-- RIGHT: Live Triage Feed -->
+        <div class="cta-visual">
+          <div class="triage-live-panel" id="triage-live-panel">
+            <div class="tlp-header">
+              <span class="tlp-live-dot"></span>
+              <span class="tlp-title">Live Triage Feed</span>
+              <span class="tlp-clock" id="tlp-clock"></span>
+            </div>
+            <div class="tlp-entries" id="tlp-entries"></div>
+            <div class="tlp-footer">
+              <div class="tlp-dist" id="tlp-dist">
+                <div class="tlp-dist-bar" data-level="critical" style="background:#ef4444"></div>
+                <div class="tlp-dist-bar" data-level="urgent"   style="background:#f97316"></div>
+                <div class="tlp-dist-bar" data-level="standard" style="background:#eab308"></div>
+                <div class="tlp-dist-bar" data-level="minor"    style="background:#22c55e"></div>
+              </div>
+              <div class="tlp-legend">
+                <span><span class="tlp-leg-dot" style="background:#ef4444"></span>Critical</span>
+                <span><span class="tlp-leg-dot" style="background:#f97316"></span>Urgent</span>
+                <span><span class="tlp-leg-dot" style="background:#eab308"></span>Standard</span>
+                <span><span class="tlp-leg-dot" style="background:#22c55e"></span>Minor</span>
+              </div>
+            </div>
+          </div>
+          <div class="holo-badge" style="margin-top:0.75rem;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            WHO Certified · HIPAA Compliant · Offline-Ready
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ FOOTER ══════════════ -->
+  <footer>
+    <p>© 2026 <span>Smart Triage</span>. Built for Rwanda. Inspired by every nurse who works past midnight.</p>
+  </footer>
+
+</div><!-- /scroll-root -->
+
+<!-- ═══════════════════════════════════════════════════════════
+     THREE.JS + GSAP ENGINE
+═══════════════════════════════════════════════════════════ -->
+<script>
+(function() {
+  'use strict';
+
+  /* ─────────────────────────────────────────────
+     0. GSAP PLUGIN REGISTRATION
+  ───────────────────────────────────────────── */
+  gsap.registerPlugin(ScrollTrigger);
+
+  /* ─────────────────────────────────────────────
+     1. THREE.JS SCENE SETUP
+  ───────────────────────────────────────────── */
+  const canvas  = document.getElementById('three-canvas');
+  const W = () => window.innerWidth;
+  const H = () => window.innerHeight;
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(W(), H());
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+
+  const scene  = new THREE.Scene();
+  scene.background = new THREE.Color(0x020b14);
+  scene.fog = new THREE.FogExp2(0x020b14, 0.038);
+
+  const camera = new THREE.PerspectiveCamera(52, W() / H(), 0.1, 80);
+  camera.position.set(0, 0.4, 7.5);
+
+  /* ─────────────────────────────────────────────
+     2. LIGHTING
+  ───────────────────────────────────────────── */
+  scene.add(new THREE.AmbientLight(0x0a1525, 0.9));
+
+  const keyLight = new THREE.DirectionalLight(0x0284c7, 2.8);
+  keyLight.position.set(3, 5, 4);
+  keyLight.castShadow = true;
+  scene.add(keyLight);
+
+  const fillLight = new THREE.PointLight(0x0369a1, 3.5, 14);
+  fillLight.position.set(-3, 2, 3);
+  scene.add(fillLight);
+
+  const rimLight = new THREE.PointLight(0x0c4a6e, 2.2, 10);
+  rimLight.position.set(0, -3, -4);
+  scene.add(rimLight);
+
+  const topLight = new THREE.PointLight(0x67e8f9, 1.6, 8);
+  topLight.position.set(0, 6, 1);
+  scene.add(topLight);
+
+  /* ─────────────────────────────────────────────
+     3. MATERIAL FACTORY
+  ───────────────────────────────────────────── */
+  const M = {
+    body:    () => new THREE.MeshStandardMaterial({ color: 0x0d1a2d, metalness: 0.4, roughness: 0.55 }),
+    dark:    () => new THREE.MeshStandardMaterial({ color: 0x060d1d, metalness: 0.5, roughness: 0.45 }),
+    forest:  () => new THREE.MeshStandardMaterial({ color: 0x0c4a6e, metalness: 0.35, roughness: 0.5 }),
+    emerald: (i=2.5) => new THREE.MeshStandardMaterial({
+      color: 0x0369a1, emissive: new THREE.Color(0x0369a1), emissiveIntensity: i,
+      metalness: 0.2, roughness: 0.3,
+    }),
+    mint: (i=2) => new THREE.MeshStandardMaterial({
+      color: 0x0284c7, emissive: new THREE.Color(0x0284c7), emissiveIntensity: i,
+      metalness: 0.2, roughness: 0.3,
+    }),
+    eye: () => new THREE.MeshStandardMaterial({
+      color: 0x67e8f9, emissive: new THREE.Color(0x0284c7), emissiveIntensity: 5,
+    }),
+    shine: () => new THREE.MeshStandardMaterial({
+      color: 0xffffff, emissive: new THREE.Color(0xffffff), emissiveIntensity: 4,
+    }),
+    cross: () => new THREE.MeshStandardMaterial({
+      color: 0x0c4a6e, emissive: new THREE.Color(0x0284c7), emissiveIntensity: 1.1,
+    }),
+    ring: (c, i=1.5) => new THREE.MeshStandardMaterial({
+      color: c, emissive: new THREE.Color(c), emissiveIntensity: i,
+      transparent: true, opacity: 0.75,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    }),
+    wireRing: (c) => new THREE.MeshBasicMaterial({
+      color: c, wireframe: true, transparent: true, opacity: 0.18,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }),
+  };
+
+  /* ─────────────────────────────────────────────
+     4. LOGO SPRITE — background-stripped, floating
+        freely with depth-illusion cues:
+        • Canvas pixel-diff strips the white bg
+        • Drop-shadow ellipse underneath
+        • Rim-glow additive copy behind
+        • Specular highlight disc for roundness feel
+        • Animated bob, sway, glow pulse
+  ───────────────────────────────────────────── */
+
+  // Tiny mesh helper (used by holographic props below)
+  function mesh(geo, mat, parent, pos=[0,0,0], rot=[0,0,0]) {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(...pos);
+    m.rotation.set(...rot);
+    parent.add(m);
+    return m;
+  }
+
+  // Root group — GSAP scroll transitions animate this
+  const robotRoot = new THREE.Group();
+  robotRoot.position.set(0, 0.0, 0);
+  scene.add(robotRoot);
+
+  // ── INNER GLOW LIGHT — pulses in animation loop ───────────────
+  const logoLight = new THREE.PointLight(0x06b6d4, 0, 0);
+  logoLight.position.set(0, 0, 0.8);
+  robotRoot.add(logoLight);
+  robotRoot.userData.logoLight = logoLight;
+
+  // ── Load, strip white bg, build sprite stack ──────────────────
+  const _img = new Image();
+  _img.crossOrigin = 'anonymous';
+  _img.onload = () => {
+    // 1. Draw to canvas and remove background by corner-colour flood
+    const cvs = document.createElement('canvas');
+    cvs.width  = _img.width;
+    cvs.height = _img.height;
+    const ctx = cvs.getContext('2d');
+    ctx.drawImage(_img, 0, 0);
+    const imgData = ctx.getImageData(0, 0, cvs.width, cvs.height);
+    const d = imgData.data;
+    // Sample top-left corner as background reference colour
+    const bgR = d[0], bgG = d[1], bgB = d[2];
+    const THRESH = 42;
+    for (let i = 0; i < d.length; i += 4) {
+      const dr = d[i]   - bgR;
+      const dg = d[i+1] - bgG;
+      const db = d[i+2] - bgB;
+      if (Math.sqrt(dr*dr + dg*dg + db*db) < THRESH) d[i+3] = 0;
+    }
+
+    /* ── LOGO COLOUR OVERRIDES ────────────────────────────────────────
+       To recolour parts of the mascot set the hex values below.
+       Set a value to null to keep the original PNG colour.
+
+       BLUE   — head ring, arm blobs
+       ORANGE — happy-eye arcs, top antenna disc
+       RED    — medical cross (change this to any colour you like)
+    ──────────────────────────────────────────────────────────────── */
+    const LOGO_RECOLOR = {
+      orange: '#0c4a6e',    // happy-eye arcs, antenna disc → dark navy
+      blue:   '#0369a1',    // dark blue body parts
+      red:    '#06b6d4',    // medical cross
+      body:   '#eef6ff',    // white/light-grey body → barely-blue clean white
+    };
+
+    // Helper: convert hex string to [r, g, b] 0-255
+    function hexToRGB(hex) {
+      const n = parseInt(hex.replace('#',''), 16);
+      return [(n>>16)&255, (n>>8)&255, n&255];
+    }
+    // Helper: RGB → HSV (h: 0-360)
+    function rgbToHsv(r, g, b) {
+      r/=255; g/=255; b/=255;
+      const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min;
+      let h=0;
+      if (d) {
+        if      (max===r) h=((g-b)/d)%6;
+        else if (max===g) h=(b-r)/d+2;
+        else              h=(r-g)/d+4;
+        h=((h*60)+360)%360;
+      }
+      return { h, s: max?d/max:0, v: max };
+    }
+    if (LOGO_RECOLOR.blue || LOGO_RECOLOR.orange || LOGO_RECOLOR.red || LOGO_RECOLOR.body) {
+      const blueRGB   = LOGO_RECOLOR.blue   ? hexToRGB(LOGO_RECOLOR.blue)   : null;
+      const orangeRGB = LOGO_RECOLOR.orange ? hexToRGB(LOGO_RECOLOR.orange) : null;
+      const redRGB    = LOGO_RECOLOR.red    ? hexToRGB(LOGO_RECOLOR.red)    : null;
+      const bodyRGB   = LOGO_RECOLOR.body   ? hexToRGB(LOGO_RECOLOR.body)   : null;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i+3] < 10) continue; // skip transparent
+        const { h, s, v } = rgbToHsv(d[i], d[i+1], d[i+2]);
+        // Blue  hue roughly 195–240
+        if (blueRGB   && s > 0.25 && v > 0.20 && h >= 195 && h <= 240) {
+          d[i]=blueRGB[0]; d[i+1]=blueRGB[1]; d[i+2]=blueRGB[2];
+        }
+        // Orange hue roughly 20–50
+        else if (orangeRGB && s > 0.35 && v > 0.45 && h >= 20 && h <= 50) {
+          d[i]=orangeRGB[0]; d[i+1]=orangeRGB[1]; d[i+2]=orangeRGB[2];
+        }
+        // Red hue roughly 340-360 or 0-15
+        else if (redRGB && s > 0.35 && v > 0.25 && (h >= 340 || h <= 15)) {
+          d[i]=redRGB[0]; d[i+1]=redRGB[1]; d[i+2]=redRGB[2];
+        }
+        // White / near-white body: low saturation, high brightness
+        else if (bodyRGB && s < 0.18 && v > 0.78) {
+          // very light blend — keeps it essentially white with the faintest tint
+          const blend = 0.22;
+          d[i]   = Math.round(d[i]   * (1-blend) + bodyRGB[0] * blend);
+          d[i+1] = Math.round(d[i+1] * (1-blend) + bodyRGB[1] * blend);
+          d[i+2] = Math.round(d[i+2] * (1-blend) + bodyRGB[2] * blend);
+        }
+      }
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+
+    const W3 = 3.0; // world-space size
+    const makeCanvasTex = () => {
+      const t = new THREE.CanvasTexture(cvs);
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    };
+
+    // 2. RIM GLOW — larger additive tinted copy behind
+    const rimMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(W3 * 1.22, W3 * 1.22),
+      new THREE.MeshBasicMaterial({
+        map: makeCanvasTex(), transparent: true, opacity: 0.20,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+        side: THREE.DoubleSide, color: new THREE.Color(0x06b6d4),
+      })
+    );
+    rimMesh.position.set(0, 0, -0.10);
+    robotRoot.add(rimMesh);
+    robotRoot.userData.haloRim = rimMesh;
+
+    // 4. MAIN SPRITE — exact colours, no lighting
+    const spriteMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(W3, W3),
+      new THREE.MeshBasicMaterial({
+        map: makeCanvasTex(), transparent: true,
+        alphaTest: 0.04, side: THREE.DoubleSide, depthWrite: false,
+      })
+    );
+    spriteMesh.position.set(0, 0, 0);
+    robotRoot.add(spriteMesh);
+    robotRoot.userData.logoSprite = spriteMesh;
+
+    // (specular highlight removed — was showing as unwanted white circle)
+  };
+  _img.src = '/logo.png';
+
+  /* ──────────────────────────────────────────
+     5. HOLOGRAPHIC CLIPBOARD (scene-space)
+     Floats beside the logo when SATS section
+     is active — animation loop lerps it into place.
+  ────────────────────────────────────────── */
+  const clipGroup = new THREE.Group();
+  clipGroup.visible = false;
+  clipGroup.position.set(3.2, -0.1, 1.4);
+  clipGroup.rotation.y = -0.55;
+  scene.add(clipGroup);
+
+  clipGroup.add(new THREE.Mesh(
+    new THREE.BoxGeometry(0.78, 1.08, 0.04),
+    new THREE.MeshStandardMaterial({
+      color: 0x0d1a2d, emissive: new THREE.Color(0x0c4a6e), emissiveIntensity: 0.7,
+      transparent: true, opacity: 0.93, metalness: 0.3, roughness: 0.5,
+    })
+  ));
+  clipGroup.add(new THREE.Mesh(
+    new THREE.BoxGeometry(0.80, 1.10, 0.035),
+    new THREE.MeshStandardMaterial({
+      color: 0x0369a1, emissive: new THREE.Color(0x0369a1), emissiveIntensity: 2.8,
+      transparent: true, opacity: 0.38, blending: THREE.AdditiveBlending, depthWrite: false, wireframe: true,
+    })
+  ));
+  // mSATS header bar
+  mesh(new THREE.BoxGeometry(0.58, 0.058, 0.02), M.mint(3.2), clipGroup, [0, 0.44, 0.03]);
+  mesh(new THREE.BoxGeometry(0.20, 0.028, 0.02), M.emerald(2.2), clipGroup, [-0.18, 0.36, 0.03]);
+  // Data rows — patient vitals
+  const rowWidths = [0.52, 0.38, 0.46, 0.32, 0.44, 0.36, 0.50, 0.30];
+  rowWidths.forEach((w, i) => {
+    mesh(new THREE.BoxGeometry(w, 0.016, 0.02),
+      new THREE.MeshStandardMaterial({ color: 0x0369a1, emissive: new THREE.Color(0x0369a1), emissiveIntensity: 1.4 + i * 0.1 }),
+      clipGroup, [-0.04, 0.26 - i * 0.105, 0.03]);
+  });
+  // Tick / check glyph
+  mesh(new THREE.BoxGeometry(0.06, 0.016, 0.02), M.mint(3.5), clipGroup, [-0.3, -0.60, 0.03], [0,0, 0.7]);
+  mesh(new THREE.BoxGeometry(0.10, 0.016, 0.02), M.mint(3.5), clipGroup, [-0.24, -0.62, 0.03], [0,0,-0.4]);
+
+  /* ──────────────────────────────────────────
+     6. HOLOGRAPHIC REPORT (scene-space)
+     Floats beside the logo when Report section
+     is active — animation loop lerps it into place.
+  ────────────────────────────────────────── */
+  const reportGroup = new THREE.Group();
+  reportGroup.visible = false;
+  reportGroup.position.set(-3.2, -0.1, 1.4);
+  reportGroup.rotation.y = 0.55;
+  scene.add(reportGroup);
+
+  reportGroup.add(new THREE.Mesh(
+    new THREE.BoxGeometry(1.15, 0.95, 0.03),
+    new THREE.MeshStandardMaterial({
+      color: 0x060d1d, emissive: new THREE.Color(0x0c4a6e), emissiveIntensity: 0.9,
+      transparent: true, opacity: 0.90,
+    })
+  ));
+  reportGroup.add(new THREE.Mesh(
+    new THREE.BoxGeometry(1.17, 0.97, 0.025),
+    new THREE.MeshStandardMaterial({
+      color: 0x0284c7, emissive: new THREE.Color(0x0284c7), emissiveIntensity: 3.2,
+      transparent: true, opacity: 0.38, blending: THREE.AdditiveBlending, depthWrite: false, wireframe: true,
+    })
+  ));
+  // Title bar
+  mesh(new THREE.BoxGeometry(0.75, 0.044, 0.02), M.mint(3.5), reportGroup, [0, 0.39, 0.02]);
+  mesh(new THREE.BoxGeometry(0.35, 0.026, 0.02), M.emerald(2.2), reportGroup, [-0.19, 0.31, 0.02]);
+  // Bar chart — shift summary by hour
+  const barColors = [0x0369a1, 0x0284c7, 0x06b6d4, 0x0369a1, 0x0284c7, 0x22d3ee];
+  const barHeights = [0.30, 0.50, 0.22, 0.58, 0.38, 0.44];
+  barColors.forEach((c, i) => {
+    const h = barHeights[i];
+    mesh(new THREE.BoxGeometry(0.10, h, 0.025),
+      new THREE.MeshStandardMaterial({ color: c, emissive: new THREE.Color(c), emissiveIntensity: 2.4 }),
+      reportGroup, [-0.52 + i * 0.21, -0.40 + h / 2, 0.02]);
+  });
+  // X-axis line
+  mesh(new THREE.BoxGeometry(1.05, 0.016, 0.02), M.emerald(1.8), reportGroup, [0, -0.41, 0.02]);
+
+  /* ──────────────────────────────────────────
+     7. RADAR RINGS (orbiting toruses)
+  ────────────────────────────────────────── */
+  const radarGroup = new THREE.Group();
+  robotRoot.add(radarGroup);
+
+  const radarDefs = [
+    { r: 2.1,  tube: 0.025, color: 0x0284c7, tiltX: 0,     tiltY: 0,     speed: 0.55,  dir: 1  },
+    { r: 2.8,  tube: 0.017, color: 0x0369a1, tiltX: 0.28,  tiltY: 0,     speed: 0.38,  dir: -1 },
+    { r: 3.55, tube: 0.012, color: 0x06b6d4, tiltX: -0.45, tiltY: 0.2,   speed: 0.24,  dir: 1  },
+  ];
+
+  // Dark-mode ring colours (originals) and light-mode replacements
+  const ringColorsDark  = [0x0284c7, 0x0369a1, 0x06b6d4];
+  const ringColorsLight = [0x083766, 0x0b4e8a, 0x0d6ab0];
+
+  const radarRings = radarDefs.map((d, idx) => {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(d.r, d.tube, 16, 128),
+      M.ring(d.color, 1.4)
+    );
+    ring.rotation.set(d.tiltX, d.tiltY, 0);
+    ring.userData = { speed: d.speed, dir: d.dir, idx };
+    radarGroup.add(ring);
+    return ring;
+  });
+
+  function setRingTheme(isLight) {
+    radarRings.forEach((ring, i) => {
+      const col = new THREE.Color(isLight ? ringColorsLight[i] : ringColorsDark[i]);
+      ring.material.color.set(col);
+      ring.material.emissive.set(col);
+      ring.material.blending    = isLight ? THREE.NormalBlending  : THREE.AdditiveBlending;
+      ring.material.opacity     = isLight ? 0.80 : 0.70;
+      ring.material.emissiveIntensity = isLight ? 0.5 : 1.4;
+      ring.material.needsUpdate = true;
+    });
+  }
+  window._stSetRingTheme = setRingTheme;
+
+  // Wireframe decoration rings (faint)
+  [2.45, 3.1].forEach((r, i) => {
+    const wr = new THREE.Mesh(
+      new THREE.TorusGeometry(r, 0.008, 8, 100),
+      M.wireRing(i === 0 ? 0x0284c7 : 0x0369a1)
+    );
+    wr.rotation.x = [0.6, -0.3][i];
+    radarGroup.add(wr);
+  });
+
+  /* ──────────────────────────────────────────
+     8. PARTICLE SYSTEM — Mouse reactive
+  ────────────────────────────────────────── */
+  const PARTICLE_COUNT = 3200;
+  const SPREAD = 30;
+
+  const particlePositions = new Float32Array(PARTICLE_COUNT * 3);
+  const particleVelocities = new Float32Array(PARTICLE_COUNT * 3);
+  const particleColors = new Float32Array(PARTICLE_COUNT * 3);
+  const particleSizes = new Float32Array(PARTICLE_COUNT);
+
+  const palette = [
+    [0.008, 0.518, 0.784],  // #0284c7
+    [0.012, 0.412, 0.631],  // #0369a1
+    [0.024, 0.714, 0.831],  // #06b6d4
+    [0.133, 0.827, 0.933],  // #22d3ee
+    [0.404, 0.910, 0.976],  // #67e8f9
+    [0.020, 0.345, 0.627],  // #0858A0
+  ];
+
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const i3 = i * 3;
+    const theta = Math.random() * Math.PI * 2;
+    const phi   = Math.acos(2 * Math.random() - 1);
+    const r     = SPREAD * (0.25 + Math.random() * 0.75);
+    particlePositions[i3]     = r * Math.sin(phi) * Math.cos(theta);
+    particlePositions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    particlePositions[i3 + 2] = r * Math.cos(phi);
+
+    particleVelocities[i3]     = (Math.random() - 0.5) * 0.003;
+    particleVelocities[i3 + 1] = (Math.random() - 0.5) * 0.003 + 0.0008;
+    particleVelocities[i3 + 2] = (Math.random() - 0.5) * 0.002;
+
+    const c = palette[Math.floor(Math.random() * palette.length)];
+    particleColors[i3] = c[0]; particleColors[i3+1] = c[1]; particleColors[i3+2] = c[2];
+    particleSizes[i] = 0.04 + Math.random() * 0.06;
+  }
+
+  const particleGeo = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(particlePositions.slice(), 3);
+  posAttr.setUsage(THREE.DynamicDrawUsage);
+  particleGeo.setAttribute('position', posAttr);
+  particleGeo.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
+  particleGeo.setAttribute('size', new THREE.BufferAttribute(particleSizes, 1));
+
+  // Circle texture for round particles
+  function makeParticleCircle() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0,   'rgba(255,255,255,1.0)');
+    g.addColorStop(0.35,'rgba(255,255,255,0.9)');
+    g.addColorStop(0.70,'rgba(255,255,255,0.25)');
+    g.addColorStop(1.0, 'rgba(255,255,255,0.0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(32, 32, 32, 0, Math.PI * 2); ctx.fill();
+    return new THREE.CanvasTexture(c);
+  }
+
+  const particleMat = new THREE.PointsMaterial({
+    size: 0.10,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.72,
+    sizeAttenuation: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    map: makeParticleCircle(),
+    alphaTest: 0.005,
+  });
+
+  // Dark-mode and light-mode particle colour palettes
+  const paletteDark  = [
+    [0.008, 0.518, 0.784], [0.012, 0.412, 0.631],
+    [0.024, 0.714, 0.831], [0.133, 0.827, 0.933],
+    [0.404, 0.910, 0.976], [0.020, 0.345, 0.627],
+  ];
+  const paletteLight = [
+    [0.008, 0.184, 0.424], [0.012, 0.267, 0.553],   // deep navy blues
+    [0.020, 0.345, 0.627], [0.035, 0.412, 0.706],
+    [0.008, 0.243, 0.502], [0.047, 0.294, 0.569],
+  ];
+
+  function setParticleTheme(isLight) {
+    const pal = isLight ? paletteLight : paletteDark;
+    const ca = particleGeo.attributes.color.array;
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const c = pal[Math.floor(Math.random() * pal.length)];
+      ca[i*3] = c[0]; ca[i*3+1] = c[1]; ca[i*3+2] = c[2];
+    }
+    particleGeo.attributes.color.needsUpdate = true;
+    particleMat.blending = isLight ? THREE.NormalBlending  : THREE.AdditiveBlending;
+    particleMat.opacity  = isLight ? 0.55 : 0.72;
+    particleMat.needsUpdate = true;
+  }
+  window._stSetParticleTheme = setParticleTheme;
+
+  // ── Halo rim theme helper ──────────────────────────────────────────
+  window._stIsLight = false;
+  window._stSetHaloTheme = function (isLight) {
+    const rim = robotRoot.userData.haloRim;
+    if (rim) {
+      rim.material.color.set(isLight ? 0x0c3a5c : 0x06b6d4);
+      rim.material.blending = isLight ? THREE.NormalBlending : THREE.AdditiveBlending;
+      rim.material.opacity = isLight ? 0.06 : 0.20;
+      rim.material.needsUpdate = true;
+    }
+    window._stIsLight = isLight;
+  };
+
+  const particles = new THREE.Points(particleGeo, particleMat);
+  scene.add(particles);
+
+  // Live working positions array
+  const livePos = particlePositions.slice();
+
+  /* ──────────────────────────────────────────
+     9. MOUSE TRACKING
+  ────────────────────────────────────────── */
+  const mouse = { x: 0, y: 0, nx: 0, ny: 0 }; // normalised -1..1
+  const cursorGlow = document.getElementById('cursor-glow');
+
+  window.addEventListener('mousemove', e => {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+    mouse.nx = (e.clientX / W()) * 2 - 1;
+    mouse.ny = -(e.clientY / H()) * 2 + 1;
+    if (cursorGlow) {
+      cursorGlow.style.left = e.clientX + 'px';
+      cursorGlow.style.top  = e.clientY + 'px';
+    }
+  });
+
+  /* ──────────────────────────────────────────
+     10. GSAP SCROLL TRIGGERS
+  ────────────────────────────────────────── */
+
+  // Logo scroll target — GSAP tweens these, animation loop reads them
+  const mascot = {
+    posX: 0, posY: 0.2,
+    rotY: 0, rotX: 0,
+    clipVis:   false,
+    reportVis: false,
+  };
+
+  // ── Progress bar ──
+  gsap.to('#progress-bar', {
+    scaleX: 1, ease: 'none',
+    scrollTrigger: { trigger: 'body', start: 'top top', end: 'bottom bottom', scrub: 0 }
+  });
+
+  // ── Reveal hero content on load ──
+  gsap.fromTo('#hero-content', { opacity: 0, y: 40 }, {
+    opacity: 1, y: 0, duration: 1.2, delay: 0.3, ease: 'power3.out',
+  });
+
+  /* ══ SECTION 1 → 2  (SATS AUDIT) ══
+     Logo glides right, tilts to face the text on the left. */
+  ScrollTrigger.create({
+    trigger: '#section-sats',
+    start: 'top 80%',
+    onEnter: () => {
+      gsap.to(mascot, { posX: 1.85, posY: 0.1, rotY: 0.52, rotX: -0.05, duration: 1.1, ease: 'power3.out' });
+      setTimeout(() => { mascot.clipVis = true; }, 520);
+    },
+    onLeaveBack: () => {
+      gsap.to(mascot, { posX: 0, posY: 0.2, rotY: 0, rotX: 0, duration: 0.9, ease: 'power2.inOut' });
+      mascot.clipVis = false;
+    }
+  });
+
+  /* ══ SECTION 2 → 3  (MIDNIGHT REPORT) ══
+     Logo glides left, tilts to face the text on the right. */
+  ScrollTrigger.create({
+    trigger: '#section-report',
+    start: 'top 80%',
+    onEnter: () => {
+      gsap.to(mascot, { posX: -1.85, posY: 0.1, rotY: -0.52, rotX: -0.05, duration: 1.0, ease: 'power3.out' });
+      mascot.clipVis = false;
+      setTimeout(() => { mascot.reportVis = true; }, 520);
+    },
+    onLeaveBack: () => {
+      gsap.to(mascot, { posX: 1.85, posY: 0.1, rotY: 0.52, rotX: -0.05, duration: 0.9, ease: 'power2.inOut' });
+      mascot.clipVis = true;
+      mascot.reportVis = false;
+    }
+  });
+
+  /* ══ SECTION 3 → CTA ══
+     Logo returns to centre, faces forward. */
+  ScrollTrigger.create({
+    trigger: '#cta-content',
+    start: 'top 80%',
+    onEnter: () => {
+      gsap.to(mascot, { posX: 0, posY: 0.2, rotY: 0, rotX: 0, duration: 1.0, ease: 'power3.out' });
+      mascot.reportVis = false;
+    },
+    onLeaveBack: () => {
+      gsap.to(mascot, { posX: -1.85, posY: 0.1, rotY: -0.52, duration: 0.9, ease: 'power2.inOut' });
+      mascot.reportVis = true;
+    }
+  });
+
+  // ── Content reveals ──
+  ['#sats-content', '#report-content', '#cta-content'].forEach(id => {
+    gsap.fromTo(id,
+      { opacity: 0, y: 48 },
+      {
+        opacity: 1, y: 0, duration: 0.9, ease: 'power3.out',
+        scrollTrigger: { trigger: id, start: 'top 78%' },
+      }
+    );
+  });
+
+  /* ──────────────────────────────────────────
+     10b. STRIPE-INSPIRED ANIMATIONS
+  ────────────────────────────────────────── */
+
+  // 1. Hero content staggered entrance on page load
+  gsap.from('#hero-content > *', {
+    y: 30, opacity: 0, duration: 0.85, stagger: 0.12,
+    ease: 'power3.out', delay: 0.45,
+  });
+
+  // 2. Animated ambient gradient blobs (Stripe-style)
+  [
+    { sel: '#section-hero',   color: 'rgba(2,132,199,0.18)', w: 560, h: 380, l: '8%',  t: '18%', dur: 18, dx: 65, dy: 45  },
+    { sel: '#section-hero',   color: 'rgba(12,74,110,0.22)',   w: 400, h: 420, l: '72%', t: '62%', dur: 22, dx:-55, dy: 38  },
+    { sel: '#section-sats',   color: 'rgba(6,182,212,0.13)', w: 480, h: 360, l: '78%', t: '28%', dur: 16, dx:-60, dy: 55  },
+    { sel: '#section-report', color: 'rgba(12,74,110,0.16)',   w: 440, h: 440, l: '14%', t: '48%', dur: 20, dx: 50, dy:-42  },
+  ].forEach(b => {
+    const el = document.querySelector(b.sel);
+    if (!el) return;
+    const div = document.createElement('div');
+    div.className = 'st-blob';
+    div.style.cssText =
+      `width:${b.w}px;height:${b.h}px;background:${b.color};` +
+      `left:${b.l};top:${b.t};transform:translate(-50%,-50%);`;
+    el.appendChild(div);
+    gsap.fromTo(div, { opacity: 0 }, { opacity: 1, duration: 2.5, ease: 'power2.out' });
+    gsap.to(div, {
+      x: b.dx, y: b.dy, duration: b.dur,
+      ease: 'sine.inOut', yoyo: true, repeat: -1,
+    });
+  });
+
+  // 3. Feature items stagger on scroll (within each section)
+  gsap.utils.toArray('.feature-item').forEach((item, i) => {
+    gsap.from(item, {
+      x: -22, opacity: 0, duration: 0.55, ease: 'power2.out',
+      delay: (i % 3) * 0.10,
+      scrollTrigger: { trigger: item, start: 'top 80%', once: true },
+    });
+  });
+
+  // 4. Stat counter animations (counts up when scrolled into view)
+  document.querySelectorAll('.stat-val').forEach(el => {
+    const raw = el.textContent.trim();
+    // Match leading numeric portion (digits, dots, commas, spaces, narrow-spaces)
+    const m = raw.match(/^([\.\d\u00a0\u202f ,]+)(.*)/u);
+    if (!m) return;
+    const numStr = m[1].replace(/[\u00a0\u202f ,]/g, '');
+    const suffix = m[2];
+    const num = parseFloat(numStr);
+    if (isNaN(num)) return;
+    const decimals = numStr.includes('.') ? numStr.split('.')[1].length : 0;
+    const obj = { v: 0 };
+    ScrollTrigger.create({
+      trigger: el, start: 'top 88%', once: true,
+      onEnter: () => gsap.to(obj, {
+        v: num, duration: 1.55, ease: 'power2.out',
+        onUpdate() {
+          let n;
+          if (decimals) {
+            n = obj.v.toFixed(decimals);
+          } else if (num >= 1000) {
+            n = Math.round(obj.v).toLocaleString('en-GB').replace(',', '\u202f');
+          } else {
+            n = Math.round(obj.v).toString();
+          }
+          el.textContent = n + suffix;
+        },
+      }),
+    });
+  });
+
+  // 5. Section headlines slide up on scroll
+  gsap.utils.toArray('.section-headline').forEach(el => {
+    gsap.from(el, {
+      y: 26, opacity: 0, duration: 0.75, ease: 'power3.out',
+      scrollTrigger: { trigger: el, start: 'top 82%', once: true },
+    });
+  });
+
+  // 6. Section label pills slide in from left
+  gsap.utils.toArray('.section-label').forEach(el => {
+    gsap.from(el, {
+      x: -20, opacity: 0, duration: 0.5, ease: 'power2.out',
+      scrollTrigger: { trigger: el, start: 'top 85%', once: true },
+    });
+  });
+
+  // 7. Holo badge slide in
+  gsap.utils.toArray('.holo-badge').forEach(el => {
+    gsap.from(el, {
+      x: -16, opacity: 0, duration: 0.55, ease: 'power2.out',
+      scrollTrigger: { trigger: el, start: 'top 88%', once: true },
+    });
+  });
+
+  // 8. CTA stat cards stagger in
+  gsap.utils.toArray('.cta-stat-card').forEach((el, i) => {
+    gsap.from(el, {
+      y: 22, opacity: 0, duration: 0.55, ease: 'power3.out',
+      delay: i * 0.09,
+      scrollTrigger: { trigger: el, start: 'top 88%', once: true },
+    });
+  });
+
+  // 9. inject scan-line div into every feature card and hero stat card
+  [...document.querySelectorAll('.feature-item'), ...document.querySelectorAll('.hero-stat-card')].forEach(card => {
+    if (!card.querySelector('.card-scan')) {
+      const s = document.createElement('div');
+      s.className = 'card-scan';
+      card.prepend(s);
+    }
+  });
+
+  // 10. Hero stat cards: pop entrance + sparkline draw
+  gsap.utils.toArray('.hero-stat-card').forEach((card, i) => {
+    gsap.from(card, {
+      scale: 0.88, opacity: 0, y: 18, duration: 0.65, ease: 'back.out(1.7)',
+      delay: 0.58 + i * 0.14,
+    });
+    setTimeout(() => {
+      const line = card.querySelector('.hsc-line');
+      if (line) line.classList.add('drawn');
+    }, 920 + i * 170);
+  });
+
+  // 11. Hero stat cards: spotlight + 3-D tilt + border breathe + sparkline re-draw on re-hover
+  document.querySelectorAll('.hero-stat-card').forEach(card => {
+    card.addEventListener('mousemove', e => {
+      const r = card.getBoundingClientRect();
+      card.style.setProperty('--mx', ((e.clientX - r.left) / r.width) * 100 + '%');
+      card.style.setProperty('--my', ((e.clientY - r.top) / r.height) * 100 + '%');
+      const tx = ((e.clientY - r.top)  / r.height - 0.5) * -13;
+      const ty = ((e.clientX - r.left) / r.width  - 0.5) *  13;
+      card.style.transform = `perspective(480px) rotateX(${tx}deg) rotateY(${ty}deg) scale(1.045) translateY(-3px)`;
+    });
+    card.addEventListener('mouseenter', () => card.classList.add('is-hovered'));
+    card.addEventListener('mouseleave', () => {
+      card.classList.remove('is-hovered');
+      card.style.transform = '';
+      // Replay sparkline animation
+      const line = card.querySelector('.hsc-line');
+      if (line) { line.classList.remove('drawn'); void line.offsetWidth; line.classList.add('drawn'); }
+    });
+  });
+
+  // 12. is-hovered class management for feature-items and cta-stat-cards
+  [...document.querySelectorAll('.feature-item'), ...document.querySelectorAll('.cta-stat-card')].forEach(card => {
+    card.addEventListener('mouseenter', () => card.classList.add('is-hovered'));
+    card.addEventListener('mouseleave', () => card.classList.remove('is-hovered'));
+  });
+
+  // 13. CTA stat-card spotlight tracking
+  document.querySelectorAll('.cta-stat-card').forEach(card => {
+    card.addEventListener('mousemove', e => {
+      const r = card.getBoundingClientRect();
+      card.style.setProperty('--mx', ((e.clientX - r.left) / r.width) * 100 + '%');
+      card.style.setProperty('--my', ((e.clientY - r.top) / r.height) * 100 + '%');
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // LIVE TRIAGE FEED
+  // ────────────────────────────────────────────────────────────────────
+  (function initTriageFeed() {
+    const container = document.getElementById('tlp-entries');
+    const clockEl   = document.getElementById('tlp-clock');
+    const distBars  = {
+      critical: document.querySelector('.tlp-dist-bar[data-level="critical"]'),
+      urgent:   document.querySelector('.tlp-dist-bar[data-level="urgent"]'),
+      standard: document.querySelector('.tlp-dist-bar[data-level="standard"]'),
+      minor:    document.querySelector('.tlp-dist-bar[data-level="minor"]'),
+    };
+    if (!container) return;
+
+    const LEVELS = [
+      { key: 'critical', label: 'Critical',  color: '#ef4444', badgeBg: 'rgba(239,68,68,0.18)',  badgeCol: '#fca5a5' },
+      { key: 'urgent',   label: 'Urgent',    color: '#f97316', badgeBg: 'rgba(249,115,22,0.18)', badgeCol: '#fdba74' },
+      { key: 'standard', label: 'Standard',  color: '#eab308', badgeBg: 'rgba(234,179,8,0.18)',  badgeCol: '#fde047' },
+      { key: 'minor',    label: 'Minor',     color: '#22c55e', badgeBg: 'rgba(34,197,94,0.18)',  badgeCol: '#86efac' },
+    ];
+    const STATUSES = [
+      ['Arriving…',     true ],
+      ['Assessing…',    true ],
+      ['TEWS scored',   false],
+      ['Triaged ✓',     false],
+      ['In observation',false],
+    ];
+    const NAMES = ['Amara K.','Mugisha E.','Uwase B.','Niyonzima J.','Kalisa R.',
+                   'Ingabire P.','Habimana D.','Mukamana S.','Bizimana T.','Uwiringiyimana C.'];
+
+    let patientSeq = 1000 + Math.floor(Math.random() * 200);
+    const entries = []; // { el, age, level }
+    const counts  = { critical: 2, urgent: 4, standard: 6, minor: 3 };
+
+    function fmt(sec) {
+      if (sec < 60) return sec + 's ago';
+      return Math.floor(sec / 60) + 'm ' + (sec % 60) + 's ago';
+    }
+    function updateClock() {
+      const n = new Date();
+      const h = String(n.getHours()).padStart(2,'0');
+      const m = String(n.getMinutes()).padStart(2,'0');
+      const s = String(n.getSeconds()).padStart(2,'0');
+      if (clockEl) clockEl.textContent = h + ':' + m + ':' + s;
+    }
+    function updateDist() {
+      const total = counts.critical + counts.urgent + counts.standard + counts.minor;
+      if (!total) return;
+      Object.keys(counts).forEach(k => {
+        if (distBars[k]) distBars[k].style.flex = String(counts[k] / total * 10);
+      });
+    }
+    function addEntry() {
+      const level = LEVELS[Math.floor(Math.random() * LEVELS.length)];
+      const status= STATUSES[Math.floor(Math.random() * 3)]; // mostly active
+      const name  = NAMES[Math.floor(Math.random() * NAMES.length)];
+      const id    = '#' + (++patientSeq);
+      counts[level.key] = Math.min((counts[level.key] || 0) + 1, 12);
+      updateDist();
+
+      const el = document.createElement('div');
+      el.className = 'tlp-entry';
+      el.innerHTML = `
+        <span class="tlp-priority${status[1] ? ' pulse-anim' : ''}" style="background:${level.color};color:${level.color}"></span>
+        <span class="tlp-id">${id}</span>
+        <span class="tlp-badge" style="background:${level.badgeBg};color:${level.badgeCol}">${level.label}</span>
+        <span class="tlp-status">${name} &mdash; ${status[0]}</span>
+        <span class="tlp-age">just now</span>
+      `;
+      container.prepend(el);
+      entries.unshift({ el, age: 0, level });
+
+      // Cap at 5 visible entries
+      while (entries.length > 5) {
+        const old = entries.pop();
+        old.el.classList.add('leaving');
+        counts[old.level.key] = Math.max((counts[old.level.key] || 1) - 1, 0);
+        updateDist();
+        setTimeout(() => old.el.remove(), 380);
+      }
+    }
+
+    // Seed 4 initial entries
+    for (let i = 0; i < 4; i++) setTimeout(addEntry, i * 120);
+
+    // New patient every 2.8s
+    setInterval(addEntry, 2800);
+
+    // Age counter every second
+    setInterval(() => {
+      updateClock();
+      entries.forEach(e => {
+        e.age++;
+        const ageEl = e.el.querySelector('.tlp-age');
+        if (ageEl) ageEl.textContent = fmt(e.age);
+        // Occasionally update status text to feel alive
+        if (e.age === 4 || e.age === 10) {
+          const sEl = e.el.querySelector('.tlp-status');
+          if (sEl) {
+            const next = STATUSES[Math.min(
+              STATUSES.findIndex(s => sEl.textContent.includes(s[0].replace('…',''))) + 1,
+              STATUSES.length - 1
+            )];
+            if (next) {
+              const dot = e.el.querySelector('.tlp-priority');
+              if (!next[1] && dot) dot.classList.remove('pulse-anim');
+              const parts = sEl.textContent.split('\u2014');
+              sEl.innerHTML = (parts[0] || '') + '\u2014 ' + next[0];
+            }
+          }
+        }
+      });
+    }, 1000);
+
+    updateClock();
+    updateDist();
+  })();
+
+  // 14. Stat counters on CTA scroll-in (glow burst then settles)
+  gsap.utils.toArray('.cta-stat-card .stat-val').forEach((el, i) => {
+    ScrollTrigger.create({ trigger: el, start: 'top 88%', once: true,
+      onEnter: () => gsap.fromTo(el,
+        { filter: 'drop-shadow(0 0 24px rgba(6,182,212,0.9))' },
+        { filter: 'drop-shadow(0 0 0px rgba(6,182,212,0))', duration: 1.4, ease: 'power2.out', delay: i * 0.15 }
+      ),
+    });
+  });
+
+  // 15. Badge continuous glow
+  gsap.to('.holo-badge', {
+    boxShadow: '0 0 20px rgba(6,182,212,0.45), 0 0 0 1px rgba(6,182,212,0.55)',
+    duration: 1.5, ease: 'sine.inOut', yoyo: true, repeat: -1,
+  });
+
+  // 16. Feature icon flip-in on scroll
+  gsap.utils.toArray('.feature-icon').forEach((icon, i) => {
+    gsap.from(icon, {
+      rotationY: 90, scale: 0.5, opacity: 0, duration: 0.55, ease: 'back.out(1.7)',
+      delay: (i % 3) * 0.08,
+      scrollTrigger: { trigger: icon, start: 'top 84%', once: true },
+    });
+  });
+
+  // 17. Mild parallax depth on feature cards
+  gsap.utils.toArray('.feature-item').forEach(item => {
+    gsap.to(item, { yPercent: -4, ease: 'none',
+      scrollTrigger: { trigger: item, start: 'top bottom', end: 'bottom top', scrub: 1.2 },
+    });
+  });
+
+  // 18. Magnetic pull on primary CTA buttons
+  document.querySelectorAll('a[href="/dashboard"]').forEach(btn => {
+    btn.classList.add('has-shimmer', 'has-ripple');
+    btn.addEventListener('mousemove', e => {
+      const r = btn.getBoundingClientRect();
+      gsap.to(btn, { x: (e.clientX - (r.left + r.width/2)) * 0.28, y: (e.clientY - (r.top + r.height/2)) * 0.28, duration: 0.28, ease: 'power2.out' });
+    });
+    btn.addEventListener('mouseleave', () => gsap.to(btn, { x: 0, y: 0, duration: 0.55, ease: 'elastic.out(1,0.4)' }) );
+    btn.addEventListener('click', e => {
+      const r = btn.getBoundingClientRect(), size = Math.max(r.width, r.height);
+      const w = document.createElement('span');
+      w.className = 'ripple-wave';
+      w.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX-r.left-size/2}px;top:${e.clientY-r.top-size/2}px;`;
+      btn.appendChild(w);
+      w.addEventListener('animationend', () => w.remove());
+    });
+  });
+  let clock = new THREE.Clock();
+  let t = 0;
+
+  function lerp(a, b, f) { return a + (b - a) * f; }
+
+  // Smooth working state
+  const cur = { posX: 0, posY: 0.2, rotY: 0, rotX: 0 };
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    t += delta;
+
+    // ── Frame-rate-independent lerp ──
+    const LF = 1 - Math.pow(0.004, delta);
+    cur.posX = lerp(cur.posX, mascot.posX, LF * 3.0);
+    cur.posY = lerp(cur.posY, mascot.posY, LF * 3.0);
+    cur.rotY = lerp(cur.rotY, mascot.rotY, LF * 3.0);
+    cur.rotX = lerp(cur.rotX, mascot.rotX, LF * 3.0);
+
+    // ── Idle breathing ──
+    const breath  = Math.sin(t * 0.55) * 0.10;
+    const breathS = 1 + Math.sin(t * 1.1) * 0.014;
+
+    // ── Logo root: position + scroll rotation + mouse parallax tilt ──
+    robotRoot.position.set(
+      cur.posX + mouse.nx * 0.12,
+      cur.posY + breath + mouse.ny * 0.08,
+      0
+    );
+    // Sprite: allow Y rotation for scroll storytelling but keep X tilt very subtle
+    // so the flat texture doesn't look skewed.
+    robotRoot.rotation.y = cur.rotY + mouse.nx * 0.08;
+    robotRoot.rotation.x = cur.rotX * 0.3 + mouse.ny * 0.04;
+    robotRoot.rotation.z = Math.sin(t * 0.12) * 0.015;
+    robotRoot.scale.setScalar(breathS);
+
+    // ── Sprite glow pulse ──
+    if (robotRoot.userData.logoLight) {
+      robotRoot.userData.logoLight.intensity = 4.5 + Math.sin(t * 1.8) * 2.0;
+    }
+    if (robotRoot.userData.haloRim) {
+      // In light mode keep the halo subtle so it doesn't clash with the bright bg
+      robotRoot.userData.haloRim.material.opacity = window._stIsLight
+        ? 0.05 + Math.sin(t * 1.2) * 0.02
+        : 0.16 + Math.sin(t * 1.2) * 0.06;
+    }
+    // ── Radar rings orbit ──
+    radarRings.forEach(ring => {
+      ring.rotation.z += delta * ring.userData.speed * ring.userData.dir;
+      ring.rotation.x += delta * ring.userData.speed * 0.4 * ring.userData.dir;
+      ring.material.emissiveIntensity = 1.1 + Math.sin(t * 1.5 + ring.userData.speed) * 0.55;
+    });
+    radarGroup.position.copy(robotRoot.position);
+
+    // ── Clipboard: float beside logo when visible ──
+    if (mascot.clipVis !== clipGroup.visible) clipGroup.visible = mascot.clipVis;
+    if (clipGroup.visible) {
+      clipGroup.position.x = lerp(clipGroup.position.x, cur.posX + 2.15, 0.08);
+      clipGroup.position.y = -0.1 + Math.sin(t * 0.85) * 0.06;
+    }
+
+    // ── Report: float beside logo when visible ──
+    if (mascot.reportVis !== reportGroup.visible) reportGroup.visible = mascot.reportVis;
+    if (reportGroup.visible) {
+      reportGroup.position.x = lerp(reportGroup.position.x, cur.posX - 2.15, 0.08);
+      reportGroup.position.y = -0.1 + Math.sin(t * 0.75) * 0.06;
+    }
+
+    // ── Particles (drift + mouse parallax) ──
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const i3 = i * 3;
+      livePos[i3]     += particleVelocities[i3];
+      livePos[i3 + 1] += particleVelocities[i3 + 1];
+      livePos[i3 + 2] += particleVelocities[i3 + 2];
+
+      // Wrap
+      const dx = livePos[i3], dy = livePos[i3+1], dz = livePos[i3+2];
+      const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      if (dist > SPREAD) {
+        const s = SPREAD * 0.28 / dist;
+        livePos[i3] *= s; livePos[i3+1] *= s; livePos[i3+2] *= s;
+      }
+    }
+    posAttr.set(livePos);
+    posAttr.needsUpdate = true;
+
+    // Global rotate + mouse parallax
+    particles.rotation.y += delta * 0.038 + mouse.nx * 0.00025;
+    particles.rotation.x  = Math.sin(t * 0.05) * 0.07 + mouse.ny * 0.012;
+    particles.rotation.z  = window.scrollY * 0.000032;
+
+    // ── Camera subtle drift ──
+    camera.position.x = lerp(camera.position.x, mouse.nx * 0.4, 0.035);
+    camera.position.y = lerp(camera.position.y, 0.4 + mouse.ny * 0.25, 0.035);
+    camera.lookAt(0, 0.2, 0);
+
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  /* ──────────────────────────────────────────
+     12. RESIZE HANDLER
+  ────────────────────────────────────────── */
+  window.addEventListener('resize', () => {
+    camera.aspect = W() / H();
+    camera.updateProjectionMatrix();
+    renderer.setSize(W(), H());
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  });
+
+  /* ──────────────────────────────────────────
+     13. TOUCH SUPPORT — rudimentary parallax
+  ────────────────────────────────────────── */
+  window.addEventListener('touchmove', e => {
+    const t0 = e.touches[0];
+    if (!t0) return;
+    mouse.nx = (t0.clientX / W()) * 2 - 1;
+    mouse.ny = -(t0.clientY / H()) * 2 + 1;
+  }, { passive: true });
+
+  /* ──────────────────────────────────────────
+     14. LIGHT / DARK THEME TOGGLE
+  ────────────────────────────────────────── */
+  (function () {
+    const html   = document.documentElement;
+    const btn    = document.getElementById('theme-toggle');
+    const moon   = document.getElementById('icon-moon');
+    const sun    = document.getElementById('icon-sun');
+
+    // Restore saved preference
+    if (localStorage.getItem('st-theme') === 'light') applyLight();
+
+    btn.addEventListener('click', () => {
+      if (html.classList.contains('light')) {
+        applyDark();
+        localStorage.setItem('st-theme', 'dark');
+      } else {
+        applyLight();
+        localStorage.setItem('st-theme', 'light');
+      }
+    });
+
+    function applyLight() {
+      html.classList.add('light');
+      moon.style.display = 'none';
+      sun.style.display  = 'block';
+      scene.background = new THREE.Color(0xd6eaf8);
+      scene.fog        = new THREE.FogExp2(0xd6eaf8, 0.028);
+      if (window._stSetRingTheme)     window._stSetRingTheme(true);
+      if (window._stSetParticleTheme) window._stSetParticleTheme(true);
+      if (window._stSetHaloTheme)     window._stSetHaloTheme(true);
+    }
+    function applyDark() {
+      html.classList.remove('light');
+      moon.style.display = 'block';
+      sun.style.display  = 'none';
+      scene.background = new THREE.Color(0x020b14);
+      scene.fog        = new THREE.FogExp2(0x020b14, 0.038);
+      if (window._stSetRingTheme)     window._stSetRingTheme(false);
+      if (window._stSetParticleTheme) window._stSetParticleTheme(false);
+      if (window._stSetHaloTheme)     window._stSetHaloTheme(false);
+    }
+  })();
+
+})();
+</script>
+</body>
+</html>
+

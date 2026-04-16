@@ -1,0 +1,20 @@
+[
+  {
+    "serial": "MON-BED-01",
+    "apiKey": "PASTE_API_KEY_HERE",
+    "scenario": "normal",
+    "interval": 5
+  },
+  {
+    "serial": "MON-BED-02",
+    "apiKey": "PASTE_API_KEY_HERE",
+    "scenario": "deteriorating",
+    "interval": 5
+  },
+  {
+    "serial": "MON-BED-03",
+    "apiKey": "PASTE_API_KEY_HERE",
+    "scenario": "critical",
+    "interval": 5
+  }
+]

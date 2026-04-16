@@ -1,0 +1,111 @@
+# ═══════════════════════════════════════════════════════════════════
+#  SmartTriage monorepo — root .gitignore
+#  Covers: Spring Boot backend, React/Vite frontend, Python simulator
+# ═══════════════════════════════════════════════════════════════════
+
+# ── OS / editor ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# ── IDE ─────────────────────────────────────────────────────────────
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/*
+!.vscode/extensions.json
+.project
+.classpath
+.settings/
+.springBeans
+.sts4-cache
+.factorypath
+.apt_generated/
+nbproject/private/
+nbbuild/
+nbdist/
+.nb-gradle/
+
+# ── Logs ────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── Env / secrets (NEVER COMMIT) ────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+credentials.json
+secrets.json
+
+# ═══════════════════════════════════════════════════════════════════
+#  Backend — Spring Boot / Maven
+# ═══════════════════════════════════════════════════════════════════
+SmartTriage-server/target/
+SmartTriage-server/.mvn/wrapper/maven-wrapper.jar
+SmartTriage-server/HELP.md
+**/target/
+!**/src/main/**/target/
+!**/src/test/**/target/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# ── Spring profiles with local overrides (keep .properties in resources) ──
+SmartTriage-server/src/main/resources/application-local.properties
+SmartTriage-server/src/main/resources/application-*.local.properties
+
+# ═══════════════════════════════════════════════════════════════════
+#  Frontend — Vite / React / Node
+# ═══════════════════════════════════════════════════════════════════
+SmartTriage_Frontend_V6/node_modules/
+SmartTriage_Frontend_V6/dist/
+SmartTriage_Frontend_V6/dist-ssr/
+SmartTriage_Frontend_V6/*.local
+SmartTriage_Frontend_V6/.vite/
+SmartTriage_Frontend_V6/coverage/
+
+# Generic (catches any other node project)
+node_modules/
+dist/
+dist-ssr/
+.vite/
+
+# ═══════════════════════════════════════════════════════════════════
+#  Simulator — Python
+# ═══════════════════════════════════════════════════════════════════
+simulator/__pycache__/
+simulator/*.pyc
+simulator/*.pyo
+simulator/.venv/
+simulator/venv/
+simulator/devices.json
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ═══════════════════════════════════════════════════════════════════
+#  Misc build / deploy
+# ═══════════════════════════════════════════════════════════════════
+*.tsbuildinfo
+.eslintcache
+.stylelintcache

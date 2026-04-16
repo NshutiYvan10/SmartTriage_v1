@@ -1,0 +1,201 @@
+package com.smartTriage.smartTriage_server.module.invitation.service;
+
+import com.smartTriage.smartTriage_server.common.enums.AccountStatus;
+import com.smartTriage.smartTriage_server.common.exception.DuplicateResourceException;
+import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
+import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
+import com.smartTriage.smartTriage_server.module.hospital.service.HospitalService;
+import com.smartTriage.smartTriage_server.module.invitation.dto.ActivateAccountRequest;
+import com.smartTriage.smartTriage_server.module.invitation.dto.InviteUserRequest;
+import com.smartTriage.smartTriage_server.module.invitation.entity.InvitationToken;
+import com.smartTriage.smartTriage_server.module.invitation.repository.InvitationTokenRepository;
+import com.smartTriage.smartTriage_server.module.user.dto.UserResponse;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
+import com.smartTriage.smartTriage_server.module.user.mapper.UserMapper;
+import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.UUID;
+
+/**
+ * Invitation service — handles the full invite → activate lifecycle.
+ *
+ * Flow:
+ *  1. Admin calls invite() → creates a PENDING_ACTIVATION user + token → sends email
+ *  2. User clicks link → calls activate() → sets name/password → account becomes ACTIVE
+ *  3. Admin can resend() → invalidates old token, creates new one, re-sends email
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class InvitationService {
+
+    private final UserRepository userRepository;
+    private final InvitationTokenRepository tokenRepository;
+    private final HospitalService hospitalService;
+    private final EmailService emailService;
+    private final PasswordEncoder passwordEncoder;
+
+    private static final Duration TOKEN_VALIDITY = Duration.ofHours(48);
+
+    /**
+     * Step 1: Admin invites a user by email.
+     * Creates a PENDING_ACTIVATION user (no password) and sends invitation email.
+     */
+    @Transactional
+    public UserResponse inviteUser(InviteUserRequest request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new DuplicateResourceException("User", "email", request.getEmail());
+        }
+
+        Hospital hospital = hospitalService.findHospitalOrThrow(request.getHospitalId());
+
+        // Create user with PENDING_ACTIVATION status and a placeholder password
+        User user = User.builder()
+                .firstName("Pending")
+                .lastName("Activation")
+                .email(request.getEmail())
+                .passwordHash("PENDING_ACTIVATION_NO_LOGIN")  // Not a valid BCrypt hash — cannot login
+                .role(request.getRole())
+                .designation(request.getDesignation())
+                .department(request.getDepartment())
+                .hospital(hospital)
+                .accountStatus(AccountStatus.PENDING_ACTIVATION)
+                .build();
+
+        user = userRepository.save(user);
+
+        // Generate invitation token
+        String token = generateToken();
+        InvitationToken invitation = InvitationToken.builder()
+                .user(user)
+                .token(token)
+                .expiresAt(Instant.now().plus(TOKEN_VALIDITY))
+                .build();
+        tokenRepository.save(invitation);
+
+        // Send invitation email
+        String roleName = request.getRole().name().replace("_", " ");
+        emailService.sendInvitationEmail(request.getEmail(), token, roleName, hospital.getName());
+
+        log.info("Invitation sent to {} for role {} at hospital {}",
+                request.getEmail(), request.getRole(), hospital.getName());
+
+        return UserMapper.toResponse(user);
+    }
+
+    /**
+     * Step 2: User activates their account using the invitation token.
+     * Sets their name, password, and changes status to ACTIVE.
+     */
+    @Transactional
+    public UserResponse activateAccount(ActivateAccountRequest request) {
+        InvitationToken invitation = tokenRepository.findByTokenAndIsActiveTrue(request.getToken())
+                .orElseThrow(() -> new ResourceNotFoundException("InvitationToken", "token", request.getToken()));
+
+        if (invitation.isUsed()) {
+            throw new IllegalStateException("This invitation has already been used.");
+        }
+
+        if (invitation.isExpired()) {
+            throw new IllegalStateException("This invitation has expired. Please ask your administrator to resend the invitation.");
+        }
+
+        User user = invitation.getUser();
+
+        if (user.getAccountStatus() != AccountStatus.PENDING_ACTIVATION) {
+            throw new IllegalStateException("This account has already been activated.");
+        }
+
+        // Update user profile
+        user.setFirstName(request.getFirstName());
+        user.setLastName(request.getLastName());
+        user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+        user.setPhoneNumber(request.getPhoneNumber());
+        user.setEmployeeNumber(request.getEmployeeNumber());
+        user.setProfessionalLicense(request.getProfessionalLicense());
+        user.setAccountStatus(AccountStatus.ACTIVE);
+        userRepository.save(user);
+
+        // Mark token as used
+        invitation.setUsedAt(Instant.now());
+        tokenRepository.save(invitation);
+
+        log.info("Account activated for user: {} {} ({})", user.getFirstName(), user.getLastName(), user.getEmail());
+
+        return UserMapper.toResponse(user);
+    }
+
+    /**
+     * Resend invitation — invalidates previous token, generates new one, re-sends email.
+     */
+    @Transactional
+    public void resendInvitation(UUID userId) {
+        User user = userRepository.findByIdAndIsActiveTrue(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+
+        if (user.getAccountStatus() != AccountStatus.PENDING_ACTIVATION) {
+            throw new IllegalStateException("Can only resend invitations for pending accounts.");
+        }
+
+        // Invalidate any existing active tokens for this user
+        tokenRepository.findFirstByUserIdAndUsedAtIsNullAndIsActiveTrueOrderByCreatedAtDesc(userId)
+                .ifPresent(existing -> {
+                    existing.softDelete();
+                    tokenRepository.save(existing);
+                });
+
+        // Generate new token
+        String token = generateToken();
+        InvitationToken invitation = InvitationToken.builder()
+                .user(user)
+                .token(token)
+                .expiresAt(Instant.now().plus(TOKEN_VALIDITY))
+                .build();
+        tokenRepository.save(invitation);
+
+        // Resend email
+        String roleName = user.getRole().name().replace("_", " ");
+        emailService.sendInvitationEmail(user.getEmail(), token, roleName, user.getHospital().getName());
+
+        log.info("Invitation resent to {}", user.getEmail());
+    }
+
+    /**
+     * Validate a token without consuming it — used by the frontend to show
+     * the activation form or an error message.
+     */
+    @Transactional(readOnly = true)
+    public InvitationTokenInfo validateToken(String token) {
+        InvitationToken invitation = tokenRepository.findByTokenAndIsActiveTrue(token)
+                .orElseThrow(() -> new ResourceNotFoundException("InvitationToken", "token", token));
+
+        User user = invitation.getUser();
+
+        return new InvitationTokenInfo(
+                user.getEmail(),
+                user.getRole().name(),
+                user.getHospital().getName(),
+                invitation.isExpired(),
+                invitation.isUsed()
+        );
+    }
+
+    public record InvitationTokenInfo(
+            String email,
+            String role,
+            String hospitalName,
+            boolean expired,
+            boolean used
+    ) {}
+
+    private String generateToken() {
+        return UUID.randomUUID().toString() + "-" + UUID.randomUUID().toString();
+    }
+}

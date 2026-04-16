@@ -1,0 +1,131 @@
+package com.smartTriage.smartTriage_server.module.user.service;
+
+import com.smartTriage.smartTriage_server.common.enums.Designation;
+import com.smartTriage.smartTriage_server.common.exception.DuplicateResourceException;
+import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
+import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
+import com.smartTriage.smartTriage_server.module.hospital.service.HospitalService;
+import com.smartTriage.smartTriage_server.module.user.dto.CreateUserRequest;
+import com.smartTriage.smartTriage_server.module.user.dto.UpdateUserRequest;
+import com.smartTriage.smartTriage_server.module.user.dto.UserResponse;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
+import com.smartTriage.smartTriage_server.module.user.mapper.UserMapper;
+import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
+
+/**
+ * User service — manages system users (clinicians, nurses, admins).
+ * Also implements Spring Security's UserDetailsService for authentication.
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class UserService implements UserDetailsService {
+
+    private final UserRepository userRepository;
+    private final HospitalService hospitalService;
+    private final PasswordEncoder passwordEncoder;
+
+    @Override
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        return userRepository.findByEmailAndIsActiveTrue(email)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
+    }
+
+    @Transactional
+    public UserResponse createUser(CreateUserRequest request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new DuplicateResourceException("User", "email", request.getEmail());
+        }
+
+        Hospital hospital = hospitalService.findHospitalOrThrow(request.getHospitalId());
+
+        User user = User.builder()
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .email(request.getEmail())
+                .passwordHash(passwordEncoder.encode(request.getPassword()))
+                .phoneNumber(request.getPhoneNumber())
+                .role(request.getRole())
+                .designation(request.getDesignation())
+                .employeeNumber(request.getEmployeeNumber())
+                .professionalLicense(request.getProfessionalLicense())
+                .department(request.getDepartment())
+                .hospital(hospital)
+                .build();
+
+        user = userRepository.save(user);
+        log.info("User created: {} {} ({})", user.getFirstName(), user.getLastName(), user.getRole());
+        return UserMapper.toResponse(user);
+    }
+
+    public UserResponse getUserById(UUID id) {
+        User user = findUserOrThrow(id);
+        return UserMapper.toResponse(user);
+    }
+
+    public Page<UserResponse> getUsersByHospital(UUID hospitalId, Pageable pageable) {
+        return userRepository.findByHospitalIdAndIsActiveTrue(hospitalId, pageable)
+                .map(UserMapper::toResponse);
+    }
+
+    @Transactional
+    public void deactivateUser(UUID id) {
+        User user = findUserOrThrow(id);
+        user.softDelete();
+        userRepository.save(user);
+        log.info("User deactivated: {}", user.getEmail());
+    }
+
+    /**
+     * Update a user's professional designation.
+     * Restricted to SUPER_ADMIN and HOSPITAL_ADMIN via controller @PreAuthorize.
+     */
+    @Transactional
+    public UserResponse updateDesignation(UUID userId, Designation designation) {
+        User user = findUserOrThrow(userId);
+        user.setDesignation(designation);
+        user = userRepository.save(user);
+        log.info("User {} designation updated to {}", user.getEmail(), designation);
+        return UserMapper.toResponse(user);
+    }
+
+    /**
+     * Update a user's details (for admin edit).
+     */
+    @Transactional
+    public UserResponse updateUser(UUID userId, UpdateUserRequest request) {
+        User user = findUserOrThrow(userId);
+        user.setFirstName(request.getFirstName());
+        user.setLastName(request.getLastName());
+        user.setPhoneNumber(request.getPhoneNumber());
+        user.setRole(request.getRole());
+        user.setDesignation(request.getDesignation());
+        user.setEmployeeNumber(request.getEmployeeNumber());
+        user.setProfessionalLicense(request.getProfessionalLicense());
+        user.setDepartment(request.getDepartment());
+        if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+        }
+        user = userRepository.save(user);
+        log.info("User updated: {} {}", user.getFirstName(), user.getLastName());
+        return UserMapper.toResponse(user);
+    }
+
+    public User findUserOrThrow(UUID id) {
+        return userRepository.findByIdAndIsActiveTrue(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+    }
+}

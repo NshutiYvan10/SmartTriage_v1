@@ -1,0 +1,15 @@
+package com.smartTriage.smartTriage_server;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+@SpringBootApplication
+@EnableScheduling
+public class SmartTriageServerApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(SmartTriageServerApplication.class, args);
+	}
+
+}

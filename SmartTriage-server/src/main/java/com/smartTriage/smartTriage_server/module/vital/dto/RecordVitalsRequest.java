@@ -1,0 +1,65 @@
+package com.smartTriage.smartTriage_server.module.vital.dto;
+
+import com.smartTriage.smartTriage_server.common.enums.AvpuScore;
+import com.smartTriage.smartTriage_server.common.enums.VitalSource;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.UUID;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class RecordVitalsRequest {
+
+    @NotNull(message = "Visit ID is required")
+    private UUID visitId;
+
+    @Min(value = 0, message = "Respiratory rate cannot be negative")
+    @Max(value = 80, message = "Respiratory rate exceeds physiological range")
+    private Integer respiratoryRate;
+
+    @Min(value = 0, message = "Heart rate cannot be negative")
+    @Max(value = 300, message = "Heart rate exceeds physiological range")
+    private Integer heartRate;
+
+    @Min(value = 0, message = "Systolic BP cannot be negative")
+    @Max(value = 300, message = "Systolic BP exceeds physiological range")
+    private Integer systolicBp;
+
+    @Min(value = 0, message = "Diastolic BP cannot be negative")
+    @Max(value = 200, message = "Diastolic BP exceeds physiological range")
+    private Integer diastolicBp;
+
+    @Min(value = 25, message = "Temperature below physiological range")
+    @Max(value = 45, message = "Temperature above physiological range")
+    private Double temperature;
+
+    @Min(value = 0, message = "SpO2 cannot be negative")
+    @Max(value = 100, message = "SpO2 cannot exceed 100%")
+    private Integer spo2;
+
+    private AvpuScore avpu;
+
+    private Double bloodGlucose;
+
+    @Min(value = 0, message = "Pain score minimum is 0")
+    @Max(value = 10, message = "Pain score maximum is 10")
+    private Integer painScore;
+
+    @Min(value = 3, message = "GCS minimum is 3")
+    @Max(value = 15, message = "GCS maximum is 15")
+    private Integer gcsScore;
+
+    @Builder.Default
+    private VitalSource source = VitalSource.MANUAL_ENTRY;
+
+    private String deviceId;
+    private String notes;
+}
