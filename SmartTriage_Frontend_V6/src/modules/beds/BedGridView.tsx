@@ -20,6 +20,7 @@ import { BedActionSheet } from './BedActionSheet';
 const ZONES: { key: EdZone; label: string; hint: string }[] = [
   { key: 'RESUS', label: 'Resuscitation', hint: 'Critical RED patients' },
   { key: 'ACUTE', label: 'Acute Care', hint: 'ORANGE — urgent treatment' },
+  { key: 'GENERAL', label: 'General', hint: 'YELLOW & GREEN — sub-acute care' },
   { key: 'PEDIATRIC', label: 'Pediatric', hint: 'Children under 18' },
   { key: 'ISOLATION', label: 'Isolation', hint: 'Infection control' },
   { key: 'OBSERVATION', label: 'Observation', hint: 'Short-stay monitoring' },

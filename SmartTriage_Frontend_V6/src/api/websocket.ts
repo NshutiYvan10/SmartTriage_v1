@@ -74,7 +74,7 @@ export function subscribeToTopic<T>(
 
 // ── Typed subscription helpers ──
 
-import type { VitalStreamResponse, ClinicalAlertResponse, EdZone } from './types';
+import type { VitalStreamResponse, ClinicalAlertResponse, ClinicalNoteResponse, EdZone } from './types';
 
 export function subscribeToVitals(
   visitId: string,
@@ -121,6 +121,21 @@ export function subscribeToTriageChanges(
   return subscribeToTopic(`/topic/triage/${visitId}`, callback);
 }
 
+export interface TrendChangeEvent {
+  visitId: string;
+  sessionId: string;
+  trendStatus: 'WORSENING' | 'STABLE' | 'IMPROVING' | 'UNKNOWN';
+  previousTrendStatus: string;
+  timestamp: string;
+}
+
+export function subscribeToTrendChanges(
+  visitId: string,
+  callback: (event: TrendChangeEvent) => void
+): () => void {
+  return subscribeToTopic(`/topic/trend/${visitId}`, callback);
+}
+
 /**
  * Subscribe to bed-occupancy changes hospital-wide. Payload carries
  * bedId/code/zone/status/event so every bed-grid view can decide
@@ -141,6 +156,18 @@ export function subscribeToBedChanges(
   callback: (event: BedChangeEvent) => void
 ): () => void {
   return subscribeToTopic(`/topic/beds/${hospitalId}`, callback);
+}
+
+/**
+ * Subscribe to clinical-note events for a visit. Fires on both initial
+ * creation and supersede (correction). Subscribers can detect a correction
+ * via a non-null `supersedesId` on the payload.
+ */
+export function subscribeToClinicalNotes(
+  visitId: string,
+  callback: (note: ClinicalNoteResponse) => void
+): () => void {
+  return subscribeToTopic(`/topic/visit/${visitId}/notes`, callback);
 }
 
 export function getStompClient(): Client | null {

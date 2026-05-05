@@ -1,6 +1,7 @@
 package com.smartTriage.smartTriage_server.module.iot.entity;
 
 import com.smartTriage.smartTriage_server.common.entity.BaseEntity;
+import com.smartTriage.smartTriage_server.common.enums.TrendStatus;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import jakarta.persistence.*;
 import lombok.*;
@@ -89,6 +90,30 @@ public class DeviceSession extends BaseEntity {
     @Column(name = "retriages_triggered", nullable = false)
     @Builder.Default
     private int retriagesTriggered = 0;
+
+    /**
+     * Current trend classification derived from recent VitalStream readings.
+     * Updated by ContinuousMonitoringEngine on each ingest, with hysteresis —
+     * two consecutive classifications must agree before this field changes.
+     * Null/UNKNOWN until enough readings accumulate.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "trend_status", length = 16)
+    @Builder.Default
+    private TrendStatus trendStatus = TrendStatus.UNKNOWN;
+
+    /** Timestamp of the last trend recalculation (for audit / freshness checks). */
+    @Column(name = "trend_updated_at")
+    private Instant trendUpdatedAt;
+
+    /**
+     * Last proposed classification held as a "candidate" pending confirmation.
+     * If the next tick agrees with this value, {@link #trendStatus} is updated.
+     * Internal hysteresis state — not exposed in DTOs.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "trend_candidate", length = 16)
+    private TrendStatus trendCandidate;
 
     public void incrementReadings() {
         this.totalReadings++;

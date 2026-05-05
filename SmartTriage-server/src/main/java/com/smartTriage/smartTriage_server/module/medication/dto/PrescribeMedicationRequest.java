@@ -36,4 +36,35 @@ public class PrescribeMedicationRequest {
     private String prescribedByName;
 
     private String notes;
+
+    // ────────── ALLERGY OVERRIDE (V23) ──────────
+    // Populated by the frontend AllergyConfirmDialog when the prescriber
+    // chose to prescribe despite a known allergy. Both fields are
+    // nullable — for the common case (no conflict), the request body is
+    // unchanged.
+
+    /** TRUE when the prescriber acknowledged an allergy conflict. */
+    private Boolean prescribedDespiteAllergy;
+
+    /**
+     * Free-text snapshot of the conflicts the dialog showed, e.g.
+     * "penicillin (penicillins/beta-lactam); sulfa (sulfa drugs)".
+     * Persisted verbatim so the audit record reflects exactly what the
+     * prescriber saw at decision time.
+     */
+    private String allergyOverrideMatches;
+
+    // ────────── INTERACTION OVERRIDE (V24) ──────────
+    // Populated by the same PrescribeSafetyDialog when an interaction
+    // conflict was acknowledged. Both nullable for the common no-
+    // conflict case.
+
+    /** TRUE when the prescriber acknowledged a drug–drug interaction. */
+    private Boolean prescribedDespiteInteraction;
+
+    /**
+     * Free-text snapshot of the interactions the dialog showed, e.g.
+     * "Warfarin 5mg + aspirin/warfarin: additive bleeding risk [major]".
+     */
+    private String interactionOverrideMatches;
 }

@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -29,6 +30,12 @@ public class VitalSignsResponse {
     private Double bloodGlucose;
     private Integer painScore;
     private Integer gcsScore;
+    /**
+     * Phase 12b — adult body weight in kg. Optional; nullable on
+     * most vitals rows. Drives Cockcroft-Gault eGFR for renal
+     * dose checking.
+     */
+    private BigDecimal weightKg;
     private VitalSource source;
     private String deviceId;
     private String notes;

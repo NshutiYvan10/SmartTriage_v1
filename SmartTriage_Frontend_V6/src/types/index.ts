@@ -24,6 +24,7 @@ export interface Guardian {
 export type AuditAction =
   | 'PATIENT_REGISTERED'
   | 'PATIENT_UPDATED'
+  | 'VISIT_CREATED_FOR_EXISTING_PATIENT'
   | 'TRIAGE_STARTED'
   | 'TRIAGE_COMPLETED'
   | 'CATEGORY_ASSIGNED'
@@ -101,6 +102,7 @@ export interface Patient {
   assignedNurseName?: string;
   registrationCompletedAt?: Date;
   registeredBy?: string; // clinician who registered
+  trendStatus?: 'WORSENING' | 'STABLE' | 'IMPROVING' | 'UNKNOWN';
 }
 
 // Vital Signs (IoT)

@@ -781,6 +781,14 @@ export function Dashboard() {
                   </div>
                 )}
               </div>
+              {zoneAlerts.length > 0 && (
+                <button
+                  onClick={() => navigate('/alert-dashboard')}
+                  className={`mt-3 w-full text-center py-2 rounded-xl text-[12px] font-bold transition-all ${isDark ? 'text-cyan-300 hover:bg-white/5' : 'text-cyan-700 hover:bg-cyan-50'}`}
+                >
+                  View all {zoneAlerts.length} alert{zoneAlerts.length === 1 ? '' : 's'} →
+                </button>
+              )}
             </div>
 
             {/* Department Summary Card */}

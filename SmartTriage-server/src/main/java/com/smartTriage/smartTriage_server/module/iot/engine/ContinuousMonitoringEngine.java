@@ -1,12 +1,17 @@
 package com.smartTriage.smartTriage_server.module.iot.engine;
 
 import com.smartTriage.smartTriage_server.common.enums.*;
+import com.smartTriage.smartTriage_server.common.enums.TrendStatus;
+import com.smartTriage.smartTriage_server.module.alert.dto.ClinicalAlertResponse;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
+import com.smartTriage.smartTriage_server.module.alert.mapper.ClinicalAlertMapper;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
+import com.smartTriage.smartTriage_server.module.alert.service.AlertEscalationService;
 import com.smartTriage.smartTriage_server.module.iot.entity.DeviceSession;
 import com.smartTriage.smartTriage_server.module.iot.entity.VitalStream;
 import com.smartTriage.smartTriage_server.module.iot.repository.DeviceSessionRepository;
 import com.smartTriage.smartTriage_server.module.iot.repository.VitalStreamRepository;
+import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher;
 import com.smartTriage.smartTriage_server.module.iot.service.VitalStreamService;
 import com.smartTriage.smartTriage_server.module.triage.engine.TewsCalculator;
 import com.smartTriage.smartTriage_server.module.triage.engine.PediatricTewsCalculator;
@@ -65,6 +70,8 @@ public class ContinuousMonitoringEngine {
     private final VitalStreamService vitalStreamService;
     private final TewsCalculator tewsCalculator;
     private final PediatricTewsCalculator pediatricTewsCalculator;
+    private final RealTimeEventPublisher eventPublisher;
+    private final AlertEscalationService alertEscalationService;
 
     // ====================================================================
     // CRITICAL THRESHOLDS (from Rwanda National Triage Protocol)
@@ -111,7 +118,12 @@ public class ContinuousMonitoringEngine {
      * @return MonitoringResult with detection findings
      */
     @Transactional
-    public MonitoringResult analyseAndRespond(UUID visitId, DeviceSession session) {
+    public MonitoringResult analyseAndRespond(UUID visitId, DeviceSession detachedSession) {
+        // The session passed in from the controller was loaded in a prior
+        // transaction, so its lazy Visit proxy is detached. Re-fetch inside
+        // this transaction so Visit/Patient access works without LazyInit errors.
+        DeviceSession session = sessionRepository.findById(detachedSession.getId())
+                .orElse(detachedSession);
         Visit visit = session.getVisit();
         Instant windowStart = Instant.now().minus(TREND_WINDOW_MINUTES, ChronoUnit.MINUTES);
         Instant windowEnd = Instant.now();
@@ -181,6 +193,10 @@ public class ContinuousMonitoringEngine {
         }
 
         if (!critical) {
+            // Still classify trend so the dashboard reflects gradual drift
+            // (e.g. "worsening" long before a RED threshold is crossed).
+            updateTrendClassification(session, recentReadings, false);
+            sessionRepository.save(session);
             return new MonitoringResult(false, DeteriorationPattern.NONE,
                     "All vitals within acceptable range", false, null, 0);
         }
@@ -192,10 +208,37 @@ public class ContinuousMonitoringEngine {
         log.warn("DETERIORATION DETECTED — Visit {} | Pattern: {} | {}",
                 visit.getVisitNumber(), detectedPattern, description);
 
-        // Generate clinical alert
-        generateDeteriorationAlert(visit, detectedPattern, description);
-        alertCount++;
-        session.incrementAlerts();
+        // Dedup: the engine runs on every vitals packet (every few seconds).
+        // Without this guard, a patient who stays critical for 10 minutes
+        // produces 100+ duplicate alerts. Only create (and broadcast) a new
+        // deterioration alert when there is no unacknowledged one already
+        // open for this visit — the single open alert is kept fresh and the
+        // clinician acknowledges once. If the clinician acks and the patient
+        // then deteriorates again, a new alert fires (correct behaviour).
+        boolean alreadyOpen = clinicalAlertRepository
+                .existsByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(
+                        visit.getId(), AlertType.DETERIORATION_DETECTED);
+        if (!alreadyOpen) {
+            ClinicalAlert saved = generateDeteriorationAlert(visit, detectedPattern, description);
+            try {
+                ClinicalAlertResponse response = ClinicalAlertMapper.toResponse(saved);
+                UUID hospitalId = visit.getPatient().getHospital().getId();
+                eventPublisher.publishHospitalAlert(hospitalId, response);
+                TriageCategory currentCat = visit.getCurrentTriageCategory();
+                if (currentCat != null) {
+                    eventPublisher.publishZoneAlert(hospitalId,
+                            EdZone.fromTriageCategory(currentCat), response);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to publish deterioration alert for visit {}: {}",
+                        visit.getVisitNumber(), e.getMessage());
+            }
+            alertCount++;
+            session.incrementAlerts();
+        } else {
+            log.debug("Deterioration alert already open for visit {}, skipping duplicate",
+                    visit.getVisitNumber());
+        }
 
         // Check if auto-retriage should be triggered
         boolean retriageTriggered = false;
@@ -221,10 +264,168 @@ public class ContinuousMonitoringEngine {
             }
         }
 
+        // Update trend classification with hysteresis (even when critical —
+        // a worsening label is still the correct answer in that case).
+        updateTrendClassification(session, recentReadings, critical);
+
         sessionRepository.save(session);
 
         return new MonitoringResult(true, detectedPattern, description,
                 retriageTriggered, suggestedCategory, alertCount);
+    }
+
+    // ====================================================================
+    // TREND CLASSIFICATION — authoritative, hysteresis-backed
+    // ====================================================================
+
+    /**
+     * Compute the trend label (WORSENING / STABLE / IMPROVING / UNKNOWN) from
+     * recent readings and update the session's persisted trend_status with
+     * hysteresis: the raw classification becomes the "candidate"; the stored
+     * status only moves when two consecutive ticks agree on the same label.
+     * This eliminates flicker from per-reading noise.
+     */
+    private void updateTrendClassification(DeviceSession session,
+                                           List<VitalStream> recentReadings,
+                                           boolean deteriorationDetected) {
+        TrendStatus raw = classifyTrendRaw(recentReadings, deteriorationDetected);
+        TrendStatus current = session.getTrendStatus() != null
+                ? session.getTrendStatus() : TrendStatus.UNKNOWN;
+
+        // If the classifier can't decide yet, don't touch what's persisted.
+        if (raw == TrendStatus.UNKNOWN) {
+            session.setTrendUpdatedAt(Instant.now());
+            return;
+        }
+
+        // Same as what's already stored → clear any stale candidate, done.
+        if (raw == current) {
+            session.setTrendCandidate(null);
+            session.setTrendUpdatedAt(Instant.now());
+            return;
+        }
+
+        // Different from stored. Two shortcuts bypass hysteresis:
+        //   1. current is UNKNOWN → this is the first real classification, commit now
+        //      (otherwise the dashboard shows "stable" for an extra tick on seed).
+        //   2. deterioration already detected by the engine this tick → WORSENING
+        //      is authoritative, flicker is not a concern, show it immediately.
+        boolean immediate = current == TrendStatus.UNKNOWN
+                || (deteriorationDetected && raw == TrendStatus.WORSENING);
+
+        // Otherwise require a previous tick to have proposed the SAME new value
+        // before we commit. One-step hysteresis smooths slope-driven flicker.
+        TrendStatus candidate = session.getTrendCandidate();
+        if (immediate || candidate == raw) {
+            log.info("Trend change CONFIRMED for visit {}: {} → {}",
+                    session.getVisit().getVisitNumber(), current, raw);
+            session.setTrendStatus(raw);
+            session.setTrendCandidate(null);
+            try {
+                eventPublisher.publishTrendChange(session.getVisit().getId(),
+                        java.util.Map.of(
+                                "visitId", session.getVisit().getId().toString(),
+                                "sessionId", session.getId().toString(),
+                                "trendStatus", raw.name(),
+                                "previousTrendStatus", current.name(),
+                                "timestamp", Instant.now().toString()));
+            } catch (Exception e) {
+                log.warn("Failed to publish trend change for visit {}: {}",
+                        session.getVisit().getVisitNumber(), e.getMessage());
+            }
+        } else {
+            // First time we see this new label — park it, wait for confirmation.
+            session.setTrendCandidate(raw);
+        }
+        session.setTrendUpdatedAt(Instant.now());
+    }
+
+    /**
+     * Classify trend from the raw reading window WITHOUT hysteresis.
+     * Rules (evaluated top-down, first match wins):
+     *   - If the latest reading has any vital in the RED critical band → WORSENING.
+     *   - If ≥2 vitals are currently abnormal (TEWS > 0 territory) → WORSENING.
+     *   - If any key vital is trending in a dangerous direction over the window
+     *     by more than the noise floor → WORSENING.
+     *   - If previously-abnormal vitals are returning to normal → IMPROVING.
+     *   - Otherwise → STABLE.
+     *   - Too few readings → UNKNOWN.
+     */
+    private TrendStatus classifyTrendRaw(List<VitalStream> readings,
+                                         boolean deteriorationDetected) {
+        if (readings == null || readings.size() < TREND_MIN_READINGS) {
+            return TrendStatus.UNKNOWN;
+        }
+
+        VitalStream latest = readings.getLast();
+        VitalStream earliest = readings.getFirst();
+
+        // Deterioration engine already flagged this reading as critical → worsening.
+        if (deteriorationDetected) {
+            return TrendStatus.WORSENING;
+        }
+
+        // Current-state check: any RED band value → worsening.
+        if (isInCriticalBand(latest)) {
+            return TrendStatus.WORSENING;
+        }
+
+        // Multiple simultaneously abnormal vitals → worsening.
+        if (countAbnormalVitals(latest) >= 2) {
+            return TrendStatus.WORSENING;
+        }
+
+        // Slope analysis on key vitals. Thresholds are deliberately wider than
+        // the simulator / real device noise floors so small jitter doesn't
+        // trip the label.
+        boolean anyWorseningSlope = false;
+        boolean anyImprovingSlope = false;
+
+        // Heart rate: >15 bpm rise over window = worsening; >15 fall from an
+        // elevated baseline back toward normal = improving.
+        if (latest.getHeartRate() != null && earliest.getHeartRate() != null) {
+            int hrDelta = latest.getHeartRate() - earliest.getHeartRate();
+            if (hrDelta > 15) anyWorseningSlope = true;
+            else if (hrDelta < -15 && earliest.getHeartRate() > 100) anyImprovingSlope = true;
+        }
+
+        // Respiratory rate: +4 = worsening, -4 from elevated = improving.
+        if (latest.getRespiratoryRate() != null && earliest.getRespiratoryRate() != null) {
+            int rrDelta = latest.getRespiratoryRate() - earliest.getRespiratoryRate();
+            if (rrDelta > 4) anyWorseningSlope = true;
+            else if (rrDelta < -4 && earliest.getRespiratoryRate() > 20) anyImprovingSlope = true;
+        }
+
+        // SpO2: -3% = worsening (even while still above 92%), +3 from low = improving.
+        if (latest.getSpo2() != null && earliest.getSpo2() != null) {
+            int sp = latest.getSpo2() - earliest.getSpo2();
+            if (sp < -3) anyWorseningSlope = true;
+            else if (sp > 3 && earliest.getSpo2() < 94) anyImprovingSlope = true;
+        }
+
+        // Systolic BP: -15 = worsening (shock drift), +15 from low = improving.
+        if (latest.getSystolicBp() != null && earliest.getSystolicBp() != null) {
+            int sbp = latest.getSystolicBp() - earliest.getSystolicBp();
+            if (sbp < -15) anyWorseningSlope = true;
+            else if (sbp > 15 && earliest.getSystolicBp() < 100) anyImprovingSlope = true;
+        }
+
+        if (anyWorseningSlope) return TrendStatus.WORSENING;
+        if (anyImprovingSlope) return TrendStatus.IMPROVING;
+        return TrendStatus.STABLE;
+    }
+
+    /** True if any single vital in this reading is in the RED critical band. */
+    private boolean isInCriticalBand(VitalStream r) {
+        if (r.getHeartRate() != null
+                && (r.getHeartRate() > CRITICAL_HR_HIGH || r.getHeartRate() < CRITICAL_HR_LOW)) return true;
+        if (r.getRespiratoryRate() != null && r.getRespiratoryRate() > CRITICAL_RR_HIGH) return true;
+        if (r.getSpo2() != null && r.getSpo2() < CRITICAL_SPO2) return true;
+        if (r.getSystolicBp() != null
+                && (r.getSystolicBp() < CRITICAL_SBP_LOW || r.getSystolicBp() > CRITICAL_SBP_HIGH)) return true;
+        if (r.getTemperature() != null
+                && (r.getTemperature() > CRITICAL_TEMP_HIGH || r.getTemperature() < CRITICAL_TEMP_LOW)) return true;
+        return false;
     }
 
     // ====================================================================
@@ -458,7 +659,32 @@ public class ContinuousMonitoringEngine {
                 .autoGenerated(true)
                 .build();
 
-        clinicalAlertRepository.save(escalationAlert);
+        escalationAlert = clinicalAlertRepository.save(escalationAlert);
+
+        // Route through the tiered escalation service so the zone doctor and
+        // charge nurse receive targeted WebSocket notifications, and Tier 2/3
+        // escalation scheduling kicks in if nobody acknowledges.
+        // Dedup the doctor-routing call: if an unacknowledged DOCTOR_NOTIFICATION
+        // for this visit already exists, skip creating another to prevent
+        // flooding the clinician with repeat Tier 1 pages for the same episode.
+        try {
+            UUID hospitalId = visit.getPatient().getHospital().getId();
+            boolean doctorAlertOpen = clinicalAlertRepository
+                    .existsByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(
+                            visit.getId(), AlertType.DOCTOR_NOTIFICATION);
+            if (!doctorAlertOpen) {
+                alertEscalationService.createZoneRoutedAlert(
+                        visit, newCategory, tews,
+                        "IoT AUTO-RETRIAGE: " + pattern.name() + " — " + description);
+            }
+            ClinicalAlertResponse response = ClinicalAlertMapper.toResponse(escalationAlert);
+            eventPublisher.publishHospitalAlert(hospitalId, response);
+            eventPublisher.publishZoneAlert(hospitalId,
+                    EdZone.fromTriageCategory(newCategory), response);
+        } catch (Exception e) {
+            log.warn("Failed to route auto-retriage alert for visit {}: {}",
+                    visit.getVisitNumber(), e.getMessage());
+        }
     }
 
     // ====================================================================

@@ -2,6 +2,8 @@ package com.smartTriage.smartTriage_server.module.vital.dto;
 
 import com.smartTriage.smartTriage_server.common.enums.AvpuScore;
 import com.smartTriage.smartTriage_server.common.enums.VitalSource;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -10,6 +12,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Data
@@ -56,6 +59,16 @@ public class RecordVitalsRequest {
     @Min(value = 3, message = "GCS minimum is 3")
     @Max(value = 15, message = "GCS maximum is 15")
     private Integer gcsScore;
+
+    /**
+     * Phase 12b — adult body weight in kg. Optional. Drives Cockcroft-
+     * Gault eGFR for renal-risk dose checking on the prescribe path.
+     * Range gates obviously-wrong entries (e.g. typo'd 250 kg or
+     * decimal-shifted 5 kg adult).
+     */
+    @DecimalMin(value = "10.00", message = "Weight below physiological range")
+    @DecimalMax(value = "300.00", message = "Weight above physiological range")
+    private BigDecimal weightKg;
 
     @Builder.Default
     private VitalSource source = VitalSource.MANUAL_ENTRY;

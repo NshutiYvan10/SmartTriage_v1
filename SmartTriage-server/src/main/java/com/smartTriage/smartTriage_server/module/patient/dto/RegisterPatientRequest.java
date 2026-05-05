@@ -40,6 +40,12 @@ public class RegisterPatientRequest {
     @Size(max = 30)
     private String nationalId;
 
+    @Size(max = 30)
+    private String passportNumber;
+
+    @Size(max = 30)
+    private String birthCertificateNumber;
+
     @Size(max = 20)
     private String phoneNumber;
 
@@ -49,6 +55,12 @@ public class RegisterPatientRequest {
     private String bloodType;
     private String knownAllergies;
     private String chronicConditions;
+
+    // ── Guardian fields (pediatric) ──
+    @Size(max = 30) private String guardianNationalId;
+    @Size(max = 20) private String guardianPhone;
+    @Size(max = 200) private String guardianName;
+    @Size(max = 50)  private String guardianRelationship;
 
     @NotNull(message = "Hospital ID is required")
     private UUID hospitalId;

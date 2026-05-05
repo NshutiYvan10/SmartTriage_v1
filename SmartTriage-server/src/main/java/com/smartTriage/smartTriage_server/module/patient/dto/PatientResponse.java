@@ -1,6 +1,7 @@
 package com.smartTriage.smartTriage_server.module.patient.dto;
 
 import com.smartTriage.smartTriage_server.common.enums.Gender;
+import com.smartTriage.smartTriage_server.common.enums.PregnancyStatus;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -36,6 +37,8 @@ public class PatientResponse {
 
     private Gender gender;
     private String nationalId;
+    private String passportNumber;
+    private String birthCertificateNumber;
     private String medicalRecordNumber;
     private String phoneNumber;
     private String address;
@@ -44,6 +47,22 @@ public class PatientResponse {
     private String bloodType;
     private String knownAllergies;
     private String chronicConditions;
+
+    /**
+     * Phase 13b — structured pregnancy status. Drives the teratogen
+     * safety check at prescribe time. NULL means "never recorded";
+     * the frontend safety check falls back to a free-text scan of
+     * chronicConditions in that case.
+     */
+    private PregnancyStatus pregnancyStatus;
+    private Instant pregnancyStatusRecordedAt;
+
+    // ── Guardian (pediatric attribution) ──
+    private String guardianNationalId;
+    private String guardianPhone;
+    private String guardianName;
+    private String guardianRelationship;
+
     private UUID hospitalId;
     private Instant createdAt;
     private Instant updatedAt;

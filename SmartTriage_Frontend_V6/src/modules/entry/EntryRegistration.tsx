@@ -30,7 +30,11 @@ import { Gender, ArrivalMode, Mobility } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
 import { userApi } from '@/api/users';
-import type { UserResponse } from '@/api/types';
+import { visitApi } from '@/api/visits';
+import type { UserResponse, PatientResponse } from '@/api/types';
+import { PatientLookupPanel } from './PatientLookupPanel';
+import { PatientHistoryPanel } from './PatientHistoryPanel';
+import { PatientProfilePanel } from './PatientProfilePanel';
 
 /* ─── Constants ─── */
 const ALLERGIES = ['Penicillin', 'Latex', 'Pollen', 'Food', 'Dairy', 'Other'];
@@ -161,6 +165,27 @@ export function EntryRegistration() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showSuccess, setShowSuccess] = useState(false);
 
+  /**
+   * Federated-lookup mode flag.
+   *  - 'lookup'   → render PatientLookupPanel above Step 1, hide form fields
+   *  - 'register' → render the standard registration form
+   * The nurse either picks a candidate (auto-switches to 'register' with
+   * fields pre-filled) or clicks "Skip — register new" to bypass lookup.
+   */
+  const [mode, setMode] = useState<'lookup' | 'register'>('lookup');
+  /**
+   * If non-null, this registration is for an existing patient that we found
+   * via lookup. Used purely to surface a banner today; future work can route
+   * to a "create new visit only" endpoint instead of full registration.
+   */
+  const [existingPatientId, setExistingPatientId] = useState<string | null>(null);
+  /**
+   * The full PatientResponse captured when the nurse picked a candidate
+   * via lookup. Stored so we can pass it directly to PatientProfilePanel
+   * without forcing a re-fetch.
+   */
+  const [pickedPatient, setPickedPatient] = useState<PatientResponse | null>(null);
+
   /* ── Load real nurses from backend ── */
   const [nurses, setNurses] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => {
@@ -243,6 +268,67 @@ export function EntryRegistration() {
     });
   };
 
+  /**
+   * Pre-fill the form with an existing patient's identity + contact +
+   * medical-history fields. Address, arrival/mobility, chief-complaint, and
+   * nurse assignment remain blank — those are visit-specific and the nurse
+   * collects them fresh each time.
+   */
+  const applyLookupCandidate = (patient: PatientResponse) => {
+    // Compute age from DOB if present (mirrors handleDateOfBirth's logic)
+    let computedAge = '';
+    if (patient.dateOfBirth) {
+      const birth = new Date(patient.dateOfBirth);
+      const today = new Date();
+      let age = today.getFullYear() - birth.getFullYear();
+      const monthDiff = today.getMonth() - birth.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) age--;
+      if (age >= 0 && age <= 120) computedAge = String(age);
+    } else if (typeof patient.ageInYears === 'number') {
+      computedAge = String(patient.ageInYears);
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      firstName: patient.firstName ?? '',
+      lastName:  patient.lastName ?? '',
+      dateOfBirth: patient.dateOfBirth ?? '',
+      age: computedAge,
+      gender: (patient.gender as Gender) ?? '',
+      nationalId: patient.nationalId ?? '',
+      phoneNumber: patient.phoneNumber ?? '',
+      // PatientResponse exposes a single concatenated address string —
+      // drop it into streetAddress so it's at least visible; the nurse can
+      // re-enter the structured province/district/sector fields.
+      streetAddress: patient.address ?? '',
+      emergencyContactName:  patient.emergencyContactName ?? '',
+      emergencyContactPhone: patient.emergencyContactPhone ?? '',
+      guardianName:         patient.guardianName ?? '',
+      guardianPhone:        patient.guardianPhone ?? '',
+      guardianRelationship: patient.guardianRelationship ?? '',
+      guardianNationalId:   patient.guardianNationalId ?? '',
+      // Medical-history fields (chronicConditions/knownAllergies are free
+      // text on the backend, our form uses string-array checkboxes — we
+      // can't safely round-trip them into the checkboxes, so we leave the
+      // checkbox arrays empty and the nurse re-confirms).
+    }));
+    setExistingPatientId(patient.id);
+    setPickedPatient(patient);
+    setMode('register');
+    // Clear any stale validation errors so the freshly-filled form is clean.
+    setErrors({});
+  };
+
+  /** Reset lookup → return to the lookup panel and clear the form. */
+  const resetToLookup = () => {
+    setFormData(INITIAL_FORM);
+    setErrors({});
+    setExistingPatientId(null);
+    setPickedPatient(null);
+    setMode('lookup');
+    setStep(1);
+  };
+
   /* ── Validation per step ── */
   const validateStep = (s: number): boolean => {
     const e: Record<string, string> = {};
@@ -312,43 +398,71 @@ export function EntryRegistration() {
     // ── Persist to backend API (single source of truth) ──
     const hospitalId = authUser?.hospitalId || 'a0000000-0000-0000-0000-000000000001';
     const fullName = `${formData.firstName.trim()} ${formData.lastName.trim()}`;
+    const chiefComplaint = [...formData.chiefComplaints, formData.chiefComplaintOther.trim()]
+      .filter(Boolean).join('; ') || undefined;
 
-    const patient = await registerPatientApi({
-      firstName: formData.firstName.trim(),
-      lastName: formData.lastName.trim(),
-      dateOfBirth: formData.dateOfBirth || undefined,
-      gender: formData.gender,
-      nationalId: formData.nationalId || undefined,
-      phoneNumber: formData.contactPersonPhone || undefined,
-      address: [formData.streetAddress, formData.district, formData.city, formData.province]
-        .filter(Boolean)
-        .join(', ') || undefined,
-      emergencyContactName: formData.contactPersonName || formData.guardianName || undefined,
-      emergencyContactPhone: formData.contactPersonPhone || formData.guardianPhone || undefined,
-      chiefComplaint: [...formData.chiefComplaints, formData.chiefComplaintOther.trim()].filter(Boolean).join('; ') || undefined,
-      arrivalMode: formData.arrivalMode || undefined,
-      hospitalId,
-    });
+    // Branch:
+    //  - existingPatientId set ⇒ nurse picked an existing patient via lookup;
+    //    do NOT call /patients/register (that would tripwire the duplicate
+    //    detector on NID/passport/birth-cert). Just create a fresh Visit.
+    //  - otherwise ⇒ standard atomic patient + visit registration.
+    let patientId: string;
+    if (existingPatientId) {
+      try {
+        await visitApi.create({
+          patientId: existingPatientId,
+          hospitalId,
+          arrivalMode: formData.arrivalMode || undefined,
+          chiefComplaint,
+          referringFacility: formData.referringFacility || undefined,
+        });
+      } catch (err: any) {
+        setErrors({ assignedNurseId: err?.message ?? 'Failed to create visit for this patient.' });
+        return;
+      }
+      patientId = existingPatientId;
+    } else {
+      const patient = await registerPatientApi({
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        dateOfBirth: formData.dateOfBirth || undefined,
+        gender: formData.gender,
+        nationalId: formData.nationalId || undefined,
+        phoneNumber: formData.contactPersonPhone || undefined,
+        address: [formData.streetAddress, formData.district, formData.city, formData.province]
+          .filter(Boolean)
+          .join(', ') || undefined,
+        emergencyContactName: formData.contactPersonName || formData.guardianName || undefined,
+        emergencyContactPhone: formData.contactPersonPhone || formData.guardianPhone || undefined,
+        chiefComplaint,
+        arrivalMode: formData.arrivalMode || undefined,
+        hospitalId,
+      });
 
-    if (!patient) {
-      setErrors({ assignedNurseId: 'Failed to register patient. Please try again.' });
-      return;
+      if (!patient) {
+        setErrors({ assignedNurseId: 'Failed to register patient. Please try again.' });
+        return;
+      }
+      patientId = patient.id;
     }
 
-    // Audit log
+    // Audit log — distinguish "new visit for existing patient" from
+    // "fresh registration" so the trail is honest about what happened.
     addAuditEntry({
-      action: 'PATIENT_REGISTERED',
+      action: existingPatientId ? 'VISIT_CREATED_FOR_EXISTING_PATIENT' : 'PATIENT_REGISTERED',
       performedBy: formData.assignedNurseId,
       performedByName: selectedNurseName,
-      patientId: patient.id,
-      details: `Patient "${fullName}" registered. Arrival: ${formData.arrivalMode}, Mobility: ${formData.mobility || 'N/A'}, Nurse: ${selectedNurseName}${isPediatric ? ', Pediatric patient' : ''}`,
+      patientId,
+      details: existingPatientId
+        ? `New visit created for existing patient "${fullName}". Arrival: ${formData.arrivalMode}, Mobility: ${formData.mobility || 'N/A'}, Nurse: ${selectedNurseName}${isPediatric ? ', Pediatric patient' : ''}`
+        : `Patient "${fullName}" registered. Arrival: ${formData.arrivalMode}, Mobility: ${formData.mobility || 'N/A'}, Nurse: ${selectedNurseName}${isPediatric ? ', Pediatric patient' : ''}`,
     });
 
     addAuditEntry({
       action: 'NURSE_ASSIGNED',
       performedBy: formData.assignedNurseId,
       performedByName: selectedNurseName,
-      patientId: patient.id,
+      patientId,
       details: `Triage nurse "${selectedNurseName}" assigned to patient "${fullName}"`,
     });
 
@@ -512,7 +626,71 @@ export function EntryRegistration() {
           </div>
         )}
 
-        {/* ── Form Card — all steps always mounted, hidden when inactive ── */}
+        {/* ── Federated lookup gate ──
+            Default landing for Step 1: nurse searches for an existing
+            patient by NID/passport/birth-cert/MRN/phone+DOB/guardian/etc.
+            Picking a candidate pre-fills the form and switches to
+            'register' mode. "Skip — register new" goes straight to the
+            blank form. */}
+        {mode === 'lookup' && step === 1 && (
+          <div className="animate-fade-up" style={{ animationDelay: '0.1s' }}>
+            <PatientLookupPanel
+              hospitalId={authUser?.hospitalId || 'a0000000-0000-0000-0000-000000000001'}
+              onCandidatePicked={applyLookupCandidate}
+              onRegisterNew={() => setMode('register')}
+            />
+          </div>
+        )}
+
+        {/* ── Existing-patient banner (visible once a candidate has been
+            picked from lookup). Lets the nurse reset back to the lookup
+            panel if they grabbed the wrong record. */}
+        {existingPatientId && mode === 'register' && (
+          <div
+            className="rounded-xl px-4 py-3 flex items-center gap-3 animate-fade-in"
+            style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.3)' }}
+          >
+            <UserCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-emerald-700">
+                Existing patient loaded
+              </p>
+              <p className="text-xs text-emerald-600/70 font-medium mt-0.5">
+                Identity and contact fields were pre-filled. Please verify, then
+                continue through the steps to register today's visit.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={resetToLookup}
+              className="text-xs font-semibold text-emerald-700 hover:text-emerald-900 px-2.5 py-1 rounded-md hover:bg-emerald-100 transition-colors"
+            >
+              Search again
+            </button>
+          </div>
+        )}
+
+        {/* ── Returning-patient context block ──
+            Two side-by-side panels (stacks on mobile):
+              • Patient profile — persistent facts (allergies, chronic
+                conditions, blood type, guardian). Safety-critical info
+                that the nurse must see before working with this person.
+              • Prior visits — timeline of past encounters with chief
+                complaint, triage colour, disposition. Each row is a
+                drilldown to the full visit detail page. */}
+        {existingPatientId && mode === 'register' && (
+          <div
+            className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-fade-up"
+            style={{ animationDelay: '0.05s' }}
+          >
+            <PatientProfilePanel patient={pickedPatient} patientId={existingPatientId} />
+            <PatientHistoryPanel patientId={existingPatientId} />
+          </div>
+        )}
+
+        {/* ── Form Card — all steps always mounted, hidden when inactive.
+            Hidden entirely while we're still in the lookup gate. ── */}
+        {mode === 'register' && (
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -1287,6 +1465,7 @@ export function EntryRegistration() {
             )}
           </div>
         </form>
+        )}
       </div>
     </div>
   );

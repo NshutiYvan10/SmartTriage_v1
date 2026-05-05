@@ -1,5 +1,6 @@
 import React from 'react';
-import { AlertTriangle, AlertCircle, Info, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, AlertCircle, BellRing, X, ShieldAlert, CheckCircle2, Clock, ArrowRight } from 'lucide-react';
 import { AIAlert } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
@@ -10,135 +11,280 @@ interface AlertPanelProps {
   onClose?: () => void;
 }
 
+const SEV_META = {
+  CRITICAL: {
+    icon: ShieldAlert,
+    ring: 'rgba(239,68,68,0.35)',
+    glow: '0 0 0 1px rgba(239,68,68,0.25), 0 10px 30px rgba(239,68,68,0.18)',
+    iconBg: 'rgba(239,68,68,0.12)',
+    iconColor: '#ef4444',
+    badgeBg: 'rgba(239,68,68,0.12)',
+    badgeText: '#dc2626',
+    accent: '#ef4444',
+  },
+  HIGH: {
+    icon: AlertTriangle,
+    ring: 'rgba(249,115,22,0.35)',
+    glow: '0 0 0 1px rgba(249,115,22,0.2), 0 10px 30px rgba(249,115,22,0.12)',
+    iconBg: 'rgba(249,115,22,0.12)',
+    iconColor: '#f97316',
+    badgeBg: 'rgba(249,115,22,0.12)',
+    badgeText: '#ea580c',
+    accent: '#f97316',
+  },
+  MEDIUM: {
+    icon: AlertCircle,
+    ring: 'rgba(234,179,8,0.3)',
+    glow: '0 0 0 1px rgba(234,179,8,0.18), 0 10px 30px rgba(234,179,8,0.1)',
+    iconBg: 'rgba(234,179,8,0.12)',
+    iconColor: '#eab308',
+    badgeBg: 'rgba(234,179,8,0.12)',
+    badgeText: '#a16207',
+    accent: '#eab308',
+  },
+  LOW: {
+    icon: BellRing,
+    ring: 'rgba(59,130,246,0.3)',
+    glow: '0 0 0 1px rgba(59,130,246,0.18), 0 10px 30px rgba(59,130,246,0.1)',
+    iconBg: 'rgba(59,130,246,0.12)',
+    iconColor: '#3b82f6',
+    badgeBg: 'rgba(59,130,246,0.12)',
+    badgeText: '#2563eb',
+    accent: '#3b82f6',
+  },
+} as const;
+
+function getMeta(sev: AIAlert['severity']) {
+  return SEV_META[sev as keyof typeof SEV_META] ?? SEV_META.LOW;
+}
+
 export function AlertPanel({ alerts, onAcknowledge, onClose }: AlertPanelProps) {
-  const { isDark } = useTheme();
-  const [acknowledgeComment, setAcknowledgeComment] = React.useState<{ [key: string]: string }>({});
+  const { isDark, text } = useTheme();
+  const navigate = useNavigate();
+  const [expandedId, setExpandedId] = React.useState<string | null>(null);
+  const [commentDraft, setCommentDraft] = React.useState<Record<string, string>>({});
 
-  const getSeverityIcon = (severity: AIAlert['severity']) => {
-    switch (severity) {
-      case 'CRITICAL':
-        return <AlertTriangle className="w-5 h-5 text-red-600" />;
-      case 'HIGH':
-        return <AlertCircle className="w-5 h-5 text-orange-600" />;
-      case 'MEDIUM':
-        return <AlertCircle className="w-5 h-5 text-yellow-600" />;
-      default:
-        return <Info className="w-5 h-5 text-blue-600" />;
-    }
-  };
+  if (alerts.length === 0) return null;
 
-  const getSeverityColor = (severity: AIAlert['severity']) => {
-    if (isDark) {
-      switch (severity) {
-        case 'CRITICAL':
-          return 'border-l-red-500 bg-red-500/15';
-        case 'HIGH':
-          return 'border-l-orange-500 bg-orange-500/15';
-        case 'MEDIUM':
-          return 'border-l-yellow-500 bg-yellow-500/15';
-        default:
-          return 'border-l-blue-500 bg-blue-500/15';
+  const sorted = [...alerts].sort((a, b) => {
+    const rank = (s: AIAlert['severity']) => (s === 'CRITICAL' ? 0 : s === 'HIGH' ? 1 : s === 'MEDIUM' ? 2 : 3);
+    return rank(a.severity) - rank(b.severity) ||
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+  });
+  const criticalCount = alerts.filter((a) => a.severity === 'CRITICAL').length;
+
+  const glassShell: React.CSSProperties = isDark
+    ? {
+        background: 'rgba(8, 47, 73, 0.92)',
+        backdropFilter: 'blur(40px)',
+        WebkitBackdropFilter: 'blur(40px)',
+        border: '1px solid rgba(2, 132, 199, 0.28)',
+        boxShadow: '0 24px 70px rgba(0,0,0,0.45), 0 10px 30px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.05)',
       }
-    }
-    switch (severity) {
-      case 'CRITICAL':
-        return 'border-l-red-600 bg-red-50';
-      case 'HIGH':
-        return 'border-l-orange-600 bg-orange-50';
-      case 'MEDIUM':
-        return 'border-l-yellow-600 bg-yellow-50';
-      default:
-        return 'border-l-blue-600 bg-blue-50';
-    }
-  };
+    : {
+        background: 'rgba(255,255,255,0.92)',
+        backdropFilter: 'blur(40px)',
+        WebkitBackdropFilter: 'blur(40px)',
+        border: '1px solid rgba(255,255,255,0.7)',
+        boxShadow: '0 24px 70px rgba(0,0,0,0.14), 0 10px 30px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9)',
+      };
 
-  if (alerts.length === 0) {
-    return null;
-  }
+  const rowStyle: React.CSSProperties = isDark
+    ? { background: 'rgba(12,74,110,0.28)', border: '1px solid rgba(2,132,199,0.22)' }
+    : { background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(226,232,240,0.7)' };
+
+  const headerBg: React.CSSProperties = isDark
+    ? { background: 'rgba(8, 47, 73, 0.98)' }
+    : { background: 'rgba(248,250,252,0.98)' };
 
   return (
     <div
-      className={`fixed right-4 top-4 w-96 max-h-[80vh] overflow-y-auto rounded-lg shadow-xl z-50 ${isDark ? '' : 'bg-white border border-gray-200'}`}
-      style={isDark ? { background: 'rgba(8,47,73,0.95)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(2,132,199,0.22)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' } : undefined}
+      role="dialog"
+      aria-label="AI Alerts"
+      className="fixed right-5 top-5 w-[420px] max-h-[82vh] rounded-2xl overflow-hidden z-[9998] animate-scale-in flex flex-col"
+      style={glassShell}
     >
-      <div
-        className={`sticky top-0 border-b px-4 py-3 flex items-center justify-between ${isDark ? 'border-white/10' : 'bg-white border-b-gray-200'}`}
-        style={isDark ? { background: 'rgba(8,47,73,0.98)' } : undefined}
-      >
-        <h3 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>AI Alerts ({alerts.length})</h3>
+      {/* Header */}
+      <div className={`px-5 py-4 flex items-center justify-between border-b ${isDark ? 'border-white/10' : 'border-gray-200/70'}`} style={headerBg}>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: criticalCount > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(6,182,212,0.15)' }}>
+              <BellRing className="w-[18px] h-[18px]" style={{ color: criticalCount > 0 ? '#ef4444' : '#0891b2' }} />
+            </div>
+            {criticalCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white dark:ring-slate-900 animate-pulse" />
+            )}
+          </div>
+          <div>
+            <h3 className={`text-sm font-extrabold tracking-tight ${text.heading}`}>AI Alerts</h3>
+            <p className={`text-[11px] font-medium ${text.body}`}>
+              {alerts.length} active{criticalCount > 0 ? ` · ${criticalCount} critical` : ''}
+            </p>
+          </div>
+        </div>
         {onClose && (
-          <button onClick={onClose} className={isDark ? 'text-slate-400 hover:text-slate-200' : 'text-gray-400 hover:text-gray-600'}>
-            <X className="w-5 h-5" />
+          <button
+            onClick={onClose}
+            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${isDark ? 'hover:bg-white/10 text-slate-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-800'}`}
+            aria-label="Close alerts panel"
+          >
+            <X className="w-4 h-4" />
           </button>
         )}
       </div>
 
-      <div className={`divide-y ${isDark ? 'divide-white/10' : 'divide-gray-200'}`}>
-        {alerts.map((alert) => (
-          <div
-            key={alert.id}
-            className={`p-4 border-l-4 ${getSeverityColor(alert.severity)} alert-enter`}
-          >
-            <div className="flex items-start gap-3">
-              {getSeverityIcon(alert.severity)}
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-1">
-                  <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-gray-500'} uppercase`}>
-                    {alert.type.replace('_', ' ')}
-                  </span>
-                  <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                    {formatDistanceToNow(alert.timestamp, { addSuffix: true })}
-                  </span>
+      {/* Alerts list */}
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5">
+        {sorted.map((alert) => {
+          const meta = getMeta(alert.severity);
+          const SevIcon = meta.icon;
+          const isExpanded = expandedId === alert.id;
+          const isCritical = alert.severity === 'CRITICAL';
+
+          return (
+            <div
+              key={alert.id}
+              className="rounded-xl p-3.5 transition-all duration-300 hover:-translate-y-0.5 cursor-pointer"
+              style={{
+                ...rowStyle,
+                borderLeft: `3px solid ${meta.accent}`,
+                boxShadow: isCritical ? meta.glow : undefined,
+              }}
+              onClick={() => setExpandedId(isExpanded ? null : alert.id)}
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: meta.iconBg }}>
+                  <SevIcon className="w-4 h-4" style={{ color: meta.iconColor }} />
                 </div>
 
-                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>{alert.message}</p>
-
-                {alert.previousCategory && alert.recommendedCategory && (
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="badge badge-yellow">{alert.previousCategory}</span>
-                    <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>→</span>
-                    <span className="badge badge-red">{alert.recommendedCategory}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className={`text-[13px] font-bold leading-snug ${isDark ? 'text-white' : 'text-slate-900'} line-clamp-2`}>
+                      {alert.title || alert.message}
+                    </p>
+                    {alert.escalationTier && alert.escalationTier > 1 && (
+                      <span className="text-[9px] font-extrabold bg-red-500 text-white px-1.5 py-0.5 rounded-md tracking-wide">
+                        TIER {alert.escalationTier}
+                      </span>
+                    )}
                   </div>
-                )}
 
-                {alert.contributingFactors.length > 0 && (
-                  <ul className={`text-xs ${isDark ? 'text-slate-300' : 'text-gray-600'} space-y-1 mb-3`}>
-                    {alert.contributingFactors.map((factor, i) => (
-                      <li key={i}>• {factor}</li>
-                    ))}
-                  </ul>
-                )}
+                  {alert.patientName && (
+                    <p className={`text-[11px] mt-0.5 truncate font-semibold ${isDark ? 'text-cyan-300' : 'text-cyan-700'}`}>
+                      {alert.patientName}
+                      {alert.visitNumber ? <span className={isDark ? 'text-slate-400 font-normal' : 'text-slate-500 font-normal'}> · {alert.visitNumber}</span> : null}
+                    </p>
+                  )}
 
-                {!alert.acknowledged && onAcknowledge && (
-                  <div className="space-y-2">
-                    <textarea
-                      placeholder="Add comment (optional)..."
-                      className={`w-full text-xs border rounded p-2 focus:outline-none focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-white/5 border-white/10 text-white placeholder-slate-500' : 'border-gray-300'}`}
-                      rows={2}
-                      value={acknowledgeComment[alert.id] || ''}
-                      onChange={(e) =>
-                        setAcknowledgeComment({ ...acknowledgeComment, [alert.id]: e.target.value })
-                      }
-                    />
-                    <button
-                      onClick={() => onAcknowledge(alert.id, acknowledgeComment[alert.id])}
-                      className="btn-primary text-xs py-1"
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <span
+                      className="text-[9px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wide"
+                      style={{ background: meta.badgeBg, color: meta.badgeText }}
                     >
-                      Acknowledge
-                    </button>
+                      {alert.severity}
+                    </span>
+                    <span className={`text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {formatDistanceToNow(new Date(alert.timestamp), { addSuffix: true })}
+                    </span>
+                    {alert.targetZone && (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/20 text-cyan-300' : 'bg-cyan-50 text-cyan-700'}`}>
+                        {alert.targetZone}
+                      </span>
+                    )}
+                    {alert.satsTargetMinutes != null && alert.satsTargetMinutes > 0 && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-600">
+                        <Clock className="w-3 h-3" />
+                        {alert.satsTargetMinutes}m SATS
+                      </span>
+                    )}
                   </div>
-                )}
 
-                {alert.acknowledged && (
-                  <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'} italic`}>
-                    Acknowledged by {alert.acknowledgedBy}
-                    {alert.comment && `: "${alert.comment}"`}
-                  </div>
+                  {/* Expanded detail */}
+                  {isExpanded && (
+                    <div className="mt-3 space-y-2.5 animate-fade-in">
+                      {alert.title && alert.message && alert.title !== alert.message && (
+                        <p className={`text-[12px] leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                          {alert.message}
+                        </p>
+                      )}
+
+                      {alert.previousCategory && alert.recommendedCategory && (
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <span className="px-2 py-0.5 rounded-md font-bold bg-amber-100 text-amber-700">
+                            {alert.previousCategory}
+                          </span>
+                          <ArrowRight className="w-3 h-3 text-slate-400" />
+                          <span className="px-2 py-0.5 rounded-md font-bold bg-red-100 text-red-700">
+                            {alert.recommendedCategory}
+                          </span>
+                        </div>
+                      )}
+
+                      {alert.contributingFactors && alert.contributingFactors.length > 0 && (
+                        <ul className={`text-[11px] space-y-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                          {alert.contributingFactors.map((factor, i) => (
+                            <li key={i} className="flex gap-1.5"><span className="text-slate-400">•</span>{factor}</li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {!alert.acknowledged && onAcknowledge && (
+                        <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                          <textarea
+                            placeholder="Add a note (optional)…"
+                            rows={2}
+                            value={commentDraft[alert.id] || ''}
+                            onChange={(e) => setCommentDraft({ ...commentDraft, [alert.id]: e.target.value })}
+                            className={`w-full text-[12px] rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 resize-none ${
+                              isDark
+                                ? 'bg-white/5 border border-white/10 text-white placeholder-slate-500'
+                                : 'bg-white border border-slate-200 text-slate-800 placeholder-slate-400'
+                            }`}
+                          />
+                          <button
+                            onClick={() => onAcknowledge(alert.id, commentDraft[alert.id])}
+                            className="inline-flex items-center gap-1.5 text-[11px] font-bold text-white bg-cyan-600 hover:bg-cyan-500 px-3 py-1.5 rounded-lg transition-all shadow-sm hover:shadow"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Acknowledge
+                          </button>
+                        </div>
+                      )}
+
+                      {alert.acknowledged && (
+                        <div className={`text-[11px] italic flex items-center gap-1.5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Acknowledged{alert.acknowledgedBy ? ` by ${alert.acknowledgedBy}` : ''}
+                          {alert.comment ? ` — "${alert.comment}"` : ''}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {!alert.acknowledged && onAcknowledge && !isExpanded && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onAcknowledge(alert.id); }}
+                    className={`text-[10px] font-extrabold flex-shrink-0 px-2 py-1 rounded-lg transition-all ${isDark ? 'text-cyan-300 bg-cyan-500/15 hover:bg-cyan-500/25' : 'text-cyan-700 bg-cyan-50 hover:bg-cyan-100'}`}
+                  >
+                    ACK
+                  </button>
                 )}
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+      </div>
+
+      {/* Footer — view all */}
+      <div className={`px-5 py-3 border-t ${isDark ? 'border-white/10' : 'border-gray-200/70'}`} style={headerBg}>
+        <button
+          onClick={() => { onClose?.(); navigate('/alert-dashboard'); }}
+          className={`w-full text-center py-2 rounded-xl text-[12px] font-bold transition-all inline-flex items-center justify-center gap-1.5 ${isDark ? 'text-cyan-300 hover:bg-white/5' : 'text-cyan-700 hover:bg-cyan-50'}`}
+        >
+          Open Alert Center
+          <ArrowRight className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.patient.service;
 
+import com.smartTriage.smartTriage_server.common.enums.PregnancyStatus;
 import com.smartTriage.smartTriage_server.common.enums.VisitStatus;
 import com.smartTriage.smartTriage_server.common.exception.DuplicateResourceException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
@@ -9,6 +10,7 @@ import com.smartTriage.smartTriage_server.module.patient.dto.CreatePatientReques
 import com.smartTriage.smartTriage_server.module.patient.dto.PatientResponse;
 import com.smartTriage.smartTriage_server.module.patient.dto.RegisterPatientRequest;
 import com.smartTriage.smartTriage_server.module.patient.dto.RegisterPatientResponse;
+import com.smartTriage.smartTriage_server.module.patient.dto.UpdatePregnancyStatusRequest;
 import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
 import com.smartTriage.smartTriage_server.module.patient.mapper.PatientMapper;
 import com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository;
@@ -53,13 +55,19 @@ public class PatientService {
     public PatientResponse createPatient(CreatePatientRequest request) {
         Hospital hospital = hospitalService.findHospitalOrThrow(request.getHospitalId());
 
-        // Duplicate detection by national ID
-        if (request.getNationalId() != null && !request.getNationalId().isBlank()) {
-            patientRepository.findByNationalIdAndHospitalIdAndIsActiveTrue(
-                    request.getNationalId(), hospital.getId()).ifPresent(existing -> {
-                        throw new DuplicateResourceException("Patient", "nationalId", request.getNationalId());
-                    });
-        }
+        // Duplicate detection across all Tier-1 deterministic identifiers.
+        // The DB will also enforce these via partial-unique indexes (V22),
+        // but checking up-front gives a friendlier error message and avoids
+        // the constraint-violation stack trace.
+        assertNoDuplicate(request.getNationalId(),            "nationalId",            hospital.getId(),
+                () -> patientRepository.findByNationalIdAndHospitalIdAndIsActiveTrue(
+                        request.getNationalId(), hospital.getId()));
+        assertNoDuplicate(request.getPassportNumber(),        "passportNumber",        hospital.getId(),
+                () -> patientRepository.findByPassportNumberAndHospitalIdAndIsActiveTrue(
+                        request.getPassportNumber(), hospital.getId()));
+        assertNoDuplicate(request.getBirthCertificateNumber(), "birthCertificateNumber", hospital.getId(),
+                () -> patientRepository.findByBirthCertificateNumberAndHospitalIdAndIsActiveTrue(
+                        request.getBirthCertificateNumber(), hospital.getId()));
 
         Patient patient = PatientMapper.toEntity(request);
         patient.setHospital(hospital);
@@ -74,6 +82,14 @@ public class PatientService {
         return PatientMapper.toResponse(patient);
     }
 
+    private void assertNoDuplicate(String value, String field, UUID hospitalId,
+                                   java.util.function.Supplier<java.util.Optional<Patient>> finder) {
+        if (value == null || value.isBlank()) return;
+        finder.get().ifPresent(existing -> {
+            throw new DuplicateResourceException("Patient", field, value);
+        });
+    }
+
     /**
      * Atomic registration — creates both Patient and Visit in a single
      * database transaction. If either step fails the entire operation
@@ -83,28 +99,39 @@ public class PatientService {
     public RegisterPatientResponse registerPatientWithVisit(RegisterPatientRequest request) {
         Hospital hospital = hospitalService.findHospitalOrThrow(request.getHospitalId());
 
-        // Duplicate detection by national ID
-        if (request.getNationalId() != null && !request.getNationalId().isBlank()) {
-            patientRepository.findByNationalIdAndHospitalIdAndIsActiveTrue(
-                    request.getNationalId(), hospital.getId()).ifPresent(existing -> {
-                        throw new DuplicateResourceException("Patient", "nationalId", request.getNationalId());
-                    });
-        }
+        // Duplicate detection across all Tier-1 deterministic identifiers.
+        assertNoDuplicate(request.getNationalId(),             "nationalId",             hospital.getId(),
+                () -> patientRepository.findByNationalIdAndHospitalIdAndIsActiveTrue(
+                        request.getNationalId(), hospital.getId()));
+        assertNoDuplicate(request.getPassportNumber(),         "passportNumber",         hospital.getId(),
+                () -> patientRepository.findByPassportNumberAndHospitalIdAndIsActiveTrue(
+                        request.getPassportNumber(), hospital.getId()));
+        assertNoDuplicate(request.getBirthCertificateNumber(), "birthCertificateNumber", hospital.getId(),
+                () -> patientRepository.findByBirthCertificateNumberAndHospitalIdAndIsActiveTrue(
+                        request.getBirthCertificateNumber(), hospital.getId()));
 
-        // 1. Create Patient
+        // 1. Create Patient. Empty strings are coerced to NULL so the
+        //    partial-unique indexes (which fire on `WHERE col IS NOT NULL`)
+        //    treat blank fields as absent rather than as a reserved value.
         Patient patient = Patient.builder()
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
                 .dateOfBirth(request.getDateOfBirth())
                 .gender(request.getGender())
-                .nationalId(request.getNationalId())
-                .phoneNumber(request.getPhoneNumber())
+                .nationalId(blankToNull(request.getNationalId()))
+                .passportNumber(blankToNull(request.getPassportNumber()))
+                .birthCertificateNumber(blankToNull(request.getBirthCertificateNumber()))
+                .phoneNumber(blankToNull(request.getPhoneNumber()))
                 .address(request.getAddress())
                 .emergencyContactName(request.getEmergencyContactName())
                 .emergencyContactPhone(request.getEmergencyContactPhone())
                 .bloodType(request.getBloodType())
                 .knownAllergies(request.getKnownAllergies())
                 .chronicConditions(request.getChronicConditions())
+                .guardianNationalId(blankToNull(request.getGuardianNationalId()))
+                .guardianPhone(blankToNull(request.getGuardianPhone()))
+                .guardianName(blankToNull(request.getGuardianName()))
+                .guardianRelationship(blankToNull(request.getGuardianRelationship()))
                 .build();
         patient.setHospital(hospital);
         patient.setMedicalRecordNumber(generateMRN(hospital.getHospitalCode()));
@@ -155,6 +182,40 @@ public class PatientService {
                 .orElseThrow(() -> new ResourceNotFoundException("Patient", "id", id));
     }
 
+    /**
+     * Phase 13b — structured pregnancy-status update. The frontend
+     * teratogen check reads `pregnancyStatus` first and falls back to
+     * the legacy free-text `chronicConditions` scan only when the
+     * structured value is null or UNKNOWN. Without this endpoint the
+     * structured column would always be null and the structured-first
+     * path would never fire.
+     *
+     * The audit timestamp is set server-side rather than accepted from
+     * the client — that's the only path consistent with "the chart
+     * timestamps are produced by the system, not the user".
+     *
+     * Logged at INFO so a safety officer can grep for who toggled a
+     * patient between PREGNANT and NOT_PREGNANT and when. Per
+     * SmartTriage convention we log the visit-number / MRN, not the
+     * UUIDs that aren't human-readable.
+     */
+    @Transactional
+    public PatientResponse updatePregnancyStatus(UUID patientId, UpdatePregnancyStatusRequest request) {
+        Patient patient = findPatientOrThrow(patientId);
+        PregnancyStatus previous = patient.getPregnancyStatus();
+        patient.setPregnancyStatus(request.getPregnancyStatus());
+        patient.setPregnancyStatusRecordedAt(Instant.now());
+        patient = patientRepository.save(patient);
+
+        log.info("Pregnancy status updated for patient {} (MRN {}): {} → {}",
+                patient.getId(),
+                patient.getMedicalRecordNumber(),
+                previous,
+                patient.getPregnancyStatus());
+
+        return PatientMapper.toResponse(patient);
+    }
+
     private String generateMRN(String hospitalCode) {
         return hospitalCode + "-" + mrnCounter.incrementAndGet();
     }
@@ -163,5 +224,9 @@ public class PatientService {
         String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         long sequence = visitCounter.incrementAndGet();
         return String.format("V-%s-%s-%05d", hospitalCode, date, sequence);
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s.trim();
     }
 }

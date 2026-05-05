@@ -21,14 +21,24 @@ import java.util.UUID;
 /**
  * Clinical note management endpoints.
  *
+ * <p>Notes are append-only. There is no in-place update endpoint — to correct
+ * an earlier note, callers POST to {@code /{id}/supersede}, which writes a new
+ * row referencing the original via {@code supersedesId}. The original row is
+ * never modified.</p>
+ *
+ * <p>Hard delete is reserved for system administrators; clinical staff should
+ * use supersede for routine corrections so the original record is preserved.</p>
+ *
+ * <pre>
  *   POST   /api/v1/clinical-notes                         → Create note
- *   PUT    /api/v1/clinical-notes/{id}                     → Update note
- *   DELETE /api/v1/clinical-notes/{id}                     → Soft-delete note
- *   GET    /api/v1/clinical-notes/{id}                     → Single record
- *   GET    /api/v1/clinical-notes/visit/{visitId}          → Paginated list
- *   GET    /api/v1/clinical-notes/visit/{visitId}/all      → Full list
+ *   POST   /api/v1/clinical-notes/{id}/supersede          → Correct an existing note
+ *   DELETE /api/v1/clinical-notes/{id}                    → Soft-delete (admin only)
+ *   GET    /api/v1/clinical-notes/{id}                    → Single record
+ *   GET    /api/v1/clinical-notes/visit/{visitId}         → Paginated list
+ *   GET    /api/v1/clinical-notes/visit/{visitId}/all     → Full list
  *   GET    /api/v1/clinical-notes/visit/{visitId}/type/{type} → By note type
  *   GET    /api/v1/clinical-notes/visit/{visitId}/type/{type}/latest → Latest of type
+ * </pre>
  */
 @RestController
 @RequestMapping("/api/v1/clinical-notes")
@@ -46,17 +56,28 @@ public class ClinicalNoteController {
                 .body(ApiResponse.success("Clinical note created", response));
     }
 
-    @PutMapping("/{id}")
+    /**
+     * Correct an existing clinical note. Writes a new row that references the
+     * original via {@code supersedesId}; the original is never modified. Both
+     * rows remain visible to readers so the correction trail is auditable.
+     */
+    @PostMapping("/{id}/supersede")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
-    public ResponseEntity<ApiResponse<ClinicalNoteResponse>> updateNote(
+    public ResponseEntity<ApiResponse<ClinicalNoteResponse>> supersedeNote(
             @PathVariable UUID id,
             @Valid @RequestBody CreateClinicalNoteRequest request) {
-        ClinicalNoteResponse response = clinicalNoteService.updateNote(id, request);
-        return ResponseEntity.ok(ApiResponse.success("Clinical note updated", response));
+        ClinicalNoteResponse response = clinicalNoteService.supersedeNote(id, request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Clinical note superseded", response));
     }
 
+    /**
+     * Soft-delete a note. Restricted to system/hospital administrators —
+     * routine clinical corrections must use the supersede endpoint so the
+     * original record is preserved.
+     */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<Void>> deleteNote(@PathVariable UUID id) {
         clinicalNoteService.deleteNote(id);
         return ResponseEntity.ok(ApiResponse.success("Clinical note deleted", null));

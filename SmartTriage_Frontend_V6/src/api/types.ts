@@ -25,6 +25,26 @@ export interface Page<T> {
 // ── Enums ──
 
 export type Gender = 'MALE' | 'FEMALE' | 'OTHER' | 'UNKNOWN';
+
+/**
+ * Phase 13b — structured pregnancy / lactation status. Mirrors the
+ * backend `PregnancyStatus` enum.
+ *  - PREGNANT — known active pregnancy.
+ *  - BREASTFEEDING — postpartum lactation; drug crosses into milk.
+ *  - POSSIBLY_PREGNANT — childbearing-age + missed period / unsure.
+ *  - NOT_PREGNANT — explicitly ruled out.
+ *  - NOT_APPLICABLE — male / pre-menarche / post-menopausal.
+ *  - UNKNOWN — recorded but indeterminate.
+ *  - null on the wire — never recorded; teratogen check falls back
+ *    to chronicConditions free-text scan.
+ */
+export type PregnancyStatus =
+  | 'PREGNANT'
+  | 'BREASTFEEDING'
+  | 'POSSIBLY_PREGNANT'
+  | 'NOT_PREGNANT'
+  | 'NOT_APPLICABLE'
+  | 'UNKNOWN';
 export type Role = 'SUPER_ADMIN' | 'HOSPITAL_ADMIN' | 'DOCTOR' | 'TRIAGE_NURSE' | 'NURSE' | 'REGISTRAR' | 'PARAMEDIC' | 'LAB_TECHNICIAN' | 'READ_ONLY';
 export type ArrivalMode = 'WALK_IN' | 'AMBULANCE' | 'REFERRAL' | 'POLICE' | 'HELICOPTER' | 'OTHER';
 export type VisitStatus = 'REGISTERED' | 'AWAITING_TRIAGE' | 'TRIAGED' | 'AWAITING_ASSESSMENT' | 'UNDER_ASSESSMENT' | 'UNDER_TREATMENT' | 'UNDER_OBSERVATION' | 'PENDING_DISPOSITION' | 'DISCHARGED' | 'ADMITTED' | 'TRANSFERRED' | 'ICU_ADMITTED' | 'LEFT_WITHOUT_BEING_SEEN' | 'DECEASED';
@@ -44,7 +64,7 @@ export type DeviceType = 'ESP32_MONITOR' | 'PULSE_OXIMETER' | 'ECG_MONITOR' | 'B
 export type DeviceStatus = 'REGISTERED' | 'ONLINE' | 'OFFLINE' | 'MONITORING' | 'ERROR' | 'DECOMMISSIONED';
 export type SignalQuality = 'GOOD' | 'ACCEPTABLE' | 'POOR' | 'INVALID' | 'UNKNOWN';
 export type AlertSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
-export type AlertType = 'TEWS_CRITICAL' | 'TEWS_ESCALATION' | 'VITAL_SIGN_ABNORMAL' | 'RETRIAGE_REQUIRED' | 'WAITING_TIME_EXCEEDED' | 'DETERIORATION_DETECTED' | 'SEPSIS_SCREENING' | 'PEDIATRIC_SAFETY' | 'REASSESSMENT_DUE' | 'CRITICAL_LAB_RESULT' | 'IOT_DEVICE_DISCONNECTED' | 'IOT_DEVICE_LOW_BATTERY' | 'IOT_SIGNAL_QUALITY_DEGRADED' | 'IOT_AUTO_RETRIAGE' | 'DOCTOR_NOTIFICATION' | 'DOCTOR_ESCALATION' | 'SURGE_WARNING' | 'INVESTIGATION_RESULTED';
+export type AlertType = 'TEWS_CRITICAL' | 'TEWS_ESCALATION' | 'VITAL_SIGN_ABNORMAL' | 'RETRIAGE_REQUIRED' | 'WAITING_TIME_EXCEEDED' | 'DETERIORATION_DETECTED' | 'SEPSIS_SCREENING' | 'PEDIATRIC_SAFETY' | 'REASSESSMENT_DUE' | 'CRITICAL_LAB_RESULT' | 'IOT_DEVICE_DISCONNECTED' | 'IOT_DEVICE_LOW_BATTERY' | 'IOT_SIGNAL_QUALITY_DEGRADED' | 'IOT_AUTO_RETRIAGE' | 'DOCTOR_NOTIFICATION' | 'DOCTOR_ESCALATION' | 'SURGE_WARNING' | 'INVESTIGATION_RESULTED' | 'MEDICATION_SAFETY_WARNING';
 export type EdZone = 'RESUS' | 'ACUTE' | 'GENERAL' | 'TRIAGE' | 'OBSERVATION' | 'ISOLATION' | 'PEDIATRIC';
 export type ShiftPeriod = 'DAY' | 'NIGHT';
 export type ShiftFunction = 'CHARGE_NURSE' | 'TRIAGE_NURSE' | 'ZONE_NURSE' | 'PRIMARY_DOCTOR' | 'SUPERVISING_DOCTOR' | 'RESIDENT';
@@ -188,7 +208,12 @@ export interface CreatePatientRequest {
   lastName: string;
   dateOfBirth?: string;
   gender: Gender;
+  /** Rwanda NID — primary deterministic id for adults. */
   nationalId?: string;
+  /** Passport number — primary deterministic id for foreign nationals. */
+  passportNumber?: string;
+  /** Birth-certificate number — primary deterministic id for pediatric patients. */
+  birthCertificateNumber?: string;
   phoneNumber?: string;
   address?: string;
   emergencyContactName?: string;
@@ -196,6 +221,11 @@ export interface CreatePatientRequest {
   bloodType?: string;
   knownAllergies?: string;
   chronicConditions?: string;
+  // ── Guardian (pediatric) ──
+  guardianNationalId?: string;
+  guardianPhone?: string;
+  guardianName?: string;
+  guardianRelationship?: string;
   hospitalId: string;
 }
 
@@ -219,6 +249,8 @@ export interface PatientResponse {
   dateOfBirth: string;
   gender: Gender;
   nationalId: string;
+  passportNumber: string | null;
+  birthCertificateNumber: string | null;
   phoneNumber: string;
   address: string;
   emergencyContactName: string;
@@ -226,12 +258,84 @@ export interface PatientResponse {
   bloodType: string;
   knownAllergies: string;
   chronicConditions: string;
+  /**
+   * Phase 13b — structured pregnancy / lactation status. Drives the
+   * teratogen safety check at prescribe time. NULL means "never
+   * recorded" → safety check falls back to free-text scan of
+   * chronicConditions (legacy behaviour).
+   */
+  pregnancyStatus: PregnancyStatus | null;
+  pregnancyStatusRecordedAt: string | null;
+  guardianNationalId: string | null;
+  guardianPhone: string | null;
+  guardianName: string | null;
+  guardianRelationship: string | null;
   medicalRecordNumber: string;
   ageInYears: number;
   isPediatric: boolean;
   hospitalId: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Patient Lookup (federated identity) ──
+
+/**
+ * Why a row matched a patient lookup. See backend
+ * com.smartTriage.smartTriage_server.common.enums.MatchType.
+ *
+ * Tier 1 (deterministic) | Tier 2 (MRN) | Tier 3 (soft) | Tier 4 (demographic)
+ */
+export type MatchType =
+  | 'NATIONAL_ID'
+  | 'PASSPORT'
+  | 'BIRTH_CERTIFICATE'
+  | 'MRN'
+  | 'PHONE_AND_DOB'
+  | 'PHONE'
+  | 'GUARDIAN_NATIONAL_ID'
+  | 'GUARDIAN_PHONE'
+  | 'DEMOGRAPHIC';
+
+/**
+ * Query parameters for /patients/hospital/{id}/lookup. Pass any combination
+ * of identifiers — the backend unions matchers and returns a ranked list.
+ */
+export interface PatientLookupParams {
+  nationalId?: string;
+  passport?: string;
+  birthCertificate?: string;
+  mrn?: string;
+  phone?: string;
+  guardianNationalId?: string;
+  guardianPhone?: string;
+  firstName?: string;
+  lastName?: string;
+  /** ISO date YYYY-MM-DD. */
+  dob?: string;
+}
+
+/**
+ * One ranked candidate. The triage UI renders these as cards; the nurse
+ * picks one (→ pre-fill registration) or "register new".
+ */
+export interface PatientLookupCandidate {
+  patientId: string;
+  medicalRecordNumber: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string | null;
+  ageInYears: number | null;
+  isPediatric: boolean;
+  gender: Gender | null;
+  /** Last 4 chars of NID — full NID is intentionally not in candidates. */
+  nationalIdLast4: string | null;
+  /** ISO instant of most recent active visit, null if none. */
+  lastVisitAt: string | null;
+  hospitalId: string;
+  matchType: MatchType;
+  /** 0.00 – 1.00 — 1.00 = deterministic Tier-1 hit. */
+  confidence: number;
 }
 
 // ── Visit ──
@@ -282,6 +386,8 @@ export interface RecordVitalsRequest {
   bloodGlucose?: number;
   painScore?: number;
   gcsScore?: number;
+  /** Phase 12b — adult body weight in kg. Drives Cockcroft-Gault eGFR. */
+  weightKg?: number;
   source?: VitalSource;
   deviceId?: string;
   notes?: string;
@@ -300,6 +406,8 @@ export interface VitalSignsResponse {
   bloodGlucose: number;
   painScore: number;
   gcsScore: number;
+  /** Phase 12b — adult body weight in kg. Nullable for most rows. */
+  weightKg: number | null;
   source: VitalSource;
   deviceId: string | null;
   notes: string;
@@ -513,8 +621,26 @@ export interface ClinicalNoteResponse {
   visitId: string;
   noteType: NoteType;
   content: string;
-  recordedById: string;
+  /** Display name of the author (server-derived from the authenticated user). */
   recordedByName: string;
+  /**
+   * UUID of the User who wrote the note. Server-derived from the security
+   * context — never set from the client. Null only for legacy rows created
+   * before V21.
+   */
+  authorUserId: string | null;
+  /**
+   * Role of the author at write time (DOCTOR, NURSE, ...). Captured at write
+   * time so the timeline still renders correctly even if the user's role
+   * changes later.
+   */
+  authorRole: Role | null;
+  /**
+   * If this note corrects an earlier one, the original's id. Non-null
+   * indicates a supersede; the original row remains visible in the timeline.
+   */
+  supersedesId: string | null;
+  recordedAt: string;
   section: string;
   createdAt: string;
   updatedAt: string;
@@ -560,6 +686,10 @@ export interface OrderInvestigationRequest {
 export interface RecordInvestigationResultRequest {
   investigationId: string;
   result: string;
+  /** Phase 12b — optional numeric value (e.g. 1.8 for "Cr 1.8 mg/dL"). */
+  resultNumeric?: number;
+  /** Phase 12b — unit string ("mg/dL", "µmol/L", "mmol/L", …). */
+  resultUnit?: string;
   isAbnormal?: boolean;
   isCritical?: boolean;
   notes?: string;
@@ -575,6 +705,9 @@ export interface InvestigationResponse {
   priority: string;
   status: InvestigationStatus;
   result: string | null;
+  /** Phase 12b — principal scalar value, drives Cockcroft-Gault eGFR. */
+  resultNumeric: number | null;
+  resultUnit: string | null;
   isAbnormal: boolean;
   isCritical: boolean;
   notes: string;
@@ -597,6 +730,19 @@ export interface PrescribeMedicationRequest {
   frequency?: string;
   prescribedByName?: string;
   notes?: string;
+  /** TRUE when the prescriber acknowledged a known-allergy conflict in
+   *  the PrescribeSafetyDialog and chose to prescribe anyway. The
+   *  backend stamps the timestamp and persists the matches snapshot. */
+  prescribedDespiteAllergy?: boolean;
+  /** Free-text snapshot of the matches the dialog showed at decision
+   *  time, formatted by formatAllergyMatches() in utils/allergyCheck. */
+  allergyOverrideMatches?: string;
+  /** TRUE when the prescriber acknowledged a drug–drug interaction in
+   *  the PrescribeSafetyDialog and chose to prescribe anyway. */
+  prescribedDespiteInteraction?: boolean;
+  /** Free-text snapshot of the interaction conflicts at decision time,
+   *  formatted by formatInteractionMatches() in utils/interactionCheck. */
+  interactionOverrideMatches?: string;
 }
 
 export interface AdministerMedicationRequest {
@@ -632,6 +778,22 @@ export interface MedicationResponse {
   refusalReason: string | null;
   cancellationReason: string | null;
   notes: string;
+  /** TRUE when this medication was prescribed against a known patient
+   *  allergy. Drives the amber "Allergy override" badge on the
+   *  medication card. */
+  prescribedDespiteAllergy?: boolean | null;
+  /** Free-text snapshot of conflicts at prescribe time. */
+  allergyOverrideMatches?: string | null;
+  /** Server timestamp of the override acknowledgement. */
+  allergyOverrideAcknowledgedAt?: string | null;
+  /** TRUE when this medication was prescribed despite a drug–drug
+   *  interaction with another active medication on the same visit.
+   *  Drives the orange "Interaction override" badge. */
+  prescribedDespiteInteraction?: boolean | null;
+  /** Free-text snapshot of interaction conflicts at prescribe time. */
+  interactionOverrideMatches?: string | null;
+  /** Server timestamp of the interaction override acknowledgement. */
+  interactionOverrideAcknowledgedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -696,6 +858,8 @@ export interface DeviceSessionResponse {
   rejectedReadings: number;
   alertsGenerated: number;
   retriagesTriggered: number;
+  trendStatus: 'WORSENING' | 'STABLE' | 'IMPROVING' | 'UNKNOWN' | null;
+  trendUpdatedAt: string | null;
   createdAt: string;
 }
 

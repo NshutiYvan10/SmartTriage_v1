@@ -28,6 +28,14 @@ public class InvestigationResponse {
     private Instant specimenCollectedAt;
     private Instant resultedAt;
     private String result;
+    /**
+     * Phase 12b — principal scalar value of the result. Optional
+     * (null when the result is purely qualitative). Paired with
+     * resultUnit. Drives Cockcroft-Gault eGFR for renal-risk
+     * dose checking.
+     */
+    private Double resultNumeric;
+    private String resultUnit;
     private Boolean isAbnormal;
     private Boolean isCritical;
     private InvestigationStatus status;

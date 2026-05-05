@@ -15,8 +15,10 @@ import { usePatientStore } from '@/store/patientStore';
 import { useDeviceStore } from '@/store/deviceStore';
 import { useVitalStore } from '@/store/vitalStore';
 import { useAuthStore } from '@/store/authStore';
-import { subscribeToVitals } from '@/api/websocket';
-import type { Patient, VitalSigns } from '@/types';
+import { useAlertStore } from '@/store/alertStore';
+import { subscribeToVitals, subscribeToTrendChanges } from '@/api/websocket';
+import { iotApi } from '@/api/iot';
+import type { Patient, VitalSigns, AIAlert } from '@/types';
 import {
   SIGNAL_QUALITY_META,
   getBatteryColor,
@@ -341,6 +343,8 @@ function toMonitoredPatient(
   p: Patient,
   vitals: VitalSigns | undefined,
   vitalHistoryMap: Map<string, { timestamp: Date; value: number }[]> | undefined,
+  trendOverride?: 'WORSENING' | 'STABLE' | 'IMPROVING' | 'UNKNOWN',
+  storeAlerts?: AIAlert[],
 ): MonitoredPatient {
   const v = vitals ?? { heartRate: 0, respiratoryRate: 0, spo2: 0, systolicBP: 0, diastolicBP: 0, temperature: 0, ecg: 0, glucose: 0, timestamp: new Date(), deviceConnected: false };
   const currentVitals = {
@@ -376,16 +380,14 @@ function toMonitoredPatient(
     glucose: glcHist[i]?.value ?? currentVitals.glucose,
   }));
 
-  // Derive trend from HR history (simple heuristic: first-half vs second-half avg)
-  let trend: 'improving' | 'stable' | 'worsening' = 'stable';
-  if (hrHist.length >= 4) {
-    const mid = Math.floor(hrHist.length / 2);
-    const firstAvg = hrHist.slice(0, mid).reduce((s, r) => s + r.value, 0) / mid;
-    const secondAvg = hrHist.slice(mid).reduce((s, r) => s + r.value, 0) / (hrHist.length - mid);
-    const delta = secondAvg - firstAvg;
-    if (delta > 5) trend = 'worsening';
-    else if (delta < -5) trend = 'improving';
-  }
+  // Server-authoritative trend (classified with hysteresis in the backend
+  // and pushed over /topic/trend/{visitId}). The trendOverride map from the
+  // component is the single source of truth; p.trendStatus is a fallback.
+  const serverTrend = trendOverride ?? p.trendStatus;
+  const trend: 'improving' | 'stable' | 'worsening' =
+    serverTrend === 'WORSENING' ? 'worsening'
+    : serverTrend === 'IMPROVING' ? 'improving'
+    : 'stable';
 
   const tewsHistory = buildTewsHistory(p.tewsScore ?? 0);
 
@@ -396,7 +398,7 @@ function toMonitoredPatient(
     tewsHistory,
     lastAssessment: v.timestamp ?? new Date(),
     trend,
-    alerts: (p.aiAlerts ?? []).map((a) => ({
+    alerts: ((storeAlerts && storeAlerts.length > 0) ? storeAlerts : (p.aiAlerts ?? [])).map((a) => ({
       message: a.message,
       severity: a.severity,
       time: a.timestamp,
@@ -416,18 +418,42 @@ export function ConstantMonitoring() {
   const fetchLatestVitals = useVitalStore((s) => s.fetchLatestVitals);
   const fetchVitalHistory = useVitalStore((s) => s.fetchVitalHistory);
   const authUser = useAuthStore((s) => s.user);
+  const storeAlerts = useAlertStore((s) => s.alerts);
+  // Group store alerts by visitId (== patient.id in the monitoring view) for O(1) lookup
+  const alertsByVisitId = useMemo(() => {
+    const m = new Map<string, AIAlert[]>();
+    for (const a of storeAlerts) {
+      if (!a.patientId) continue;
+      const arr = m.get(a.patientId) ?? [];
+      arr.push(a);
+      m.set(a.patientId, arr);
+    }
+    // Sort newest first and cap at 5 per patient
+    for (const [k, arr] of m) {
+      arr.sort((x, y) => new Date(y.timestamp).getTime() - new Date(x.timestamp).getTime());
+      m.set(k, arr.slice(0, 5));
+    }
+    return m;
+  }, [storeAlerts]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [trendFilter, setTrendFilter] = useState<string>('all');
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [expandedPatient, setExpandedPatient] = useState<string | null>(null);
+  // visitId → server-classified trend. Seeded from getActiveSessions, updated
+  // live from /topic/trend/{visitId}. Independent of patientStore so patient
+  // re-fetches never wipe it.
+  const [trendByVisitId, setTrendByVisitId] = useState<Map<string, 'WORSENING' | 'STABLE' | 'IMPROVING' | 'UNKNOWN'>>(new Map());
 
-  // Refresh device store on mount so we see latest device-patient assignments
+  // Refresh device store on mount AND every 30s tick. A device's
+  // status flips to MONITORING only after a DeviceSession is created
+  // (e.g. via heartbeat auto-pair when a patient is placed in its bed).
+  // Without periodic re-fetch the dashboard shows DEMO forever.
   useEffect(() => {
     if (authUser?.hospitalId) {
       useDeviceStore.getState().fetchDevicesFromApi(authUser.hospitalId);
     }
-  }, [authUser?.hospitalId]);
+  }, [authUser?.hospitalId, lastRefresh]);
 
   // Auto-refresh timestamp every 30 seconds
   useEffect(() => {
@@ -453,6 +479,7 @@ export function ConstantMonitoring() {
   // Subscribe to /topic/vitals/{visitId} for every patient that has a
   // streaming device. This gives true real-time updates every ~5s.
   const wsUnsubs = useRef<Map<string, () => void>>(new Map());
+  const trendUnsubs = useRef<Map<string, () => void>>(new Map());
 
   // Build a set of visit IDs that have an active device streaming
   const devicePairedVisitIds = useMemo(() => {
@@ -507,14 +534,74 @@ export function ConstantMonitoring() {
     };
   }, [devicePairedVisitIds]);
 
+  // ── Seed trendStatus from active sessions ──
+  // The backend pushes /topic/trend/{visitId} ONLY when the label changes.
+  // If we join the dashboard after a change already fired, we'd be stuck on
+  // "stable" until the next transition. Fetch active sessions on mount and
+  // on each 30s tick, and seed patient.trendStatus from session.trendStatus.
+  useEffect(() => {
+    if (!authUser?.hospitalId) return;
+    let cancelled = false;
+    iotApi
+      .getActiveSessions(authUser.hospitalId)
+      .then((sessions) => {
+        if (cancelled) return;
+        setTrendByVisitId((prev) => {
+          const next = new Map(prev);
+          sessions.forEach((s) => {
+            if (!s.visitId || !s.trendStatus) return;
+            next.set(s.visitId, s.trendStatus);
+          });
+          return next;
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.hospitalId, lastRefresh]);
+
+  // ── WebSocket subscriptions for server-authoritative trend changes ──
+  // Backend classifies trend (with hysteresis) and pushes WORSENING/STABLE/
+  // IMPROVING to /topic/trend/{visitId}. This replaces the old client-side
+  // HR-only heuristic that caused badge flicker.
+  useEffect(() => {
+    const currentSubs = trendUnsubs.current;
+
+    devicePairedVisitIds.forEach((visitId) => {
+      if (!currentSubs.has(visitId)) {
+        const unsub = subscribeToTrendChanges(visitId, (ev) => {
+          setTrendByVisitId((prev) => {
+            const next = new Map(prev);
+            next.set(visitId, ev.trendStatus);
+            return next;
+          });
+        });
+        currentSubs.set(visitId, unsub);
+      }
+    });
+
+    currentSubs.forEach((unsub, visitId) => {
+      if (!devicePairedVisitIds.has(visitId)) {
+        unsub();
+        currentSubs.delete(visitId);
+      }
+    });
+
+    return () => {
+      currentSubs.forEach((unsub) => unsub());
+      currentSubs.clear();
+    };
+  }, [devicePairedVisitIds]);
+
   const patients = useMemo(() => {
     const monitorable = storePatients.filter((p) =>
       p.triageStatus === 'TRIAGED' || p.triageStatus === 'IN_TREATMENT' || p.triageStatus === 'IN_TRIAGE'
     );
     return monitorable.map((p) =>
-      toMonitoredPatient(p, vitalsByPatient.get(p.id), vitalHistoryStore.get(p.id))
+      toMonitoredPatient(p, vitalsByPatient.get(p.id), vitalHistoryStore.get(p.id), trendByVisitId.get(p.id), alertsByVisitId.get(p.id))
     );
-  }, [storePatients, vitalsByPatient, vitalHistoryStore]);
+  }, [storePatients, vitalsByPatient, vitalHistoryStore, trendByVisitId, alertsByVisitId]);
 
   const filtered = useMemo(() => {
     return patients.filter((p) => {

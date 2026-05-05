@@ -64,6 +64,8 @@ public final class IoTMapper {
                 .rejectedReadings(session.getRejectedReadings())
                 .alertsGenerated(session.getAlertsGenerated())
                 .retriagesTriggered(session.getRetriagesTriggered())
+                .trendStatus(session.getTrendStatus())
+                .trendUpdatedAt(session.getTrendUpdatedAt())
                 .createdAt(session.getCreatedAt())
                 .build();
     }

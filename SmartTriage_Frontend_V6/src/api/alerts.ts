@@ -23,6 +23,23 @@ export const alertApi = {
   getByDoctor: (doctorId: string) =>
     get<ClinicalAlertResponse[]>(`/alerts/doctor/${doctorId}`),
 
+  /**
+   * Phase 14 — server-side filter for the Override Audit dashboard.
+   * `range` accepts "24h" | "7d" | "30d" | "all". Default page size is
+   * 200 — large enough that a typical hospital's recent overrides come
+   * in one round-trip but small enough that a malformed query can't
+   * blow up the response.
+   */
+  getSafetyOverrides: (
+    hospitalId: string,
+    range: '24h' | '7d' | '30d' | 'all' = 'all',
+    page = 0,
+    size = 200,
+  ) =>
+    get<Page<ClinicalAlertResponse>>(
+      `/alerts/hospital/${hospitalId}/safety-overrides?range=${range}&page=${page}&size=${size}`,
+    ),
+
   acknowledge: (alertId: string) =>
     patch<ClinicalAlertResponse>(`/alerts/${alertId}/acknowledge`),
 };

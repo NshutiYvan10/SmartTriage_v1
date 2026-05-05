@@ -2,6 +2,7 @@ package com.smartTriage.smartTriage_server.module.iot.service;
 
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.module.alert.dto.ClinicalAlertResponse;
+import com.smartTriage.smartTriage_server.module.clinical.dto.ClinicalNoteResponse;
 import com.smartTriage.smartTriage_server.module.iot.dto.VitalStreamResponse;
 import com.smartTriage.smartTriage_server.module.iot.mapper.IoTMapper;
 import com.smartTriage.smartTriage_server.module.iot.entity.VitalStream;
@@ -70,6 +71,16 @@ public class RealTimeEventPublisher {
     }
 
     /**
+     * Push a patient trend classification change (WORSENING / STABLE / IMPROVING)
+     * to the visit topic. Monitoring dashboards subscribe here and update the
+     * badge + counter without recomputing locally.
+     */
+    public void publishTrendChange(UUID visitId, Map<String, Object> trendData) {
+        messagingTemplate.convertAndSend("/topic/trend/" + visitId, (Object) trendData);
+        log.debug("Published trend change to /topic/trend/{}", visitId);
+    }
+
+    /**
      * Push a triage change to the visit's triage topic.
      */
     public void publishTriageChange(UUID visitId, Map<String, Object> triageData) {
@@ -115,5 +126,24 @@ public class RealTimeEventPublisher {
         String topic = "/topic/beds/" + hospitalId;
         messagingTemplate.convertAndSend(topic, (Object) bedData);
         log.debug("Published bed change to {}", topic);
+    }
+
+    // ====================================================================
+    // CLINICAL NOTE TOPICS
+    // ====================================================================
+
+    /**
+     * Push a clinical note event to the visit's notes topic. Fired on both
+     * initial creation and supersede (correction) events so any subscribed
+     * timeline / handover view can append the new row in real time without a
+     * re-fetch. Subscribers can distinguish a correction by inspecting the
+     * payload's {@code supersedesId} field — non-null indicates this note
+     * supersedes an earlier one.
+     */
+    public void publishClinicalNote(UUID visitId, ClinicalNoteResponse note) {
+        String topic = "/topic/visit/" + visitId + "/notes";
+        messagingTemplate.convertAndSend(topic, (Object) note);
+        log.debug("Published clinical note to {} (id:{}, supersedes:{})",
+                topic, note.getId(), note.getSupersedesId());
     }
 }

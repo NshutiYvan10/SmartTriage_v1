@@ -68,6 +68,23 @@ public class Investigation extends BaseEntity {
     @Column(name = "result", columnDefinition = "TEXT")
     private String result;
 
+    /**
+     * Phase 12b — principal scalar value of the result, e.g. 1.8 for
+     * a creatinine reported as "Cr 1.8 mg/dL". Lets downstream
+     * calculators (Cockcroft-Gault eGFR, sepsis scoring) read a
+     * number without parsing free text.
+     */
+    @Column(name = "result_numeric")
+    private Double resultNumeric;
+
+    /**
+     * Phase 12b — unit for resultNumeric. Free text because lab units
+     * vary by site (mg/dL vs µmol/L for creatinine, g/dL vs g/L for
+     * haemoglobin, mmol/L vs mEq/L for electrolytes).
+     */
+    @Column(name = "result_unit", length = 32)
+    private String resultUnit;
+
     /** Whether the result is abnormal / critical */
     @Column(name = "is_abnormal")
     @Builder.Default

@@ -41,6 +41,7 @@ import { HypoglycemiaView } from './modules/hypoglycemia/HypoglycemiaView';
 import { IsolationDashboard } from './modules/isolation/IsolationDashboard';
 import { ClinicalPathwaysView } from './modules/pathway/ClinicalPathwaysView';
 import { MedicationSafetyView } from './modules/medsafety/MedicationSafetyView';
+import { MedicationSafetyOverridesView } from './modules/medsafety/MedicationSafetyOverridesView';
 import { IcuEscalationView } from './modules/icu/IcuEscalationView';
 import { ReferralManagement } from './modules/referral/ReferralManagement';
 import { ClinicalDocumentation } from './modules/documentation/ClinicalDocumentation';
@@ -171,6 +172,7 @@ function AppContent() {
             <Route path="/isolation" element={<RoleGuard page="isolation"><IsolationDashboard /></RoleGuard>} />
             <Route path="/pathways" element={<RoleGuard page="pathways"><ClinicalPathwaysView /></RoleGuard>} />
             <Route path="/med-safety" element={<RoleGuard page="med-safety"><MedicationSafetyView /></RoleGuard>} />
+            <Route path="/med-safety/overrides" element={<RoleGuard page="med-safety-overrides" allowDesignations={['SUPERVISOR', 'SAFETY_OFFICER']}><MedicationSafetyOverridesView /></RoleGuard>} />
             <Route path="/icu" element={<RoleGuard page="icu"><IcuEscalationView /></RoleGuard>} />
             <Route path="/referral" element={<RoleGuard page="referral"><ReferralManagement /></RoleGuard>} />
             {/* Documentation & Handover */}

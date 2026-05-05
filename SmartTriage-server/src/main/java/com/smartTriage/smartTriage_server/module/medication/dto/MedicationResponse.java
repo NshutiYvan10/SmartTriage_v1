@@ -47,6 +47,21 @@ public class MedicationResponse {
     private MedicationStatus status;
     private String notes;
 
+    // Allergy override (V23) — exposed so the frontend can render a
+    // visible badge on overridden orders. Other clinicians coming into
+    // the case need to see at a glance "this drug was prescribed
+    // against a known allergy."
+    private Boolean prescribedDespiteAllergy;
+    private String allergyOverrideMatches;
+    private Instant allergyOverrideAcknowledgedAt;
+
+    // Interaction override (V24) — same rationale as the allergy
+    // override fields, but for drug–drug interaction conflicts. A
+    // single order can carry both flags.
+    private Boolean prescribedDespiteInteraction;
+    private String interactionOverrideMatches;
+    private Instant interactionOverrideAcknowledgedAt;
+
     // Audit
     private Instant createdAt;
     private Instant updatedAt;

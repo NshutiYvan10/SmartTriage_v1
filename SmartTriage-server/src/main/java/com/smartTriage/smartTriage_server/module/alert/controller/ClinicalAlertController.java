@@ -65,6 +65,28 @@ public class ClinicalAlertController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    /**
+     * Phase 14 Override Audit dashboard — server-side filter for
+     * MEDICATION_SAFETY_WARNING alerts within a date window. The dashboard
+     * was previously fetching every alert and filtering client-side; this
+     * lets it scale past a few hundred overrides per hospital.
+     *
+     * @param range one of "24h", "7d", "30d", "all" (case-insensitive).
+     *              Unknown values are treated as "all" rather than
+     *              rejected — a stale link shouldn't take the dashboard
+     *              down.
+     */
+    @GetMapping("/hospital/{hospitalId}/safety-overrides")
+    public ResponseEntity<ApiResponse<Page<ClinicalAlertResponse>>> getSafetyOverrides(
+            @PathVariable UUID hospitalId,
+            @RequestParam(required = false, defaultValue = "all") String range,
+            @PageableDefault(size = 200) Pageable pageable) {
+        Page<ClinicalAlertResponse> response = clinicalAlertService
+                .getSafetyOverrides(hospitalId, range, pageable)
+                .map(ClinicalAlertMapper::toResponse);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
     @PatchMapping("/{alertId}/acknowledge")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
     public ResponseEntity<ApiResponse<ClinicalAlertResponse>> acknowledgeAlert(@PathVariable UUID alertId) {

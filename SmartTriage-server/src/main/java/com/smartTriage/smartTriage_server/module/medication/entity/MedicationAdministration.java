@@ -125,4 +125,57 @@ public class MedicationAdministration extends BaseEntity {
     /** Clinical notes (e.g., reason for hold, adverse reaction) */
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
+
+    // ====================================================================
+    // ALLERGY OVERRIDE (V23)
+    // ====================================================================
+    // Set when the prescribe-time allergy cross-check (frontend
+    // utils/allergyCheck.ts) found a conflict and the prescriber
+    // explicitly acknowledged a hard-stop dialog. These fields are the
+    // permanent audit record — the patient's allergy list can change
+    // later but the snapshot here reflects what the prescriber saw.
+
+    /** TRUE when prescribed against a known patient allergy. */
+    @Column(name = "prescribed_despite_allergy", nullable = false)
+    @Builder.Default
+    private Boolean prescribedDespiteAllergy = Boolean.FALSE;
+
+    /**
+     * Snapshot of the conflicting allergens at decision time. Free-text;
+     * format produced by the frontend formatAllergyMatches() helper:
+     * "<token> [(<family>)]; …".
+     */
+    @Column(name = "allergy_override_matches", columnDefinition = "TEXT")
+    private String allergyOverrideMatches;
+
+    /** Server timestamp when the override dialog was confirmed. */
+    @Column(name = "allergy_override_acknowledged_at")
+    private Instant allergyOverrideAcknowledgedAt;
+
+    // ====================================================================
+    // INTERACTION OVERRIDE (V24)
+    // ====================================================================
+    // Set when the prescribe-time drug–drug interaction check
+    // (frontend utils/interactionCheck.ts) found a conflict against
+    // another active medication on the same visit and the prescriber
+    // explicitly acknowledged the hard-stop dialog. Distinct from the
+    // allergy fields because a single order can hit zero, one, or both.
+
+    /** TRUE when prescribed despite a known drug–drug interaction. */
+    @Column(name = "prescribed_despite_interaction", nullable = false)
+    @Builder.Default
+    private Boolean prescribedDespiteInteraction = Boolean.FALSE;
+
+    /**
+     * Snapshot of the conflicting interactions at decision time. Free-
+     * text; format produced by the frontend formatInteractionMatches()
+     * helper: "<other drug> + <prescribed class>/<other class>:
+     * <mechanism> [<severity>]; …".
+     */
+    @Column(name = "interaction_override_matches", columnDefinition = "TEXT")
+    private String interactionOverrideMatches;
+
+    /** Server timestamp when the interaction override was confirmed. */
+    @Column(name = "interaction_override_acknowledged_at")
+    private Instant interactionOverrideAcknowledgedAt;
 }

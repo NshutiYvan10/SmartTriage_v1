@@ -14,14 +14,20 @@ public final class PatientMapper {
                 .lastName(request.getLastName())
                 .dateOfBirth(request.getDateOfBirth())
                 .gender(request.getGender())
-                .nationalId(request.getNationalId())
-                .phoneNumber(request.getPhoneNumber())
+                .nationalId(blankToNull(request.getNationalId()))
+                .passportNumber(blankToNull(request.getPassportNumber()))
+                .birthCertificateNumber(blankToNull(request.getBirthCertificateNumber()))
+                .phoneNumber(blankToNull(request.getPhoneNumber()))
                 .address(request.getAddress())
                 .emergencyContactName(request.getEmergencyContactName())
                 .emergencyContactPhone(request.getEmergencyContactPhone())
                 .bloodType(request.getBloodType())
                 .knownAllergies(request.getKnownAllergies())
                 .chronicConditions(request.getChronicConditions())
+                .guardianNationalId(blankToNull(request.getGuardianNationalId()))
+                .guardianPhone(blankToNull(request.getGuardianPhone()))
+                .guardianName(blankToNull(request.getGuardianName()))
+                .guardianRelationship(blankToNull(request.getGuardianRelationship()))
                 .build();
     }
 
@@ -35,6 +41,8 @@ public final class PatientMapper {
                 .isPediatric(patient.isPediatric())
                 .gender(patient.getGender())
                 .nationalId(patient.getNationalId())
+                .passportNumber(patient.getPassportNumber())
+                .birthCertificateNumber(patient.getBirthCertificateNumber())
                 .medicalRecordNumber(patient.getMedicalRecordNumber())
                 .phoneNumber(patient.getPhoneNumber())
                 .address(patient.getAddress())
@@ -43,9 +51,25 @@ public final class PatientMapper {
                 .bloodType(patient.getBloodType())
                 .knownAllergies(patient.getKnownAllergies())
                 .chronicConditions(patient.getChronicConditions())
+                .pregnancyStatus(patient.getPregnancyStatus())
+                .pregnancyStatusRecordedAt(patient.getPregnancyStatusRecordedAt())
+                .guardianNationalId(patient.getGuardianNationalId())
+                .guardianPhone(patient.getGuardianPhone())
+                .guardianName(patient.getGuardianName())
+                .guardianRelationship(patient.getGuardianRelationship())
                 .hospitalId(patient.getHospital().getId())
                 .createdAt(patient.getCreatedAt())
                 .updatedAt(patient.getUpdatedAt())
                 .build();
+    }
+
+    /**
+     * Empty strings from form posts must become NULL on the way into the DB,
+     * otherwise our partial-unique indexes (which fire on
+     * `WHERE nid IS NOT NULL`) treat "" as a real value and will reject the
+     * second blank registration as a duplicate.
+     */
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s.trim();
     }
 }

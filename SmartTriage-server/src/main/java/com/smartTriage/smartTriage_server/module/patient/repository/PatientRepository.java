@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -18,9 +20,43 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
 
     Page<Patient> findByHospitalIdAndIsActiveTrue(UUID hospitalId, Pageable pageable);
 
+    // ── Tier 1: deterministic identifiers (partial-unique within hospital) ──
+
     Optional<Patient> findByNationalIdAndHospitalIdAndIsActiveTrue(String nationalId, UUID hospitalId);
 
+    Optional<Patient> findByPassportNumberAndHospitalIdAndIsActiveTrue(String passportNumber, UUID hospitalId);
+
+    Optional<Patient> findByBirthCertificateNumberAndHospitalIdAndIsActiveTrue(
+            String birthCertificateNumber, UUID hospitalId);
+
     Optional<Patient> findByMedicalRecordNumberAndHospitalIdAndIsActiveTrue(String mrn, UUID hospitalId);
+
+    // ── Tier 3: soft identifiers (multiple matches possible) ──
+    //
+    // These return List<> rather than Optional<> because the same phone /
+    // guardian-NID / guardian-phone can legitimately point to several
+    // patients (siblings, family-shared phones, etc.). Ranking is the
+    // service's job; the repo just retrieves.
+
+    List<Patient> findAllByPhoneNumberAndHospitalIdAndIsActiveTrue(String phoneNumber, UUID hospitalId);
+
+    List<Patient> findAllByGuardianNationalIdAndHospitalIdAndIsActiveTrue(
+            String guardianNationalId, UUID hospitalId);
+
+    List<Patient> findAllByGuardianPhoneAndHospitalIdAndIsActiveTrue(String guardianPhone, UUID hospitalId);
+
+    // ── Tier 4: demographic match (name + DOB) ──
+
+    @Query("SELECT p FROM Patient p WHERE p.hospital.id = :hospitalId AND p.isActive = true " +
+            "AND LOWER(p.firstName) = LOWER(:firstName) " +
+            "AND LOWER(p.lastName)  = LOWER(:lastName) " +
+            "AND p.dateOfBirth = :dob")
+    List<Patient> findDemographicMatch(@Param("hospitalId") UUID hospitalId,
+                                       @Param("firstName") String firstName,
+                                       @Param("lastName") String lastName,
+                                       @Param("dob") LocalDate dob);
+
+    // ── Free-text search (kept for hospital/{id}/search compatibility) ──
 
     @Query("SELECT p FROM Patient p WHERE p.hospital.id = :hospitalId AND p.isActive = true " +
             "AND (LOWER(p.firstName) LIKE LOWER(CONCAT('%', :query, '%')) " +

@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -68,4 +69,13 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
          */
         @Query("SELECT v FROM Visit v WHERE v.isActive = true AND v.status IN :statuses")
         List<Visit> findAllActiveVisitsByStatuses(@Param("statuses") List<VisitStatus> statuses);
+
+        /**
+         * Most recent arrival time across all active visits for a patient.
+         * Used by the patient-lookup service to surface "last seen at" when a
+         * triage nurse is choosing among ranked candidates. Returns empty if
+         * the patient has no active visits.
+         */
+        @Query("SELECT MAX(v.arrivalTime) FROM Visit v WHERE v.patient.id = :patientId AND v.isActive = true")
+        Optional<Instant> findLastArrivalByPatientId(@Param("patientId") UUID patientId);
 }

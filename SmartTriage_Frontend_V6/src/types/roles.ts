@@ -34,6 +34,7 @@ export type AppPage =
   | 'isolation'
   | 'documentation'
   | 'med-safety'
+  | 'med-safety-overrides'
   | 'lab'
   | 'pathways'
   | 'icu'
@@ -170,7 +171,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   HOSPITAL_ADMIN: [
     'dashboard', 'admin', 'admin-users', 'iot-devices', 'admin-beds', 'settings', 'notifications', 'profile',
     'audit-trail', 'reports', 'quality',
-    'safety-incidents', 'moh-reports',
+    'safety-incidents', 'med-safety-overrides', 'moh-reports',
     'shift-planner', 'shift-assignment',
   ],
 
@@ -180,7 +181,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'notifications', 'profile',
     // Clinical tools
     'sepsis', 'fast-track', 'hypoglycemia', 'isolation',
-    'pathways', 'med-safety', 'icu', 'referral',
+    'pathways', 'med-safety', 'med-safety-overrides', 'icu', 'referral',
     // Documentation & handover
     'documentation', 'handover', 'lab',
     // Reports (own)
@@ -231,7 +232,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   // ── View-only ──
   READ_ONLY: [
     'dashboard', 'patients', 'profile',
-    'audit-trail', 'reports', 'quality', 'moh-reports',
+    'audit-trail', 'reports', 'quality', 'med-safety-overrides', 'moh-reports',
   ],
 };
 

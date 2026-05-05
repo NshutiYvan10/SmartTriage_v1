@@ -133,6 +133,12 @@ public class InvestigationService {
 
                 investigation.setResultedAt(Instant.now());
                 investigation.setResult(request.getResult());
+                // Phase 12b — optional structured numeric result. Both
+                // fields are nullable; we don't synthesise either side
+                // when only one is supplied because a unitless number
+                // is meaningless for downstream calculators.
+                investigation.setResultNumeric(request.getResultNumeric());
+                investigation.setResultUnit(request.getResultUnit());
                 investigation.setIsAbnormal(Boolean.TRUE.equals(request.getIsAbnormal()));
                 investigation.setIsCritical(Boolean.TRUE.equals(request.getIsCritical()));
                 investigation.setStatus(InvestigationStatus.RESULTED);

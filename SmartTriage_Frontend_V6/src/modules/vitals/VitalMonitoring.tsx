@@ -29,6 +29,7 @@ import {
   formatLastDataReceived,
   getConnectionDuration,
 } from '@/utils/iotDeviceManager';
+import { ClinicalNotesPanel } from './ClinicalNotesPanel';
 
 export function VitalMonitoring() {
   const { patientId } = useParams<{ patientId: string }>();
@@ -1017,17 +1018,8 @@ export function VitalMonitoring() {
           </div>
         )}
 
-        {activeTab === 'notes' && (
-          <div className={`rounded-xl shadow-md p-4 ${isDark ? glassCard + ' border border-white/10' : 'bg-white border border-gray-200'}`}>
-            <h3 className={`text-sm font-bold mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              <FileText className="w-4 h-4" />
-              Clinical Notes
-            </h3>
-            <div className={`text-center py-8 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-              <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">Clinical notes feature coming soon</p>
-            </div>
-          </div>
+        {activeTab === 'notes' && patientId && (
+          <ClinicalNotesPanel visitId={patientId} />
         )}
 
       </div>

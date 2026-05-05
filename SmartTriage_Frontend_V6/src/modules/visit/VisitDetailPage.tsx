@@ -23,10 +23,40 @@ import { diagnosisApi } from '@/api/diagnoses';
 import { investigationApi } from '@/api/investigations';
 import { medicationApi } from '@/api/medications';
 import { alertApi } from '@/api/alerts';
+import { patientApi } from '@/api/patients';
+import { PatientHistoryPanel } from '@/modules/entry/PatientHistoryPanel';
+import { PatientProfilePanel } from '@/modules/entry/PatientProfilePanel';
+import { PrescribeSafetyDialog } from '@/modules/visit/PrescribeSafetyDialog';
+import { checkDrugAgainstAllergies, formatAllergyMatches, type AllergyMatch } from '@/utils/allergyCheck';
+import {
+  checkInteractions, formatInteractionMatches,
+  checkDuplicateTherapy, formatDuplicateMatches,
+  type InteractionMatch, type DuplicateMatch,
+} from '@/utils/interactionCheck';
+import {
+  checkPediatricDose, formatDoseMatches, type DoseMatch,
+} from '@/utils/pediatricDoseCheck';
+import {
+  checkAdultDose, formatAdultDoseMatches, type AdultDoseMatch,
+} from '@/utils/adultDoseCheck';
+import {
+  checkRenalRisk, formatRenalMatches, type RenalMatch,
+} from '@/utils/renalRiskCheck';
+import {
+  checkTeratogenRisk, formatTeratogenMatches, type TeratogenMatch,
+} from '@/utils/teratogenCheck';
+import {
+  checkGeriatricRisk, formatGeriatricMatches, type GeriatricMatch,
+} from '@/utils/geriatricCheck';
+import {
+  cockcroftGaultEgfr, normaliseCreatinineToMgPerDl,
+  checkRenalEgfrDosing, formatRenalEgfrMatches,
+  type RenalEgfrMatch,
+} from '@/utils/eGfrCalc';
 import type {
   VisitResponse, VitalSignsResponse, TriageRecordResponse,
   ClinicalNoteResponse, DiagnosisResponse, InvestigationResponse,
-  MedicationResponse, ClinicalAlertResponse,
+  MedicationResponse, ClinicalAlertResponse, PatientResponse,
   RecordVitalsRequest, CreateClinicalNoteRequest, CreateDiagnosisRequest,
   OrderInvestigationRequest, PrescribeMedicationRequest,
   NoteType, DiagnosisType, InvestigationType, MedicationRoute,
@@ -115,14 +145,36 @@ export function VisitDetailPage() {
   const [investigations, setInvestigations] = useState<InvestigationResponse[]>([]);
   const [medications, setMedications] = useState<MedicationResponse[]>([]);
   const [visitAlerts, setVisitAlerts] = useState<ClinicalAlertResponse[]>([]);
+  // Patient is fetched separately (visit only carries patientId).
+  // Used for allergy cross-checking at prescribe time.
+  const [patient, setPatient] = useState<PatientResponse | null>(null);
 
-  // Forms  
+  // Forms
   const [showVitalsForm, setShowVitalsForm] = useState(false);
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [showDiagnosisForm, setShowDiagnosisForm] = useState(false);
   const [showInvestigationForm, setShowInvestigationForm] = useState(false);
   const [showMedicationForm, setShowMedicationForm] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
+
+  // Safety hard-stop: when a prescribe attempt conflicts with the
+  // patient's known allergies, with a drug–drug interaction against
+  // another active medication, with a duplicate-therapy hit (same
+  // class, different drug), or with a paediatric weight-based dose
+  // out of range, we hold the request here until the clinician
+  // explicitly cancels or overrides.
+  const [pendingPrescribe, setPendingPrescribe] = useState<{
+    data: Partial<PrescribeMedicationRequest>;
+    allergyMatches: AllergyMatch[];
+    interactionMatches: InteractionMatch[];
+    duplicateMatches: DuplicateMatch[];
+    doseMatches: DoseMatch[];
+    adultDoseMatches: AdultDoseMatch[];
+    renalMatches: RenalMatch[];
+    teratogenMatches: TeratogenMatch[];
+    geriatricMatches: GeriatricMatch[];
+    renalEgfrMatches: RenalEgfrMatch[];
+  } | null>(null);
 
   const userName = user?.fullName || 'Unknown';
 
@@ -161,6 +213,19 @@ export function VisitDetailPage() {
   }, [visitId]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Fetch the patient profile once the visit is loaded — needed for
+  // the allergy check at prescribe time. Best-effort: failure here
+  // doesn't block the rest of the page.
+  useEffect(() => {
+    if (!visit?.patientId) return;
+    let cancelled = false;
+    patientApi
+      .getById(visit.patientId)
+      .then((p) => { if (!cancelled) setPatient(p); })
+      .catch(() => { /* swallow — non-critical */ });
+    return () => { cancelled = true; };
+  }, [visit?.patientId]);
 
   const category = visit?.currentTriageCategory || latestTriage?.triageCategory;
   const catColor = CATEGORY_COLORS[category || 'GREEN'] || CATEGORY_COLORS.GREEN;
@@ -219,13 +284,206 @@ export function VisitDetailPage() {
     } catch (err) { console.error(err); } finally { setFormLoading(false); }
   };
 
-  const handlePrescribeMedication = async (data: Partial<PrescribeMedicationRequest>) => {
+  // Actually issue the prescribe. Split out so the override path
+  // (after the safety dialog is acknowledged) and the clean path can
+  // share it. The four override arrays are non-empty only when this
+  // prescribe is going through after the dialog was acknowledged —
+  // that's what tells the backend to set the override flags (V23
+  // allergy / V24 interaction). All four can be true on a single
+  // order if one drug hit every check.
+  //
+  // Only allergy gets its own DB column (V23). Interactions, duplicate
+  // therapy, and paediatric dose all share the V24 column. Each
+  // formatter prefixes its lines with a tag — `[major]`/`[contraind]`
+  // for true interactions (no prefix for legacy reasons),
+  // `[duplicate]` for same-class hits, `[overdose]`/`[underdose]` for
+  // dose. A SQL `LIKE '%[overdose]%'` filter cleanly separates them
+  // for QA reports without needing a migration.
+  const submitPrescribe = async (
+    data: Partial<PrescribeMedicationRequest>,
+    allergyOverride: AllergyMatch[] = [],
+    interactionOverride: InteractionMatch[] = [],
+    duplicateOverride: DuplicateMatch[] = [],
+    doseOverride: DoseMatch[] = [],
+    adultDoseOverride: AdultDoseMatch[] = [],
+    renalOverride: RenalMatch[] = [],
+    teratogenOverride: TeratogenMatch[] = [],
+    geriatricOverride: GeriatricMatch[] = [],
+    renalEgfrOverride: RenalEgfrMatch[] = [],
+  ) => {
     setFormLoading(true);
     try {
-      await medicationApi.prescribe({ visitId: visit.id, prescribedByName: userName, ...data } as PrescribeMedicationRequest);
+      // Combine real interactions, duplicate-therapy hits, dose
+      // out-of-range hits, renal-risk hits, and teratogen hits into
+      // a single audit snapshot for the V24 column. The `[…]`
+      // prefixes in each formatter preserve filterability for
+      // downstream QA.
+      const interactionParts: string[] = [];
+      if (interactionOverride.length > 0) interactionParts.push(formatInteractionMatches(interactionOverride));
+      if (duplicateOverride.length > 0) interactionParts.push(formatDuplicateMatches(duplicateOverride));
+      if (doseOverride.length > 0) interactionParts.push(formatDoseMatches(doseOverride));
+      if (adultDoseOverride.length > 0) interactionParts.push(formatAdultDoseMatches(adultDoseOverride));
+      if (renalOverride.length > 0) interactionParts.push(formatRenalMatches(renalOverride));
+      if (teratogenOverride.length > 0) interactionParts.push(formatTeratogenMatches(teratogenOverride));
+      if (geriatricOverride.length > 0) interactionParts.push(formatGeriatricMatches(geriatricOverride));
+      if (renalEgfrOverride.length > 0) interactionParts.push(formatRenalEgfrMatches(renalEgfrOverride));
+      const interactionFlag =
+        interactionOverride.length > 0 ||
+        duplicateOverride.length > 0 ||
+        doseOverride.length > 0 ||
+        adultDoseOverride.length > 0 ||
+        renalOverride.length > 0 ||
+        teratogenOverride.length > 0 ||
+        geriatricOverride.length > 0 ||
+        renalEgfrOverride.length > 0;
+
+      const payload: PrescribeMedicationRequest = {
+        visitId: visit.id,
+        prescribedByName: userName,
+        ...data,
+        ...(allergyOverride.length > 0
+          ? {
+              prescribedDespiteAllergy: true,
+              allergyOverrideMatches: formatAllergyMatches(allergyOverride),
+            }
+          : {}),
+        ...(interactionFlag
+          ? {
+              prescribedDespiteInteraction: true,
+              interactionOverrideMatches: interactionParts.join('; '),
+            }
+          : {}),
+      } as PrescribeMedicationRequest;
+      await medicationApi.prescribe(payload);
       setShowMedicationForm(false);
+      setPendingPrescribe(null);
       loadData();
     } catch (err) { console.error(err); } finally { setFormLoading(false); }
+  };
+
+  const handlePrescribeMedication = async (data: Partial<PrescribeMedicationRequest>) => {
+    // Run all five safety checks. Any one firing opens the dialog;
+    // the dialog renders only the sections that have content. Patient
+    // and medications may still be loading — in that case we skip the
+    // relevant check rather than block on the lookup (the alternative
+    // is a flicker dialog that never appears for a fast prescriber).
+    // The backend remains the safety net of last resort.
+    const allergyMatches = patient
+      ? checkDrugAgainstAllergies(data.drugName, patient.knownAllergies)
+      : [];
+    const activeForChecks = medications.map((m) => ({ drugName: m.drugName, status: m.status }));
+    const interactionMatches = checkInteractions(data.drugName, activeForChecks);
+    const duplicateMatches  = checkDuplicateTherapy(data.drugName, activeForChecks);
+    // Paediatric dose check fires only for paediatric visits with a
+    // recorded weight. Weight is captured during triage on the child
+    // form (`childWeightKg` on TriageRecordResponse). We don't fall
+    // back to adult-stub weights because an out-of-range warning that
+    // hinges on a stale or assumed weight is worse than no warning.
+    const doseMatches = visit.isPediatric && latestTriage?.childWeightKg
+      ? checkPediatricDose(data.drugName, data.dose, latestTriage.childWeightKg)
+      : [];
+    // Adult single-dose envelope check (Phase 11b). Fires only on
+    // non-paediatric visits — paediatric uses the mg/kg path above.
+    // No weight required for adults: ranges are absolute mg.
+    const adultDoseMatches = visit.isPediatric
+      ? []
+      : checkAdultDose(data.drugName, data.dose);
+    // Renal-risk check (Phase 12a) — screening level only because we
+    // don't yet have structured creatinine or adult weight to compute
+    // eGFR. Two trigger paths: chronicConditions text mentions CKD,
+    // OR latest vitals fit a hemodynamic-AKI pattern. Patient still
+    // loading → skip CKD trigger; AKI trigger still works on vitals.
+    const renalMatches = checkRenalRisk(
+      data.drugName,
+      patient?.chronicConditions,
+      latestVitals,
+    );
+    // Teratogen check (Phase 13) — fires only when chronicConditions
+    // explicitly records pregnancy or breastfeeding. We deliberately
+    // do NOT trigger on demographics (female + childbearing age),
+    // because that would alert on a huge fraction of orders and
+    // train prescribers to dismiss the dialog. The cost of a missed
+    // teratogen warning is borne by the fetus, not the clinician —
+    // alert fatigue is the worse failure mode.
+    const teratogenMatches = checkTeratogenRisk(
+      data.drugName,
+      patient?.chronicConditions,
+      patient?.pregnancyStatus,
+    );
+    // Geriatric (Beers Criteria) check (Phase 16) — fires when the
+    // patient is ≥ 65 and the drug appears in the curated Beers table.
+    // Deterministic age gate, no chronicConditions parsing. Patient
+    // still loading → skip (the backend formulary check will catch
+    // gross errors anyway).
+    const geriatricMatches = checkGeriatricRisk(
+      data.drugName,
+      patient?.ageInYears,
+    );
+    // Phase 12b — Cockcroft-Gault eGFR-driven dose check. Distinct
+    // from the Phase 12a screening trigger (which fires on text
+    // CKD or AKI-pattern vitals): this one needs a structured serum
+    // creatinine AND adult weight. When either is missing, we silently
+    // skip — the screening check still covers the chart-text path.
+    //
+    // Walk the investigations list newest-first for a creatinine row
+    // with a numeric result + unit. testName matching is permissive
+    // ("creatinine", "Cr", "Serum Cr") because lab labelling varies.
+    const creatinineInv = investigations.find((inv) => {
+      const tn = (inv.testName || '').toLowerCase();
+      return (
+        inv.resultNumeric != null &&
+        inv.resultUnit != null &&
+        (tn.includes('creatinine') || tn.includes(' cr ') || tn.startsWith('cr '))
+      );
+    });
+    const creatinineMgPerDl = creatinineInv
+      ? normaliseCreatinineToMgPerDl(creatinineInv.resultNumeric!, creatinineInv.resultUnit)
+      : null;
+    // Walk vitals newest-first for the most recent recorded weight.
+    // Single-call here rather than every render — vitals[] is already
+    // sorted newest-first by the API (see loadData / vitalApi.getByVisit).
+    const latestWeightKg = vitals.find((v) => v.weightKg != null)?.weightKg ?? null;
+    const sex: 'female' | 'male' | 'unknown' = patient?.gender === 'FEMALE'
+      ? 'female'
+      : patient?.gender === 'MALE'
+        ? 'male'
+        : 'unknown';
+    const egfr = cockcroftGaultEgfr({
+      ageYears: patient?.ageInYears ?? null,
+      weightKg: latestWeightKg,
+      creatinineMgPerDl,
+      sex,
+    });
+    const renalEgfrMatches = visit.isPediatric
+      ? []
+      : checkRenalEgfrDosing(data.drugName, egfr);
+
+    if (
+      allergyMatches.length > 0 ||
+      interactionMatches.length > 0 ||
+      duplicateMatches.length > 0 ||
+      doseMatches.length > 0 ||
+      adultDoseMatches.length > 0 ||
+      renalMatches.length > 0 ||
+      teratogenMatches.length > 0 ||
+      geriatricMatches.length > 0 ||
+      renalEgfrMatches.length > 0
+    ) {
+      setPendingPrescribe({
+        data,
+        allergyMatches,
+        interactionMatches,
+        duplicateMatches,
+        doseMatches,
+        adultDoseMatches,
+        renalMatches,
+        teratogenMatches,
+        geriatricMatches,
+        renalEgfrMatches,
+      });
+      return;
+    }
+    await submitPrescribe(data);
   };
 
   const handleAcknowledgeAlert = async (alertId: string) => {
@@ -352,6 +610,37 @@ export function VisitDetailPage() {
           {activeTab === 'disposition' && <DispositionTab visit={visit} onDisposition={handleRecordDisposition} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
         </div>
       </div>
+
+      {/* ── Combined prescribe-time safety hard-stop modal ── */}
+      {pendingPrescribe && (
+        <PrescribeSafetyDialog
+          drugName={pendingPrescribe.data.drugName ?? ''}
+          allergyMatches={pendingPrescribe.allergyMatches}
+          interactionMatches={pendingPrescribe.interactionMatches}
+          duplicateMatches={pendingPrescribe.duplicateMatches}
+          doseMatches={pendingPrescribe.doseMatches}
+          adultDoseMatches={pendingPrescribe.adultDoseMatches}
+          renalMatches={pendingPrescribe.renalMatches}
+          teratogenMatches={pendingPrescribe.teratogenMatches}
+          geriatricMatches={pendingPrescribe.geriatricMatches}
+          renalEgfrMatches={pendingPrescribe.renalEgfrMatches}
+          rawAllergyString={patient?.knownAllergies ?? ''}
+          loading={formLoading}
+          onCancel={() => setPendingPrescribe(null)}
+          onOverride={() => submitPrescribe(
+            pendingPrescribe.data,
+            pendingPrescribe.allergyMatches,
+            pendingPrescribe.interactionMatches,
+            pendingPrescribe.duplicateMatches,
+            pendingPrescribe.doseMatches,
+            pendingPrescribe.adultDoseMatches,
+            pendingPrescribe.renalMatches,
+            pendingPrescribe.teratogenMatches,
+            pendingPrescribe.geriatricMatches,
+            pendingPrescribe.renalEgfrMatches,
+          )}
+        />
+      )}
     </div>
   );
 }
@@ -361,6 +650,12 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
   const unackAlerts = alerts.filter((a: ClinicalAlertResponse) => !a.acknowledged).length;
 
   return (
+    <div className="space-y-4">
+    {/* Patient profile — persistent facts (allergies, chronic conditions,
+        blood type, guardian). Safety-critical: rendered first so a doctor
+        can't reach the form / orders without seeing the allergy list. */}
+    <PatientProfilePanel patientId={visit.patientId} />
+
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* Visit Info */}
       <div className="rounded-2xl p-5" style={glassCard}>
@@ -447,6 +742,16 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
         )}
       </div>
     </div>
+
+    {/* Prior visits — federated patient history. Excludes the current
+        visit so the page doesn't list itself. Each row navigates to
+        the corresponding /visit/:id detail page. */}
+    <PatientHistoryPanel
+      patientId={visit.patientId}
+      excludeVisitId={visit.id}
+      emptyMessage="This is the patient's only visit on record at this hospital."
+    />
+    </div>
   );
 }
 
@@ -456,7 +761,8 @@ function VitalsTab({ vitals, latestVitals, showForm, setShowForm, onSubmit, form
     heartRate: undefined, respiratoryRate: undefined, systolicBp: undefined,
     diastolicBp: undefined, temperature: undefined, spo2: undefined,
     avpu: 'ALERT' as AvpuScore, painScore: undefined, gcsScore: 15,
-    bloodGlucose: undefined, source: 'MANUAL_ENTRY', notes: '',
+    bloodGlucose: undefined, weightKg: undefined,
+    source: 'MANUAL_ENTRY', notes: '',
   });
 
   return (
@@ -481,6 +787,7 @@ function VitalsTab({ vitals, latestVitals, showForm, setShowForm, onSubmit, form
             <FormInput label="Pain Score (0-10)" value={form.painScore} onChange={(v: string) => setForm({ ...form, painScore: v ? Number(v) : undefined })} glassInner={glassInner} isDark={isDark} text={text} />
             <FormInput label="GCS (3-15)" value={form.gcsScore} onChange={(v: string) => setForm({ ...form, gcsScore: v ? Number(v) : undefined })} glassInner={glassInner} isDark={isDark} text={text} />
             <FormInput label="Blood Glucose" value={form.bloodGlucose} onChange={(v: string) => setForm({ ...form, bloodGlucose: v ? Number(v) : undefined })} glassInner={glassInner} isDark={isDark} text={text} />
+            <FormInput label="Weight (kg)" value={form.weightKg} onChange={(v: string) => setForm({ ...form, weightKg: v ? Number(v) : undefined })} glassInner={glassInner} isDark={isDark} text={text} />
             <div>
               <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>AVPU</label>
               <select value={form.avpu || 'ALERT'} onChange={(e) => setForm({ ...form, avpu: e.target.value as AvpuScore })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
@@ -519,6 +826,9 @@ function VitalsTab({ vitals, latestVitals, showForm, setShowForm, onSubmit, form
               <MiniVital label="BP" value={v.systolicBp ? `${v.systolicBp}/${v.diastolicBp}` : '—'} unit="" isDark={isDark} />
               <MiniVital label="Temp" value={v.temperature ? `${v.temperature}` : '—'} unit="°C" isDark={isDark} />
               <MiniVital label="AVPU" value={v.avpu || '—'} unit="" isDark={isDark} />
+              {v.weightKg != null && (
+                <MiniVital label="Weight" value={`${v.weightKg}`} unit="kg" isDark={isDark} />
+              )}
             </div>
           </div>
         ))}
@@ -744,7 +1054,21 @@ function DiagnosesTab({ diagnoses, showForm, setShowForm, onSubmit, formLoading,
 // ═══════ INVESTIGATIONS TAB ═══════
 function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, onAction, formLoading, glassCard, glassInner, isDark, text, userName: _userName }: any) {
   const [form, setForm] = useState<Partial<OrderInvestigationRequest>>({ investigationType: 'LABORATORY' as InvestigationType, testName: '', priority: 'ROUTINE', notes: '' });
-  const [resultForm, setResultForm] = useState<{ id: string; result: string; isAbnormal: boolean; isCritical: boolean; notes: string } | null>(null);
+  // resultNumeric + resultUnit are the structured pair the eGFR check
+  // (Phase 12b) reads. Free-text `result` is preserved alongside — it's
+  // still the right field for "trace haemolysis, repeat sent" nuance.
+  // Clinicians enter the principal scalar (creatinine, K+, Hb) into
+  // the numeric pair so downstream calculators can use it without
+  // parsing free text.
+  const [resultForm, setResultForm] = useState<{
+    id: string;
+    result: string;
+    resultNumeric?: number;
+    resultUnit?: string;
+    isAbnormal: boolean;
+    isCritical: boolean;
+    notes: string;
+  } | null>(null);
 
   return (
     <div className="space-y-4">
@@ -792,16 +1116,48 @@ function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, on
           <h4 className={`text-sm font-bold mb-4 ${text.heading}`}>Record Result</h4>
           <div className="space-y-3">
             <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Result</label>
-              <textarea value={resultForm.result} onChange={(e) => setResultForm({ ...resultForm, result: e.target.value })} rows={3} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800'}`} style={glassInner} />
+              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Result (free text)</label>
+              <textarea value={resultForm.result} onChange={(e) => setResultForm({ ...resultForm, result: e.target.value })} rows={3} placeholder="e.g. Cr 1.8 — moderately elevated, repeat sent" className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
             </div>
+            {/* Structured numeric pair — feeds the Phase 12b eGFR
+                calculator and any other downstream consumer. Optional;
+                leaving them blank keeps the free-text result valid. */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Numeric value (optional)</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={resultForm.resultNumeric ?? ''}
+                  onChange={(e) => setResultForm({ ...resultForm, resultNumeric: e.target.value ? Number(e.target.value) : undefined })}
+                  placeholder="e.g. 1.8"
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+                  style={glassInner}
+                />
+              </div>
+              <div>
+                <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Unit (optional)</label>
+                <input
+                  type="text"
+                  value={resultForm.resultUnit ?? ''}
+                  onChange={(e) => setResultForm({ ...resultForm, resultUnit: e.target.value })}
+                  placeholder="e.g. mg/dL or µmol/L"
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+                  style={glassInner}
+                />
+              </div>
+            </div>
+            <p className={`text-[10px] ${text.muted}`}>
+              Numeric value + unit are optional, but required for the Cockcroft-Gault eGFR calculator
+              to fire on creatinine. Use the unit string the lab reported (mg/dL or µmol/L).
+            </p>
             <div className="flex items-center gap-4">
               <label className="flex items-center gap-2"><input type="checkbox" checked={resultForm.isAbnormal} onChange={(e) => setResultForm({ ...resultForm, isAbnormal: e.target.checked })} className="rounded" /><span className={`text-xs ${text.body}`}>Abnormal</span></label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={resultForm.isCritical} onChange={(e) => setResultForm({ ...resultForm, isCritical: e.target.checked })} className="rounded" /><span className={`text-xs ${text.body}`}>Critical</span></label>
             </div>
           </div>
           <div className="flex items-center gap-3 mt-4">
-            <button onClick={() => { onAction(resultForm.id, 'result', { investigationId: resultForm.id, result: resultForm.result, isAbnormal: resultForm.isAbnormal, isCritical: resultForm.isCritical, notes: resultForm.notes }); setResultForm(null); }} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all">
+            <button onClick={() => { onAction(resultForm.id, 'result', { investigationId: resultForm.id, result: resultForm.result, resultNumeric: resultForm.resultNumeric, resultUnit: resultForm.resultUnit, isAbnormal: resultForm.isAbnormal, isCritical: resultForm.isCritical, notes: resultForm.notes }); setResultForm(null); }} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all">
               <CheckCircle2 className="w-3.5 h-3.5" /> Save Result
             </button>
             <button onClick={() => setResultForm(null)} className={`px-4 py-2.5 text-xs font-bold rounded-xl ${text.muted}`}>Cancel</button>
@@ -826,9 +1182,17 @@ function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, on
               <span className={`text-[10px] ${text.muted}`}>{inv.orderedAt ? format(new Date(inv.orderedAt), 'dd MMM HH:mm') : ''}</span>
             </div>
             <p className={`text-sm font-medium ${text.heading}`}>{inv.testName}</p>
-            {inv.result && (
+            {(inv.result || inv.resultNumeric != null) && (
               <div className="mt-2 p-2.5 rounded-lg" style={glassInner}>
-                <p className={`text-xs font-bold ${inv.isCritical ? 'text-red-500' : inv.isAbnormal ? 'text-amber-500' : text.body}`}>{inv.result}</p>
+                {inv.resultNumeric != null && (
+                  <p className={`text-sm font-extrabold ${inv.isCritical ? 'text-red-500' : inv.isAbnormal ? 'text-amber-500' : text.heading}`}>
+                    {inv.resultNumeric}
+                    {inv.resultUnit && <span className={`ml-1 text-xs font-medium ${text.muted}`}>{inv.resultUnit}</span>}
+                  </p>
+                )}
+                {inv.result && (
+                  <p className={`text-xs ${inv.isCritical ? 'text-red-500' : inv.isAbnormal ? 'text-amber-500' : text.body} ${inv.resultNumeric != null ? 'mt-1' : 'font-bold'}`}>{inv.result}</p>
+                )}
                 {inv.isCritical && <span className="text-[10px] font-bold text-red-500">CRITICAL</span>}
                 {inv.isAbnormal && !inv.isCritical && <span className="text-[10px] font-bold text-amber-500">ABNORMAL</span>}
               </div>
@@ -893,17 +1257,168 @@ function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction
             <Pill className="w-8 h-8 mx-auto mb-2 text-slate-400" />
             <p className={text.muted}>No medications prescribed yet</p>
           </div>
-        ) : medications.map((med: MedicationResponse) => (
-          <div key={med.id} className="rounded-2xl p-4" style={glassCard}>
+        ) : medications.map((med: MedicationResponse) => {
+          // The V24 column packs interactions, duplicate-therapy, and
+          // paediatric dose hits together. Tag-prefixes in the snapshot
+          // let the card surface a distinct badge for the most severe
+          // override class without a schema change.
+          const snap = med.interactionOverrideMatches ?? '';
+          const hasOverdoseTag = snap.includes('[overdose]');
+          const hasUnderdoseTag = snap.includes('[underdose]');
+          const hasDuplicateTag = snap.includes('[duplicate]');
+          const hasRenalTag = snap.includes('[renal]');
+          const hasTeratogenTag = snap.includes('[teratogen]');
+          const hasCategoryXTag = snap.includes('[teratogen][X]');
+          // A "real" interaction line has none of our tags (legacy
+          // format). We approximate "real interaction present" as:
+          // flag set AND there's at least one untagged segment.
+          const hasInteractionLine =
+            med.prescribedDespiteInteraction &&
+            snap
+              .split(';')
+              .some(
+                (seg) =>
+                  seg.trim().length > 0 &&
+                  !seg.includes('[overdose]') &&
+                  !seg.includes('[underdose]') &&
+                  !seg.includes('[duplicate]') &&
+                  !seg.includes('[renal]') &&
+                  !seg.includes('[teratogen]'),
+              );
+
+          // Ring escalation, top-down:
+          //   allergy / overdose / category-X teratogen (red) >
+          //   non-X teratogen (rose / pink-700) >
+          //   interaction (orange) > renal (violet) >
+          //   duplicate / underdose (yellow).
+          const ringClass = med.prescribedDespiteAllergy || hasOverdoseTag || hasCategoryXTag
+            ? 'ring-2 ring-red-400/60'
+            : hasTeratogenTag
+              ? 'ring-2 ring-pink-400/60'
+              : hasInteractionLine
+                ? 'ring-2 ring-orange-400/60'
+                : hasRenalTag
+                  ? 'ring-2 ring-violet-400/60'
+                  : (hasDuplicateTag || hasUnderdoseTag)
+                    ? 'ring-2 ring-yellow-400/60'
+                    : '';
+
+          return (
+          <div
+            key={med.id}
+            className={`rounded-2xl p-4 ${ringClass}`}
+            style={glassCard}
+          >
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg ${MEDICATION_STATUS_COLORS[med.status] || ''}`}>{med.status}</span>
                 <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg text-slate-500 bg-slate-500/10`}>{med.route}</span>
+                {med.prescribedDespiteAllergy && (
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-red-500/15 text-red-600 border border-red-500/40 inline-flex items-center gap-1"
+                    title={med.allergyOverrideMatches ?? 'Prescribed against a known allergy'}
+                  >
+                    <AlertTriangle className="w-3 h-3" />
+                    Allergy override
+                  </span>
+                )}
+                {hasOverdoseTag && (
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-red-500/15 text-red-600 border border-red-500/40 inline-flex items-center gap-1"
+                    title={snap}
+                  >
+                    <AlertTriangle className="w-3 h-3" />
+                    Overdose override
+                  </span>
+                )}
+                {hasInteractionLine && (
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-orange-500/15 text-orange-600 border border-orange-500/40 inline-flex items-center gap-1"
+                    title={snap}
+                  >
+                    <AlertTriangle className="w-3 h-3" />
+                    Interaction override
+                  </span>
+                )}
+                {hasUnderdoseTag && !hasOverdoseTag && (
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-blue-500/15 text-blue-600 border border-blue-500/40 inline-flex items-center gap-1"
+                    title={snap}
+                  >
+                    <AlertTriangle className="w-3 h-3" />
+                    Underdose override
+                  </span>
+                )}
+                {hasRenalTag && (
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-violet-500/15 text-violet-600 border border-violet-500/40 inline-flex items-center gap-1"
+                    title={snap}
+                  >
+                    <AlertTriangle className="w-3 h-3" />
+                    Renal override
+                  </span>
+                )}
+                {hasTeratogenTag && (
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg inline-flex items-center gap-1 ${
+                      hasCategoryXTag
+                        ? 'bg-red-500/15 text-red-600 border border-red-500/40'
+                        : 'bg-pink-500/15 text-pink-600 border border-pink-500/40'
+                    }`}
+                    title={snap}
+                  >
+                    <AlertTriangle className="w-3 h-3" />
+                    {hasCategoryXTag ? 'Category X override' : 'Pregnancy override'}
+                  </span>
+                )}
               </div>
               <span className={`text-[10px] ${text.muted}`}>{med.prescribedAt ? format(new Date(med.prescribedAt), 'dd MMM HH:mm') : ''}</span>
             </div>
             <p className={`text-sm font-medium ${text.heading}`}>{med.drugName} {med.dose && `— ${med.dose}`}</p>
             {med.frequency && <p className={`text-xs ${text.body}`}>{med.frequency}</p>}
+            {med.prescribedDespiteAllergy && med.allergyOverrideMatches && (
+              <p className="text-[10px] text-red-600 mt-1.5 font-medium break-words">
+                Allergy: {med.allergyOverrideMatches}
+              </p>
+            )}
+            {med.prescribedDespiteInteraction && med.interactionOverrideMatches && (
+              <p
+                className={`text-[10px] mt-1 font-medium break-words ${
+                  hasCategoryXTag || hasOverdoseTag
+                    ? 'text-red-600'
+                    : hasTeratogenTag
+                      ? 'text-pink-700'
+                      : hasInteractionLine
+                        ? 'text-orange-600'
+                        : hasRenalTag
+                          ? 'text-violet-700'
+                          : 'text-yellow-700'
+                }`}
+              >
+                {/* Pick the most-severe class present and label
+                    accordingly. Multiple tags is rare but possible
+                    (e.g. NSAID prescribed in shock + same patient
+                    already on another NSAID → renal + duplicate). */}
+                {hasCategoryXTag
+                  ? 'Category X'
+                  : hasTeratogenTag
+                    ? 'Pregnancy'
+                    : hasOverdoseTag
+                      ? 'Dose / interaction'
+                      : hasInteractionLine
+                        ? 'Interaction'
+                        : hasRenalTag && hasDuplicateTag
+                          ? 'Renal / duplicate'
+                          : hasRenalTag
+                            ? 'Renal'
+                            : hasDuplicateTag && hasUnderdoseTag
+                              ? 'Duplicate / dose'
+                              : hasDuplicateTag
+                                ? 'Duplicate'
+                                : 'Dose'}
+                : {med.interactionOverrideMatches}
+              </p>
+            )}
             {med.administeredByName && <p className={`text-[10px] mt-1 text-emerald-500`}>Administered by: {med.administeredByName}</p>}
             {med.countersignedByName && <p className={`text-[10px] text-violet-500`}>Countersigned by: {med.countersignedByName}</p>}
             {/* Actions */}
@@ -921,7 +1436,8 @@ function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction
             </div>
             <p className={`text-[10px] mt-2 ${text.muted}`}>Prescribed by: {med.prescribedByName}</p>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

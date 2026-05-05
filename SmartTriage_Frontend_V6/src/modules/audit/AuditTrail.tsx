@@ -13,8 +13,9 @@ import { useTheme } from '@/hooks/useTheme';
 
 // Action metadata for UI
 const ACTION_CONFIG: Record<AuditAction, { icon: any; color: string; bg: string; label: string }> = {
-  PATIENT_REGISTERED:    { icon: UserPlus,      color: 'text-cyan-600',    bg: 'rgba(6,182,212,0.1)',    label: 'Patient Registered' },
-  PATIENT_UPDATED:       { icon: Edit,          color: 'text-blue-600',    bg: 'rgba(59,130,246,0.1)',   label: 'Patient Updated' },
+  PATIENT_REGISTERED:                  { icon: UserPlus,      color: 'text-cyan-600',    bg: 'rgba(6,182,212,0.1)',    label: 'Patient Registered' },
+  PATIENT_UPDATED:                     { icon: Edit,          color: 'text-blue-600',    bg: 'rgba(59,130,246,0.1)',   label: 'Patient Updated' },
+  VISIT_CREATED_FOR_EXISTING_PATIENT:  { icon: UserPlus,      color: 'text-emerald-600', bg: 'rgba(16,185,129,0.1)',   label: 'Visit (Returning Patient)' },
   TRIAGE_STARTED:        { icon: Stethoscope,   color: 'text-violet-600',  bg: 'rgba(139,92,246,0.1)',   label: 'Triage Started' },
   TRIAGE_COMPLETED:      { icon: CheckCircle,   color: 'text-emerald-600', bg: 'rgba(34,197,94,0.1)',    label: 'Triage Completed' },
   CATEGORY_ASSIGNED:     { icon: Shield,        color: 'text-indigo-600',  bg: 'rgba(99,102,241,0.1)',   label: 'Category Assigned' },

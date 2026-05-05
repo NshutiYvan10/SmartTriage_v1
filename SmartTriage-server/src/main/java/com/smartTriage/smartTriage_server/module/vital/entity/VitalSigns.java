@@ -72,6 +72,16 @@ public class VitalSigns extends BaseEntity {
     @Column(name = "gcs_score")
     private Integer gcsScore; // Glasgow Coma Scale 3-15
 
+    /**
+     * Phase 12b — adult body weight in kg. Drives Cockcroft-Gault
+     * eGFR and any other adult weight-based dosing. Paediatric weight
+     * is captured separately on triage_records.childWeightKg.
+     * Nullable — most vitals rows won't have weight; the calculator
+     * walks back to the most recent non-null entry.
+     */
+    @Column(name = "weight_kg", precision = 5, scale = 2)
+    private java.math.BigDecimal weightKg;
+
     // --- Data Source ---
 
     @Enumerated(EnumType.STRING)

@@ -50,6 +50,7 @@ public class VitalSignsService {
                 .bloodGlucose(request.getBloodGlucose())
                 .painScore(request.getPainScore())
                 .gcsScore(request.getGcsScore())
+                .weightKg(request.getWeightKg())
                 .source(request.getSource())
                 .deviceId(request.getDeviceId())
                 .notes(request.getNotes())

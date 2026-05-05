@@ -22,6 +22,7 @@ public final class VitalSignsMapper {
                 .bloodGlucose(vitals.getBloodGlucose())
                 .painScore(vitals.getPainScore())
                 .gcsScore(vitals.getGcsScore())
+                .weightKg(vitals.getWeightKg())
                 .source(vitals.getSource())
                 .deviceId(vitals.getDeviceId())
                 .notes(vitals.getNotes())

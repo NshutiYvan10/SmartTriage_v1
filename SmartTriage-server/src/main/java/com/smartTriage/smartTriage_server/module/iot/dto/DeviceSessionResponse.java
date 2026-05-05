@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.iot.dto;
 
+import com.smartTriage.smartTriage_server.common.enums.TrendStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -33,5 +34,7 @@ public class DeviceSessionResponse {
     private long rejectedReadings;
     private int alertsGenerated;
     private int retriagesTriggered;
+    private TrendStatus trendStatus;
+    private Instant trendUpdatedAt;
     private Instant createdAt;
 }

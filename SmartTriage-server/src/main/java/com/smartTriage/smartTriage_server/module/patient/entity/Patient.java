@@ -2,10 +2,12 @@ package com.smartTriage.smartTriage_server.module.patient.entity;
 
 import com.smartTriage.smartTriage_server.common.entity.BaseEntity;
 import com.smartTriage.smartTriage_server.common.enums.Gender;
+import com.smartTriage.smartTriage_server.common.enums.PregnancyStatus;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
 import java.time.LocalDate;
 
 /**
@@ -23,6 +25,11 @@ import java.time.LocalDate;
         @Index(name = "idx_patient_active", columnList = "is_active"),
         @Index(name = "idx_patient_dob", columnList = "date_of_birth"),
         @Index(name = "idx_patient_name", columnList = "last_name, first_name")
+        // NB: partial unique + lookup indexes for the V22 identity expansion
+        // (passport_number, birth_certificate_number, phone_number,
+        // guardian_national_id, guardian_phone) are declared as PostgreSQL
+        // partial indexes with WHERE clauses; JPA cannot express those, so
+        // they live in V22__patient_identity_expansion.sql.
 })
 @Getter
 @Setter
@@ -47,6 +54,21 @@ public class Patient extends BaseEntity {
     @Column(name = "national_id", length = 30)
     private String nationalId;
 
+    /**
+     * Passport number — primary identifier for foreign nationals who do not
+     * have a Rwandan NID. Partial-unique within (hospital_id, is_active=true).
+     */
+    @Column(name = "passport_number", length = 30)
+    private String passportNumber;
+
+    /**
+     * Birth certificate number — primary deterministic identifier for
+     * pediatric patients before they receive a national ID. Partial-unique
+     * within (hospital_id, is_active=true).
+     */
+    @Column(name = "birth_certificate_number", length = 30)
+    private String birthCertificateNumber;
+
     @Column(name = "medical_record_number", length = 30)
     private String medicalRecordNumber;
 
@@ -62,6 +84,24 @@ public class Patient extends BaseEntity {
     @Column(name = "emergency_contact_phone", length = 20)
     private String emergencyContactPhone;
 
+    // ── Guardian fields ──
+    //
+    // Used for pediatric identity. The guardian's NID + the child's first
+    // name + DOB form the deterministic-ish key for finding a kid across
+    // visits when the kid has no NID/passport/birth-cert of their own.
+
+    @Column(name = "guardian_national_id", length = 30)
+    private String guardianNationalId;
+
+    @Column(name = "guardian_phone", length = 20)
+    private String guardianPhone;
+
+    @Column(name = "guardian_name", length = 200)
+    private String guardianName;
+
+    @Column(name = "guardian_relationship", length = 50)
+    private String guardianRelationship;
+
     @Column(name = "blood_type", length = 5)
     private String bloodType;
 
@@ -70,6 +110,25 @@ public class Patient extends BaseEntity {
 
     @Column(name = "chronic_conditions", columnDefinition = "TEXT")
     private String chronicConditions;
+
+    /**
+     * Phase 13b — structured pregnancy / lactation status. Drives the
+     * teratogen safety check at prescribe time. NULL means "never
+     * recorded" and the safety check falls back to a free-text scan
+     * of {@link #chronicConditions} (legacy behaviour).
+     *
+     * @see com.smartTriage.smartTriage_server.common.enums.PregnancyStatus
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pregnancy_status", length = 32)
+    private PregnancyStatus pregnancyStatus;
+
+    /**
+     * Timestamp the pregnancy_status was last set. Lets the safety
+     * officer detect stale flags ("PREGNANT" recorded 18 months ago).
+     */
+    @Column(name = "pregnancy_status_recorded_at")
+    private Instant pregnancyStatusRecordedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "hospital_id", nullable = false)

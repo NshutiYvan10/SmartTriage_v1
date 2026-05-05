@@ -2,11 +2,13 @@ package com.smartTriage.smartTriage_server.module.clinical.entity;
 
 import com.smartTriage.smartTriage_server.common.entity.BaseEntity;
 import com.smartTriage.smartTriage_server.common.enums.NoteType;
+import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * ClinicalNote — structured clinical documentation for an ED visit.
@@ -54,9 +56,35 @@ public class ClinicalNote extends BaseEntity {
     @Column(name = "content", nullable = false, columnDefinition = "TEXT")
     private String content;
 
-    /** Name of the clinician who recorded this note */
+    /** Name of the clinician who recorded this note (display value) */
     @Column(name = "recorded_by_name", length = 255)
     private String recordedByName;
+
+    /**
+     * UUID of the User who wrote the note. Server-derived from the security
+     * context — never trusted from the client request body. Null only for
+     * legacy rows created before V21.
+     */
+    @Column(name = "author_user_id")
+    private UUID authorUserId;
+
+    /**
+     * Role of the author at time of write (DOCTOR, NURSE, ...). Captured at
+     * write time so the timeline still renders correctly even if the user's
+     * role changes later or the user is deactivated.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "author_role", length = 30)
+    private Role authorRole;
+
+    /**
+     * If this note corrects/replaces an earlier one, this is the original's
+     * id. The original row is never modified — corrections create a new row
+     * pointing back via this FK. Audit traversal walks the chain to render
+     * "Note A (corrected at T2)" → "Note B (corrects A)".
+     */
+    @Column(name = "supersedes_id")
+    private UUID supersedesId;
 
     /** Time the note was recorded */
     @Column(name = "recorded_at", nullable = false)

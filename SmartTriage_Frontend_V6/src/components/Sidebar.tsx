@@ -115,6 +115,7 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
       items: [
         { id: 'alerts', label: 'AI Alerts', badge: '2', badgeColor: 'bg-rose-500', icon: BellRing, pageId: 'alerts' as AppPage },
         { id: 'alert-dashboard', label: 'Alert Center', icon: ShieldAlert, pageId: 'alerts' as AppPage },
+        { id: 'med-safety/overrides', label: 'Override Audit', icon: Pill, pageId: 'med-safety-overrides' as AppPage },
         { id: 'quality', label: 'Quality Metrics', icon: BarChart3, pageId: 'quality' as AppPage },
         { id: 'prediction', label: 'Surge Prediction', icon: TrendingUp, pageId: 'prediction' as AppPage },
         { id: 'audit-trail', label: 'Audit Trail', icon: ScrollText, pageId: 'audit-trail' as AppPage },

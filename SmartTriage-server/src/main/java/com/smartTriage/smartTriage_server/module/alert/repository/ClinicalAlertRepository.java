@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -102,4 +103,32 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
         List<ClinicalAlert> findUnacknowledgedAlertsByType(
                         @Param("hospitalId") UUID hospitalId,
                         @Param("alertType") AlertType alertType);
+
+        /**
+         * Server-side filter for the Override Audit dashboard. The Phase 14
+         * frontend currently pulls every alert and filters in-memory; once
+         * volume crosses a few hundred per hospital that doesn't scale.
+         * This query lets the dashboard ask the database for just the
+         * MEDICATION_SAFETY_WARNING rows in a date window.
+         *
+         * `from` / `to` are both inclusive endpoints — pass null on either
+         * side to leave that bound open. The frontend's "24h / 7d / 30d /
+         * all" ranges all map cleanly onto this contract.
+         *
+         * Returns acknowledged + unacknowledged together because the
+         * Override Audit is a forensic surface, not a queue — safety
+         * officers need to see what overrides happened regardless of
+         * whether someone has clicked acknowledge.
+         */
+        @Query("SELECT a FROM ClinicalAlert a JOIN a.visit v WHERE v.hospital.id = :hospitalId " +
+                        "AND a.isActive = true " +
+                        "AND a.alertType = com.smartTriage.smartTriage_server.common.enums.AlertType.MEDICATION_SAFETY_WARNING " +
+                        "AND (:from IS NULL OR a.createdAt >= :from) " +
+                        "AND (:to IS NULL OR a.createdAt <= :to) " +
+                        "ORDER BY a.createdAt DESC")
+        Page<ClinicalAlert> findSafetyOverrides(
+                        @Param("hospitalId") UUID hospitalId,
+                        @Param("from") Instant from,
+                        @Param("to") Instant to,
+                        Pageable pageable);
 }

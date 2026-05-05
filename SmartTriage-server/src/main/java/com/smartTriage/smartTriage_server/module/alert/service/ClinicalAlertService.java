@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -60,6 +61,31 @@ public class ClinicalAlertService {
      */
     public List<ClinicalAlert> getAlertsForDoctor(UUID doctorId) {
         return clinicalAlertRepository.findUnacknowledgedAlertsForDoctor(doctorId);
+    }
+
+    /**
+     * Server-side filter for the Phase 14 Override Audit dashboard. The
+     * `range` parameter accepts the same shorthand the frontend uses
+     * ("24h", "7d", "30d", "all" — case-insensitive). Anything else
+     * is treated as "all" rather than throwing, because a malformed
+     * query string from a stale link shouldn't take the dashboard down.
+     */
+    public Page<ClinicalAlert> getSafetyOverrides(
+            UUID hospitalId,
+            String range,
+            Pageable pageable) {
+        Instant from = null;
+        if (range != null) {
+            String normalised = range.trim().toLowerCase();
+            Instant now = Instant.now();
+            switch (normalised) {
+                case "24h" -> from = now.minus(24, ChronoUnit.HOURS);
+                case "7d"  -> from = now.minus(7, ChronoUnit.DAYS);
+                case "30d" -> from = now.minus(30, ChronoUnit.DAYS);
+                default    -> from = null;
+            }
+        }
+        return clinicalAlertRepository.findSafetyOverrides(hospitalId, from, null, pageable);
     }
 
     @Transactional

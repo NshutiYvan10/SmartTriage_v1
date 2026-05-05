@@ -29,6 +29,12 @@ public final class MedicationMapper {
                 .countersignedAt(med.getCountersignedAt())
                 .status(med.getStatus())
                 .notes(med.getNotes())
+                .prescribedDespiteAllergy(med.getPrescribedDespiteAllergy())
+                .allergyOverrideMatches(med.getAllergyOverrideMatches())
+                .allergyOverrideAcknowledgedAt(med.getAllergyOverrideAcknowledgedAt())
+                .prescribedDespiteInteraction(med.getPrescribedDespiteInteraction())
+                .interactionOverrideMatches(med.getInteractionOverrideMatches())
+                .interactionOverrideAcknowledgedAt(med.getInteractionOverrideAcknowledgedAt())
                 .createdAt(med.getCreatedAt())
                 .updatedAt(med.getUpdatedAt())
                 .build();

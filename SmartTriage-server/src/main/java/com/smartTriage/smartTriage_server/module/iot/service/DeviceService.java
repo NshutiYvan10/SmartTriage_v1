@@ -183,6 +183,12 @@ public class DeviceService {
 
     /**
      * Process a heartbeat from a device. Updates last seen timestamp and status.
+     *
+     * Also performs self-healing auto-pairing: if the device is assigned to a bed
+     * that currently holds a patient but no active DeviceSession exists, we open
+     * one. This covers the case where the device was OFFLINE at the moment of
+     * patient placement (so BedService.autoStartSessionForBed bailed out) and
+     * comes online later.
      */
     @Transactional
     public void processHeartbeat(IoTDevice device, String ipAddress) {
@@ -196,17 +202,81 @@ public class DeviceService {
             fresh.setIpAddress(ipAddress);
         }
 
+        boolean cameOnline = false;
         // If device was REGISTERED or OFFLINE, bring it ONLINE
         if (fresh.getStatus() == DeviceStatus.REGISTERED
                 || fresh.getStatus() == DeviceStatus.OFFLINE) {
             fresh.setStatus(DeviceStatus.ONLINE);
+            cameOnline = true;
             log.info("Device {} came online", fresh.getSerialNumber());
         }
 
-        deviceRepository.save(fresh);
+        fresh = deviceRepository.save(fresh);
+
+        // Self-healing: if this device has a bed with an occupied visit but no
+        // active session, open one now. This handles the case where a patient
+        // was placed in the bed while the device was offline.
+        if (cameOnline || fresh.getStatus() == DeviceStatus.ONLINE) {
+            try {
+                autoPairIfMissingSession(fresh);
+            } catch (Exception e) {
+                log.warn("Self-healing auto-pair failed for device {}: {}",
+                        fresh.getSerialNumber(), e.getMessage());
+            }
+        }
 
         // Notify frontend of device status change
         publishDeviceStatus(fresh);
+    }
+
+    /**
+     * If the device has an assigned bed holding an active visit but no current
+     * DeviceSession, open one and transition the device to MONITORING. No-op
+     * if any precondition is missing.
+     */
+    @Transactional
+    protected void autoPairIfMissingSession(IoTDevice device) {
+        com.smartTriage.smartTriage_server.module.bed.entity.Bed bed = device.getAssignedBed();
+        if (bed == null) {
+            return; // portable device — nothing to pair
+        }
+        Visit visit = bed.getCurrentVisit();
+        if (visit == null) {
+            return; // bed has no patient
+        }
+
+        // Already paired?
+        boolean alreadyPaired = sessionRepository
+                .findByDeviceIdAndSessionActiveTrueAndIsActiveTrue(device.getId())
+                .isPresent();
+        if (alreadyPaired) {
+            return;
+        }
+
+        // Close any stray session on the visit from a different device
+        sessionRepository.findByVisitIdAndSessionActiveTrueAndIsActiveTrue(visit.getId())
+                .ifPresent(stale -> {
+                    log.warn("Auto-closing prior session {} on visit {} before heartbeat auto-pair",
+                            stale.getId(), visit.getVisitNumber());
+                    stale.endSession("System", "Auto-closed: heartbeat re-pairing");
+                    sessionRepository.save(stale);
+                });
+
+        DeviceSession session = DeviceSession.builder()
+                .device(device)
+                .visit(visit)
+                .startedAt(Instant.now())
+                .sessionActive(true)
+                .startedByName("Heartbeat auto-pair")
+                .build();
+        sessionRepository.save(session);
+
+        IoTDevice fresh = deviceRepository.findById(device.getId()).orElse(device);
+        fresh.setStatus(DeviceStatus.MONITORING);
+        deviceRepository.save(fresh);
+
+        log.info("Self-healing auto-pair: device {} → visit {} via bed {}",
+                fresh.getSerialNumber(), visit.getVisitNumber(), bed.getCode());
     }
 
     // ====================================================================
