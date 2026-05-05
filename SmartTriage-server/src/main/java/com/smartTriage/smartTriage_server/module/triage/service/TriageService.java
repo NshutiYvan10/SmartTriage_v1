@@ -72,6 +72,8 @@ public class TriageService {
     private final RwandaPediatricTriageDecisionEngine pediatricDecisionEngine;
     private final RealTimeEventPublisher eventPublisher;
     private final AlertEscalationService alertEscalationService;
+    /** Bootstraps the clinical-signs timeline from each new triage record. */
+    private final com.smartTriage.smartTriage_server.module.clinicalsigns.service.ClinicalSignService clinicalSignService;
 
     /**
      * Perform initial triage or manual re-triage on a visit.
@@ -331,6 +333,14 @@ public class TriageService {
         log.info("Triage completed: Visit {} → {} (TEWS: {}) | Decision: {} | Retriage: {} | Form: {}",
                 visit.getVisitNumber(), category, tewsScore, decisionPath, isRetriage,
                 isPediatric ? "Child (3-12)" : "Adult (Over 12)");
+
+        // Bootstrap the clinical-signs timeline. Each positive triage flag
+        // (emergency sign, mSAT VU/URG discriminator, special consideration)
+        // becomes a PRESENT, isBaseline=true event so the doctor's Clinical
+        // Signs tab opens populated rather than empty. Failure here is logged
+        // inside the service and never propagated — triage submission must
+        // not fail because of timeline bookkeeping.
+        clinicalSignService.recordBaselineFromTriage(record);
 
         return TriageRecordMapper.toResponse(record);
     }

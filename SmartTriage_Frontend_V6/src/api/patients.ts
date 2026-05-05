@@ -64,4 +64,17 @@ export const patientApi = {
    */
   updatePregnancyStatus: (id: string, pregnancyStatus: PregnancyStatus) =>
     patch<PatientResponse>(`/patients/${id}/pregnancy-status`, { pregnancyStatus }),
+
+  /**
+   * Replace the patient's free-text known allergies. Drives the medication
+   * safety engine's cross-reactivity check on every prescribe; mid-visit
+   * edit matters when a clinician learns of a new allergy or wants to
+   * correct a wrongly-recorded one. Pass null to clear.
+   */
+  updateAllergies: (id: string, knownAllergies: string | null) =>
+    patch<PatientResponse>(`/patients/${id}/allergies`, { knownAllergies }),
+
+  /** Replace the patient's free-text chronic conditions. Pass null to clear. */
+  updateChronicConditions: (id: string, chronicConditions: string | null) =>
+    patch<PatientResponse>(`/patients/${id}/chronic-conditions`, { chronicConditions }),
 };

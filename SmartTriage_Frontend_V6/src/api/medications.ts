@@ -35,4 +35,12 @@ export const medicationApi = {
 
   getAllByVisit: (visitId: string) =>
     get<MedicationResponse[]>(`/medications/visit/${visitId}/all`),
+
+  /**
+   * Patient-level medication history across all visits, newest first.
+   * Drives the prescribing UI's "Reorder" feature so the doctor can copy
+   * a past prescription into a new order with one tap.
+   */
+  getPatientHistory: (patientId: string) =>
+    get<MedicationResponse[]>(`/medications/patient/${patientId}/history`),
 };

@@ -216,6 +216,40 @@ public class PatientService {
         return PatientMapper.toResponse(patient);
     }
 
+    /**
+     * Replaces the patient's free-text known allergies. Null is intentional —
+     * a clinician may need to clear a previously-recorded allergy that turned
+     * out to be wrong (e.g. patient reported a "penicillin allergy" that was
+     * actually a side effect, not an immune reaction).
+     *
+     * The medication safety engine reads from this field on every prescribe;
+     * a stale or wrong allergy here translates directly into incorrect cross-
+     * reactivity warnings, which is why mid-visit edit needs to be possible.
+     */
+    @Transactional
+    public PatientResponse updateKnownAllergies(UUID patientId, String knownAllergies) {
+        Patient patient = findPatientOrThrow(patientId);
+        patient.setKnownAllergies(knownAllergies);
+        patient = patientRepository.save(patient);
+        log.info("Known allergies updated for patient {} (MRN {})",
+                patient.getId(), patient.getMedicalRecordNumber());
+        return PatientMapper.toResponse(patient);
+    }
+
+    /**
+     * Replaces the patient's free-text chronic conditions. Same semantics
+     * as updateKnownAllergies — full replacement, null is intentional.
+     */
+    @Transactional
+    public PatientResponse updateChronicConditions(UUID patientId, String chronicConditions) {
+        Patient patient = findPatientOrThrow(patientId);
+        patient.setChronicConditions(chronicConditions);
+        patient = patientRepository.save(patient);
+        log.info("Chronic conditions updated for patient {} (MRN {})",
+                patient.getId(), patient.getMedicalRecordNumber());
+        return PatientMapper.toResponse(patient);
+    }
+
     private String generateMRN(String hospitalCode) {
         return hospitalCode + "-" + mrnCounter.incrementAndGet();
     }

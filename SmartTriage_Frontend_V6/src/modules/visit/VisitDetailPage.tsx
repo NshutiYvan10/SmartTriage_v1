@@ -11,7 +11,9 @@ import {
   FlaskConical, Pill, Monitor, BellRing, Heart, Thermometer,
   Wind, Droplets, Brain, Clock, User, AlertTriangle, ChevronRight,
   Plus, Send, CheckCircle2, XCircle, Eye, Loader2, RefreshCw, LogOut,
+  TrendingUp,
 } from 'lucide-react';
+import { ClinicalSignsTab } from './ClinicalSignsTab';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
 import { visitApi } from '@/api/visits';
@@ -78,6 +80,10 @@ const TABS = [
   { id: 'overview', label: 'Overview', icon: Eye },
   { id: 'vitals', label: 'Vitals', icon: Activity },
   { id: 'triage', label: 'Triage', icon: Stethoscope },
+  // Clinical Signs sits adjacent to Triage because it tracks the
+  // evolution of the very signs that triage captured at entry —
+  // emergency signs and mSAT discriminators over time.
+  { id: 'clinical-signs', label: 'Clinical Signs', icon: TrendingUp },
   { id: 'notes', label: 'Notes', icon: FileText },
   { id: 'diagnoses', label: 'Diagnoses', icon: ClipboardList },
   { id: 'investigations', label: 'Investigations', icon: FlaskConical },
@@ -601,6 +607,7 @@ export function VisitDetailPage() {
           {activeTab === 'overview' && <OverviewTab visit={visit} latestVitals={latestVitals} latestTriage={latestTriage} notes={notes} diagnoses={diagnoses} investigations={investigations} medications={medications} alerts={visitAlerts} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'vitals' && <VitalsTab vitals={vitals} latestVitals={latestVitals} showForm={showVitalsForm} setShowForm={setShowVitalsForm} onSubmit={handleRecordVitals} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'triage' && <TriageTab visit={visit} triageHistory={triageHistory} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} navigate={navigate} />}
+          {activeTab === 'clinical-signs' && <ClinicalSignsTab visitId={visit.id} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'notes' && <NotesTab notes={notes} showForm={showNoteForm} setShowForm={setShowNoteForm} onSubmit={handleCreateNote} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'diagnoses' && <DiagnosesTab diagnoses={diagnoses} showForm={showDiagnosisForm} setShowForm={setShowDiagnosisForm} onSubmit={handleCreateDiagnosis} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'investigations' && <InvestigationsTab investigations={investigations} showForm={showInvestigationForm} setShowForm={setShowInvestigationForm} onSubmit={handleOrderInvestigation} onAction={handleInvestigationAction} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} userName={userName} />}
