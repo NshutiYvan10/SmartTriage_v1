@@ -92,7 +92,14 @@ public class ShiftAssignmentAuthz {
 
             // Charge nurses manage the unit in Rwandan EDs — they own zone
             // and shift assignment as part of day-to-day operations.
-            if (user.getDesignation() == Designation.CHARGE_NURSE && sameHospital) {
+            //
+            // Defence-in-depth: also require role = NURSE. The user-create
+            // path validates role/designation pairs, but checking role here
+            // means a stale or otherwise corrupted DOCTOR-with-CHARGE_NURSE
+            // record can never grant nurse-management authority.
+            if (user.getRole() == Role.NURSE
+                    && user.getDesignation() == Designation.CHARGE_NURSE
+                    && sameHospital) {
                 return true;
             }
 

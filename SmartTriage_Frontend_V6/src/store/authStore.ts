@@ -65,7 +65,6 @@ function mapRole(backendRole: Role): UserRole {
     case 'SUPER_ADMIN': return 'SUPER_ADMIN';
     case 'HOSPITAL_ADMIN': return 'HOSPITAL_ADMIN';
     case 'DOCTOR': return 'DOCTOR';
-    case 'TRIAGE_NURSE': return 'TRIAGE_NURSE';
     case 'NURSE': return 'NURSE';
     case 'REGISTRAR': return 'REGISTRAR';
     case 'PARAMEDIC': return 'PARAMEDIC';
@@ -123,15 +122,6 @@ const DEMO_USERS: Record<UserRole, AuthUser> = {
     email: 'alice.mukiza@kfh.rw',
     role: 'NURSE',
     department: 'Emergency Department',
-    hospital: 'King Faisal Hospital',
-    hospitalId: 'a0000000-0000-0000-0000-000000000001',
-  },
-  TRIAGE_NURSE: {
-    id: 'U005',
-    fullName: 'Habimana Claude',
-    email: 'claude.habimana@kfh.rw',
-    role: 'TRIAGE_NURSE',
-    department: 'Emergency Triage',
     hospital: 'King Faisal Hospital',
     hospitalId: 'a0000000-0000-0000-0000-000000000001',
   },

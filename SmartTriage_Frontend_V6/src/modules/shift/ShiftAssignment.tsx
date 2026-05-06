@@ -110,7 +110,7 @@ export function ShiftAssignment() {
       setShiftDate(shiftInfo.shiftDate);
       setShiftPeriod(shiftInfo.shiftPeriod);
       setAssignments(currentAssignments);
-      setUsers(allUsers.content.filter((u: UserResponse) => ['DOCTOR', 'NURSE', 'TRIAGE_NURSE'].includes(u.role)));
+      setUsers(allUsers.content.filter((u: UserResponse) => ['DOCTOR', 'NURSE'].includes(u.role)));
     } catch (err) {
       console.error('Failed to load shift data:', err);
       showToast('Failed to load shift data', 'error');

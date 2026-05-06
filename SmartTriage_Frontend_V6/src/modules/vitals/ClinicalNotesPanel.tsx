@@ -45,7 +45,7 @@ const NOTE_TYPE_LABEL: Record<NoteType, string> = NOTE_TYPES.reduce(
 );
 
 const CORRECTION_ALLOWED: ReadonlySet<string> = new Set([
-  'DOCTOR', 'NURSE', 'TRIAGE_NURSE', 'SUPER_ADMIN',
+  'DOCTOR', 'NURSE', 'SUPER_ADMIN',
 ]);
 
 function formatRecordedAt(iso: string | undefined | null): string {

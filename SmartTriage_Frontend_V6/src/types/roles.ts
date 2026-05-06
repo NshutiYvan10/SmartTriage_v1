@@ -5,7 +5,6 @@ export type UserRole =
   | 'HOSPITAL_ADMIN'
   | 'DOCTOR'
   | 'NURSE'
-  | 'TRIAGE_NURSE'
   | 'REGISTRAR'
   | 'PARAMEDIC'
   | 'LAB_TECHNICIAN'
@@ -104,13 +103,6 @@ export const ROLE_META: Record<UserRole, RoleMeta> = {
     textColor: 'text-emerald-600',
     borderColor: 'border-emerald-300',
   },
-  TRIAGE_NURSE: {
-    label: 'Triage Nurse',
-    description: 'Dedicated triage responsibilities in the ED',
-    color: 'bg-amber-500',
-    textColor: 'text-amber-600',
-    borderColor: 'border-amber-300',
-  },
   REGISTRAR: {
     label: 'Registrar',
     description: 'Patient registration and admission processing',
@@ -148,7 +140,8 @@ export const ROLE_META: Record<UserRole, RoleMeta> = {
  * HOSPITAL_ADMIN → Hospital management: staff, settings, audit, reports. Can view clinical data.
  * DOCTOR       → Full clinical: patients, triage, all clinical tools, monitoring, documentation.
  * NURSE        → Clinical care: patients, triage, vitals, monitoring, core clinical tools, documentation.
- * TRIAGE_NURSE → Triage-focused: registration, triage queue, patients, monitoring. No advanced clinical tools.
+ *                Triage-station assignment is a per-shift function (ShiftAssignment.shiftFunction =
+ *                TRIAGE_NURSE), NOT a separate role.
  * REGISTRAR    → Registration only: entry, patient list, referrals.
  * PARAMEDIC    → Pre-hospital: registration, handover, basic patient view.
  * LAB_TECHNICIAN → Lab-focused: lab orders/results, patient data for context.
@@ -201,14 +194,6 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'safety-incidents',
   ],
 
-  // ── Triage-focused ──
-  TRIAGE_NURSE: [
-    'dashboard', 'entry', 'patients', 'triage', 'monitoring', 'alerts', 'beds',
-    'notifications', 'profile',
-    // Handover & documentation
-    'documentation', 'handover',
-  ],
-
   // ── Registration only ──
   REGISTRAR: [
     'dashboard', 'entry', 'patients',
@@ -252,10 +237,6 @@ export const ROLE_FEATURES: Record<UserRole, AppFeature[]> = {
     'export_report', 'view_reports', 'view_monitoring',
   ],
   NURSE: [
-    'register_patient', 'start_triage', 'record_vitals',
-    'acknowledge_alert', 'add_clinical_note', 'view_monitoring',
-  ],
-  TRIAGE_NURSE: [
     'register_patient', 'start_triage', 'record_vitals',
     'acknowledge_alert', 'add_clinical_note', 'view_monitoring',
   ],

@@ -37,7 +37,7 @@ public class DiagnosisController {
     private final DiagnosisService diagnosisService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<DiagnosisResponse>> createDiagnosis(
             @Valid @RequestBody CreateDiagnosisRequest request) {
         DiagnosisResponse response = diagnosisService.createDiagnosis(request);
@@ -46,7 +46,7 @@ public class DiagnosisController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<DiagnosisResponse>> updateDiagnosis(
             @PathVariable UUID id,
             @Valid @RequestBody CreateDiagnosisRequest request) {

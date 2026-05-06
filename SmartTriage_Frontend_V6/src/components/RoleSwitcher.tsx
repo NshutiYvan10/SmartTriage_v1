@@ -7,7 +7,7 @@ import { ROLE_META } from '@/types/roles';
 import type { UserRole } from '@/types/roles';
 
 const ALL_ROLES: UserRole[] = [
-  'SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE', 'REGISTRAR', 'PARAMEDIC', 'LAB_TECHNICIAN', 'READ_ONLY',
+  'SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'REGISTRAR', 'PARAMEDIC', 'LAB_TECHNICIAN', 'READ_ONLY',
 ];
 
 /**

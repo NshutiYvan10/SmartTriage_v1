@@ -45,7 +45,7 @@ public class MedicationController {
     // ====================================================================
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<MedicationResponse>> prescribe(
             @Valid @RequestBody PrescribeMedicationRequest request) {
         MedicationResponse response = medicationService.prescribe(request);
@@ -58,7 +58,7 @@ public class MedicationController {
     // ====================================================================
 
     @PatchMapping("/{id}/administer")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<MedicationResponse>> administer(
             @PathVariable UUID id,
             @RequestBody AdministerMedicationRequest request) {
@@ -71,7 +71,7 @@ public class MedicationController {
     // ====================================================================
 
     @PatchMapping("/{id}/countersign")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<MedicationResponse>> countersign(
             @PathVariable UUID id,
             @RequestBody CountersignMedicationRequest request) {
@@ -84,7 +84,7 @@ public class MedicationController {
     // ====================================================================
 
     @PatchMapping("/{id}/hold")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<MedicationResponse>> hold(
             @PathVariable UUID id,
             @RequestParam(required = false) String reason) {
@@ -102,7 +102,7 @@ public class MedicationController {
     }
 
     @PatchMapping("/{id}/refuse")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<MedicationResponse>> refuse(
             @PathVariable UUID id,
             @RequestParam(required = false) String reason) {
@@ -141,7 +141,7 @@ public class MedicationController {
      * doctor's "Reorder" affordance in the prescribing UI.
      */
     @GetMapping("/patient/{patientId}/history")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<List<MedicationResponse>>> getPatientMedicationHistory(
             @PathVariable UUID patientId) {
         List<MedicationResponse> response = medicationService.getMedicationHistoryForPatient(patientId);

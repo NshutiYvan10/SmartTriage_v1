@@ -42,7 +42,7 @@ public class MedicationSafetyController {
     // ====================================================================
 
     @PostMapping("/validate")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<MedicationSafetyCheckResponse>> validatePrescription(
             @Valid @RequestBody ValidatePrescriptionRequest request) {
         MedicationSafetyCheckResponse response = medicationSafetyService.validatePrescription(request);
@@ -69,7 +69,7 @@ public class MedicationSafetyController {
     // ====================================================================
 
     @GetMapping("/visit/{visitId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<Page<MedicationSafetyCheckResponse>>> getChecksForVisit(
             @PathVariable UUID visitId,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -82,7 +82,7 @@ public class MedicationSafetyController {
     // ====================================================================
 
     @GetMapping("/formulary/{hospitalId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE', 'PHARMACIST')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<Page<DrugFormularyResponse>>> getFormulary(
             @PathVariable UUID hospitalId,
             @PageableDefault(size = 50) Pageable pageable) {
@@ -91,7 +91,7 @@ public class MedicationSafetyController {
     }
 
     @GetMapping("/formulary/search")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE', 'PHARMACIST')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<List<DrugFormularyResponse>>> searchFormulary(
             @RequestParam String query) {
         List<DrugFormularyResponse> response = medicationSafetyService.searchFormulary(query);

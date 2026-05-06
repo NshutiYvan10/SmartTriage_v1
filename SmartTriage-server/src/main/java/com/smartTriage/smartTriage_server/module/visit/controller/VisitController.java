@@ -32,7 +32,7 @@ public class VisitController {
     private final VisitService visitService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'TRIAGE_NURSE', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR')")
     public ResponseEntity<ApiResponse<VisitResponse>> createVisit(
             @Valid @RequestBody CreateVisitRequest request) {
         VisitResponse response = visitService.createVisit(request);
@@ -72,7 +72,7 @@ public class VisitController {
     }
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<VisitResponse>> updateVisitStatus(
             @PathVariable UUID id,
             @RequestParam VisitStatus status) {

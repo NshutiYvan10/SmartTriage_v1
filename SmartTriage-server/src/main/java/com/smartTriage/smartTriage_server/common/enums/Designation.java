@@ -38,10 +38,11 @@ public enum Designation {
     INTERN("Intern", Role.DOCTOR),
 
     // ── Nurse designations ──
-    // Charge Nurse covers unit-management responsibilities; no separate
-    // NURSE_MANAGER designation exists. A Triage Nurse cannot be a Charge
-    // Nurse because triage nurses are dedicated to intake assessment, not
-    // unit management — see forRole() below for the split.
+    // Charge Nurse covers unit-management responsibilities (see class
+    // doc for the permission lift). All nurses fall under Role.NURSE;
+    // a "triage nurse" is a NURSE assigned to triage for the shift
+    // (ShiftAssignment.shiftFunction = TRIAGE_NURSE), not a separate
+    // designation.
     CHARGE_NURSE("Charge Nurse", Role.NURSE),
     SENIOR_NURSE("Senior Nurse", Role.NURSE),
     STAFF_NURSE("Staff Nurse", Role.NURSE),
@@ -76,17 +77,38 @@ public enum Designation {
         return switch (role) {
             case DOCTOR ->
                 new Designation[] { ED_HEAD, CONSULTANT, SENIOR_MEDICAL_OFFICER, MEDICAL_OFFICER, RESIDENT, INTERN };
-            // Full nurse career ladder — includes Charge Nurse (unit management).
+            // Full nurse career ladder — includes Charge Nurse (unit
+            // management). Triage nurses are NURSE-role users assigned
+            // to triage via ShiftAssignment, not a separate role.
             case NURSE ->
                 new Designation[] { CHARGE_NURSE, SENIOR_NURSE, STAFF_NURSE, STUDENT_NURSE };
-            // Triage nurses are dedicated to intake/assessment and cannot hold
-            // a Charge Nurse title (that's a unit-management responsibility).
-            case TRIAGE_NURSE ->
-                new Designation[] { SENIOR_NURSE, STAFF_NURSE, STUDENT_NURSE };
             case LAB_TECHNICIAN -> new Designation[] { HEAD_LAB_TECHNICIAN, Designation.LAB_TECHNICIAN };
             case REGISTRAR -> new Designation[] { SENIOR_REGISTRAR, Designation.REGISTRAR };
             case PARAMEDIC -> new Designation[] { SENIOR_PARAMEDIC, Designation.PARAMEDIC };
             default -> new Designation[] { UNSPECIFIED };
         };
+    }
+
+    /**
+     * Backend-enforced check: is the supplied (role, designation) pair
+     * legal? Used by user-create/update services to reject invalid
+     * combinations at persist time. The frontend dropdown filters via
+     * {@link #forRole}, but UI filtering is not a security boundary —
+     * an API client that bypasses the form (or a future code path that
+     * forgets to filter) would otherwise be able to set, e.g., a
+     * DOCTOR-role user to {@link #CHARGE_NURSE} and inherit nurse
+     * unit-management authority.
+     *
+     * <p>{@code null} or {@link #UNSPECIFIED} are always valid. Any
+     * other designation must be in {@link #forRole(Role)} for the
+     * supplied role.
+     */
+    public static boolean isValidForRole(Designation designation, Role role) {
+        if (designation == null || designation == UNSPECIFIED) return true;
+        if (role == null) return false;
+        for (Designation d : forRole(role)) {
+            if (d == designation) return true;
+        }
+        return false;
     }
 }

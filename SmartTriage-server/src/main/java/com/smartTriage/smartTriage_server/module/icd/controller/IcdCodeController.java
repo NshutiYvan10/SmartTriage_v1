@@ -32,21 +32,21 @@ public class IcdCodeController {
     private final IcdCodeService icdCodeService;
 
     @GetMapping("/search")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE', 'HOSPITAL_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<List<IcdCodeResponse>>> search(
             @RequestParam(required = false) String query) {
         return ResponseEntity.ok(ApiResponse.success(icdCodeService.search(query)));
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE', 'HOSPITAL_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<Page<IcdCodeResponse>>> browse(
             @PageableDefault(size = 100) Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.success(icdCodeService.browse(pageable)));
     }
 
     @GetMapping("/common")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE', 'HOSPITAL_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<List<IcdCodeResponse>>> common() {
         return ResponseEntity.ok(ApiResponse.success(icdCodeService.getCommonInRwanda()));
     }

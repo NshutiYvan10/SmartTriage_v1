@@ -1,6 +1,7 @@
 package com.smartTriage.smartTriage_server.module.user.service;
 
 import com.smartTriage.smartTriage_server.common.enums.Designation;
+import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.common.exception.DuplicateResourceException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
@@ -49,6 +50,7 @@ public class UserService implements UserDetailsService {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new DuplicateResourceException("User", "email", request.getEmail());
         }
+        validateRoleDesignationPair(request.getRole(), request.getDesignation());
 
         Hospital hospital = hospitalService.findHospitalOrThrow(request.getHospitalId());
 
@@ -96,6 +98,7 @@ public class UserService implements UserDetailsService {
     @Transactional
     public UserResponse updateDesignation(UUID userId, Designation designation) {
         User user = findUserOrThrow(userId);
+        validateRoleDesignationPair(user.getRole(), designation);
         user.setDesignation(designation);
         user = userRepository.save(user);
         log.info("User {} designation updated to {}", user.getEmail(), designation);
@@ -108,6 +111,7 @@ public class UserService implements UserDetailsService {
     @Transactional
     public UserResponse updateUser(UUID userId, UpdateUserRequest request) {
         User user = findUserOrThrow(userId);
+        validateRoleDesignationPair(request.getRole(), request.getDesignation());
         user.setFirstName(request.getFirstName());
         user.setLastName(request.getLastName());
         user.setPhoneNumber(request.getPhoneNumber());
@@ -127,5 +131,26 @@ public class UserService implements UserDetailsService {
     public User findUserOrThrow(UUID id) {
         return userRepository.findByIdAndIsActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+    }
+
+    /**
+     * Backend-enforced (role, designation) pair check. Used on every
+     * user create / update / designation-only update path so an admin
+     * (or a malformed API client) cannot persist an invalid pair like
+     * DOCTOR + CHARGE_NURSE — which would inadvertently grant nurse
+     * unit-management authority to a doctor account via
+     * {@code ShiftAssignmentAuthz.canAssign}'s designation check.
+     *
+     * <p>UI dropdown filtering is not a security boundary; this is.
+     * {@code null} or {@link Designation#UNSPECIFIED} are always
+     * valid (the column is nullable for users whose seniority hasn't
+     * been recorded yet).
+     */
+    private void validateRoleDesignationPair(Role role, Designation designation) {
+        if (!Designation.isValidForRole(designation, role)) {
+            throw new IllegalArgumentException(
+                    "Designation " + designation + " is not valid for role " + role
+                            + ". Allowed: " + java.util.Arrays.toString(Designation.forRole(role)));
+        }
     }
 }

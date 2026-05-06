@@ -55,8 +55,15 @@ const CHIEF_COMPLAINTS = [
 const RELATIONSHIPS = ['Parent', 'Spouse', 'Sibling', 'Child', 'Guardian', 'Friend', 'Colleague', 'Other'];
 const GUARDIAN_RELATIONSHIPS = ['Mother', 'Father', 'Guardian', 'Grandparent', 'Aunt/Uncle', 'Sibling', 'Other'];
 
-/* Only triage nurses can be assigned for triage */
-const TRIAGE_ROLES = ['TRIAGE_NURSE'];
+/**
+ * Roles eligible to be the on-shift triage nurse for a new
+ * registration. Triage is performed by NURSE-role users — the
+ * triage station is a per-shift assignment
+ * (ShiftAssignment.shiftFunction = TRIAGE_NURSE), not a role of
+ * its own. Any nurse can be assigned to triage; the assignment
+ * itself is enforced by the shift planner / charge nurse.
+ */
+const TRIAGE_ROLES = ['NURSE'];
 
 const STEPS = [
   { id: 1, label: 'Personal', icon: User },

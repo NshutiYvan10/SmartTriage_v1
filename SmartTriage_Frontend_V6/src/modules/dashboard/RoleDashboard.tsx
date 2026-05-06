@@ -80,10 +80,8 @@ function getActionsForRole(role: UserRole): QuickAction[] {
       // Full clinical: patients, triage, monitoring, alerts
       return [base.patients, base.triage, base.monitoring, base.alerts, base.reports];
     case 'NURSE':
-      // Clinical care: register, triage, patients, monitoring
-      return [base.register, base.triage, base.patients, base.monitoring, base.alerts];
-    case 'TRIAGE_NURSE':
-      // Triage-focused: register, triage, patients, monitoring
+      // Clinical care: register, triage, patients, monitoring.
+      // (Triage-station assignment is per-shift, not a separate role.)
       return [base.register, base.triage, base.patients, base.monitoring, base.alerts];
     case 'REGISTRAR':
       // Registration only
@@ -192,7 +190,7 @@ export function RoleDashboard() {
         </div>
 
         {/* ── Quick Stats (for clinical roles) ── */}
-        {['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE', 'REGISTRAR', 'PARAMEDIC'].includes(user.role) && (
+        {['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'REGISTRAR', 'PARAMEDIC'].includes(user.role) && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard label="Total Patients" value={stats.total} icon={Users} accent="bg-blue-500" />
             <StatCard label="Waiting" value={stats.waiting} icon={Activity} accent="bg-amber-500" />

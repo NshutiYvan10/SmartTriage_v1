@@ -29,7 +29,7 @@ public class ZoneTransferController {
      * primary clinician change atomically.
      */
     @PostMapping("/{transferId}/accept")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<ZoneTransferResponse>> accept(
             @PathVariable UUID transferId,
             @RequestBody(required = false) Map<String, String> body) {
@@ -43,7 +43,7 @@ public class ZoneTransferController {
      * original zone; declined_reason explains why.
      */
     @PostMapping("/{transferId}/decline")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<ZoneTransferResponse>> decline(
             @PathVariable UUID transferId,
             @RequestBody Map<String, String> body) {
@@ -58,7 +58,7 @@ public class ZoneTransferController {
      * responsibility and brings equipment + escalation.
      */
     @PostMapping("/{transferId}/resus-in-place")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<ZoneTransferResponse>> resusInPlace(
             @PathVariable UUID transferId,
             @RequestBody(required = false) Map<String, String> body) {
@@ -72,7 +72,7 @@ public class ZoneTransferController {
      * bump is immediately undone (false-positive sign correction).
      */
     @PostMapping("/{transferId}/cancel")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<ZoneTransferResponse>> cancel(
             @PathVariable UUID transferId,
             @RequestBody(required = false) Map<String, String> body) {

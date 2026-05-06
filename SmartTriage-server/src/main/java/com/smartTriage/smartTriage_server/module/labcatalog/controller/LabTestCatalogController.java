@@ -26,21 +26,21 @@ public class LabTestCatalogController {
     private final LabTestCatalogService service;
 
     @GetMapping("/search")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE', 'LAB_TECHNICIAN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN')")
     public ResponseEntity<ApiResponse<List<LabTestCatalogResponse>>> search(
             @RequestParam(required = false) String query) {
         return ResponseEntity.ok(ApiResponse.success(service.search(query)));
     }
 
     @GetMapping("/by-type/{type}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE', 'LAB_TECHNICIAN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN')")
     public ResponseEntity<ApiResponse<List<LabTestCatalogResponse>>> byType(
             @PathVariable InvestigationType type) {
         return ResponseEntity.ok(ApiResponse.success(service.findByType(type)));
     }
 
     @GetMapping("/common")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE', 'LAB_TECHNICIAN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN')")
     public ResponseEntity<ApiResponse<List<LabTestCatalogResponse>>> common() {
         return ResponseEntity.ok(ApiResponse.success(service.getCommonInRwanda()));
     }

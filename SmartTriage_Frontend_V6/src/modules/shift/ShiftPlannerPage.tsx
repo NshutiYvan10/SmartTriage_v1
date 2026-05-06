@@ -160,7 +160,7 @@ export function ShiftPlannerPage() {
 
       setUsers(
         userPage.content.filter((u: UserResponse) =>
-          ['DOCTOR', 'NURSE', 'TRIAGE_NURSE'].includes(u.role),
+          ['DOCTOR', 'NURSE'].includes(u.role),
         ),
       );
 

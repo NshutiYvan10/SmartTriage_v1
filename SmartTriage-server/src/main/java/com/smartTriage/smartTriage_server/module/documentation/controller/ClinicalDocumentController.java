@@ -41,7 +41,7 @@ public class ClinicalDocumentController {
     // ====================================================================
 
     @PostMapping("/create")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<ClinicalDocumentResponse>> createDocument(
             @Valid @RequestBody CreateDocumentRequest request) {
         ClinicalDocumentResponse response = documentService.createDocument(request.getVisitId(), request);
@@ -54,7 +54,7 @@ public class ClinicalDocumentController {
     // ====================================================================
 
     @PutMapping("/{id}/sign")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<ClinicalDocumentResponse>> signDocument(
             @PathVariable UUID id,
             @Valid @RequestBody SignDocumentRequest request) {
@@ -81,7 +81,7 @@ public class ClinicalDocumentController {
     // ====================================================================
 
     @PostMapping("/{id}/amend")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<ClinicalDocumentResponse>> amendDocument(
             @PathVariable UUID id,
             @Valid @RequestBody AmendDocumentRequest request) {
@@ -122,7 +122,7 @@ public class ClinicalDocumentController {
     }
 
     @PostMapping("/visit/{visitId}/handover")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<ClinicalDocumentResponse>> generateHandoverDocument(
             @PathVariable UUID visitId) {
         ClinicalDocumentResponse response = documentService.generateHandoverDocument(visitId);
