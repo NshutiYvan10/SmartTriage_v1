@@ -67,12 +67,21 @@ export function PatientsList() {
 
   const allPatients: RegistryPatient[] = storePatients.map(p => ({ ...p } as RegistryPatient));
 
-  // ── Pediatric determination ──
-  // Authoritative rule: a patient is pediatric when age < 18 years.
-  // We trust `p.isPediatric` if explicitly true (for records that have a
-  // verified flag from the backend), but fall back to age so records with
-  // missing or mis-serialized flags are classified correctly.
-  const isPediatric = (p: RegistryPatient): boolean => {
+  // ── "Minor" filter for the registry view ──
+  //
+  // This is a UI display filter only — it does NOT determine clinical
+  // routing. The system's authoritative pediatric boundary is set by
+  // the Rwanda mSAT triage form ("Adult: Over 12 years"; "Child: 3–12
+  // years") and computed in Patient.isPediatric() on the backend
+  // (<13). That stored flag drives triage form selection, peds resus
+  // routing, and pediatric dose checks.
+  //
+  // The registry filter widens to <18 deliberately because operational
+  // reporting often wants "all minors" (the WHO definition of "child")
+  // rather than the clinical cutoff. Patients aged 13–17 will show
+  // here as "minor" even though the system treats them clinically as
+  // adults.
+  const isMinor = (p: RegistryPatient): boolean => {
     if (p.isPediatric === true) return true;
     return typeof p.age === 'number' && p.age >= 0 && p.age < 18;
   };
@@ -80,8 +89,8 @@ export function PatientsList() {
   // Summary stats
   const stats = useMemo(() => ({
     total: allPatients.length,
-    adults: allPatients.filter((p) => !isPediatric(p)).length,
-    pediatric: allPatients.filter((p) => isPediatric(p)).length,
+    adults: allPatients.filter((p) => !isMinor(p)).length,
+    pediatric: allPatients.filter((p) => isMinor(p)).length,
     ambulance: allPatients.filter((p) => p.arrivalMode === 'AMBULANCE').length,
     walkIn: allPatients.filter((p) => p.arrivalMode === 'WALK_IN').length,
     referral: allPatients.filter((p) => p.arrivalMode === 'REFERRAL').length,
@@ -111,8 +120,8 @@ export function PatientsList() {
 
     // Type filter (adult/pediatric) — uses age-based rule so records with
     // missing backend flag still classify correctly.
-    if (typeFilter === 'adult') list = list.filter((p) => !isPediatric(p));
-    if (typeFilter === 'pediatric') list = list.filter((p) => isPediatric(p));
+    if (typeFilter === 'adult') list = list.filter((p) => !isMinor(p));
+    if (typeFilter === 'pediatric') list = list.filter((p) => isMinor(p));
 
     // Sort
     list.sort((a, b) => {
@@ -323,7 +332,7 @@ export function PatientsList() {
             <div className="divide-y" style={{ borderColor: isDark ? 'rgba(2,132,199,0.15)' : 'rgba(203,213,225,0.15)' }}>
               {filtered.map((patient) => {
                 const arrivalMode = arrivalModeConfig[patient.arrivalMode];
-                const peds = isPediatric(patient);
+                const peds = isMinor(patient);
 
                 return (
                   <div

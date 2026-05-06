@@ -197,7 +197,10 @@ export const usePatientStore = create<PatientState>((set, get) => ({
       ...patientData,
       id: `PT${Date.now()}${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
       arrivalTimestamp: new Date(),
-      isPediatric: patientData.age < 15,
+      // Rwanda mSAT boundary — child form covers 3–12, adult form 13+.
+      // Matches Patient.isPediatric() on the backend and the
+      // EntryRegistration form's pediatric-fields toggle.
+      isPediatric: patientData.age < 13,
       triageStatus: 'WAITING',
       aiAlerts: [],
       overrideHistory: [],

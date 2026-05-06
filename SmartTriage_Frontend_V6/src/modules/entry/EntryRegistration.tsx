@@ -216,7 +216,14 @@ export function EntryRegistration() {
       });
   }, [authUser]);
 
-  const isPediatric = formData.age ? parseInt(formData.age) < 15 : false;
+  // Rwanda mSAT triage form boundary: Adult Triage Form "Over 12
+  // years"; Child Triage Form "3–12 years". A 12-year-old is on the
+  // child form, a 13-year-old is on the adult form. KFH's peds
+  // triage form follows the same boundary. The backend's
+  // Patient.isPediatric() uses the same <13 rule, so this keeps
+  // the registration UI in sync with what the system actually
+  // stores when the patient gets persisted.
+  const isPediatric = formData.age ? parseInt(formData.age) < 13 : false;
   const isReferral = formData.arrivalMode === 'REFERRAL';
 
   /* \u2500\u2500 Duplicate NID detection \u2500\u2500 */
