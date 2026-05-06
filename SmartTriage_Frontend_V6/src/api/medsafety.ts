@@ -34,6 +34,8 @@ export interface DrugFormulary {
   adultMaxDoseMg: number | null;
   pediatricMinDoseMgPerKg: number | null;
   pediatricMaxDoseMgPerKg: number | null;
+  /** Comma- or slash-separated routes the drug supports (e.g. "PO, IV"). */
+  availableRoutes: string | null;
   isHighAlert: boolean;
   requiresDoubleCheck: boolean;
   isOnReml: boolean;

@@ -16,6 +16,7 @@ import {
 import { ClinicalSignsTab } from './ClinicalSignsTab';
 import { DiagnosisPanel } from './DiagnosisPanel';
 import { InvestigationPanel } from './InvestigationPanel';
+import { MedicationPanel } from './MedicationPanel';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
 import { visitApi } from '@/api/visits';
@@ -658,7 +659,7 @@ export function VisitDetailPage() {
           {activeTab === 'notes' && <NotesTab notes={notes} showForm={showNoteForm} setShowForm={setShowNoteForm} onSubmit={handleCreateNote} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'diagnoses' && <DiagnosesTab diagnoses={diagnoses} showForm={showDiagnosisForm} setShowForm={setShowDiagnosisForm} onSubmit={handleCreateDiagnosis} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'investigations' && <InvestigationsTab investigations={investigations} showForm={showInvestigationForm} setShowForm={setShowInvestigationForm} onSubmit={handleOrderInvestigation} onAction={handleInvestigationAction} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} userName={userName} />}
-          {activeTab === 'medications' && <MedicationsTab medications={medications} showForm={showMedicationForm} setShowForm={setShowMedicationForm} onSubmit={handlePrescribeMedication} onAction={handleMedicationAction} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
+          {activeTab === 'medications' && <MedicationsTab medications={medications} showForm={showMedicationForm} setShowForm={setShowMedicationForm} onSubmit={handlePrescribeMedication} onAction={handleMedicationAction} formLoading={formLoading} patient={patient} visit={visit} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'monitor' && <MonitorTab visitId={visit.id} glassCard={glassCard} isDark={isDark} text={text} />}
           {activeTab === 'alerts' && <AlertsTab alerts={visitAlerts} onAcknowledge={handleAcknowledgeAlert} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'disposition' && <DispositionTab visit={visit} onDisposition={handleRecordDisposition} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
@@ -1363,11 +1364,7 @@ function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, on
 }
 
 // ═══════ MEDICATIONS TAB ═══════
-function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction, formLoading, glassCard, glassInner, isDark, text }: any) {
-  const [form, setForm] = useState<Partial<PrescribeMedicationRequest>>({ drugName: '', dose: '', route: 'PO' as MedicationRoute, frequency: '', notes: '' });
-
-  const ROUTE_LABELS: Record<string, string> = { PO: 'Oral', IV: 'IV', IM: 'IM', SC: 'SC', SL: 'Sublingual', PR: 'PR', INH: 'Inhaled', NEB: 'Nebuliser', TOP: 'Topical', NASAL: 'Nasal', OPHTHALMIC: 'Ophthalmic', OTIC: 'Ear', ETT: 'ETT', IO: 'IO', OTHER: 'Other' };
-
+function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction, formLoading, patient, visit, latestTriage, glassCard, glassInner, isDark, text }: any) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -1378,26 +1375,18 @@ function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction
       </div>
 
       {showForm && (
-        <div className="rounded-2xl p-5 animate-fade-up" style={glassCard}>
-          <h4 className={`text-sm font-bold mb-4 ${text.heading}`}>Prescribe Medication</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <FormInput label="Drug Name" value={form.drugName} onChange={(v: string) => setForm({ ...form, drugName: v })} glassInner={glassInner} isDark={isDark} text={text} />
-            <FormInput label="Dose" value={form.dose} onChange={(v: string) => setForm({ ...form, dose: v })} glassInner={glassInner} isDark={isDark} text={text} />
-            <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Route</label>
-              <select value={form.route || 'PO'} onChange={(e) => setForm({ ...form, route: e.target.value as MedicationRoute })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
-                {Object.entries(ROUTE_LABELS).map(([k, v]) => <option key={k} value={k}>{v} ({k})</option>)}
-              </select>
-            </div>
-            <FormInput label="Frequency" value={form.frequency} onChange={(v: string) => setForm({ ...form, frequency: v })} glassInner={glassInner} isDark={isDark} text={text} />
-          </div>
-          <div className="flex items-center gap-3 mt-4">
-            <button onClick={() => onSubmit(form)} disabled={formLoading || !form.drugName} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
-              {formLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Prescribe
-            </button>
-            <button onClick={() => setShowForm(false)} className={`px-4 py-2.5 text-xs font-bold rounded-xl ${text.muted}`}>Cancel</button>
-          </div>
-        </div>
+        <MedicationPanel
+          onSubmit={async (req) => { await onSubmit(req); setShowForm(false); }}
+          onClose={() => setShowForm(false)}
+          formLoading={formLoading}
+          patient={patient}
+          visit={visit}
+          latestTriage={latestTriage}
+          glassCard={glassCard}
+          glassInner={glassInner}
+          isDark={isDark}
+          text={text}
+        />
       )}
 
       <div className="space-y-3">
