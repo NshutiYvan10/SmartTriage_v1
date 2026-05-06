@@ -208,6 +208,24 @@ public class ShiftAssignmentService {
     }
 
     /**
+     * Phase 1 zone routing — return the active shift assignment for a
+     * single user on the current shift period, or empty when they're
+     * off-shift.
+     *
+     * <p>Drives the frontend's zone-scoped patient list: a user with
+     * a specific zone sees only that zone; a shift lead sees all
+     * zones; an off-shift user sees only patients they're explicitly
+     * primary clinician on.
+     */
+    public Optional<ShiftAssignmentResponse> getCurrentShiftForUser(UUID userId) {
+        LocalDate shiftDate = getCurrentShiftDate();
+        ShiftPeriod shiftPeriod = getCurrentShiftPeriod();
+        return shiftAssignmentRepository
+                .findByUserIdAndShiftDateAndShiftPeriodAndIsActiveTrue(userId, shiftDate, shiftPeriod)
+                .map(ShiftAssignmentMapper::toResponse);
+    }
+
+    /**
      * Get assignments for a specific zone on the current shift.
      */
     public List<ShiftAssignmentResponse> getZoneAssignments(UUID hospitalId, EdZone zone) {

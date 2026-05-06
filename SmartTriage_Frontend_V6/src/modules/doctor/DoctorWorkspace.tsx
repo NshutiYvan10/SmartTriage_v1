@@ -33,6 +33,7 @@ const ZONE_LABELS: Record<EdZone, string> = {
   RESUS: 'Resuscitation Zone',
   ACUTE: 'Acute Treatment Zone',
   GENERAL: 'General / Sub-Acute Zone',
+  AMBULATORY: 'Ambulatory Zone',
   TRIAGE: 'Triage Station',
   OBSERVATION: 'Observation Unit',
   ISOLATION: 'Isolation Area',
@@ -58,7 +59,7 @@ export function DoctorWorkspace() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
-  const { zone: myZone, assignment: myShift, isLoading: shiftLoading, refresh: refreshShift } = useMyShift();
+  const { zone: myZone, assignment: myShift, isShiftLead, isLoading: shiftLoading, refresh: refreshShift } = useMyShift();
   const hospitalId = user?.hospitalId || '';
 
   const [visits, setVisits] = useState<VisitResponse[]>([]);
@@ -83,13 +84,21 @@ export function DoctorWorkspace() {
   }, [hospitalId, loadHospitalBeds]);
 
   // ── Data loading ──
+  //
+  // Phase 1 zone routing:
+  //   - Shift lead (charge nurse) → cross-zone visibility, full active list
+  //   - User assigned to a specific zone → that zone only (server reads
+  //     current_ed_zone, so peds + ambulatory zones are honoured)
+  //   - User off-shift → full active list (graceful degradation; without
+  //     zone scoping we'd lock them out, which breaks small-hospital
+  //     usage where a single doctor covers everything without an
+  //     explicit shift assignment)
   const loadData = useCallback(async () => {
     if (!hospitalId || shiftLoading) return;
     setLoading(true);
     try {
-      // Load visits — zone-specific if assigned, otherwise all active
       let visitData: VisitResponse[];
-      if (myZone) {
+      if (myZone && !isShiftLead) {
         visitData = await visitApi.getByZone(hospitalId, myZone);
       } else {
         const page = await visitApi.getActiveByHospital(hospitalId, 0, 100);
@@ -97,9 +106,8 @@ export function DoctorWorkspace() {
       }
       setVisits(visitData);
 
-      // Load unacknowledged alerts for my zone
       try {
-        if (myZone) {
+        if (myZone && !isShiftLead) {
           const alertData = await alertApi.getByZone(hospitalId, myZone);
           setAlerts(alertData);
         } else {
@@ -112,7 +120,7 @@ export function DoctorWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, myZone, shiftLoading]);
+  }, [hospitalId, myZone, isShiftLead, shiftLoading]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

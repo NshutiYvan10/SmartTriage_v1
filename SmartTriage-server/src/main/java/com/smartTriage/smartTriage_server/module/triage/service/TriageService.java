@@ -78,6 +78,8 @@ public class TriageService {
     private final AlertEscalationService alertEscalationService;
     /** Bootstraps the clinical-signs timeline from each new triage record. */
     private final com.smartTriage.smartTriage_server.module.clinicalsigns.service.ClinicalSignService clinicalSignService;
+    /** Resolves the canonical zone for a visit at triage / re-triage time. */
+    private final com.smartTriage.smartTriage_server.module.visit.service.ZoneRoutingService zoneRoutingService;
 
     /**
      * Perform initial triage or manual re-triage on a visit.
@@ -299,6 +301,12 @@ public class TriageService {
         if (isRetriage) {
             visit.setRetriageCount(visit.getRetriageCount() + 1);
         }
+        // Phase 1 zone routing — manual triage updates the visit's zone
+        // directly. (Phase 2 will introduce a ZoneTransfer state
+        // machine that gates inter-zone moves on receiving-doctor
+        // acceptance; today the manual triage nurse already saw the
+        // patient and chose the category, so the move is final.)
+        visit.setCurrentEdZone(zoneRoutingService.routeFor(visit, category));
         visitRepository.save(visit);
 
         // --- STEP 6: Generate zone-routed alerts ---
@@ -458,11 +466,15 @@ public class TriageService {
                 .build();
         record = triageRecordRepository.save(record);
 
-        // Update visit
+        // Update visit. Zone updates here are direct in Phase 1; the
+        // Phase 2 ZoneTransfer state machine will move this behind a
+        // PENDING_ACCEPT step so the receiving doctor explicitly
+        // takes responsibility before the patient's zone changes.
         visit.setCurrentTriageCategory(targetCategory);
         visit.setTriageTime(record.getTriageTime());
         visit.setStatus(VisitStatus.TRIAGED);
         visit.setRetriageCount(visit.getRetriageCount() + 1);
+        visit.setCurrentEdZone(zoneRoutingService.routeFor(visit, targetCategory));
         visitRepository.save(visit);
 
         // Severity is calibrated to the new category's clinical urgency,

@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.visit.repository;
 
+import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.TriageCategory;
 import com.smartTriage.smartTriage_server.common.enums.VisitStatus;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
@@ -11,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -78,4 +80,26 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
          */
         @Query("SELECT MAX(v.arrivalTime) FROM Visit v WHERE v.patient.id = :patientId AND v.isActive = true")
         Optional<Instant> findLastArrivalByPatientId(@Param("patientId") UUID patientId);
+
+        /**
+         * Phase 1 zone-scoped visit list. The doctor-side question
+         * "show me only the patients in my zone" reads
+         * {@code current_ed_zone} directly. Discharged / admitted /
+         * transferred visits are excluded — same shape as
+         * {@link #findActiveVisits} so the zone-scoped list is a
+         * straight subset of the full active list.
+         *
+         * <p>Accepts a collection of zones rather than a single zone
+         * because (a) Phase 2 will surface pending-transfer patients
+         * in both their current and target zones, (b) the AMBULATORY
+         * zone often shares staff coverage with GENERAL on smaller
+         * shifts, so a doctor may legitimately need both at once.
+         */
+        @Query("SELECT v FROM Visit v WHERE v.hospital.id = :hospitalId AND v.isActive = true " +
+                        "AND v.currentEdZone IN :zones " +
+                        "AND v.status NOT IN ('DISCHARGED', 'ADMITTED', 'TRANSFERRED', 'ICU_ADMITTED', 'DECEASED', 'LEFT_WITHOUT_BEING_SEEN')")
+        Page<Visit> findActiveVisitsInZones(
+                        @Param("hospitalId") UUID hospitalId,
+                        @Param("zones") Collection<EdZone> zones,
+                        Pageable pageable);
 }

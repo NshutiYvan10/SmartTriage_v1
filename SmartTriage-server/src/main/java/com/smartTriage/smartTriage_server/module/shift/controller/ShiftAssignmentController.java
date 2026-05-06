@@ -5,15 +5,18 @@ import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.module.shift.dto.CreateShiftAssignmentRequest;
 import com.smartTriage.smartTriage_server.module.shift.dto.ShiftAssignmentResponse;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -69,6 +72,49 @@ public class ShiftAssignmentController {
         return ResponseEntity.ok(ApiResponse.success(Map.of(
                 "shiftDate", ShiftAssignmentService.getCurrentShiftDate().toString(),
                 "shiftPeriod", ShiftAssignmentService.getCurrentShiftPeriod().name())));
+    }
+
+    /**
+     * Phase 1 — return the authenticated user's currently-active shift
+     * assignment, or an empty payload when they have none. Drives the
+     * frontend's zone-scoped patient list:
+     * <ul>
+     *   <li>{@code zone} non-null → user sees only that zone's patients</li>
+     *   <li>{@code shiftLead = true} → user sees all zones (charge
+     *       nurse / shift lead has cross-zone visibility)</li>
+     *   <li>empty payload → user has no active shift; frontend falls
+     *       back to "patients I'm primary clinician on" only</li>
+     * </ul>
+     *
+     * <p>The endpoint resolves the user from the security context, so
+     * no path / query param is needed. Returns
+     * {@code {assignment: null}} when there's no active assignment
+     * for today's shift period rather than 404 — empty is a valid
+     * state (off-shift) and the frontend wants to render gracefully.
+     */
+    @GetMapping("/me/current")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getMyCurrentShift() {
+        User user = currentUser();
+        if (user == null) {
+            return ResponseEntity.ok(ApiResponse.success(
+                    Map.of("assignment", "")));
+        }
+        Optional<ShiftAssignmentResponse> assignment =
+                shiftAssignmentService.getCurrentShiftForUser(user.getId());
+        return ResponseEntity.ok(ApiResponse.success(
+                assignment.<Map<String, Object>>map(a -> Map.of("assignment", (Object) a))
+                        .orElseGet(() -> Map.of("assignment", ""))));
+    }
+
+    /** Resolves the User from the JWT-authenticated principal. */
+    private User currentUser() {
+        try {
+            Object principal = SecurityContextHolder.getContext()
+                    .getAuthentication().getPrincipal();
+            return principal instanceof User u ? u : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**

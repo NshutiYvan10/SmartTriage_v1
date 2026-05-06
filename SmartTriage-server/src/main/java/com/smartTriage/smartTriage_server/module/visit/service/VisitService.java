@@ -2,7 +2,6 @@ package com.smartTriage.smartTriage_server.module.visit.service;
 
 import com.smartTriage.smartTriage_server.common.enums.DispositionType;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
-import com.smartTriage.smartTriage_server.common.enums.TriageCategory;
 import com.smartTriage.smartTriage_server.common.enums.VisitStatus;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.bed.service.BedService;
@@ -126,30 +125,37 @@ public class VisitService {
     // ====================================================================
 
     /**
-     * Get active visits whose triage category maps to a given ED zone.
+     * Get active visits whose canonical zone equals the given zone.
      * Used by doctors to see only patients in their assigned zone.
+     *
+     * <p>Phase 1 of the zone-routing workflow — reads
+     * {@code visits.current_ed_zone} directly rather than deriving
+     * from triage category. This honours per-hospital configuration
+     * (peds resus, ambulatory zone) and supports the AMBULATORY +
+     * PEDIATRIC zones that the previous category-mapping couldn't.
      */
     public List<VisitResponse> getVisitsByZone(UUID hospitalId, EdZone zone) {
-        List<TriageCategory> categories = getTriageCategoriesForZone(zone);
-        if (categories.isEmpty())
-            return List.of();
-        return visitRepository.findActiveVisitsByTriageCategories(hospitalId, categories)
+        return visitRepository.findActiveVisitsInZones(
+                hospitalId, java.util.List.of(zone),
+                org.springframework.data.domain.PageRequest.of(0, 200))
                 .stream()
                 .map(VisitMapper::toResponse)
                 .collect(Collectors.toList());
     }
 
     /**
-     * Map an ED zone back to the triage categories it covers.
-     * Inverse of EdZone.fromTriageCategory().
+     * Phase 1 zone-scoped list with multiple zones at once. Used by
+     * shifts that cover more than one zone (e.g. doctor covering
+     * GENERAL + AMBULATORY) and by Phase 2 to surface
+     * pending-transfer-into patients alongside the home zone's list.
      */
-    private List<TriageCategory> getTriageCategoriesForZone(EdZone zone) {
-        return switch (zone) {
-            case RESUS -> List.of(TriageCategory.RED);
-            case ACUTE -> List.of(TriageCategory.ORANGE);
-            case GENERAL -> List.of(TriageCategory.YELLOW, TriageCategory.GREEN, TriageCategory.BLUE);
-            default -> List.of(); // TRIAGE, OBSERVATION, ISOLATION, PEDIATRIC — no category mapping
-        };
+    public Page<VisitResponse> getVisitsInZones(
+            UUID hospitalId, java.util.Collection<EdZone> zones, Pageable pageable) {
+        if (zones == null || zones.isEmpty()) {
+            return org.springframework.data.domain.Page.empty(pageable);
+        }
+        return visitRepository.findActiveVisitsInZones(hospitalId, zones, pageable)
+                .map(VisitMapper::toResponse);
     }
 
     // ====================================================================

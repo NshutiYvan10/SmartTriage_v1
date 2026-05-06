@@ -8,7 +8,7 @@ public final class VisitMapper {
     private VisitMapper() {}
 
     public static VisitResponse toResponse(Visit visit) {
-        return VisitResponse.builder()
+        VisitResponse.VisitResponseBuilder b = VisitResponse.builder()
                 .id(visit.getId())
                 .visitNumber(visit.getVisitNumber())
                 .patientId(visit.getPatient().getId())
@@ -28,8 +28,15 @@ public final class VisitMapper {
                 .referringFacility(visit.getReferringFacility())
                 .isPediatric(visit.isPediatric())
                 .retriageCount(visit.getRetriageCount())
+                .currentEdZone(visit.getCurrentEdZone())
                 .createdAt(visit.getCreatedAt())
-                .updatedAt(visit.getUpdatedAt())
-                .build();
+                .updatedAt(visit.getUpdatedAt());
+        if (visit.getPrimaryClinician() != null) {
+            b.primaryClinicianId(visit.getPrimaryClinician().getId())
+                    .primaryClinicianName(
+                            visit.getPrimaryClinician().getFirstName() + " "
+                                    + visit.getPrimaryClinician().getLastName());
+        }
+        return b.build();
     }
 }

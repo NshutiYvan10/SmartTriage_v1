@@ -65,7 +65,7 @@ export type DeviceStatus = 'REGISTERED' | 'ONLINE' | 'OFFLINE' | 'MONITORING' | 
 export type SignalQuality = 'GOOD' | 'ACCEPTABLE' | 'POOR' | 'INVALID' | 'UNKNOWN';
 export type AlertSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
 export type AlertType = 'TEWS_CRITICAL' | 'TEWS_ESCALATION' | 'VITAL_SIGN_ABNORMAL' | 'RETRIAGE_REQUIRED' | 'WAITING_TIME_EXCEEDED' | 'DETERIORATION_DETECTED' | 'SEPSIS_SCREENING' | 'PEDIATRIC_SAFETY' | 'REASSESSMENT_DUE' | 'CRITICAL_LAB_RESULT' | 'IOT_DEVICE_DISCONNECTED' | 'IOT_DEVICE_LOW_BATTERY' | 'IOT_SIGNAL_QUALITY_DEGRADED' | 'IOT_AUTO_RETRIAGE' | 'DOCTOR_NOTIFICATION' | 'DOCTOR_ESCALATION' | 'SURGE_WARNING' | 'INVESTIGATION_RESULTED' | 'MEDICATION_SAFETY_WARNING';
-export type EdZone = 'RESUS' | 'ACUTE' | 'GENERAL' | 'TRIAGE' | 'OBSERVATION' | 'ISOLATION' | 'PEDIATRIC';
+export type EdZone = 'RESUS' | 'ACUTE' | 'GENERAL' | 'AMBULATORY' | 'TRIAGE' | 'OBSERVATION' | 'ISOLATION' | 'PEDIATRIC';
 export type ShiftPeriod = 'DAY' | 'NIGHT';
 export type ShiftFunction = 'CHARGE_NURSE' | 'TRIAGE_NURSE' | 'ZONE_NURSE' | 'PRIMARY_DOCTOR' | 'SUPERVISING_DOCTOR' | 'RESIDENT';
 export type Designation =
@@ -368,6 +368,11 @@ export interface VisitResponse {
   referringFacility: string | null;
   isPediatric: boolean;
   retriageCount: number;
+  /** Phase 1 zone routing — canonical zone the patient is currently in. */
+  currentEdZone: EdZone | null;
+  /** Doctor of record (soft binding); null until first clinical action. */
+  primaryClinicianId: string | null;
+  primaryClinicianName: string | null;
   createdAt: string;
   updatedAt: string;
 }

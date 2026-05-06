@@ -36,6 +36,11 @@ public class VisitResponse {
     @JsonProperty("isPediatric")
     private boolean isPediatric;
     private int retriageCount;
+    /** Phase 1 zone routing — canonical zone the patient is currently in. */
+    private EdZone currentEdZone;
+    /** Doctor of record (soft binding); null until first clinical action. */
+    private UUID primaryClinicianId;
+    private String primaryClinicianName;
     private Instant createdAt;
     private Instant updatedAt;
 }

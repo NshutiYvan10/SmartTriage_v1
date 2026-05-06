@@ -56,4 +56,19 @@ public class Hospital extends BaseEntity {
 
     @Column(name = "icu_capacity")
     private Integer icuCapacity;
+
+    /**
+     * True when this hospital has full resuscitation capability inside
+     * its dedicated PEDIATRIC zone (defibrillator, paeds drug calcs,
+     * full ETT range, etc.). Affects how RED pediatric patients are
+     * routed: when true, they go to PEDIATRIC; when false (the default
+     * for most facilities), they go to the main RESUS zone — the
+     * conservative direction.
+     *
+     * <p>See {@link com.smartTriage.smartTriage_server.common.enums.EdZone#forPatientPlacement}
+     * for the full placement decision matrix.
+     */
+    @Column(name = "has_pediatric_resus", nullable = false)
+    @Builder.Default
+    private boolean hasPediatricResus = false;
 }

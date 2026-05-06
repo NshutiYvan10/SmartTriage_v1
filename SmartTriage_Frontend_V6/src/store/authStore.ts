@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import type { UserRole } from '@/types/roles';
 import { authApi } from '@/api/auth';
+import { shiftApi } from '@/api/shifts';
 import { setTokens, clearTokens, restoreTokens } from '@/api/client';
-import type { AuthResponse, Role } from '@/api/types';
+import type { AuthResponse, EdZone, Role } from '@/api/types';
 
 export interface AuthUser {
   id: string;
@@ -15,6 +16,17 @@ export interface AuthUser {
   department?: string;
   hospital?: string;
   hospitalId?: string;
+  /**
+   * Phase 1 zone routing — the user's current shift assignment.
+   * Resolved from /shifts/me/current after login or session restore;
+   * null when the user is off-shift. The zone-scoped patient list
+   * uses these to decide what to show.
+   */
+  currentZone?: EdZone | null;
+  /** True when this user holds the shift-lead badge — cross-zone visibility. */
+  isShiftLead?: boolean;
+  /** True when the user has an active shift assignment of any kind. */
+  isOnShift?: boolean;
 }
 
 interface AuthState {
@@ -37,6 +49,14 @@ interface AuthState {
   restoreSession: () => void;
   /** Clear error */
   clearError: () => void;
+  /**
+   * Phase 1 zone routing — refresh the user's current shift assignment
+   * from /shifts/me/current. Called automatically after successful
+   * login and on session restore; can be called manually when the
+   * user thinks their shift may have changed (e.g. after a charge
+   * nurse re-assignment).
+   */
+  refreshCurrentShift: () => Promise<void>;
 }
 
 /** Map backend Role to frontend UserRole */
@@ -190,6 +210,11 @@ export const useAuthStore = create<AuthState>((set, get) => {
         localStorage.setItem('st-auth-user', JSON.stringify(user));
         localStorage.setItem('st-active-role', user.role);
         set({ user, isLoading: false, error: null });
+        // Phase 1 — pull the user's current shift assignment so the
+        // patient list can render in zone-scoped mode immediately.
+        // Best-effort: a failed shift fetch logs but doesn't block
+        // login (off-shift users still need to use the app).
+        get().refreshCurrentShift().catch(() => {});
         return true;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Login failed';
@@ -229,6 +254,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
         try {
           const user = JSON.parse(storedUser);
           set({ user });
+          // Refresh the shift assignment after restoring — the cached
+          // user's zone may be stale (shift changed since the tab was
+          // last open).
+          get().refreshCurrentShift().catch(() => {});
         } catch {
           // Ignore parse errors
         }
@@ -236,6 +265,37 @@ export const useAuthStore = create<AuthState>((set, get) => {
     },
 
     clearError: () => set({ error: null }),
+
+    refreshCurrentShift: async () => {
+      const currentUser = get().user;
+      if (!currentUser) return;
+      try {
+        const { assignment } = await shiftApi.getMyCurrent();
+        // Backend sentinel: '' or null means "no active shift". Treat
+        // both identically — user is off-shift.
+        if (!assignment) {
+          const updated: AuthUser = {
+            ...currentUser,
+            currentZone: null,
+            isShiftLead: false,
+            isOnShift: false,
+          };
+          localStorage.setItem('st-auth-user', JSON.stringify(updated));
+          set({ user: updated });
+          return;
+        }
+        const updated: AuthUser = {
+          ...currentUser,
+          currentZone: (assignment.zone as EdZone) ?? null,
+          isShiftLead: !!assignment.isShiftLead,
+          isOnShift: true,
+        };
+        localStorage.setItem('st-auth-user', JSON.stringify(updated));
+        set({ user: updated });
+      } catch (err) {
+        console.warn('[auth] failed to refresh current shift', err);
+      }
+    },
   };
 });
 

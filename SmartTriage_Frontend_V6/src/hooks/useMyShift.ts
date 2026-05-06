@@ -1,61 +1,70 @@
 /**
- * useMyShift – Returns the current user's active shift assignment.
- * Used to determine which ED zone the user is assigned to,
- * so the Dashboard can filter patients and subscribe to zone alerts.
+ * useMyShift – returns the current user's active shift assignment.
+ *
+ * Phase 1 zone routing: now reads from /shifts/me/current (which only
+ * returns the authenticated user's own assignment) rather than
+ * fetching every shift at the hospital and filtering client-side.
+ *
+ * The auth store also caches `currentZone` + `isShiftLead` on the
+ * AuthUser after each shift refresh; this hook surfaces them with
+ * a stable shape and a manual refresh entry point.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { shiftApi } from '@/api/shifts';
 import type { ShiftAssignmentResponse, EdZone } from '@/api/types';
 
 interface MyShiftInfo {
-  /** The zone the current user is assigned to, or null if not on shift */
+  /** The zone the current user is assigned to, or null if off-shift. */
   zone: EdZone | null;
-  /** Full shift assignment details */
+  /** True when this user holds the shift-lead badge — cross-zone visibility. */
+  isShiftLead: boolean;
+  /** True when there is any active shift assignment for this user. */
+  isOnShift: boolean;
+  /** Full shift assignment details (null when off-shift). */
   assignment: ShiftAssignmentResponse | null;
-  /** All shift assignments for the current period (useful for zone lookup) */
-  allAssignments: ShiftAssignmentResponse[];
-  /** Whether the data is still loading */
+  /** Whether the initial fetch is still in flight. */
   isLoading: boolean;
-  /** Refresh shift data */
+  /** Manual refresh — call after a charge nurse re-assigns the user. */
   refresh: () => Promise<void>;
 }
 
 export function useMyShift(): MyShiftInfo {
   const user = useAuthStore((s) => s.user);
+  const refreshAuthShift = useAuthStore((s) => s.refreshCurrentShift);
   const [assignment, setAssignment] = useState<ShiftAssignmentResponse | null>(null);
-  const [allAssignments, setAllAssignments] = useState<ShiftAssignmentResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchShift = async () => {
-    if (!user?.hospitalId) {
+  const fetchShift = useCallback(async () => {
+    if (!user?.id) {
       setIsLoading(false);
       return;
     }
-
+    setIsLoading(true);
     try {
-      const hospitalId = user.hospitalId || 'a0000000-0000-0000-0000-000000000001';
-      const assignments = await shiftApi.getCurrentShift(hospitalId);
-      setAllAssignments(assignments);
-
-      // Find the current user's assignment
-      const mine = assignments.find((a) => a.userId === user.id && a.active);
-      setAssignment(mine || null);
+      const { assignment: a } = await shiftApi.getMyCurrent();
+      // Backend sentinel: '' or null means "no active shift".
+      setAssignment(a ? (a as ShiftAssignmentResponse) : null);
+      // Also push the result into the auth store so other components
+      // reading user.currentZone / user.isShiftLead stay consistent.
+      await refreshAuthShift();
     } catch (err) {
       console.error('[useMyShift] Failed to fetch shift:', err);
+      setAssignment(null);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user?.id, refreshAuthShift]);
 
   useEffect(() => {
     fetchShift();
-  }, [user?.id, user?.hospitalId]);
+  }, [fetchShift]);
 
   return {
-    zone: assignment?.zone || null,
+    zone: assignment?.zone ?? null,
+    isShiftLead: !!assignment?.isShiftLead,
+    isOnShift: !!assignment,
     assignment,
-    allAssignments,
     isLoading,
     refresh: fetchShift,
   };
@@ -63,7 +72,10 @@ export function useMyShift(): MyShiftInfo {
 
 /**
  * Utility: derive the ED zone from a triage category.
- * Mirrors the backend EdZone.fromTriageCategory() logic.
+ * Mirrors the backend EdZone.fromTriageCategory() simple mapping.
+ * Patient-placement decisions use a richer mapping server-side
+ * (per-hospital peds resus + ambulatory zone configuration); this
+ * helper is for label-rendering only.
  */
 export function getZoneForCategory(category: string | undefined): EdZone | null {
   switch (category) {

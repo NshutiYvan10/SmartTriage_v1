@@ -106,4 +106,32 @@ public class Visit extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "current_bed_id")
     private Bed currentBed;
+
+    /**
+     * Canonical zone the patient is currently in. Stored explicitly
+     * (rather than derived from category at every read) so the
+     * doctor-side question "show me only the patients in my zone"
+     * is a simple filter on this column.
+     *
+     * <p>Set on triage from
+     * {@link com.smartTriage.smartTriage_server.common.enums.EdZone#forPatientPlacement}
+     * and updated on system-triggered re-triage. Phase 2 of the
+     * zone workflow gates inter-zone moves behind nurse acceptance
+     * via the {@code ZoneTransfer} state machine; until that lands,
+     * auto re-triage updates this field directly.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "current_ed_zone", length = 20)
+    private com.smartTriage.smartTriage_server.common.enums.EdZone currentEdZone;
+
+    /**
+     * The doctor of record for this visit — soft binding for
+     * accountability and handover. NULL until the first clinical
+     * action by a doctor. A second doctor acting on the patient
+     * doesn't change the primary; explicit transfer happens via
+     * the handover flow or a manual transfer-of-care action.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "primary_clinician_id")
+    private com.smartTriage.smartTriage_server.module.user.entity.User primaryClinician;
 }

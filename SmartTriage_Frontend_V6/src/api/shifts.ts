@@ -52,4 +52,15 @@ export const shiftApi = {
    */
   transferShiftLead: (assignmentId: string) =>
     post<ShiftAssignmentResponse>(`/shifts/${assignmentId}/shift-lead`, {}),
+
+  /**
+   * Phase 1 zone routing — fetch the authenticated user's current
+   * shift assignment. Returns `{assignment: null}` when the user is
+   * off-shift (which the helper coerces to null-valued when the
+   * backend sends an empty string sentinel). The frontend's auth
+   * store calls this on login and on shift change to derive the
+   * user's currently-assigned zone + shift-lead status.
+   */
+  getMyCurrent: () =>
+    get<{ assignment: ShiftAssignmentResponse | null | '' }>('/shifts/me/current'),
 };
