@@ -597,7 +597,11 @@ export function ConstantMonitoring() {
         </div>
 
         {/* ── Monitoring Showcase ── */}
-        <MonitoringShowcase allPatients={patients} onNavigate={(id) => navigate(`/vitals/${id}`)} />
+        {/* Showcase navigates straight into the unified visit chart (Monitor tab).
+            Old destination was the standalone /vitals/:id page, which has been
+            folded into VisitDetailPage so doctors don't flip between two screens
+            for the same patient. */}
+        <MonitoringShowcase allPatients={patients} onNavigate={(id) => navigate(`/visit/${id}?tab=monitor`)} />
 
         {/* ── Inline Glass Search & Filters ── */}
         <div
@@ -1192,11 +1196,15 @@ export function ConstantMonitoring() {
                               );
                             })()}
 
-                            {/* Action Button */}
+                            {/* Action Button — opens the unified visit chart on the
+                                Monitor tab. Replaces the legacy /vitals/:id page so
+                                the doctor lands inside the patient's full chart
+                                (vitals, orders, notes, alerts, devices) rather than
+                                a vitals-only silo. */}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/vitals/${patient.id}`);
+                                navigate(`/visit/${patient.id}?tab=monitor`);
                               }}
                               className="w-full bg-gradient-to-r from-slate-800 to-slate-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2 shadow-md"
                             >

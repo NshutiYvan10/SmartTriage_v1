@@ -77,11 +77,16 @@ interface PatientState {
   patients: Patient[];
   isLoading: boolean;
   addPatient: (patient: Omit<Patient, 'id' | 'arrivalTimestamp' | 'isPediatric' | 'triageStatus' | 'aiAlerts' | 'overrideHistory' | 'registrationCompletedAt'>) => Patient;
-  /** Register patient + create visit via API, then add to local store */
+  /** Register patient + create visit via API, then add to local store.
+   *  All fields the registration form captures must flow through here —
+   *  silently dropping allergies / chronic conditions / blood type at this
+   *  layer is exactly what caused the doctor's chart to look empty. */
   registerPatientApi: (data: {
     firstName: string; lastName: string; dateOfBirth?: string;
     gender: string; nationalId?: string; phoneNumber?: string;
     address?: string; emergencyContactName?: string; emergencyContactPhone?: string;
+    guardianName?: string; guardianPhone?: string; guardianRelationship?: string; guardianNationalId?: string;
+    bloodType?: string; knownAllergies?: string; chronicConditions?: string;
     chiefComplaint?: string; arrivalMode?: string; hospitalId: string;
   }) => Promise<Patient | null>;
   /** Fetch active visits from backend and populate patient store */
@@ -149,7 +154,10 @@ export const usePatientStore = create<PatientState>((set, get) => ({
   /** Register patient + create visit via single atomic API call */
   registerPatientApi: async (data) => {
     try {
-      // Single atomic call — creates both patient + visit in one transaction
+      // Single atomic call — creates both patient + visit in one transaction.
+      // Every field the form collects is forwarded; do NOT silently drop
+      // allergies / chronic conditions / blood type / guardian here, or the
+      // doctor's chart will look empty for data the nurse just entered.
       const result = await patientApi.register({
         firstName: data.firstName,
         lastName: data.lastName,
@@ -160,6 +168,13 @@ export const usePatientStore = create<PatientState>((set, get) => ({
         address: data.address,
         emergencyContactName: data.emergencyContactName,
         emergencyContactPhone: data.emergencyContactPhone,
+        guardianName: data.guardianName,
+        guardianPhone: data.guardianPhone,
+        guardianRelationship: data.guardianRelationship,
+        guardianNationalId: data.guardianNationalId,
+        bloodType: data.bloodType,
+        knownAllergies: data.knownAllergies,
+        chronicConditions: data.chronicConditions,
         chiefComplaint: data.chiefComplaint || '',
         arrivalMode: (data.arrivalMode as any) || 'WALK_IN',
         hospitalId: data.hospitalId,

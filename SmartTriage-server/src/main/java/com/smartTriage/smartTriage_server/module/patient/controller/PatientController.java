@@ -5,6 +5,9 @@ import com.smartTriage.smartTriage_server.module.patient.dto.CreatePatientReques
 import com.smartTriage.smartTriage_server.module.patient.dto.PatientResponse;
 import com.smartTriage.smartTriage_server.module.patient.dto.RegisterPatientRequest;
 import com.smartTriage.smartTriage_server.module.patient.dto.RegisterPatientResponse;
+import com.smartTriage.smartTriage_server.module.patient.dto.UpdatePregnancyStatusRequest;
+import com.smartTriage.smartTriage_server.module.patient.dto.UpdateAllergiesRequest;
+import com.smartTriage.smartTriage_server.module.patient.dto.UpdateChronicConditionsRequest;
 import com.smartTriage.smartTriage_server.module.patient.service.PatientService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -72,5 +75,44 @@ public class PatientController {
             @PageableDefault(size = 20) Pageable pageable) {
         Page<PatientResponse> response = patientService.searchPatients(hospitalId, query, pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    /**
+     * Update pregnancy status — clinical-safety lever for teratogen checks.
+     * Not available to REGISTRAR (non-clinical role).
+     */
+    @PatchMapping("/{id}/pregnancy-status")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'TRIAGE_NURSE', 'DOCTOR')")
+    public ResponseEntity<ApiResponse<PatientResponse>> updatePregnancyStatus(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdatePregnancyStatusRequest request) {
+        PatientResponse response = patientService.updatePregnancyStatus(id, request.getPregnancyStatus());
+        return ResponseEntity.ok(ApiResponse.success("Pregnancy status updated", response));
+    }
+
+    /**
+     * Update the patient's free-text known allergies. Drives the medication
+     * safety engine's cross-reactivity check on every prescribe — a stale
+     * or missing allergy here is a real safety risk, which is why mid-visit
+     * edit needs to be possible. REGISTRAR is excluded; updating allergies
+     * is a clinical decision.
+     */
+    @PatchMapping("/{id}/allergies")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'TRIAGE_NURSE', 'DOCTOR')")
+    public ResponseEntity<ApiResponse<PatientResponse>> updateAllergies(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateAllergiesRequest request) {
+        PatientResponse response = patientService.updateKnownAllergies(id, request.getKnownAllergies());
+        return ResponseEntity.ok(ApiResponse.success("Allergies updated", response));
+    }
+
+    /** Update the patient's free-text chronic conditions. */
+    @PatchMapping("/{id}/chronic-conditions")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'TRIAGE_NURSE', 'DOCTOR')")
+    public ResponseEntity<ApiResponse<PatientResponse>> updateChronicConditions(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateChronicConditionsRequest request) {
+        PatientResponse response = patientService.updateChronicConditions(id, request.getChronicConditions());
+        return ResponseEntity.ok(ApiResponse.success("Chronic conditions updated", response));
     }
 }

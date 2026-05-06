@@ -3,6 +3,7 @@ package com.smartTriage.smartTriage_server.module.bed.service;
 import com.smartTriage.smartTriage_server.common.enums.BedStatus;
 import com.smartTriage.smartTriage_server.common.enums.DeviceStatus;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
+import com.smartTriage.smartTriage_server.common.enums.TriageCategory;
 import com.smartTriage.smartTriage_server.common.enums.VisitStatus;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.DuplicateResourceException;
@@ -36,6 +37,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -703,5 +705,193 @@ public class BedService {
         } catch (Exception e) {
             log.warn("Failed to publish bed change for {}: {}", bed.getCode(), e.getMessage());
         }
+    }
+
+    // ====================================================================
+    // SEED DEFAULTS  (Phase G #4 + #5)
+    // ====================================================================
+
+    /**
+     * Result of a seed run — surfaced to the admin UI so the empty-state
+     * button can show "Seeded 11 beds across 5 zones" or "Seeded 4 beds
+     * (skipped 3 zones that already had beds)".
+     */
+    public record SeedResult(
+            int bedsCreated,
+            List<EdZone> zonesSeeded,
+            List<EdZone> zonesSkipped,
+            String tierUsed
+    ) {}
+
+    /**
+     * Seed the default bed inventory for a hospital, keyed by the hospital's
+     * tier string ({@link BedDefaultsConfig#normalise}). <b>Idempotent
+     * per-zone</b>: if a zone already has any beds, it is skipped entirely
+     * (see Phase G design note). This protects manual admin edits — a
+     * Charge Nurse who deleted a bed because it's structurally unusable
+     * doesn't have it silently regenerated when a teammate hits "Seed
+     * defaults" or when the hospital was just re-saved.
+     *
+     * <p>Called from two places:
+     * <ul>
+     *   <li>{@code HospitalService.createHospital} — auto-seed on create
+     *       so newly-onboarded hospitals don't sit at zero beds and break
+     *       triage placement.</li>
+     *   <li>{@code POST /api/v1/beds/hospital/{id}/seed-defaults} — admin
+     *       backfill for any hospital that pre-dates the auto-seed (e.g.
+     *       hospitals created post-V18 but before this code shipped) or
+     *       had its tier corrected.</li>
+     * </ul>
+     *
+     * <p>Wrapped at the call-site (HospitalService) in try/catch so a seed
+     * failure doesn't roll back hospital creation — the hospital still
+     * persists and the admin can retry via the backfill endpoint.
+     */
+    @Transactional
+    public SeedResult seedDefaultBedsForHospital(UUID hospitalId) {
+        Hospital hospital = hospitalService.findHospitalOrThrow(hospitalId);
+        String tier = hospital.getTier();
+        BedDefaultsConfig.Tier resolvedTier = BedDefaultsConfig.normalise(tier);
+        List<BedDefaultsConfig.ZoneDefault> defaults =
+                BedDefaultsConfig.defaultsForTier(tier);
+
+        int totalCreated = 0;
+        List<EdZone> seeded = new ArrayList<>();
+        List<EdZone> skipped = new ArrayList<>();
+
+        for (BedDefaultsConfig.ZoneDefault def : defaults) {
+            // Idempotency guard: any beds in this zone → leave it alone.
+            // Treats the admin's count as authoritative once they've
+            // touched a zone. Top-up logic (insert until target) was
+            // explicitly rejected in Phase G design — too easy to undo a
+            // deliberate manual deletion.
+            long existing = bedRepository
+                    .countByHospitalIdAndZoneAndIsActiveTrue(hospitalId, def.zone());
+            if (existing > 0) {
+                skipped.add(def.zone());
+                continue;
+            }
+
+            String codePrefix = BedDefaultsConfig.codePrefixFor(def.zone());
+            String labelPrefix = BedDefaultsConfig.labelPrefixFor(def.zone());
+
+            for (int i = 1; i <= def.count(); i++) {
+                String code = codePrefix + i;
+                String label = labelPrefix + " " + i;
+
+                // Defensive: if for some reason the (hospital, code) pair
+                // already exists from a partial historical seed (e.g. V18
+                // populated before tier matched), skip that one bed rather
+                // than fail the whole batch with DuplicateResourceException.
+                if (bedRepository.findByHospitalIdAndCodeAndIsActiveTrue(hospitalId, code).isPresent()) {
+                    log.warn("[bedseed] Hospital {} already has bed {} — skipping",
+                            hospitalId, code);
+                    continue;
+                }
+
+                Bed bed = Bed.builder()
+                        .hospital(hospital)
+                        .zone(def.zone())
+                        .code(code)
+                        .label(label)
+                        .status(BedStatus.AVAILABLE)
+                        .hasMonitor(def.hasMonitor())
+                        .displayOrder(i)
+                        .build();
+                bed = bedRepository.save(bed);
+                publishBedChange(bed, "CREATED");
+                totalCreated++;
+            }
+            seeded.add(def.zone());
+        }
+
+        log.info("[bedseed] Hospital {} ({} tier → {}): created {} beds across {} zones, skipped {}",
+                hospital.getHospitalCode(), tier, resolvedTier,
+                totalCreated, seeded.size(), skipped.size());
+
+        return new SeedResult(totalCreated, seeded, skipped, resolvedTier.name());
+    }
+
+    // ====================================================================
+    // BED SUGGESTION  (Phase G #2)
+    // ====================================================================
+
+    /**
+     * Suggest an available bed for a triaged visit. Returns
+     * {@code Optional.empty()} when no suitable bed exists (zone full, or
+     * the category doesn't route to a bed-bearing zone — YELLOW/GREEN
+     * adults flow through GENERAL which is bed-less by design).
+     *
+     * <p>Routing rules (Phase G design — there is no separate
+     * ZoneRoutingService in this codebase, so the rules live here):
+     * <ul>
+     *   <li>RED → RESUS (life-threat overrides age)</li>
+     *   <li>ORANGE → PEDIATRIC if visit.isPediatric, else ACUTE</li>
+     *   <li>YELLOW → PEDIATRIC if visit.isPediatric, else no suggestion
+     *       (YELLOW adults go to GENERAL which has no beds in the V18
+     *       data model)</li>
+     *   <li>GREEN → no suggestion (ambulatory)</li>
+     *   <li>BLUE → no suggestion (DOA)</li>
+     *   <li>null category → no suggestion (visit not yet triaged)</li>
+     * </ul>
+     *
+     * <p>Within the chosen zone, available beds are returned in
+     * {@code displayOrder ASC}. For RED and ORANGE, the suggestion
+     * <em>prefers</em> a bed with {@code hasMonitor=true} when one is
+     * available; if all monitored beds are taken, it falls back to the
+     * first available bed in the zone rather than returning empty —
+     * placement in any RESUS/ACUTE bed beats no placement.
+     *
+     * <p>Failure-mode: if RED returns empty, that's a surge signal worth
+     * logging (the surge dashboard already covers ED-wide capacity, so
+     * no separate alert here, but the audit trace shows what the system
+     * showed the nurse).
+     */
+    public Optional<Bed> suggestBedForVisit(UUID visitId) {
+        Visit visit = visitRepository.findByIdAndIsActiveTrue(visitId).orElse(null);
+        if (visit == null) return Optional.empty();
+
+        TriageCategory category = visit.getCurrentTriageCategory();
+        if (category == null) return Optional.empty();
+
+        EdZone targetZone = pickTargetZone(category, visit.isPediatric());
+        if (targetZone == null) return Optional.empty();
+
+        UUID hospitalId = visit.getHospital().getId();
+        List<Bed> available = bedRepository.findAvailableInZone(hospitalId, targetZone);
+        if (available.isEmpty()) {
+            if (category == TriageCategory.RED) {
+                log.warn("[bedsuggest] No available beds in {} for RED visit {} — "
+                        + "manual placement required", targetZone, visit.getVisitNumber());
+            }
+            return Optional.empty();
+        }
+
+        // Prefer monitored beds for RED/ORANGE.
+        boolean preferMonitor = category == TriageCategory.RED || category == TriageCategory.ORANGE;
+        if (preferMonitor) {
+            Optional<Bed> monitored = available.stream()
+                    .filter(Bed::isHasMonitor)
+                    .findFirst();
+            if (monitored.isPresent()) return monitored;
+        }
+
+        // Fallback: first available in the zone (already sorted by displayOrder).
+        return Optional.of(available.get(0));
+    }
+
+    /**
+     * Resolve the destination zone for a triaged visit. Pure function;
+     * exposed package-private so tests (and the route layer, if added
+     * later) can verify the routing matrix without instantiating the full
+     * service.
+     */
+    static EdZone pickTargetZone(TriageCategory category, boolean isPediatric) {
+        return switch (category) {
+            case RED    -> EdZone.RESUS;
+            case ORANGE -> isPediatric ? EdZone.PEDIATRIC : EdZone.ACUTE;
+            case YELLOW -> isPediatric ? EdZone.PEDIATRIC : null;
+            case GREEN, BLUE -> null;
+        };
     }
 }

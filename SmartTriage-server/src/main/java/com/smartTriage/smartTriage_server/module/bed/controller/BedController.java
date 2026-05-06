@@ -188,6 +188,32 @@ public class BedController {
     }
 
     // ====================================================================
+    // SEED DEFAULTS (Phase G #4)
+    // ====================================================================
+
+    /**
+     * Backfill the default bed inventory for a hospital. Idempotent
+     * per-zone: zones that already have any beds are skipped. Used as
+     * recovery when a hospital pre-dates the auto-seed-on-create hook
+     * (created post-V18 but before Phase G shipped) or when the tier
+     * was corrected after creation.
+     *
+     * <p>Returns the seed result so the admin UI can show
+     * "Seeded N beds across M zones, skipped K zones already populated".
+     */
+    @PostMapping("/hospital/{hospitalId}/seed-defaults")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
+    public ResponseEntity<ApiResponse<BedService.SeedResult>> seedDefaults(
+            @PathVariable UUID hospitalId) {
+        BedService.SeedResult result = bedService.seedDefaultBedsForHospital(hospitalId);
+        String msg = result.bedsCreated() == 0
+                ? "No new beds seeded (all zones already populated)"
+                : "Seeded " + result.bedsCreated() + " beds across "
+                        + result.zonesSeeded().size() + " zone(s)";
+        return ResponseEntity.ok(ApiResponse.success(msg, result));
+    }
+
+    // ====================================================================
     // INTERNAL
     // ====================================================================
 

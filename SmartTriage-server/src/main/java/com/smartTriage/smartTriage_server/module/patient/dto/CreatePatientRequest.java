@@ -38,6 +38,13 @@ public class CreatePatientRequest {
     private String address;
     private String emergencyContactName;
     private String emergencyContactPhone;
+
+    /** Legal guardian — required for pediatric patients, NULL for adults. */
+    private String guardianName;
+    private String guardianPhone;
+    private String guardianRelationship;
+    private String guardianNationalId;
+
     private String bloodType;
     private String knownAllergies;
     private String chronicConditions;

@@ -5,6 +5,8 @@ import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundExcep
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
 import com.smartTriage.smartTriage_server.module.alert.service.AlertEscalationService;
+import com.smartTriage.smartTriage_server.module.bed.entity.Bed;
+import com.smartTriage.smartTriage_server.module.bed.service.BedService;
 import com.smartTriage.smartTriage_server.module.triage.dto.PerformTriageRequest;
 import com.smartTriage.smartTriage_server.module.triage.dto.TriageRecordResponse;
 import com.smartTriage.smartTriage_server.module.triage.engine.RwandaTriageDecisionEngine;
@@ -72,6 +74,8 @@ public class TriageService {
     private final RwandaPediatricTriageDecisionEngine pediatricDecisionEngine;
     private final RealTimeEventPublisher eventPublisher;
     private final AlertEscalationService alertEscalationService;
+    private final com.smartTriage.smartTriage_server.module.clinicalsigns.service.ClinicalSignService clinicalSignService;
+    private final BedService bedService;
 
     /**
      * Perform initial triage or manual re-triage on a visit.
@@ -332,7 +336,25 @@ public class TriageService {
                 visit.getVisitNumber(), category, tewsScore, decisionPath, isRetriage,
                 isPediatric ? "Child (3-12)" : "Adult (Over 12)");
 
-        return TriageRecordMapper.toResponse(record);
+        // Bootstrap the clinical-signs timeline. Each positive triage flag
+        // becomes a PRESENT, isBaseline=true event so the doctor's Clinical
+        // Signs tab opens populated rather than empty. Failure here is
+        // logged inside the service and never propagated — triage submission
+        // must not fail because of timeline bookkeeping.
+        clinicalSignService.recordBaselineFromTriage(record);
+
+        // Phase G #2 — bed suggestion. Compute against the freshly-saved
+        // visit so the response can offer the nurse a one-click placement.
+        // Failure or empty optional both result in null suggestion fields
+        // on the response, which the form treats as "no suggestion shown".
+        Bed suggestedBed = null;
+        try {
+            suggestedBed = bedService.suggestBedForVisit(visit.getId()).orElse(null);
+        } catch (Exception e) {
+            log.warn("Bed suggestion failed for visit {}: {}", visit.getVisitNumber(), e.getMessage());
+        }
+
+        return TriageRecordMapper.toResponse(record, suggestedBed);
     }
 
     /**

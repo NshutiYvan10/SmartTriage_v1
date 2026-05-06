@@ -56,6 +56,7 @@ export type Designation =
   | 'SENIOR_PARAMEDIC' | 'PARAMEDIC'
   | 'UNSPECIFIED';
 export type AccountStatus = 'PENDING_ACTIVATION' | 'ACTIVE' | 'DEACTIVATED';
+export type PregnancyStatus = 'PREGNANT' | 'BREASTFEEDING' | 'POSSIBLY_PREGNANT' | 'NOT_PREGNANT' | 'NOT_APPLICABLE' | 'UNKNOWN';
 
 // ── Auth ──
 
@@ -193,6 +194,11 @@ export interface CreatePatientRequest {
   address?: string;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
+  /** Legal guardian — required for pediatric patients, leave undefined for adults. */
+  guardianName?: string;
+  guardianPhone?: string;
+  guardianRelationship?: string;
+  guardianNationalId?: string;
   bloodType?: string;
   knownAllergies?: string;
   chronicConditions?: string;
@@ -223,9 +229,16 @@ export interface PatientResponse {
   address: string;
   emergencyContactName: string;
   emergencyContactPhone: string;
+  /** Legal guardian for pediatric patients; null for adults. */
+  guardianName: string | null;
+  guardianPhone: string | null;
+  guardianRelationship: string | null;
+  guardianNationalId: string | null;
   bloodType: string;
   knownAllergies: string;
   chronicConditions: string;
+  pregnancyStatus: PregnancyStatus | null;
+  pregnancyStatusRecordedAt: string | null;
   medicalRecordNumber: string;
   ageInYears: number;
   isPediatric: boolean;
@@ -478,6 +491,11 @@ export interface TriageRecordResponse {
   urgForeignBodyAspiration: boolean;
   presentingComplaints: string;
   clinicalNotes: string;
+  // General patient weight / height captured at triage. childWeightKg above
+  // is the pediatric-form-specific echo; weightKg is the canonical column
+  // on triage_records used for medication-safety pediatric mg/kg dosing.
+  weightKg: number | null;
+  heightCm: number | null;
   specialAcuteTrauma: boolean;
   specialSeizureHistory: boolean;
   specialAssaultAbuse: boolean;
@@ -495,7 +513,29 @@ export interface TriageRecordResponse {
   doctorNotifiedAt: string | null;
   attendingDoctorName: string | null;
   doctorAttendedAt: string | null;
+  // ── Bed Suggestion (Phase G #2) ──
+  // Populated only on the response from POST /triage (performTriage), so
+  // the form can show the nurse a "Place in suggested bed?" confirm. Null
+  // on subsequent reads (history, getLatest) — those return the stored
+  // record without re-running the suggestion engine.
+  suggestedBedId?: string | null;
+  suggestedBedCode?: string | null;
+  suggestedBedZone?: EdZone | null;
+  suggestedBedHasMonitor?: boolean;
   createdAt: string;
+}
+
+// ── Bed Seed Defaults (Phase G #4) ──
+
+/**
+ * Result returned by POST /api/v1/beds/hospital/{hospitalId}/seed-defaults.
+ * Mirrors BedService.SeedResult on the server.
+ */
+export interface SeedResult {
+  bedsCreated: number;
+  zonesSeeded: EdZone[];
+  zonesSkipped: EdZone[];
+  tierUsed: string;
 }
 
 // ── Clinical Notes ──

@@ -132,5 +132,15 @@ public class TriageRecordResponse {
     private String attendingDoctorName;
     private Instant doctorAttendedAt;
 
+    // --- Bed Suggestion (Phase G #2) ---
+    // Populated only on the response from POST /triage (performTriage), so
+    // the form can show the nurse a "Place in suggested bed?" confirm. Null
+    // on subsequent reads (history, getLatest) — those return the stored
+    // record without re-running the suggestion engine.
+    private UUID suggestedBedId;
+    private String suggestedBedCode;
+    private EdZone suggestedBedZone;
+    private boolean suggestedBedHasMonitor;
+
     private Instant createdAt;
 }

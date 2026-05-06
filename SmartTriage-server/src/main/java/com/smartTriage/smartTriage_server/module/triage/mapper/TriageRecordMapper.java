@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.triage.mapper;
 
+import com.smartTriage.smartTriage_server.module.bed.entity.Bed;
 import com.smartTriage.smartTriage_server.module.triage.dto.TriageRecordResponse;
 import com.smartTriage.smartTriage_server.module.triage.entity.TriageRecord;
 
@@ -11,6 +12,24 @@ import com.smartTriage.smartTriage_server.module.triage.entity.TriageRecord;
 public final class TriageRecordMapper {
 
     private TriageRecordMapper() {
+    }
+
+    /**
+     * Phase G #2 overload — also populate the bed-suggestion fields on the
+     * response. Pass {@code null} for {@code suggestedBed} when no suggestion
+     * is available (zone full, category doesn't route to a bed-bearing zone,
+     * or the engine wasn't invoked). Equivalent to {@link #toResponse(TriageRecord)}
+     * with the suggestion fields left at their default values.
+     */
+    public static TriageRecordResponse toResponse(TriageRecord r, Bed suggestedBed) {
+        TriageRecordResponse response = toResponse(r);
+        if (suggestedBed != null) {
+            response.setSuggestedBedId(suggestedBed.getId());
+            response.setSuggestedBedCode(suggestedBed.getCode());
+            response.setSuggestedBedZone(suggestedBed.getZone());
+            response.setSuggestedBedHasMonitor(suggestedBed.isHasMonitor());
+        }
+        return response;
     }
 
     public static TriageRecordResponse toResponse(TriageRecord r) {

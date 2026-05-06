@@ -31,6 +31,8 @@ public class DrugFormularyResponse {
     private Double pediatricMinDoseMgPerKg;
     private Double pediatricMaxDoseMgPerKg;
     private Double pediatricMaxDailyDoseMgPerKg;
+    /** Unit for the numeric dose ranges. See DrugFormulary.doseUnit. */
+    private String doseUnit;
     private Double geriatricAdjustmentPercent;
     private boolean renalAdjustmentRequired;
     private boolean hepaticAdjustmentRequired;

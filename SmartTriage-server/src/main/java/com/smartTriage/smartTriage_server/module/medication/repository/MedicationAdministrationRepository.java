@@ -4,6 +4,8 @@ import com.smartTriage.smartTriage_server.module.medication.entity.MedicationAdm
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -21,4 +23,18 @@ public interface MedicationAdministrationRepository extends JpaRepository<Medica
     Optional<MedicationAdministration> findByIdAndIsActiveTrue(UUID id);
 
     long countByVisitIdAndIsActiveTrue(UUID visitId);
+
+    /**
+     * Returns every active medication this patient has been prescribed across
+     * ALL their visits, newest first. Drives the doctor's "Reorder" affordance:
+     * one tap to copy a previous prescription's drugName/dose/route/frequency
+     * into the new order. Cancelled / refused / soft-deleted records are
+     * excluded by `is_active = true`.
+     *
+     * Joins through the visit because MedicationAdministration is visit-scoped.
+     */
+    @Query("SELECT m FROM MedicationAdministration m " +
+           "WHERE m.visit.patient.id = :patientId AND m.isActive = true " +
+           "ORDER BY m.prescribedAt DESC")
+    List<MedicationAdministration> findByPatientIdAcrossVisits(@Param("patientId") UUID patientId);
 }

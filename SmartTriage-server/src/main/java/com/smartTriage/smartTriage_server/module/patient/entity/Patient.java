@@ -2,10 +2,12 @@ package com.smartTriage.smartTriage_server.module.patient.entity;
 
 import com.smartTriage.smartTriage_server.common.entity.BaseEntity;
 import com.smartTriage.smartTriage_server.common.enums.Gender;
+import com.smartTriage.smartTriage_server.common.enums.PregnancyStatus;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
 import java.time.LocalDate;
 
 /**
@@ -62,6 +64,24 @@ public class Patient extends BaseEntity {
     @Column(name = "emergency_contact_phone", length = 20)
     private String emergencyContactPhone;
 
+    /**
+     * Legal guardian for pediatric patients. NULL for adults — see
+     * emergencyContactName/Phone for the adult primary contact. Captured
+     * at registration; affects consent, disposition, and child-protection
+     * escalation paths.
+     */
+    @Column(name = "guardian_name", length = 200)
+    private String guardianName;
+
+    @Column(name = "guardian_phone", length = 20)
+    private String guardianPhone;
+
+    @Column(name = "guardian_relationship", length = 50)
+    private String guardianRelationship;
+
+    @Column(name = "guardian_national_id", length = 30)
+    private String guardianNationalId;
+
     @Column(name = "blood_type", length = 5)
     private String bloodType;
 
@@ -70,6 +90,13 @@ public class Patient extends BaseEntity {
 
     @Column(name = "chronic_conditions", columnDefinition = "TEXT")
     private String chronicConditions;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pregnancy_status", length = 20)
+    private PregnancyStatus pregnancyStatus;
+
+    @Column(name = "pregnancy_status_recorded_at")
+    private Instant pregnancyStatusRecordedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "hospital_id", nullable = false)

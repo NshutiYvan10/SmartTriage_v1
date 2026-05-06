@@ -211,6 +211,19 @@ public class MedicationService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Patient-level medication history across every visit, newest first.
+     * Drives the doctor's "Reorder" affordance — one tap to copy an earlier
+     * prescription's drugName / dose / route / frequency into a new order.
+     */
+    public List<MedicationResponse> getMedicationHistoryForPatient(UUID patientId) {
+        return medicationRepository
+                .findByPatientIdAcrossVisits(patientId)
+                .stream()
+                .map(MedicationMapper::toResponse)
+                .collect(Collectors.toList());
+    }
+
     public MedicationResponse getMedication(UUID medicationId) {
         MedicationAdministration med = findMedicationOrThrow(medicationId);
         return MedicationMapper.toResponse(med);

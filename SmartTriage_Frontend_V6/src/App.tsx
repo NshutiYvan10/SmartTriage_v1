@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { RoleGuard } from './components/RoleGuard';
 import { Dashboard } from './modules/dashboard/Dashboard';
@@ -7,7 +7,17 @@ import { EntryRegistration } from './modules/entry/EntryRegistration';
 import { PediatricTriageForm } from './modules/triage/PediatricTriageForm';
 import { AdultTriageForm } from './modules/triage/AdultTriageForm';
 import { TriageQueue } from './modules/triage/TriageQueue';
-import { VitalMonitoring } from './modules/vitals/VitalMonitoring';
+// VitalMonitoring (the standalone /vitals/:patientId page) has been folded
+// into VisitDetailPage's "Monitor" tab so vitals + assessment + monitoring
+// live on a single chart. /vitals/:patientId and /monitoring/:patientId now
+// redirect to /visit/:patientId?tab=monitor so old deep links keep working.
+function LegacyVitalsRedirect() {
+  const { patientId } = useParams<{ patientId: string }>();
+  // The /vitals/:patientId route was historically called with a visitId
+  // (see VitalMonitoring's "patientId IS the visitId" comment), so the
+  // route param maps directly onto /visit/:visitId.
+  return <Navigate to={`/visit/${patientId}?tab=monitor`} replace />;
+}
 import { ConstantMonitoring } from './modules/monitoring/ConstantMonitoring';
 import { AlertsView } from './modules/alerts/AlertsView';
 import { ReportsView } from './modules/reports/ReportsView';
@@ -147,9 +157,15 @@ function AppContent() {
             <Route path="/adult-triage/:patientId" element={<RoleGuard page="triage"><AdultTriageForm /></RoleGuard>} />
             <Route path="/visit/:visitId" element={<RoleGuard page="triage"><VisitDetailPage /></RoleGuard>} />
             <Route path="/doctor-workspace" element={<RoleGuard page="triage"><DoctorWorkspace /></RoleGuard>} />
-            <Route path="/vitals/:patientId" element={<RoleGuard page="monitoring"><VitalMonitoring /></RoleGuard>} />
+            {/* Legacy routes — both pointed at the standalone VitalMonitoring page.
+                That page has been folded into VisitDetailPage's Monitor tab so a
+                doctor never has to flip between /visit and /vitals for the same
+                patient. RoleGuard intentionally omitted here: every role that
+                could access /vitals/:id (DOCTOR / NURSE / TRIAGE_NURSE) also has
+                access to /visit/:id, so the redirect can never lock anyone out. */}
+            <Route path="/vitals/:patientId" element={<LegacyVitalsRedirect />} />
             <Route path="/monitoring" element={<RoleGuard page="monitoring"><ConstantMonitoring /></RoleGuard>} />
-            <Route path="/monitoring/:patientId" element={<RoleGuard page="monitoring"><VitalMonitoring /></RoleGuard>} />
+            <Route path="/monitoring/:patientId" element={<LegacyVitalsRedirect />} />
             <Route path="/alerts" element={<RoleGuard page="alerts"><AlertsView /></RoleGuard>} />
             <Route path="/alert-dashboard" element={<RoleGuard page="alerts"><AlertDashboard /></RoleGuard>} />
             <Route path="/iot-devices" element={<RoleGuard page="iot-devices"><IoTDeviceManagement /></RoleGuard>} />

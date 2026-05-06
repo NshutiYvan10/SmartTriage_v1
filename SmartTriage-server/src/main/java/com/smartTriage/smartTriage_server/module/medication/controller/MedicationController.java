@@ -134,4 +134,17 @@ public class MedicationController {
         List<MedicationResponse> response = medicationService.getAllMedicationsForVisit(visitId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
+
+    /**
+     * Patient-level medication history — every active prescription this
+     * patient has had across all their visits, newest first. Drives the
+     * doctor's "Reorder" affordance in the prescribing UI.
+     */
+    @GetMapping("/patient/{patientId}/history")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    public ResponseEntity<ApiResponse<List<MedicationResponse>>> getPatientMedicationHistory(
+            @PathVariable UUID patientId) {
+        List<MedicationResponse> response = medicationService.getMedicationHistoryForPatient(patientId);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
 }

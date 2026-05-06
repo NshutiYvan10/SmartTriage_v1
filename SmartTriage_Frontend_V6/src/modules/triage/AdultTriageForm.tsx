@@ -4,7 +4,7 @@ import {
   AlertTriangle, AlertCircle, CheckCircle, Clock, Shield, Heart,
   Wind, Eye, Activity, User, FileText, Users, Droplets,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Bell, Stethoscope, Brain,
-  ArrowLeft, Save, Timer,
+  ArrowLeft, Save, Timer, BedDouble,
 } from 'lucide-react';
 import { usePatientStore } from '@/store/patientStore';
 import { useAuditStore } from '@/store/auditStore';
@@ -12,6 +12,9 @@ import { useTEWSHistoryStore } from '@/store/tewsHistoryStore';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
 import { triageApi } from '@/api/triage';
+import { bedsApi } from '@/api/beds';
+import type { EdZone } from '@/api/types';
+import { BedSuggestionModal } from './BedSuggestionModal';
 import {
   validateTEWSInputs,
   getAbnormalValidations,
@@ -281,6 +284,21 @@ export function AdultTriageForm() {
   const [nurseName, setNurseName] = useState(authUser?.fullName || '');
   const [triageFinished, setTriageFinished] = useState(false);
   const [triageFinishTime, setTriageFinishTime] = useState<Date | null>(null);
+
+  // ── Bed-suggestion confirm (Phase G #2) ──
+  // After triage submits, the backend returns a recommended bed (zone-routed
+  // by category, prefers monitored beds for RED/ORANGE). We surface a confirm
+  // modal so the nurse keeps the final say on placement.
+  const [suggestedBed, setSuggestedBed] = useState<{
+    id: string;
+    code: string;
+    zone: EdZone;
+    hasMonitor: boolean;
+    visitId: string;
+  } | null>(null);
+  const [placingBed, setPlacingBed] = useState(false);
+  const [bedPlaced, setBedPlaced] = useState<{ code: string; zone: EdZone; hasMonitor: boolean } | null>(null);
+  const [bedError, setBedError] = useState<string | null>(null);
   const [alerts, setAlerts] = useState<string[]>([]);
   const [showDeteriorationWarning, setShowDeteriorationWarning] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -401,7 +419,7 @@ export function AdultTriageForm() {
         ALERT: 'ALERT', VOICE: 'VERBAL', PAIN: 'PAIN', UNRESPONSIVE: 'UNRESPONSIVE',
       };
       try {
-        await triageApi.perform({
+        const triageResponse = await triageApi.perform({
           visitId: targetPatientId,
           // Emergency signs
           hasAirwayCompromise: !!checkedSigns['obstruction_stridor'],
@@ -473,6 +491,20 @@ export function AdultTriageForm() {
           // Form Footer — Nurse (doctor notification handled automatically via zone routing)
           triageNurseName: nurseName || undefined,
         });
+
+        // Bed suggestion (Phase G #2) — only present on perform responses.
+        // Server-side rules: RED→RESUS, ORANGE→ACUTE (or PEDIATRIC for kids),
+        // YELLOW→PEDIATRIC for kids; GREEN/BLUE produce no suggestion. The
+        // nurse confirms before the patient is actually placed.
+        if (triageResponse.suggestedBedId && triageResponse.suggestedBedCode && triageResponse.suggestedBedZone) {
+          setSuggestedBed({
+            id: triageResponse.suggestedBedId,
+            code: triageResponse.suggestedBedCode,
+            zone: triageResponse.suggestedBedZone,
+            hasMonitor: !!triageResponse.suggestedBedHasMonitor,
+            visitId: targetPatientId,
+          });
+        }
       } catch (err) {
         console.error('Failed to submit triage to backend:', err);
         // triage still recorded locally — backend sync will retry
@@ -523,6 +555,28 @@ export function AdultTriageForm() {
       );
     }
   }, [canFinish, patient, patientNames, patientAge, gender, chiefComplaint, weightVal, categoryResult, tewsScoring, assignCategory, setTriageStatus, addPatient, addAuditEntry, addTEWSHistoryEntry, nurseName, discriminatorNeeded, discriminatorReviewed, discriminatorNotes, hasVeryUrgentSigns, hasUrgentSigns, hasAnyCriticalSign, spo2Value, triageStartedAt, tewsInput, checkedSigns, checkedVeryUrgent, checkedUrgent, fieldValues]);
+
+  const handleConfirmPlaceBed = useCallback(async () => {
+    if (!suggestedBed) return;
+    setPlacingBed(true);
+    setBedError(null);
+    try {
+      await bedsApi.placePatient(suggestedBed.id, { visitId: suggestedBed.visitId });
+      setBedPlaced({
+        code: suggestedBed.code,
+        zone: suggestedBed.zone,
+        hasMonitor: suggestedBed.hasMonitor,
+      });
+      setSuggestedBed(null);
+    } catch (err) {
+      // Most likely cause: another nurse just placed someone in the bed
+      // (race). Tell the user and let them dismiss + place manually.
+      const msg = err instanceof Error ? err.message : 'Failed to place patient in bed';
+      setBedError(msg);
+    } finally {
+      setPlacingBed(false);
+    }
+  }, [suggestedBed]);
 
   const getVitalBg = useCallback((key: string, value: string) => {
     if (!value) return '';
@@ -1171,6 +1225,18 @@ export function AdultTriageForm() {
                 </div>
               </div>
             )}
+            {bedPlaced && (
+              <div className="mb-3 rounded-lg p-3 flex items-center gap-2.5" style={{ background: 'rgba(207,250,254,0.6)', border: '1px solid rgba(103,232,249,0.4)' }}>
+                <BedDouble className="w-4 h-4 text-cyan-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-bold text-cyan-800">Patient placed in bed {bedPlaced.code}</p>
+                  <p className="text-[10px] text-cyan-700">
+                    Zone: {bedPlaced.zone}
+                    {bedPlaced.hasMonitor ? ' · Monitor will begin streaming vitals automatically.' : ' · No monitor assigned to this bed.'}
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <button onClick={() => navigate(-1)} className="px-4 py-2 bg-white/80 border border-slate-200/60 text-slate-700 rounded-xl text-xs font-semibold hover:bg-white hover:shadow-md transition-all flex items-center gap-1.5">
                 <ArrowLeft className="w-3.5 h-3.5" /> Back
@@ -1189,6 +1255,21 @@ export function AdultTriageForm() {
         </div>
 
       </div>
+
+      {/* Bed-suggestion confirm modal (Phase G #2). Renders only after the
+          backend returns a suggestion — typically RED/ORANGE/YELLOW. The
+          nurse confirms; cancel just dismisses without placing. */}
+      {suggestedBed && (
+        <BedSuggestionModal
+          bed={suggestedBed}
+          category={categoryResult.category}
+          placing={placingBed}
+          error={bedError}
+          onConfirm={handleConfirmPlaceBed}
+          onCancel={() => { setSuggestedBed(null); setBedError(null); }}
+        />
+      )}
     </div>
   );
 }
+

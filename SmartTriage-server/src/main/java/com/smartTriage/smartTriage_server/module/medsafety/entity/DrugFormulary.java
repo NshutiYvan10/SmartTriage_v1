@@ -81,6 +81,17 @@ public class DrugFormulary extends BaseEntity {
     @Column(name = "pediatric_max_daily_dose_mg_per_kg")
     private Double pediatricMaxDailyDoseMgPerKg;
 
+    /**
+     * Unit for the numeric dose ranges above. Most REML drugs are MG, but
+     * insulin is UNITS, oxytocin is IU, misoprostol is MCG, magnesium
+     * sulfate is G, dextrose 50% is ML, ORS is SACHETS. Without this, the
+     * safety engine's numeric dose check is meaningless for non-mg drugs.
+     * Allowed values: MG, MCG, G, UNITS, IU, ML, SACHETS, TABLETS, PUFFS, DROPS.
+     */
+    @Column(name = "dose_unit", nullable = false, length = 20)
+    @Builder.Default
+    private String doseUnit = "MG";
+
     /** Percentage dose reduction for geriatric patients (e.g., 25 means reduce by 25%) */
     @Column(name = "geriatric_adjustment_percent")
     private Double geriatricAdjustmentPercent;

@@ -36,6 +36,10 @@ import type { UserResponse } from '@/api/types';
 const ALLERGIES = ['Penicillin', 'Latex', 'Pollen', 'Food', 'Dairy', 'Other'];
 const CONDITIONS = ['Diabetes', 'HIV/AIDS', 'Heart Disease', 'Hypertension', 'Asthma', 'Other'];
 const PROVINCES = ['Kigali City', 'Eastern', 'Western', 'Northern', 'Southern'];
+// ABO + Rh combinations + Unknown. "Unknown" is preserved as a real value
+// rather than a blank because in a clinical-safety context "we have not
+// asked yet" is a meaningful state for blood-type-driven decisions.
+const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'];
 const CHIEF_COMPLAINTS = [
   'Chest Pain',
   'Shortness of Breath',
@@ -102,6 +106,7 @@ interface FormData {
   // Nurse Assignment
   assignedNurseId: string;
   // Step 4 — Medical History
+  bloodType: string;
   allergies: string[];
   existingConditions: string[];
   currentMedications: string;
@@ -140,6 +145,7 @@ const INITIAL_FORM: FormData = {
   referringFacility: '',
   referralDocumentFile: null,
   assignedNurseId: '',
+  bloodType: '',
   allergies: [],
   existingConditions: [],
   currentMedications: '',
@@ -313,6 +319,13 @@ export function EntryRegistration() {
     const hospitalId = authUser?.hospitalId || 'a0000000-0000-0000-0000-000000000001';
     const fullName = `${formData.firstName.trim()} ${formData.lastName.trim()}`;
 
+    // CRITICAL: every field the form captures must be forwarded. Silently
+    // dropping medical history (allergies / chronic conditions / blood type /
+    // guardian) at this layer is the source of the "doctor's chart shows
+    // empty" bug — the data was collected, displayed in the review step, and
+    // then never sent to the backend. Verified end-to-end:
+    //   form → registerPatientApi → patientApi.register → backend
+    //                                                   → patient table.
     const patient = await registerPatientApi({
       firstName: formData.firstName.trim(),
       lastName: formData.lastName.trim(),
@@ -323,8 +336,23 @@ export function EntryRegistration() {
       address: [formData.streetAddress, formData.district, formData.city, formData.province]
         .filter(Boolean)
         .join(', ') || undefined,
-      emergencyContactName: formData.contactPersonName || formData.guardianName || undefined,
-      emergencyContactPhone: formData.contactPersonPhone || formData.guardianPhone || undefined,
+      emergencyContactName: formData.contactPersonName || undefined,
+      emergencyContactPhone: formData.contactPersonPhone || undefined,
+      // Guardian fields persist as their own columns now (V22). For pediatric
+      // patients without an explicit emergency contact, the doctor still
+      // sees the guardian via the dedicated guardian section — no more
+      // squashing guardianName into emergencyContactName.
+      guardianName: formData.guardianName?.trim() || undefined,
+      guardianPhone: formData.guardianPhone?.trim() || undefined,
+      guardianRelationship: formData.guardianRelationship?.trim() || undefined,
+      guardianNationalId: formData.guardianNationalId?.trim() || undefined,
+      bloodType: formData.bloodType || undefined,
+      // Free-text strings on the backend; we serialize the multi-select
+      // arrays as comma-separated. The medication safety engine does
+      // substring matching against allergen groups, so this format is
+      // compatible with the existing safety check.
+      knownAllergies: formData.allergies.length > 0 ? formData.allergies.join(', ') : undefined,
+      chronicConditions: formData.existingConditions.length > 0 ? formData.existingConditions.join(', ') : undefined,
       chiefComplaint: [...formData.chiefComplaints, formData.chiefComplaintOther.trim()].filter(Boolean).join('; ') || undefined,
       arrivalMode: formData.arrivalMode || undefined,
       hospitalId,
@@ -1011,6 +1039,31 @@ export function EntryRegistration() {
                 </div>
               </div>
 
+              {/* Blood Type — captured at registration so prescribing /
+                  transfusion decisions have it on file. "Unknown" is a
+                  real value: it tells the clinician we have not asked yet,
+                  rather than silently leaving the field empty. */}
+              <div>
+                <label className={labelCls}>Blood Type</label>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {BLOOD_TYPES.map((bt) => (
+                    <button
+                      key={bt}
+                      type="button"
+                      onClick={() => set('bloodType', bt)}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-300 hover:-translate-y-0.5 ${
+                        formData.bloodType === bt
+                          ? 'bg-gradient-to-r from-rose-500 to-rose-600 text-white shadow-md shadow-rose-500/20'
+                          : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                      style={formData.bloodType !== bt ? glassInner : undefined}
+                    >
+                      {bt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Allergies */}
               <div>
                 <label className={labelCls}>Allergies</label>
@@ -1189,7 +1242,12 @@ export function EntryRegistration() {
                   ['Phone', formData.phoneNumber],
                   ['Emergency Contact', [formData.emergencyContactName, formData.emergencyContactPhone].filter(Boolean).join(' \u2014 ')],
                   ['Contact Person', formData.contactPersonName ? `${formData.contactPersonName} (${formData.contactPersonRelationship || 'N/A'}) \u2014 ${formData.contactPersonPhone || 'No phone'}` : ''],
-                  ...(isPediatric ? [['Guardian', formData.guardianName ? `${formData.guardianName} (${formData.guardianRelationship}) \u2014 ${formData.guardianPhone}` : 'NOT SET']] : []),
+                  // Guardian review — now shows the national ID alongside name / relationship /
+                  // phone so the nurse can verify all four guardian fields are correctly captured
+                  // before submission. Earlier the national ID was collected but invisible on review.
+                  ...(isPediatric ? [['Guardian', formData.guardianName
+                    ? `${formData.guardianName} (${formData.guardianRelationship || 'relationship not set'}) \u2014 ${formData.guardianPhone || 'no phone'}${formData.guardianNationalId ? ` \u2014 ID ${formData.guardianNationalId}` : ''}`
+                    : 'NOT SET']] : []),
                   ['Arrival Mode', formData.arrivalMode ? formData.arrivalMode.replace('_', ' ') : ''],
                   ['Mobility', formData.mobility ? formData.mobility.replace('_', ' ') : ''],
                   ...(isReferral ? [['Referring Facility', formData.referringFacility]] : []),
@@ -1227,6 +1285,11 @@ export function EntryRegistration() {
                   Medical History
                 </h4>
                 {[
+                  // Blood type — surfaced on review so the nurse can verify it
+                  // before submission. "Not recorded" is the truthful default
+                  // (versus letting the field be empty in the review, which
+                  // hides the missing data).
+                  ['Blood Type', formData.bloodType || 'Not recorded'],
                   ['Allergies', formData.allergies.join(', ') || 'None reported'],
                   ['Conditions', formData.existingConditions.join(', ') || 'None reported'],
                   ['Medications', formData.currentMedications || 'None reported'],

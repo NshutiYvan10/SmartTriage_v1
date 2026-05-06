@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.patient.service;
 
+import com.smartTriage.smartTriage_server.common.enums.PregnancyStatus;
 import com.smartTriage.smartTriage_server.common.enums.VisitStatus;
 import com.smartTriage.smartTriage_server.common.exception.DuplicateResourceException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
@@ -102,9 +103,16 @@ public class PatientService {
                 .address(request.getAddress())
                 .emergencyContactName(request.getEmergencyContactName())
                 .emergencyContactPhone(request.getEmergencyContactPhone())
+                .guardianName(request.getGuardianName())
+                .guardianPhone(request.getGuardianPhone())
+                .guardianRelationship(request.getGuardianRelationship())
+                .guardianNationalId(request.getGuardianNationalId())
                 .bloodType(request.getBloodType())
                 .knownAllergies(request.getKnownAllergies())
                 .chronicConditions(request.getChronicConditions())
+                // Clinical-safety default — see PregnancyStatus.defaultFor.
+                // recorded_at stays null until a clinician explicitly affirms.
+                .pregnancyStatus(PregnancyStatus.defaultFor(request.getGender()))
                 .build();
         patient.setHospital(hospital);
         patient.setMedicalRecordNumber(generateMRN(hospital.getHospitalCode()));
@@ -148,6 +156,48 @@ public class PatientService {
     public Page<PatientResponse> searchPatients(UUID hospitalId, String query, Pageable pageable) {
         return patientRepository.searchPatients(hospitalId, query, pageable)
                 .map(PatientMapper::toResponse);
+    }
+
+    @Transactional
+    public PatientResponse updatePregnancyStatus(UUID id, PregnancyStatus pregnancyStatus) {
+        Patient patient = findPatientOrThrow(id);
+        patient.setPregnancyStatus(pregnancyStatus);
+        patient.setPregnancyStatusRecordedAt(Instant.now());
+        patient = patientRepository.save(patient);
+        log.info("Pregnancy status updated for patient {} to {}", id, pregnancyStatus);
+        return PatientMapper.toResponse(patient);
+    }
+
+    /**
+     * Replaces the patient's free-text known allergies. Null is intentional —
+     * a clinician may need to clear a previously-recorded allergy that turned
+     * out to be wrong (e.g. patient reported a "penicillin allergy" that was
+     * actually a side effect, not an immune reaction).
+     *
+     * The medication safety engine reads from this field on every prescribe;
+     * a stale or wrong allergy here translates directly into incorrect cross-
+     * reactivity warnings, which is why mid-visit edit needs to be possible.
+     */
+    @Transactional
+    public PatientResponse updateKnownAllergies(UUID id, String knownAllergies) {
+        Patient patient = findPatientOrThrow(id);
+        patient.setKnownAllergies(knownAllergies);
+        patient = patientRepository.save(patient);
+        log.info("Known allergies updated for patient {}", id);
+        return PatientMapper.toResponse(patient);
+    }
+
+    /**
+     * Replaces the patient's free-text chronic conditions. Same semantics
+     * as updateKnownAllergies — full replacement, null is intentional.
+     */
+    @Transactional
+    public PatientResponse updateChronicConditions(UUID id, String chronicConditions) {
+        Patient patient = findPatientOrThrow(id);
+        patient.setChronicConditions(chronicConditions);
+        patient = patientRepository.save(patient);
+        log.info("Chronic conditions updated for patient {}", id);
+        return PatientMapper.toResponse(patient);
     }
 
     public Patient findPatientOrThrow(UUID id) {

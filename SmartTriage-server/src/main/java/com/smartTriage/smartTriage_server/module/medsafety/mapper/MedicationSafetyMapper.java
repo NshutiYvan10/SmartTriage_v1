@@ -80,6 +80,7 @@ public final class MedicationSafetyMapper {
                 .pediatricMinDoseMgPerKg(formulary.getPediatricMinDoseMgPerKg())
                 .pediatricMaxDoseMgPerKg(formulary.getPediatricMaxDoseMgPerKg())
                 .pediatricMaxDailyDoseMgPerKg(formulary.getPediatricMaxDailyDoseMgPerKg())
+                .doseUnit(formulary.getDoseUnit())
                 .geriatricAdjustmentPercent(formulary.getGeriatricAdjustmentPercent())
                 .renalAdjustmentRequired(formulary.isRenalAdjustmentRequired())
                 .hepaticAdjustmentRequired(formulary.isHepaticAdjustmentRequired())

@@ -56,10 +56,14 @@ export function MedicationSafetyView() {
   const [overriding, setOverriding] = useState(false);
 
   // ── Validate form ──
+  // Backend `/med-safety/validate` resolves drug + dose context from the
+  // existing medication record by id; the UI no longer collects drugName
+  // separately. doseMg and weightKg are optional overrides for cases where
+  // the doctor wants to validate a specific numeric dose without modifying
+  // the medication record.
   const [showValidateForm, setShowValidateForm] = useState(false);
   const [validateForm, setValidateForm] = useState<Partial<ValidatePrescriptionRequest>>({
-    drugName: '',
-    doseMg: 0,
+    doseMg: undefined,
     weightKg: undefined,
     medicationId: '',
   });
@@ -137,19 +141,21 @@ export function MedicationSafetyView() {
   }, [visitIdInput]);
 
   // ── Validate prescription ──
+  // The backend resolves drug name + dose from the medication record by id.
+  // Manual validate is only useful when the doctor has a known medicationId
+  // and wants to re-run the safety engine (e.g. after editing the dose).
   const handleValidate = useCallback(async () => {
-    if (!activeVisitId || !validateForm.drugName || !validateForm.doseMg) return;
+    if (!activeVisitId || !validateForm.medicationId) return;
     setValidating(true);
     try {
       await medsafetyApi.validate({
         visitId: activeVisitId,
-        medicationId: validateForm.medicationId || '',
-        drugName: validateForm.drugName,
-        doseMg: validateForm.doseMg,
-        weightKg: validateForm.weightKg,
+        medicationId: validateForm.medicationId,
+        doseMg: validateForm.doseMg ?? null,
+        weightKg: validateForm.weightKg ?? null,
       });
       setShowValidateForm(false);
-      setValidateForm({ drugName: '', doseMg: 0, weightKg: undefined, medicationId: '' });
+      setValidateForm({ doseMg: undefined, weightKg: undefined, medicationId: '' });
       loadChecks();
     } catch (err) {
       console.error('[MedicationSafety] Validate failed:', err);
@@ -169,10 +175,10 @@ export function MedicationSafetyView() {
     if (!overrideCheckId || !overrideReason.trim()) return;
     setOverriding(true);
     try {
-      await medsafetyApi.override(overrideCheckId, {
-        reason: overrideReason,
-        overriddenBy: user?.fullName || user?.username || '',
-      });
+      // Backend expects reason + overriddenBy as query params, not body —
+      // see api/medsafety.ts override() for the rationale.
+      const overriddenBy = user?.fullName || user?.email || '';
+      await medsafetyApi.override(overrideCheckId, overrideReason, overriddenBy);
       setOverrideDialogOpen(false);
       loadChecks();
     } catch (err) {
@@ -318,20 +324,11 @@ export function MedicationSafetyView() {
                   </div>
                 </div>
                 <div className="p-5 space-y-4">
+                  <p className={`text-xs ${text.muted}`}>
+                    The safety engine resolves drug name and dose context from the existing medication record.
+                    Provide the medication id and (optionally) override numeric dose / patient weight.
+                  </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className={`text-xs font-bold uppercase tracking-wider mb-1.5 block ${text.label}`}>Drug Name</label>
-                      <input
-                        type="text"
-                        value={validateForm.drugName || ''}
-                        onChange={(e) => setValidateForm({ ...validateForm, drugName: e.target.value })}
-                        placeholder="e.g. Amoxicillin"
-                        className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                          isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                        }`}
-                        style={glassInner}
-                      />
-                    </div>
                     <div>
                       <label className={`text-xs font-bold uppercase tracking-wider mb-1.5 block ${text.label}`}>Medication ID</label>
                       <input
@@ -383,7 +380,7 @@ export function MedicationSafetyView() {
                     </button>
                     <button
                       onClick={handleValidate}
-                      disabled={validating || !validateForm.drugName || !validateForm.doseMg}
+                      disabled={validating || !validateForm.medicationId}
                       className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
                     >
                       {validating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
