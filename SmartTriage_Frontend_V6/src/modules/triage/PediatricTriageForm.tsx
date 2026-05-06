@@ -1,15 +1,17 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle, AlertCircle, CheckCircle, Clock, Shield, Baby, Heart,
   Wind, Eye, Activity, User, FileText,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Bell, Stethoscope, Brain,
-  ArrowLeft, Save, Timer,
+  ArrowLeft, Save, Timer, Sparkles,
 } from 'lucide-react';
 import { usePatientStore } from '@/store/patientStore';
 import { useAuditStore } from '@/store/auditStore';
 import { useTEWSHistoryStore } from '@/store/tewsHistoryStore';
 import { useTheme } from '@/hooks/useTheme';
+import { alertApi } from '@/api/alerts';
+import { vitalApi } from '@/api/vitals';
 import {
   validateTEWSInputs,
   getAbnormalValidations,
@@ -219,6 +221,14 @@ export function PediatricTriageForm() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const { patientId } = useParams<{ patientId: string }>();
   const navigate = useNavigate();
+  // Round 4a — alert click-through context (see AdultTriageForm for the
+  // same wiring; see TriageRecordResponse + ClinicalAlertResponse for
+  // the data shape).
+  const [searchParams] = useSearchParams();
+  const fromAlertId = searchParams.get('fromAlert');
+  const sourceVisitId = searchParams.get('visitId');
+  const triggerSignCode = searchParams.get('triggerSign');
+  const [retriageBannerLabel, setRetriageBannerLabel] = useState<string | null>(null);
   const patient = usePatientStore((state) => patientId ? state.getPatient(patientId) : undefined);
   const addPatient = usePatientStore((state) => state.addPatient);
   const assignCategory = usePatientStore((state) => state.assignCategory);
@@ -266,6 +276,41 @@ export function PediatricTriageForm() {
   const [bloodGlucose, setBloodGlucose] = useState('');
   const [weightVal, setWeightVal] = useState(patient?.weight?.toString() || '');
   const [heightVal, setHeightVal] = useState('');
+
+  // Round 4a — resolve trigger-sign label + pre-fill vitals from
+  // latest reading when the form was opened from a RETRIAGE_REQUIRED
+  // alert. Pre-fill is one-way: empty fields only.
+  useEffect(() => {
+    if (!triggerSignCode) return;
+    let cancelled = false;
+    import('@/modules/visit/clinicalSignDefinitions').then((mod) => {
+      if (cancelled) return;
+      const def = mod.SIGN_BY_CODE[triggerSignCode];
+      setRetriageBannerLabel(def?.label ?? triggerSignCode);
+    });
+    return () => { cancelled = true; };
+  }, [triggerSignCode]);
+
+  useEffect(() => {
+    if (!sourceVisitId) return;
+    let cancelled = false;
+    vitalApi.getLatest(sourceVisitId)
+      .then((v) => {
+        if (cancelled || !v) return;
+        setTewsInput((prev) => ({
+          ...prev,
+          respiratoryRate: prev.respiratoryRate ?? v.respiratoryRate ?? null,
+          heartRate: prev.heartRate ?? v.heartRate ?? null,
+          temperature: prev.temperature ?? v.temperature ?? null,
+        }));
+        if (v.systolicBp != null) setSystolicBP((prev) => prev || String(v.systolicBp));
+        if (v.diastolicBp != null) setDiastolicBP((prev) => prev || String(v.diastolicBp));
+        if (v.spo2 != null) setSpo2((prev) => prev || String(v.spo2));
+        if (v.bloodGlucose != null) setBloodGlucose((prev) => prev || String(v.bloodGlucose));
+      })
+      .catch(() => { /* non-fatal */ });
+    return () => { cancelled = true; };
+  }, [sourceVisitId]);
 
   // Footer
   const [nurseName, setNurseName] = useState('');
@@ -374,6 +419,15 @@ export function PediatricTriageForm() {
     const finishTime = new Date();
     setTriageFinishTime(finishTime);
 
+    // Round 4a — ack the originating alert when this triage was
+    // launched from a click-through. Best-effort: a failed ack
+    // shouldn't undo the triage being marked finished.
+    if (fromAlertId) {
+      alertApi.acknowledge(fromAlertId).catch((err) => {
+        console.warn('Failed to acknowledge originating alert', fromAlertId, err);
+      });
+    }
+
     let targetPatientId = patient?.id;
 
     if (patient) {
@@ -458,6 +512,25 @@ export function PediatricTriageForm() {
   return (
     <div className={`min-h-full ${isDark ? '' : 'bg-gradient-to-br from-slate-50/80 via-cyan-50/30 to-slate-100/80'}`}>
       <div className="p-4 lg:p-6 space-y-4">
+
+        {/* Round 4a — context banner when opened from a RETRIAGE_REQUIRED
+            alert. We intentionally don't auto-flag the trigger sign on
+            the form: that should be the nurse's deliberate clinical
+            action after looking at the patient. */}
+        {fromAlertId && (
+          <div className="rounded-2xl px-4 py-3 flex items-start gap-3 bg-amber-500/10 border border-amber-500/40 text-amber-900">
+            <Sparkles className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-600" />
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-xs">Re-triage prompted by clinical-sign worsening</p>
+              <p className="text-[11px] mt-0.5">
+                {retriageBannerLabel
+                  ? <>The system flagged <span className="font-bold">{retriageBannerLabel}</span> as the trigger. Confirm it on the form below if appropriate, then complete the rest of the assessment normally. The originating alert will acknowledge automatically on submit.</>
+                  : <>This re-triage was prompted by an alert. Complete the assessment as usual; the alert will acknowledge automatically on submit.</>}
+                {sourceVisitId && <> Vitals have been pre-filled from the latest reading; edit any field that needs updating.</>}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Emergency Banner */}
         {(hasAnyCriticalSign || (spo2Value !== null && spo2Value < 92)) && (

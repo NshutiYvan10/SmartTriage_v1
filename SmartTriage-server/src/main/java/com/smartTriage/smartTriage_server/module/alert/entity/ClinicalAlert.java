@@ -10,6 +10,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * ClinicalAlert — system-generated alert for clinical deterioration or protocol
@@ -102,4 +103,25 @@ public class ClinicalAlert extends BaseEntity {
     /** SATS maximum wait time in minutes for the triage category */
     @Column(name = "sats_target_minutes")
     private Integer satsTargetMinutes;
+
+    // ====================================================================
+    // ROUND 4a — RETRIAGE_REQUIRED trigger audit
+    // ====================================================================
+
+    /**
+     * For RETRIAGE_REQUIRED alerts: the clinical-sign event that produced
+     * the alert. Populated by both the AutoBump and Suggest paths in
+     * TriageService. Null for every other alert type.
+     */
+    @Column(name = "triggering_sign_event_id")
+    private UUID triggeringSignEventId;
+
+    /**
+     * Denormalised sign code matching the trigger event (e.g.
+     * "MSAT_VU_CHEST_PAIN"). Stored alongside the FK so the frontend's
+     * alert click-handler has the code on the alert object directly,
+     * without a follow-up fetch on every alert render.
+     */
+    @Column(name = "triggering_sign_code", length = 60)
+    private String triggeringSignCode;
 }

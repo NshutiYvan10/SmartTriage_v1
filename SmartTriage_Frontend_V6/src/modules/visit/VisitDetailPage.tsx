@@ -652,7 +652,7 @@ export function VisitDetailPage() {
 
         {/* ── Tab Content ── */}
         <div className="animate-fade-up" style={{ animationDelay: '0.05s' }}>
-          {activeTab === 'overview' && <OverviewTab visit={visit} latestVitals={latestVitals} latestTriage={latestTriage} notes={notes} diagnoses={diagnoses} investigations={investigations} medications={medications} alerts={visitAlerts} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
+          {activeTab === 'overview' && <OverviewTab visit={visit} latestVitals={latestVitals} latestTriage={latestTriage} notes={notes} diagnoses={diagnoses} investigations={investigations} medications={medications} alerts={visitAlerts} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'vitals' && <VitalsTab vitals={vitals} latestVitals={latestVitals} glassCard={glassCard} isDark={isDark} text={text} />}
           {activeTab === 'triage' && <TriageTab visit={visit} triageHistory={triageHistory} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'clinical-signs' && <ClinicalSignsTab visitId={visit.id} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
@@ -661,7 +661,7 @@ export function VisitDetailPage() {
           {activeTab === 'investigations' && <InvestigationsTab investigations={investigations} showForm={showInvestigationForm} setShowForm={setShowInvestigationForm} onSubmit={handleOrderInvestigation} onAction={handleInvestigationAction} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} userName={userName} />}
           {activeTab === 'medications' && <MedicationsTab medications={medications} showForm={showMedicationForm} setShowForm={setShowMedicationForm} onSubmit={handlePrescribeMedication} onAction={handleMedicationAction} formLoading={formLoading} patient={patient} visit={visit} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'monitor' && <MonitorTab visitId={visit.id} glassCard={glassCard} isDark={isDark} text={text} />}
-          {activeTab === 'alerts' && <AlertsTab alerts={visitAlerts} onAcknowledge={handleAcknowledgeAlert} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
+          {activeTab === 'alerts' && <AlertsTab alerts={visitAlerts} onAcknowledge={handleAcknowledgeAlert} visit={visit} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'disposition' && <DispositionTab visit={visit} onDisposition={handleRecordDisposition} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
         </div>
       </div>
@@ -701,7 +701,7 @@ export function VisitDetailPage() {
 }
 
 // ═══════ OVERVIEW TAB ═══════
-function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, investigations, medications, alerts, glassCard, glassInner, isDark, text }: any) {
+function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, investigations, medications, alerts, navigate, glassCard, glassInner, isDark, text }: any) {
   const unackAlerts = alerts.filter((a: ClinicalAlertResponse) => !a.acknowledged).length;
 
   // Round 3 — show a prominent banner when the most recent triage was
@@ -715,6 +715,19 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
   const showRetriageBanner = latestSystemTriggered && !!matchingUnackedRetriageAlert;
   const bannerCategory = latestTriage?.triageCategory ?? 'RED';
   const bannerCatColor = CATEGORY_COLORS[bannerCategory] ?? CATEGORY_COLORS.RED;
+
+  // Round 4a — same click-through path as AlertsTab. Built here too so
+  // the doctor on Overview gets a one-tap "Re-triage now" without
+  // bouncing to the Alerts tab first.
+  const goToRetriage = (a: ClinicalAlertResponse | undefined) => {
+    if (!a || !visit?.patientId || !navigate) return;
+    const path = visit.isPediatric ? '/pediatric-triage' : '/adult-triage';
+    const params = new URLSearchParams();
+    params.set('fromAlert', a.id);
+    params.set('visitId', visit.id);
+    if (a.triggeringSignCode) params.set('triggerSign', a.triggeringSignCode);
+    navigate(`${path}/${visit.patientId}?${params.toString()}`);
+  };
 
   return (
     <div className="space-y-4">
@@ -732,8 +745,15 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
             {latestTriage.triggeringSignLabel
               ? <>System detected <span className="font-bold">{latestTriage.triggeringSignLabel}</span>{latestTriage.triggeringSignStatus && <> reported as <span className="font-bold">{latestTriage.triggeringSignStatus}</span></>}.</>
               : 'A worsening clinical sign moved this patient up.'}
-            {' '}Confirm the patient is being seen, then acknowledge in the Alerts tab.
+            {' '}Confirm the patient is being seen.
           </p>
+          <button
+            onClick={() => goToRetriage(matchingUnackedRetriageAlert)}
+            className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md hover:-translate-y-0.5 transition-all"
+          >
+            <Stethoscope className="w-3 h-3" />
+            Re-triage now
+          </button>
         </div>
       </div>
     )}
@@ -1708,13 +1728,34 @@ function MonitorTab({ visitId, glassCard, isDark, text }: { visitId: string; gla
 }
 
 // ═══════ ALERTS TAB ═══════
-function AlertsTab({ alerts, onAcknowledge, glassCard, glassInner, isDark, text }: any) {
+function AlertsTab({ alerts, onAcknowledge, visit, navigate, glassCard, glassInner: _glassInner, isDark: _isDark, text }: any) {
   const severityColors: Record<string, string> = {
     CRITICAL: 'text-red-500 bg-red-500/10 border-red-500/20',
     HIGH: 'text-orange-500 bg-orange-500/10 border-orange-500/20',
     MEDIUM: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
     LOW: 'text-blue-500 bg-blue-500/10 border-blue-500/20',
     INFO: 'text-slate-500 bg-slate-500/10 border-slate-500/20',
+  };
+
+  /**
+   * Round 4a — RETRIAGE_REQUIRED alert click-through.
+   *
+   * Routes the nurse to the appropriate triage form (adult vs.
+   * pediatric, decided by `visit.isPediatric`) with two query
+   * params:
+   *   - `fromAlert=<alertId>` so the form can ack the alert on submit.
+   *   - `triggerSign=<code>` so the form pre-flags the matching boolean.
+   *   - `visitId=<id>` so the form can submit against the right visit
+   *     even though the route is patient-scoped.
+   */
+  const goToRetriage = (a: ClinicalAlertResponse) => {
+    if (!visit?.patientId) return;
+    const path = visit.isPediatric ? '/pediatric-triage' : '/adult-triage';
+    const params = new URLSearchParams();
+    params.set('fromAlert', a.id);
+    params.set('visitId', visit.id);
+    if (a.triggeringSignCode) params.set('triggerSign', a.triggeringSignCode);
+    navigate(`${path}/${visit.patientId}?${params.toString()}`);
   };
 
   return (
@@ -1726,7 +1767,9 @@ function AlertsTab({ alerts, onAcknowledge, glassCard, glassInner, isDark, text 
             <BellRing className="w-8 h-8 mx-auto mb-2 text-slate-400" />
             <p className={text.muted}>No alerts for this visit</p>
           </div>
-        ) : alerts.map((a: ClinicalAlertResponse) => (
+        ) : alerts.map((a: ClinicalAlertResponse) => {
+          const isRetriage = a.alertType === 'RETRIAGE_REQUIRED' && !a.acknowledged;
+          return (
           <div key={a.id} className={`rounded-2xl p-4 border ${a.acknowledged ? 'opacity-60' : ''}`} style={glassCard}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -1739,16 +1782,34 @@ function AlertsTab({ alerts, onAcknowledge, glassCard, glassInner, isDark, text 
             </div>
             <p className={`text-sm ${text.heading}`}>{a.message}</p>
             {a.title && <p className={`text-xs mt-1 ${text.body}`}>{a.title}</p>}
-            {!a.acknowledged && (
-              <button onClick={() => onAcknowledge(a.id)} className="mt-3 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors">
-                <CheckCircle2 className="w-3 h-3 inline mr-1" /> Acknowledge
-              </button>
+            {/* Round 4a — surface the trigger sign label inline so the
+                nurse sees what to look at before clicking through. */}
+            {a.triggeringSignLabel && (
+              <p className={`text-[11px] mt-1 ${text.muted}`}>
+                Trigger: <span className="font-semibold">{a.triggeringSignLabel}</span>
+              </p>
             )}
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
+              {isRetriage && (
+                <button
+                  onClick={() => goToRetriage(a)}
+                  className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 text-white shadow-md hover:-translate-y-0.5 transition-all inline-flex items-center gap-1"
+                >
+                  <Stethoscope className="w-3 h-3" /> Re-triage now
+                </button>
+              )}
+              {!a.acknowledged && (
+                <button onClick={() => onAcknowledge(a.id)} className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors">
+                  <CheckCircle2 className="w-3 h-3 inline mr-1" /> Acknowledge
+                </button>
+              )}
+            </div>
             {a.acknowledged && (
               <p className={`text-[10px] mt-2 text-emerald-500`}>Acknowledged by {a.acknowledgedByName} at {a.acknowledgedAt ? format(new Date(a.acknowledgedAt), 'dd MMM HH:mm') : ''}</p>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

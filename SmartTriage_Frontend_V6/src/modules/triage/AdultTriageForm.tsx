@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle, AlertCircle, CheckCircle, Clock, Shield, Heart,
   Wind, Eye, Activity, User, FileText, Users, Droplets,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Bell, Stethoscope, Brain,
-  ArrowLeft, Save, Timer,
+  ArrowLeft, Save, Timer, Sparkles,
 } from 'lucide-react';
 import { usePatientStore } from '@/store/patientStore';
 import { useAuditStore } from '@/store/auditStore';
@@ -12,6 +12,8 @@ import { useTEWSHistoryStore } from '@/store/tewsHistoryStore';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
 import { triageApi } from '@/api/triage';
+import { alertApi } from '@/api/alerts';
+import { vitalApi } from '@/api/vitals';
 import {
   validateTEWSInputs,
   getAbnormalValidations,
@@ -227,6 +229,16 @@ export function AdultTriageForm() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const { patientId } = useParams<{ patientId: string }>();
   const navigate = useNavigate();
+  // Round 4a — query params from the alert click-through. fromAlert is
+  // the alert id we'll ack on submit; visitId pins the re-triage to
+  // the right visit even though the route is patient-scoped;
+  // triggerSign tells us which sign was the trigger so the banner can
+  // show the nurse what to confirm.
+  const [searchParams] = useSearchParams();
+  const fromAlertId = searchParams.get('fromAlert');
+  const sourceVisitId = searchParams.get('visitId');
+  const triggerSignCode = searchParams.get('triggerSign');
+  const [retriageBannerLabel, setRetriageBannerLabel] = useState<string | null>(null);
   const patient = usePatientStore((state) => patientId ? state.getPatient(patientId) : undefined);
   const addPatient = usePatientStore((state) => state.addPatient);
   const assignCategory = usePatientStore((state) => state.assignCategory);
@@ -276,6 +288,43 @@ export function AdultTriageForm() {
   const [weightVal, setWeightVal] = useState('');
   const [heightVal, setHeightVal] = useState('');
   const [painScore, setPainScore] = useState('');
+
+  // Round 4a — when the form is opened from a RETRIAGE_REQUIRED alert,
+  // resolve the trigger sign label and pre-fill TEWS inputs + vitals
+  // from the patient's latest recorded vitals so the nurse doesn't
+  // re-enter numbers already on a monitor. Pre-fill is one-way: the
+  // nurse can edit anything; we only seed empty fields.
+  useEffect(() => {
+    if (!triggerSignCode) return;
+    let cancelled = false;
+    import('@/modules/visit/clinicalSignDefinitions').then((mod) => {
+      if (cancelled) return;
+      const def = mod.SIGN_BY_CODE[triggerSignCode];
+      setRetriageBannerLabel(def?.label ?? triggerSignCode);
+    });
+    return () => { cancelled = true; };
+  }, [triggerSignCode]);
+
+  useEffect(() => {
+    if (!sourceVisitId) return;
+    let cancelled = false;
+    vitalApi.getLatest(sourceVisitId)
+      .then((v) => {
+        if (cancelled || !v) return;
+        setTewsInput((prev) => ({
+          ...prev,
+          respiratoryRate: prev.respiratoryRate ?? v.respiratoryRate ?? null,
+          heartRate: prev.heartRate ?? v.heartRate ?? null,
+          systolicBP: prev.systolicBP ?? v.systolicBp ?? null,
+          temperature: prev.temperature ?? v.temperature ?? null,
+        }));
+        if (v.spo2 != null) setSpo2((prev) => prev || String(v.spo2));
+        if (v.diastolicBp != null) setDiastolicBP((prev) => prev || String(v.diastolicBp));
+        if (v.bloodGlucose != null) setBloodGlucose((prev) => prev || String(v.bloodGlucose));
+      })
+      .catch(() => { /* non-fatal — nurse fills in manually */ });
+    return () => { cancelled = true; };
+  }, [sourceVisitId]);
 
   // Footer
   const [nurseName, setNurseName] = useState(authUser?.fullName || '');
@@ -473,6 +522,17 @@ export function AdultTriageForm() {
           // Form Footer — Nurse (doctor notification handled automatically via zone routing)
           triageNurseName: nurseName || undefined,
         });
+        // Round 4a — if this triage was launched from a
+        // RETRIAGE_REQUIRED alert, ack the alert now that the nurse
+        // has actually acted on it. Best-effort: a failed ack should
+        // not undo the successful triage submission.
+        if (fromAlertId) {
+          try {
+            await alertApi.acknowledge(fromAlertId);
+          } catch (ackErr) {
+            console.warn('Failed to acknowledge originating alert', fromAlertId, ackErr);
+          }
+        }
       } catch (err) {
         console.error('Failed to submit triage to backend:', err);
         // triage still recorded locally — backend sync will retry
@@ -551,6 +611,27 @@ export function AdultTriageForm() {
   return (
     <div className={`min-h-full ${isDark ? '' : 'bg-gradient-to-br from-slate-50/80 via-cyan-50/30 to-slate-100/80'}`}>
       <div className="p-4 lg:p-6 space-y-4">
+
+        {/* Round 4a — context banner when the form was opened from a
+            RETRIAGE_REQUIRED alert. We deliberately don't auto-flag the
+            corresponding emergency-sign / discriminator checkbox: that
+            should be the nurse's deliberate clinical action after
+            looking at the patient. The banner just makes sure they know
+            what triggered the re-triage and what to confirm. */}
+        {fromAlertId && (
+          <div className="rounded-2xl px-4 py-3 flex items-start gap-3 bg-amber-500/10 border border-amber-500/40 text-amber-900">
+            <Sparkles className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-600" />
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-xs">Re-triage prompted by clinical-sign worsening</p>
+              <p className="text-[11px] mt-0.5">
+                {retriageBannerLabel
+                  ? <>The system flagged <span className="font-bold">{retriageBannerLabel}</span> as the trigger. Confirm it on the form below if appropriate, then complete the rest of the assessment normally. The originating alert will acknowledge automatically on submit.</>
+                  : <>This re-triage was prompted by an alert. Complete the assessment as usual; the alert will acknowledge automatically on submit.</>}
+                {sourceVisitId && <> Vitals have been pre-filled from the latest reading; edit any field that needs updating.</>}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Emergency Banner */}
         {(hasAnyCriticalSign || (spo2Value !== null && spo2Value < 92)) && (
