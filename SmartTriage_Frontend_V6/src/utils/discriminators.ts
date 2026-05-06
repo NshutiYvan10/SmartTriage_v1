@@ -182,106 +182,115 @@ export const URGENT_DISCRIMINATORS: DiscriminatorGroup[] = [
   },
 ];
 
-// ── Pediatric-specific Very Urgent Discriminators ─────
+// ── KFH Pediatric Triage Form — Very Urgent Discriminators ─────
+//
+// Item IDs match `PerformTriageRequest` boolean field names (in
+// snake_case → camelCase translation), so the form's
+// `checkedVeryUrgent[id]` map can be passed straight through to the
+// backend by deriving the request field from the id.
+//
+// Items marked INFANT_ONLY appear only on the KFH Infant form (0–3);
+// items marked CHILD_ONLY appear only on the Child form (3–12). The
+// form filters by ageBand at render time.
 
 export const PEDIATRIC_VERY_URGENT_DISCRIMINATORS: DiscriminatorGroup[] = [
   {
-    system: 'Neonatal / Infant',
-    icon: '👶',
-    color: 'text-pink-700',
-    bgColor: 'bg-pink-50',
-    items: [
-      { id: 'pvu_inconsolable_cry', label: 'Inconsolable / high-pitched cry', system: 'Neonatal / Infant' },
-      { id: 'pvu_poor_feeding', label: 'Poor feeding / refusal to feed (neonate)', system: 'Neonatal / Infant' },
-      { id: 'pvu_bulging_fontanel', label: 'Bulging fontanel', system: 'Neonatal / Infant' },
-      { id: 'pvu_bile_stained_vomit', label: 'Bile-stained vomiting', system: 'Neonatal / Infant' },
-    ],
-  },
-  {
-    system: 'Respiratory',
-    icon: 'RS',
-    color: 'text-blue-700',
-    bgColor: 'bg-blue-50',
-    items: [
-      { id: 'pvu_stridor_rest', label: 'Stridor at rest (croup / FB)', system: 'Respiratory' },
-      { id: 'pvu_wheeze_severe', label: 'Severe wheeze / unable to drink', system: 'Respiratory' },
-      { id: 'pvu_barking_cough', label: 'Barking cough with distress', system: 'Respiratory' },
-    ],
-  },
-  {
-    system: 'Neurological',
-    icon: '🧠',
-    color: 'text-purple-700',
-    bgColor: 'bg-purple-50',
-    items: [
-      { id: 'pvu_febrile_seizure', label: 'Febrile seizure (first episode or prolonged)', system: 'Neurological' },
-      { id: 'pvu_altered_consciousness', label: 'Altered level of consciousness', system: 'Neurological' },
-      { id: 'pvu_severe_headache_child', label: 'Severe headache with vomiting', system: 'Neurological' },
-    ],
-  },
-  {
-    system: 'Other',
-    icon: '⚠️',
+    system: 'Medical',
+    icon: '🩺',
     color: 'text-rose-700',
     bgColor: 'bg-rose-50',
     items: [
-      { id: 'pvu_petechial_rash_fever', label: 'Petechial rash with fever (meningococcal risk)', system: 'Other' },
-      { id: 'pvu_severe_dehydration', label: 'Severe dehydration (sunken eyes, no tears, reduced turgor)', system: 'Other' },
-      { id: 'pvu_suspected_nai', label: 'Suspected non-accidental injury', system: 'Other' },
-      { id: 'pvu_ingestion_toxic', label: 'Toxic ingestion / poisoning', system: 'Other' },
+      { id: 'vu_peds_more_sleepy_than_normal', label: 'Presenting complaint: more sleepy than normal', system: 'Medical' },
+      { id: 'vu_focal_neuro_deficit', label: 'Focal neurologic deficit — acute (less than 1 day)', system: 'Medical' },
+      { id: 'vu_peds_inconsolable_severe_pain', label: 'Inconsolable crying / severe pain (pain ≥ 7)', system: 'Medical' },
+      { id: 'vu_peds_floppy_irritable_restless', label: 'Floppy, irritable, or restless', system: 'Medical' },
+      { id: 'vu_chest_pain', label: 'Chest pain', system: 'Medical' },
+      { id: 'vu_poisoning_overdose', label: 'Poisoning / overdose', system: 'Medical' },
+      // INFANT_ONLY — form filters this out for ≥36 months
+      { id: 'vu_peds_tiny_baby_under_2_months', label: 'Tiny baby (younger than 2 months)', system: 'Medical' },
+      // CHILD_ONLY — appears only on the 3–12 form
+      { id: 'vu_pregnant_abdominal_pain', label: 'Pregnant + abdominal pain', system: 'Medical' },
     ],
   },
-];
-
-// ── Pediatric-specific Urgent Discriminators ──────────
-
-export const PEDIATRIC_URGENT_DISCRIMINATORS: DiscriminatorGroup[] = [
   {
-    system: 'Fever & Infection',
-    icon: '🌡️',
+    system: 'Trauma',
+    icon: '⚠️',
     color: 'text-orange-700',
     bgColor: 'bg-orange-50',
     items: [
-      { id: 'pu_fever_3_36m', label: 'Fever in child 3-36 months (≥ 39°C)', system: 'Fever & Infection' },
-      { id: 'pu_ear_pain', label: 'Ear pain / discharge (otitis)', system: 'Fever & Infection' },
-      { id: 'pu_sore_throat_drooling', label: 'Sore throat with difficulty swallowing', system: 'Fever & Infection' },
-    ],
-  },
-  {
-    system: 'GI / Hydration',
-    icon: '💧',
-    color: 'text-cyan-700',
-    bgColor: 'bg-cyan-50',
-    items: [
-      { id: 'pu_mild_dehydration', label: 'Mild-moderate dehydration', system: 'GI / Hydration' },
-      { id: 'pu_blood_stool', label: 'Blood in stool', system: 'GI / Hydration' },
-      { id: 'pu_abdominal_pain', label: 'Abdominal pain with vomiting', system: 'GI / Hydration' },
-    ],
-  },
-  {
-    system: 'Musculoskeletal',
-    icon: '🦴',
-    color: 'text-teal-700',
-    bgColor: 'bg-teal-50',
-    items: [
-      { id: 'pu_limping', label: 'Limping / refusal to weight-bear', system: 'Musculoskeletal' },
-      { id: 'pu_closed_fracture', label: 'Suspected closed fracture', system: 'Musculoskeletal' },
-      { id: 'pu_laceration', label: 'Laceration requiring sutures', system: 'Musculoskeletal' },
-    ],
-  },
-  {
-    system: 'Other',
-    icon: '📋',
-    color: 'text-slate-700',
-    bgColor: 'bg-slate-50',
-    items: [
-      { id: 'pu_rash_no_fever', label: 'Rash without fever or systemic signs', system: 'Other' },
-      { id: 'pu_mild_wheeze', label: 'Mild wheeze (able to drink, no distress)', system: 'Other' },
-      { id: 'pu_foreign_body_nose_ear', label: 'Foreign body (nose / ear, no airway risk)', system: 'Other' },
-      { id: 'pu_insect_bite', label: 'Insect / animal bite (not venomous, wound care)', system: 'Other' },
+      // Peds form burn threshold (10%) — distinct from adult (20%)
+      { id: 'vu_peds_burn_over_10_percent', label: 'Burn over 10%, or urgent signs (electrical, chemical, circumferential)', system: 'Trauma' },
+      { id: 'vu_open_fracture', label: 'Fracture — open (with skin break)', system: 'Trauma' },
+      { id: 'vu_threatened_limb', label: 'Threatened limb (no pulses or pale)', system: 'Trauma' },
+      { id: 'vu_eye_injury', label: 'Eye injury', system: 'Trauma' },
+      { id: 'vu_large_joint_dislocation', label: 'Dislocation of larger joint (not finger / toe)', system: 'Trauma' },
+      { id: 'vu_severe_mechanism_of_injury', label: 'Severe mechanism of injury (Fall > height, RTA, other)', system: 'Trauma' },
+      // CHILD_ONLY
+      { id: 'vu_pregnant_abdominal_trauma', label: 'Pregnant and abdominal trauma', system: 'Trauma' },
     ],
   },
 ];
+
+// ── KFH Pediatric Triage Form — Urgent Discriminators ──────────
+
+export const PEDIATRIC_URGENT_DISCRIMINATORS: DiscriminatorGroup[] = [
+  {
+    system: 'Medical',
+    icon: '🩺',
+    color: 'text-amber-700',
+    bgColor: 'bg-amber-50',
+    items: [
+      { id: 'urg_peds_pitting_edema_face_or_feet', label: 'Pitting oedema of both feet or face', system: 'Medical' },
+      { id: 'urg_unable_to_drink_vomits', label: 'Unable to drink or vomits everything', system: 'Medical' },
+      { id: 'urg_very_pale', label: 'Severe pallor', system: 'Medical' },
+      { id: 'urg_peds_some_respiratory_distress', label: 'Some respiratory distress', system: 'Medical' },
+      // CHILD_ONLY — child form has this in URG section
+      { id: 'urg_pregnant_vaginal_bleeding', label: 'Pregnant + vaginal bleeding', system: 'Medical' },
+      { id: 'urg_peds_severe_malnutrition_wasting', label: 'Severe malnutrition / wasting', system: 'Medical' },
+      { id: 'urg_peds_unwell_with_known_diabetes', label: 'Unwell with known diabetes', system: 'Medical' },
+      // Composite "Diarrhoea/vomiting + ANY of: sunken eyes, dry mouth,
+      // decreased urine output, skin pinch slow but <2 sec". The
+      // composite checkbox is on the form; the backend engine also
+      // fires when ≥1 of the four sub-flags is set.
+      { id: 'urg_peds_diarrhea_vomiting_dehydration', label: 'Diarrhoea / vomiting + dehydration sign (sunken eyes, dry mouth, low urine, slow skin pinch <2s)', system: 'Medical' },
+    ],
+  },
+  {
+    system: 'Trauma',
+    icon: '⚠️',
+    color: 'text-yellow-700',
+    bgColor: 'bg-yellow-50',
+    items: [
+      { id: 'urg_finger_toe_dislocation', label: 'Dislocation — finger or toe', system: 'Trauma' },
+      { id: 'urg_closed_fracture', label: 'Fracture — closed', system: 'Trauma' },
+      { id: 'urg_burn_without_urgent_signs', label: 'Burn without urgent signs', system: 'Trauma' },
+      { id: 'urg_moderate_pain', label: 'Moderate pain (5–6)', system: 'Trauma' },
+      // CHILD_ONLY
+      { id: 'urg_pregnant_trauma_non_abdominal', label: 'Pregnant + other trauma', system: 'Trauma' },
+    ],
+  },
+];
+
+/**
+ * Discriminator IDs that should only render on the INFANT (0–3) form.
+ * The triage form filters discriminator items by this set when ageBand
+ * is INFANT.
+ */
+export const INFANT_ONLY_DISCRIMINATOR_IDS = new Set<string>([
+  'vu_peds_tiny_baby_under_2_months',
+]);
+
+/**
+ * Discriminator IDs that should only render on the CHILD (3–12) form.
+ * The triage form filters discriminator items by this set when ageBand
+ * is CHILD.
+ */
+export const CHILD_ONLY_DISCRIMINATOR_IDS = new Set<string>([
+  'vu_pregnant_abdominal_pain',
+  'vu_pregnant_abdominal_trauma',
+  'urg_pregnant_vaginal_bleeding',
+  'urg_pregnant_trauma_non_abdominal',
+]);
 
 // ── Utility Functions ─────────────────────────────────
 

@@ -351,6 +351,89 @@ public class TriageRecord extends BaseEntity {
     private boolean urgForeignBodyAspiration = false;
 
     // ====================================================================
+    // V38 — Pediatric form compliance — Very Urgent (peds-only)
+    // These exist on the KFH Infant and/or Child triage forms but NOT on
+    // the adult form. The decision engine reads these only for peds
+    // visits; adult visits leave them false.
+    // ====================================================================
+
+    @Column(name = "vu_peds_more_sleepy_than_normal", nullable = false)
+    @Builder.Default
+    private boolean vuPedsMoreSleepyThanNormal = false;
+
+    @Column(name = "vu_peds_inconsolable_severe_pain", nullable = false)
+    @Builder.Default
+    private boolean vuPedsInconsolableSeverePain = false;
+
+    @Column(name = "vu_peds_floppy_irritable_restless", nullable = false)
+    @Builder.Default
+    private boolean vuPedsFloppyIrritableRestless = false;
+
+    /** Infant form (0–3) only. Decision engine ignores this for ≥36-month visits. */
+    @Column(name = "vu_peds_tiny_baby_under_2_months", nullable = false)
+    @Builder.Default
+    private boolean vuPedsTinyBabyUnder2Months = false;
+
+    /** Peds burn threshold (10%) — distinct from adult vu_burn_over_20_percent. */
+    @Column(name = "vu_peds_burn_over_10_percent", nullable = false)
+    @Builder.Default
+    private boolean vuPedsBurnOver10Percent = false;
+
+    // ====================================================================
+    // V38 — Pediatric form compliance — Urgent (peds-only)
+    // ====================================================================
+
+    @Column(name = "urg_peds_pitting_edema_face_or_feet", nullable = false)
+    @Builder.Default
+    private boolean urgPedsPittingEdemaFaceOrFeet = false;
+
+    @Column(name = "urg_peds_some_respiratory_distress", nullable = false)
+    @Builder.Default
+    private boolean urgPedsSomeRespiratoryDistress = false;
+
+    @Column(name = "urg_peds_severe_malnutrition_wasting", nullable = false)
+    @Builder.Default
+    private boolean urgPedsSevereMalnutritionWasting = false;
+
+    /**
+     * Peds urgent: "Unwell with known diabetes". Glucose value
+     * piggybacks on the existing urg_diabetic_glucose column.
+     */
+    @Column(name = "urg_peds_unwell_with_known_diabetes", nullable = false)
+    @Builder.Default
+    private boolean urgPedsUnwellWithKnownDiabetes = false;
+
+    /**
+     * Composite "Diarrhoea and/or vomiting plus any of:
+     *   sunken eyes, dry mouth, decreased urine output,
+     *   skin pinch slow but <2 sec".
+     *
+     * <p>The composite flag is what drives the URG decision. The four
+     * sub-flags below capture what the nurse actually saw, for audit
+     * and to enforce the composite at the engine level when the nurse
+     * ticked sub-items but missed the composite.
+     */
+    @Column(name = "urg_peds_diarrhea_vomiting_dehydration", nullable = false)
+    @Builder.Default
+    private boolean urgPedsDiarrheaVomitingDehydration = false;
+
+    @Column(name = "urg_peds_dehydration_sunken_eyes", nullable = false)
+    @Builder.Default
+    private boolean urgPedsDehydrationSunkenEyes = false;
+
+    @Column(name = "urg_peds_dehydration_dry_mouth", nullable = false)
+    @Builder.Default
+    private boolean urgPedsDehydrationDryMouth = false;
+
+    @Column(name = "urg_peds_dehydration_decreased_urine", nullable = false)
+    @Builder.Default
+    private boolean urgPedsDehydrationDecreasedUrine = false;
+
+    @Column(name = "urg_peds_dehydration_slow_skin_pinch", nullable = false)
+    @Builder.Default
+    private boolean urgPedsDehydrationSlowSkinPinch = false;
+
+    // ====================================================================
     // COMPUTED SCORES & RESULTS
     // ====================================================================
 

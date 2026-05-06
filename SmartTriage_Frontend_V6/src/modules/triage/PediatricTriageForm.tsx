@@ -25,9 +25,11 @@ import {
   determinePediatricCategory,
   getInfantNormalRanges,
   getVitalStatus,
+  ageBandFromMonths,
   type PediatricTEWSInput,
   type PedMobility,
   type PedAVPU,
+  type PedAgeBand,
   type PedTriageCategory,
   type PedCategoryResult,
 } from '@/utils/pediatricTEWS';
@@ -149,14 +151,37 @@ const TEWS_COLUMNS = [3, 2, 1, 0, 1, 2, 3];
 
 interface TEWSRowDef { key: string; label: string; cells: (string | null)[]; }
 
-const TEWS_ROWS: TEWSRowDef[] = [
-  { key: 'mobility', label: 'Mobility', cells: [null, null, null, 'Normal for age', 'Unable to walk', null, null] },
-  { key: 'rr', label: 'RR', cells: [null, '< 15', '15–16', '17–21', '22–26', '≥ 27', null] },
-  { key: 'hr', label: 'P (HR)', cells: [null, '< 60', '60–79', '80–99', '100–129', '≥ 130', null] },
-  { key: 'temp', label: 'Temp', cells: [null, 'Cold / < 35', null, '35–38.4', 'Hot / > 38.4', null, null] },
-  { key: 'avpu', label: 'AVPU', cells: [null, null, 'Confused', 'Alert', 'Voice', 'Pain', 'Unresponsive'] },
-  { key: 'trauma', label: 'Trauma', cells: [null, null, null, 'No', 'Yes', null, null] },
-];
+/**
+ * KFH peds TEWS rows. Returns the INFANT (0–3) grid or CHILD (3–12)
+ * grid based on the patient's age band. Cells map 1:1 to the
+ * TEWS_COLUMNS scoring scale [3,2,1,0,1,2,3].
+ *
+ * Critical: the two grids are NOT interchangeable — see the form
+ * audit notes in pediatricTEWS.ts for the patient-safety reasoning.
+ */
+function getTewsRows(ageBand: PedAgeBand): TEWSRowDef[] {
+  if (ageBand === 'INFANT') {
+    // INFANT (0–3) per KFH form — RR, HR ranges are wider; AVPU has
+    // no Confused column; Mobility label is "move" not "walk".
+    return [
+      { key: 'mobility', label: 'Mobility', cells: [null, null, null, 'Normal for age', null, 'Unable to move normally', null] },
+      { key: 'rr',       label: 'RR',       cells: [null, '< 20', '20–25', '26–39', '40–49', '≥ 50', null] },
+      { key: 'hr',       label: 'P (HR)',   cells: [null, '< 70', '70–79', '80–130', '131–159', '≥ 160', null] },
+      { key: 'temp',     label: 'Temp',     cells: [null, null, 'Cold / < 35', '35–38.4', null, 'Hot / > 38.4', null] },
+      { key: 'avpu',     label: 'AVPU',     cells: [null, null, null, 'Alert', 'Voice', 'Pain', 'Unresponsive'] },
+      { key: 'trauma',   label: 'Trauma',   cells: [null, null, null, 'No', 'Yes', null, null] },
+    ];
+  }
+  // CHILD (3–12) per KFH form
+  return [
+    { key: 'mobility', label: 'Mobility', cells: [null, null, null, 'Normal for age', null, 'Unable to walk as normal', null] },
+    { key: 'rr',       label: 'RR',       cells: [null, '< 15', '15–16', '17–21', '22–26', '≥ 27', null] },
+    { key: 'hr',       label: 'P (HR)',   cells: [null, '< 60', '60–79', '80–99', '100–129', '≥ 130', null] },
+    { key: 'temp',     label: 'Temp',     cells: [null, null, 'Cold / < 35', '35–38.4', null, 'Hot / > 38.4', null] },
+    { key: 'avpu',     label: 'AVPU',     cells: [null, null, 'Confused', 'Alert', 'Voice', 'Pain', 'Unresponsive'] },
+    { key: 'trauma',   label: 'Trauma',   cells: [null, null, null, 'No', 'Yes', null, null] },
+  ];
+}
 
 function columnToTableIndex(col: number): number { return col + 3; }
 
@@ -263,8 +288,11 @@ export function PediatricTriageForm() {
   const [signPage, setSignPage] = useState(0);
   const totalSignPages = EMERGENCY_SIGN_GROUPS.length;
 
-  // TEWS inputs (no SBP for pediatric)
+  // TEWS inputs (no SBP for pediatric). The ageBand is derived from
+  // patientAge below (in months). Default to CHILD until age is known
+  // — same conservative default as the backend's ageInMonths helper.
   const [tewsInput, setTewsInput] = useState<PediatricTEWSInput>({
+    ageBand: 'CHILD',
     mobility: 'NORMAL', respiratoryRate: null, heartRate: null,
     temperature: null, avpu: 'ALERT', trauma: false,
   });
@@ -332,6 +360,19 @@ export function PediatricTriageForm() {
     const age = parseFloat(patientAge) || 0;
     return Math.round(age * 12);
   }, [patientAge]);
+
+  // Age band drives the KFH form selection (Infant 0–3 vs Child 3–12).
+  // <36 months → INFANT form ranges; ≥36 → CHILD form ranges.
+  const ageBand: PedAgeBand = useMemo(() => ageBandFromMonths(ageMonths), [ageMonths]);
+
+  // Keep tewsInput.ageBand in sync with the patient's age. Without this,
+  // a nurse changing the age field after picking the patient would
+  // continue scoring against the wrong grid.
+  useEffect(() => {
+    setTewsInput((prev) => prev.ageBand === ageBand ? prev : { ...prev, ageBand });
+  }, [ageBand]);
+
+  const tewsRows = useMemo(() => getTewsRows(ageBand), [ageBand]);
 
   const normalRanges = useMemo(() => getInfantNormalRanges(ageMonths), [ageMonths]);
   const tewsScoring = useMemo(() => calculatePediatricTEWS(tewsInput), [tewsInput]);
@@ -559,7 +600,7 @@ export function PediatricTriageForm() {
                 <Shield className="w-5 h-5 text-pink-400" />
               </div>
               <div>
-                <h1 className="text-base font-bold text-white tracking-wide">Pediatric Triage Form</h1>
+                <h1 className="text-base font-bold text-white tracking-wide">{ageBand === 'INFANT' ? 'Infant Triage Form (0–3 years)' : 'Child Triage Form (3–12 years)'}</h1>
                 <p className="text-white/50 text-[11px]">King Faisal Hospital — Ages 0–3</p>
               </div>
             </div>
@@ -578,7 +619,7 @@ export function PediatricTriageForm() {
 
           <div className={`border-b px-5 py-2 flex items-center gap-2 ${isDark ? 'bg-pink-900/20 border-pink-500/20' : 'bg-gradient-to-r from-pink-50/80 to-pink-100/60 border-pink-200/40'}`}>
             <Baby className="w-3.5 h-3.5 text-pink-600" />
-            <span className={`text-[11px] font-medium ${isDark ? 'text-pink-400' : 'text-pink-700'}`}>Pediatric patient — Infants from age 0 to 3 years</span>
+            <span className={`text-[11px] font-medium ${isDark ? 'text-pink-400' : 'text-pink-700'}`}>{ageBand === 'INFANT' ? 'Pediatric patient — Infant (0–3 years) — KFH Infant Triage Form' : 'Pediatric patient — Child (3–12 years) — KFH Child Triage Form'}</span>
           </div>
 
           {/* Patient Information */}
@@ -732,11 +773,11 @@ export function PediatricTriageForm() {
 
           <div className="px-4 py-3 border-b border-white/30" style={{ background: isDark ? 'rgba(12,74,110,0.25)' : 'rgba(248,250,252,0.5)' }}>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              <div><label className={labelCls}>Mobility</label><select value={tewsInput.mobility} onChange={(e) => setTewsInput({ ...tewsInput, mobility: e.target.value as PedMobility })} className={selectCls}><option value="NORMAL">Normal for age</option><option value="UNABLE">Unable to walk</option></select></div>
+              <div><label className={labelCls}>Mobility</label><select value={tewsInput.mobility} onChange={(e) => setTewsInput({ ...tewsInput, mobility: e.target.value as PedMobility })} className={selectCls}><option value="NORMAL">Normal for age</option><option value="UNABLE">{ageBand === 'INFANT' ? 'Unable to move normally' : 'Unable to walk as normal'}</option></select></div>
               <div><label className={labelCls}>Respiratory Rate</label><div className="relative"><input type="number" value={tewsInput.respiratoryRate ?? ''} onChange={(e) => setTewsInput({ ...tewsInput, respiratoryRate: e.target.value ? parseInt(e.target.value) : null })} placeholder="—" className={`${inputCls} ${getVitalBg('respiratoryRate', tewsInput.respiratoryRate?.toString() || '')}`} /><span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400">/min</span></div></div>
               <div><label className={labelCls}>Heart Rate</label><div className="relative"><input type="number" value={tewsInput.heartRate ?? ''} onChange={(e) => setTewsInput({ ...tewsInput, heartRate: e.target.value ? parseInt(e.target.value) : null })} placeholder="—" className={`${inputCls} ${getVitalBg('heartRate', tewsInput.heartRate?.toString() || '')}`} /><span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400">bpm</span></div></div>
               <div><label className={labelCls}>Temperature</label><div className="relative"><input type="number" step="0.1" value={tewsInput.temperature ?? ''} onChange={(e) => setTewsInput({ ...tewsInput, temperature: e.target.value ? parseFloat(e.target.value) : null })} placeholder="—" className={`${inputCls} ${getVitalBg('temperature', tewsInput.temperature?.toString() || '')}`} /><span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400">°C</span></div></div>
-              <div><label className={labelCls}>AVPU</label><select value={tewsInput.avpu} onChange={(e) => setTewsInput({ ...tewsInput, avpu: e.target.value as PedAVPU })} className={selectCls}><option value="ALERT">Alert</option><option value="CONFUSED">Confused</option><option value="VOICE">Responds to Voice</option><option value="PAIN">Responds to Pain</option><option value="UNRESPONSIVE">Unresponsive</option></select></div>
+              <div><label className={labelCls}>AVPU</label><select value={tewsInput.avpu} onChange={(e) => setTewsInput({ ...tewsInput, avpu: e.target.value as PedAVPU })} className={selectCls}><option value="ALERT">Alert</option>{ageBand === 'CHILD' && <option value="CONFUSED">Confused</option>}<option value="VOICE">Responds to Voice</option><option value="PAIN">Responds to Pain</option><option value="UNRESPONSIVE">Unresponsive</option></select></div>
               <div><label className={labelCls}>Trauma</label><select value={tewsInput.trauma ? 'YES' : 'NO'} onChange={(e) => setTewsInput({ ...tewsInput, trauma: e.target.value === 'YES' })} className={selectCls}><option value="NO">No</option><option value="YES">Yes</option></select></div>
             </div>
           </div>
@@ -753,7 +794,7 @@ export function PediatricTriageForm() {
                 </tr>
               </thead>
               <tbody>
-                {TEWS_ROWS.map((row, ri) => {
+                {tewsRows.map((row, ri) => {
                   const colVal = row.key === 'mobility' ? tewsColumns.mobility : row.key === 'rr' ? tewsColumns.rr : row.key === 'hr' ? tewsColumns.hr : row.key === 'temp' ? tewsColumns.temp : row.key === 'avpu' ? tewsColumns.avpu : tewsColumns.trauma;
                   const highlightIdx = columnToTableIndex(colVal);
                   const rowScore = row.key === 'mobility' ? tewsScoring.mobilityScore : row.key === 'rr' ? tewsScoring.respiratoryRateScore : row.key === 'hr' ? tewsScoring.heartRateScore : row.key === 'temp' ? tewsScoring.temperatureScore : row.key === 'avpu' ? tewsScoring.avpuScore : tewsScoring.traumaScore;

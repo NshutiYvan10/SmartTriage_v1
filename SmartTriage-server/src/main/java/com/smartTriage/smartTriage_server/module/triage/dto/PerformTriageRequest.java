@@ -365,6 +365,67 @@ public class PerformTriageRequest {
     private boolean urgForeignBodyAspiration = false;
 
     // ====================================================================
+    // V38 — Pediatric form compliance — Very Urgent (peds-only)
+    // KFH Infant 0–3 / Child 3–12 form items not present on the adult
+    // form. The decision engine reads these only on peds visits.
+    // ====================================================================
+
+    @Builder.Default
+    private boolean vuPedsMoreSleepyThanNormal = false;
+
+    @Builder.Default
+    private boolean vuPedsInconsolableSeverePain = false;
+
+    @Builder.Default
+    private boolean vuPedsFloppyIrritableRestless = false;
+
+    /** Infant form (0–3) only. */
+    @Builder.Default
+    private boolean vuPedsTinyBabyUnder2Months = false;
+
+    /** Peds-form burn threshold (10%) — distinct from adult vuBurnOver20Percent. */
+    @Builder.Default
+    private boolean vuPedsBurnOver10Percent = false;
+
+    // ====================================================================
+    // V38 — Pediatric form compliance — Urgent (peds-only)
+    // ====================================================================
+
+    @Builder.Default
+    private boolean urgPedsPittingEdemaFaceOrFeet = false;
+
+    @Builder.Default
+    private boolean urgPedsSomeRespiratoryDistress = false;
+
+    @Builder.Default
+    private boolean urgPedsSevereMalnutritionWasting = false;
+
+    @Builder.Default
+    private boolean urgPedsUnwellWithKnownDiabetes = false;
+
+    /**
+     * Composite: "Diarrhoea and/or vomiting plus any of: sunken eyes,
+     * dry mouth, decreased urine output, skin pinch slow but <2 sec".
+     * The composite flag drives the URG decision; sub-flags capture
+     * what the nurse saw. The decision engine also fires the URG
+     * when the composite flag is false but sub-flags imply it.
+     */
+    @Builder.Default
+    private boolean urgPedsDiarrheaVomitingDehydration = false;
+
+    @Builder.Default
+    private boolean urgPedsDehydrationSunkenEyes = false;
+
+    @Builder.Default
+    private boolean urgPedsDehydrationDryMouth = false;
+
+    @Builder.Default
+    private boolean urgPedsDehydrationDecreasedUrine = false;
+
+    @Builder.Default
+    private boolean urgPedsDehydrationSlowSkinPinch = false;
+
+    // ====================================================================
     // SECTION 5: CLINICAL METADATA
     // ====================================================================
 

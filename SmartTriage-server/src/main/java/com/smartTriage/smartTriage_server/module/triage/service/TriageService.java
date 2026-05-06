@@ -161,9 +161,13 @@ public class TriageService {
         String decisionPath;
 
         if (isPediatric) {
-            // CHILD form (3-12 years) — uses child-specific emergency signs
+            // PEDIATRIC — KFH Infant 0-3 or Child 3-12 form. The decision
+            // engine + TEWS calculator branch on age in months (<36 → infant)
+            // so RR/HR ranges, AVPU options, and form-specific VU/URG
+            // discriminators all match the right KFH form.
+            int ageInMonths = ageInMonths(visit);
             PediatricTriageDecisionResult pedDecision = pediatricDecisionEngine.decide(
-                    tewsScore, spo2, painScore, request);
+                    ageInMonths, tewsScore, spo2, painScore, request);
             category = pedDecision.category();
             decisionPath = pedDecision.decisionPath();
         } else {
@@ -265,6 +269,24 @@ public class TriageService {
                 .urgModeratePain(request.isUrgModeratePain())
                 .urgLacerationAbscess(request.isUrgLacerationAbscess())
                 .urgForeignBodyAspiration(request.isUrgForeignBodyAspiration())
+
+                // V38 — peds-specific Very Urgent (KFH peds form)
+                .vuPedsMoreSleepyThanNormal(request.isVuPedsMoreSleepyThanNormal())
+                .vuPedsInconsolableSeverePain(request.isVuPedsInconsolableSeverePain())
+                .vuPedsFloppyIrritableRestless(request.isVuPedsFloppyIrritableRestless())
+                .vuPedsTinyBabyUnder2Months(request.isVuPedsTinyBabyUnder2Months())
+                .vuPedsBurnOver10Percent(request.isVuPedsBurnOver10Percent())
+
+                // V38 — peds-specific Urgent (KFH peds form)
+                .urgPedsPittingEdemaFaceOrFeet(request.isUrgPedsPittingEdemaFaceOrFeet())
+                .urgPedsSomeRespiratoryDistress(request.isUrgPedsSomeRespiratoryDistress())
+                .urgPedsSevereMalnutritionWasting(request.isUrgPedsSevereMalnutritionWasting())
+                .urgPedsUnwellWithKnownDiabetes(request.isUrgPedsUnwellWithKnownDiabetes())
+                .urgPedsDiarrheaVomitingDehydration(request.isUrgPedsDiarrheaVomitingDehydration())
+                .urgPedsDehydrationSunkenEyes(request.isUrgPedsDehydrationSunkenEyes())
+                .urgPedsDehydrationDryMouth(request.isUrgPedsDehydrationDryMouth())
+                .urgPedsDehydrationDecreasedUrine(request.isUrgPedsDehydrationDecreasedUrine())
+                .urgPedsDehydrationSlowSkinPinch(request.isUrgPedsDehydrationSlowSkinPinch())
 
                 // Computed
                 .tewsScore(tewsScore)
@@ -382,11 +404,29 @@ public class TriageService {
 
     private int calculateTews(VitalSigns vitals, PerformTriageRequest request, Visit visit) {
         if (visit.isPediatric()) {
+            int ageInMonths = ageInMonths(visit);
             return pediatricTewsCalculator.calculatePediatricTewsScore(
-                    vitals, request.getMobility(), request.getAvpu(), request.getTraumaStatus());
+                    ageInMonths, vitals, request.getMobility(), request.getAvpu(), request.getTraumaStatus());
         }
         return tewsCalculator.calculateTewsScore(
                 vitals, request.getMobility(), request.getAvpu(), request.getTraumaStatus());
+    }
+
+    /**
+     * Patient age in completed months at triage time. Returns the
+     * CHILD-form boundary (36) when the patient's date of birth is
+     * unknown — defensive default that errs toward the more
+     * conservative (child-form) thresholds rather than treating an
+     * unknown-age peds patient as an infant.
+     */
+    private static int ageInMonths(Visit visit) {
+        if (visit == null || visit.getPatient() == null) {
+            return PediatricTewsCalculator.INFANT_AGE_BOUNDARY_MONTHS;
+        }
+        java.time.LocalDate dob = visit.getPatient().getDateOfBirth();
+        if (dob == null) return PediatricTewsCalculator.INFANT_AGE_BOUNDARY_MONTHS;
+        long months = java.time.temporal.ChronoUnit.MONTHS.between(dob, java.time.LocalDate.now());
+        return (int) Math.max(0, months);
     }
 
     private boolean isEscalation(TriageCategory previous, TriageCategory current) {
