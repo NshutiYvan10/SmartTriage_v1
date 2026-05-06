@@ -17,10 +17,12 @@ const ZONE_LABELS: Record<EdZone, { label: string; icon: string }> = {
   RESUS:       { label: 'Resuscitation', icon: '🔴' },
   ACUTE:       { label: 'Acute',         icon: '🟠' },
   GENERAL:     { label: 'General',       icon: '🟡' },
+  AMBULATORY:  { label: 'Ambulatory',    icon: '🟢' },
   TRIAGE:      { label: 'Triage',        icon: '🔵' },
   OBSERVATION: { label: 'Observation',   icon: '🟢' },
   ISOLATION:   { label: 'Isolation',     icon: '🟣' },
   PEDIATRIC:   { label: 'Pediatric',     icon: '🩷' },
+  NEONATAL:    { label: 'Neonatal',      icon: '👶' },
 };
 
 const FUNCTION_LABELS: Record<ShiftFunction, string> = {

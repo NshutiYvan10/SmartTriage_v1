@@ -439,6 +439,12 @@ export function TriageQueue() {
     referringFacility: p.referringFacility ?? null,
     isPediatric: p.isPediatric,
     retriageCount: 0,
+    // Phase 1+2 zone-routing fields. Pre-triage patients haven't been
+    // placed in a zone yet, so currentEdZone is null; primary clinician
+    // is null until first action.
+    currentEdZone: null,
+    primaryClinicianId: null,
+    primaryClinicianName: null,
     createdAt: new Date(p.arrivalTimestamp).toISOString(),
     updatedAt: new Date().toISOString(),
   }), [user?.hospitalId]);

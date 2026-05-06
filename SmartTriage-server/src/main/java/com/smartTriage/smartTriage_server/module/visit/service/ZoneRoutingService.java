@@ -50,15 +50,33 @@ public class ZoneRoutingService {
         if (visit == null) return EdZone.TRIAGE;
         Hospital hospital = visit.getHospital();
         boolean hasPedsResus = hospital != null && hospital.isHasPediatricResus();
+        boolean hasNeonatalUnit = hospital != null && hospital.isHasNeonatalUnit();
         boolean hasAmbulatoryZone = hospital != null
                 && bedRepository.countByHospitalIdAndZoneAndIsActiveTrue(
                         hospital.getId(), EdZone.AMBULATORY) > 0;
+        boolean isNeonatal = isNeonatal(visit);
         EdZone zone = EdZone.forPatientPlacement(
-                category, visit.isPediatric(), hasPedsResus, hasAmbulatoryZone);
-        log.debug("[zone-routing] visit={} category={} peds={} hasPedsResus={} hasAmbulatory={} → {}",
-                visit.getVisitNumber(), category, visit.isPediatric(),
-                hasPedsResus, hasAmbulatoryZone, zone);
+                category, visit.isPediatric(), isNeonatal,
+                hasPedsResus, hasAmbulatoryZone, hasNeonatalUnit);
+        log.debug("[zone-routing] visit={} category={} peds={} neonatal={} hasPedsResus={} hasAmbulatory={} hasNeonatal={} → {}",
+                visit.getVisitNumber(), category, visit.isPediatric(), isNeonatal,
+                hasPedsResus, hasAmbulatoryZone, hasNeonatalUnit, zone);
         return zone;
+    }
+
+    /**
+     * Neonatal classification — patient is ≤28 days old. Reads the
+     * patient's date of birth on the visit; returns false when DOB
+     * is null (unknown age → don't activate the neonatal branch
+     * since miscoding a 5-year-old as a neonate is the worse failure
+     * mode).
+     */
+    private static boolean isNeonatal(Visit visit) {
+        if (visit == null || visit.getPatient() == null) return false;
+        java.time.LocalDate dob = visit.getPatient().getDateOfBirth();
+        if (dob == null) return false;
+        long days = java.time.temporal.ChronoUnit.DAYS.between(dob, java.time.LocalDate.now());
+        return days >= 0 && days <= 28;
     }
 
     /**

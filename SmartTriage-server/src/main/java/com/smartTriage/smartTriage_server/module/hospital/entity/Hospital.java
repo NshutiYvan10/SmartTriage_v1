@@ -71,4 +71,21 @@ public class Hospital extends BaseEntity {
     @Column(name = "has_pediatric_resus", nullable = false)
     @Builder.Default
     private boolean hasPediatricResus = false;
+
+    /**
+     * True when this hospital has a dedicated neonatal unit with
+     * neonatal-specific equipment and trained staff. Affects how
+     * neonatal patients (≤28 days old) are routed: when true they
+     * go to the NEONATAL zone regardless of category; when false
+     * (the default for most facilities) they fall through to the
+     * pediatric routing.
+     *
+     * <p>See {@link com.smartTriage.smartTriage_server.common.enums.EdZone#forPatientPlacement(
+     *   com.smartTriage.smartTriage_server.common.enums.TriageCategory,
+     *   boolean, boolean, boolean, boolean, boolean)} for the full
+     * placement decision matrix.
+     */
+    @Column(name = "has_neonatal_unit", nullable = false)
+    @Builder.Default
+    private boolean hasNeonatalUnit = false;
 }

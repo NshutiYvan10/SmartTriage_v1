@@ -37,7 +37,15 @@ public enum EdZone {
     TRIAGE("Triage Station", "Triage nurse station — initial assessment"),
     OBSERVATION("Observation Unit", "Short-stay monitoring post-treatment"),
     ISOLATION("Isolation", "Infectious disease isolation area"),
-    PEDIATRIC("Pediatric", "Dedicated pediatric treatment area");
+    PEDIATRIC("Pediatric", "Dedicated pediatric treatment area"),
+    /**
+     * Dedicated neonatal area (≤28 days old) with neonatal-specific
+     * equipment and trained staff. Opt-in per hospital via
+     * {@code Hospital.has_neonatal_unit} — most district hospitals
+     * don't provision this, so neonates fall through to the general
+     * pediatric routing at those sites.
+     */
+    NEONATAL("Neonatal", "Dedicated neonatal area for patients ≤28 days old");
 
     private final String label;
     private final String description;
@@ -96,7 +104,49 @@ public enum EdZone {
             boolean isPediatric,
             boolean hospitalHasPediatricResus,
             boolean hospitalHasAmbulatoryZone) {
+        return forPatientPlacement(category, isPediatric, /* isNeonatal */ false,
+                hospitalHasPediatricResus, hospitalHasAmbulatoryZone,
+                /* hospitalHasNeonatalUnit */ false);
+    }
+
+    /**
+     * Full placement decision including the neonatal branch. Neonates
+     * (≤28 days old) at hospitals with a dedicated neonatal unit
+     * route to {@link #NEONATAL} regardless of triage category — even
+     * GREEN-coded neonates belong in the neonatal area for assessment,
+     * not the general waiting room. At hospitals without a neonatal
+     * unit, neonates fall through to the regular pediatric logic
+     * (their {@code is_pediatric} flag is true so they still get the
+     * peds-zone routing).
+     *
+     * <p>The neonatal branch sits at the top of the matrix so it
+     * supersedes the RED → RESUS default — neonatal resus capability
+     * is built into a proper neonatal unit, and a coding neonate is
+     * better served there than in a main resus that may not have the
+     * smaller tubes / drug-dose cards / neonatal-mode probes.
+     *
+     * @param isNeonatal true when the patient is ≤28 days old; the
+     *        caller (typically ZoneRoutingService) computes this
+     *        from the patient's date of birth
+     * @param hospitalHasNeonatalUnit the hospital's
+     *        {@code has_neonatal_unit} configuration flag
+     */
+    public static EdZone forPatientPlacement(
+            TriageCategory category,
+            boolean isPediatric,
+            boolean isNeonatal,
+            boolean hospitalHasPediatricResus,
+            boolean hospitalHasAmbulatoryZone,
+            boolean hospitalHasNeonatalUnit) {
         if (category == null) return TRIAGE;
+
+        // Neonatal branch — supersedes everything else when the
+        // hospital actually has the unit. Without the unit, fall
+        // through to the regular peds logic (the patient's is_peds
+        // flag will be true, so they'll go to PEDIATRIC).
+        if (isNeonatal && hospitalHasNeonatalUnit) {
+            return NEONATAL;
+        }
 
         if (category == TriageCategory.RED) {
             if (isPediatric && hospitalHasPediatricResus) return PEDIATRIC;

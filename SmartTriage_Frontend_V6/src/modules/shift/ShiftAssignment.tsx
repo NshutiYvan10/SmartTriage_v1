@@ -30,10 +30,12 @@ const ZONE_TEXT_COLORS: Record<EdZone, string> = {
   RESUS: 'text-red-500',
   ACUTE: 'text-orange-500',
   GENERAL: 'text-yellow-500',
+  AMBULATORY: 'text-emerald-500',
   TRIAGE: 'text-blue-500',
   OBSERVATION: 'text-emerald-500',
   ISOLATION: 'text-purple-500',
   PEDIATRIC: 'text-pink-500',
+  NEONATAL: 'text-pink-400',
 };
 
 const SHIFT_FUNCTIONS: { value: ShiftFunction; label: string }[] = [

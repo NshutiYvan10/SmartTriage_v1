@@ -49,6 +49,11 @@ const ACCEPTANCE_WINDOW_MINUTES: Record<string, number> = {
   GENERAL: 60,
   AMBULATORY: 60,
   PEDIATRIC: 30,
+  // Neonates are physiologically fragile across categories — even a
+  // GREEN-coded neonate shouldn't sit in a pending-transfer queue
+  // for an hour. Use the tightest window so the dashboard surfaces
+  // overdue neonatal transfers as urgently as RESUS ones.
+  NEONATAL: 10,
 };
 
 function minutesAgo(iso: string): number {

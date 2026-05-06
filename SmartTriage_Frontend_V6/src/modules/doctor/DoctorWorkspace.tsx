@@ -38,6 +38,7 @@ const ZONE_LABELS: Record<EdZone, string> = {
   OBSERVATION: 'Observation Unit',
   ISOLATION: 'Isolation Area',
   PEDIATRIC: 'Pediatric Zone',
+  NEONATAL: 'Neonatal Unit',
 };
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
