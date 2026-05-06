@@ -186,6 +186,25 @@ public class ClinicalSignService {
             toSave.add(event);
         }
 
+        // Round 4b — capture the previous status for each sign code BEFORE
+        // we save the new events, so the RetriageEvaluator can detect
+        // down-trajectory transitions. Building this map up-front (rather
+        // than re-querying inside the loop) keeps the evaluation hook
+        // O(N) on batch size with one query per distinct sign code.
+        java.util.Map<String, ClinicalSignStatus> previousStatusByCode = new java.util.HashMap<>();
+        for (ClinicalSignEvent prospect : toSave) {
+            String code = prospect.getSignCode();
+            if (previousStatusByCode.containsKey(code)) continue;
+            // Latest existing event for this sign code, if any. The
+            // findByVisitIdAndSignCode... query returns events oldest-first.
+            java.util.List<ClinicalSignEvent> prior = repository
+                    .findByVisitIdAndSignCodeAndIsActiveTrueOrderByRecordedAtAsc(visit.getId(), code);
+            ClinicalSignStatus prevStatus = prior.isEmpty()
+                    ? null
+                    : prior.get(prior.size() - 1).getStatus();
+            previousStatusByCode.put(code, prevStatus);
+        }
+
         List<ClinicalSignEvent> saved = repository.saveAll(toSave);
         log.info("[clinicalsigns] Recorded {} sign updates for visit {} at {}",
                 saved.size(), visit.getId(), when);
@@ -198,12 +217,18 @@ public class ClinicalSignService {
         // succeeded, the audit log is intact, and a missed re-triage
         // signal is preferable to making the doctor's "Record Update"
         // call appear failed when the events actually persisted.
+        //
+        // Round 4b — pass the captured previousStatus so the evaluator
+        // can suggest down-bump re-triages on PRESENT/WORSENING →
+        // ABSENT/IMPROVING transitions.
         for (ClinicalSignEvent event : saved) {
             try {
                 String label = ClinicalSignDefinitions.labelOrCode(event.getSignCode());
+                ClinicalSignStatus previousStatus = previousStatusByCode.get(event.getSignCode());
                 RetriageEvaluator.RetriageDecision decision = RetriageEvaluator.evaluate(
                         event.getSignCategory(),
                         event.getStatus(),
+                        previousStatus,
                         event.isBaseline(),
                         visit.isPediatric(),
                         visit.getCurrentTriageCategory(),

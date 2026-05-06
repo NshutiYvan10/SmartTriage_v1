@@ -62,23 +62,17 @@ public final class RetriageEvaluator {
     private static final NoAction NO_ACTION = new NoAction();
 
     /**
-     * @param signCategory the category enum of the recorded sign
-     * @param newStatus    the status persisted in this event
-     * @param isBaseline   true when this is a triage-bootstrap event (we
-     *                     never re-trigger off baselines, since they
-     *                     reflect the state the original triage already
-     *                     decided on)
-     * @param isPediatric  visit's pediatric flag
-     * @param currentCategory the visit's current triage category, may be
-     *                        null when not yet triaged (rare — clinical-
-     *                        sign events shouldn't normally land before
-     *                        triage)
-     * @param signLabelForMessages human-readable sign label, used in the
-     *                             alert message and decision-path string
+     * Round 4b overload — accepts the previous-known status for this
+     * sign on this visit so down-trajectory transitions
+     * (PRESENT/WORSENING → ABSENT/IMPROVING) can be detected and
+     * surface as MEDIUM-severity Suggest re-triages. Pass {@code null}
+     * for {@code previousStatus} when there is no prior event for this
+     * sign (typical for the first observation).
      */
     public static RetriageDecision evaluate(
             ClinicalSignCategory signCategory,
             ClinicalSignStatus newStatus,
+            ClinicalSignStatus previousStatus,
             boolean isBaseline,
             boolean isPediatric,
             TriageCategory currentCategory,
@@ -88,56 +82,132 @@ public final class RetriageEvaluator {
         // already committed to a category that takes them into account.
         if (isBaseline) return NO_ACTION;
 
-        // Only PRESENT or WORSENING justify an upgrade. IMPROVING /
-        // RESOLVED / ABSENT are down-trajectory; UNKNOWN is uncertainty.
-        if (newStatus != ClinicalSignStatus.PRESENT && newStatus != ClinicalSignStatus.WORSENING) {
+        // Up-trajectory branch (Round 3 logic, unchanged):
+        if (newStatus == ClinicalSignStatus.PRESENT || newStatus == ClinicalSignStatus.WORSENING) {
+
+            // EMERGENCY signs deterministically map to RED per Rwandan rules.
+            if (signCategory == ClinicalSignCategory.EMERGENCY) {
+                if (isAtOrAbove(currentCategory, TriageCategory.RED)) return NO_ACTION;
+                return new AutoBump(
+                        TriageCategory.RED,
+                        "Emergency sign positive: " + signLabelForMessages);
+            }
+
+            // PEDIATRIC_EMERGENCY likewise → RED, but only on a pediatric
+            // patient. On an adult visit we treat it as defensive NoAction
+            // rather than escalate on what's structurally an unrelated form.
+            if (signCategory == ClinicalSignCategory.PEDIATRIC_EMERGENCY) {
+                if (!isPediatric) return NO_ACTION;
+                if (isAtOrAbove(currentCategory, TriageCategory.RED)) return NO_ACTION;
+                return new AutoBump(
+                        TriageCategory.RED,
+                        "Pediatric emergency sign positive: " + signLabelForMessages);
+            }
+
+            // mSAT Very Urgent → suggest if currently below ORANGE. We don't
+            // auto-bump here because the resulting category in the Rwandan
+            // flowchart depends on additional vitals + discriminators; the
+            // nurse needs to look at the patient.
+            if (signCategory == ClinicalSignCategory.MSAT_VU) {
+                if (isAtOrAbove(currentCategory, TriageCategory.ORANGE)) return NO_ACTION;
+                return new Suggest(
+                        AlertSeverity.HIGH,
+                        "Re-triage suggested: very urgent sign \"" + signLabelForMessages
+                                + "\" reported. Current category: "
+                                + safeCategoryName(currentCategory) + ".");
+            }
+
+            // mSAT Urgent → suggest if currently below YELLOW.
+            if (signCategory == ClinicalSignCategory.MSAT_URG) {
+                if (isAtOrAbove(currentCategory, TriageCategory.YELLOW)) return NO_ACTION;
+                return new Suggest(
+                        AlertSeverity.HIGH,
+                        "Re-triage suggested: urgent sign \"" + signLabelForMessages
+                                + "\" reported. Current category: "
+                                + safeCategoryName(currentCategory) + ".");
+            }
+
+            // SPECIAL — informational only; never triggers a re-triage.
             return NO_ACTION;
         }
 
-        // EMERGENCY signs deterministically map to RED per Rwandan rules.
-        if (signCategory == ClinicalSignCategory.EMERGENCY) {
-            if (isAtOrAbove(currentCategory, TriageCategory.RED)) return NO_ACTION;
-            return new AutoBump(
-                    TriageCategory.RED,
-                    "Emergency sign positive: " + signLabelForMessages);
-        }
+        // Down-trajectory branch (Round 4b):
+        //
+        // We never auto-de-escalate. A patient improving doesn't mean the
+        // ED has spare capacity to re-bed them; that's a clinical
+        // decision the nurse should make with the patient in front of
+        // them. We only Suggest, and only when ALL of:
+        //   - the new status is ABSENT or IMPROVING (a real signal that
+        //     the sign is no longer driving acuity)
+        //   - the previous status was PRESENT or WORSENING (otherwise
+        //     this isn't a transition worth flagging)
+        //   - the visit's current category is at or above the floor
+        //     this sign would have implied (so the sign was plausibly a
+        //     driver of the current category)
+        //
+        // We use MEDIUM severity rather than HIGH — down-bump suggestions
+        // are reassurance-coloured, not alarm-coloured. The same alert
+        // type RETRIAGE_REQUIRED is reused; the title distinguishes
+        // direction.
+        if (newStatus == ClinicalSignStatus.ABSENT || newStatus == ClinicalSignStatus.IMPROVING) {
 
-        // PEDIATRIC_EMERGENCY likewise → RED, but only on a pediatric
-        // patient. On an adult visit we treat it as defensive NoAction
-        // rather than escalate on what's structurally an unrelated form.
-        if (signCategory == ClinicalSignCategory.PEDIATRIC_EMERGENCY) {
-            if (!isPediatric) return NO_ACTION;
-            if (isAtOrAbove(currentCategory, TriageCategory.RED)) return NO_ACTION;
-            return new AutoBump(
-                    TriageCategory.RED,
-                    "Pediatric emergency sign positive: " + signLabelForMessages);
-        }
+            if (previousStatus != ClinicalSignStatus.PRESENT
+                    && previousStatus != ClinicalSignStatus.WORSENING) {
+                return NO_ACTION;
+            }
 
-        // mSAT Very Urgent → suggest if currently below ORANGE. We don't
-        // auto-bump here because the resulting category in the Rwandan
-        // flowchart depends on additional vitals + discriminators; the
-        // nurse needs to look at the patient.
-        if (signCategory == ClinicalSignCategory.MSAT_VU) {
-            if (isAtOrAbove(currentCategory, TriageCategory.ORANGE)) return NO_ACTION;
+            // Determine the floor this sign category would have implied.
+            // Same thresholds as the up-bump branch.
+            TriageCategory floor;
+            if (signCategory == ClinicalSignCategory.EMERGENCY) {
+                floor = TriageCategory.RED;
+            } else if (signCategory == ClinicalSignCategory.PEDIATRIC_EMERGENCY) {
+                if (!isPediatric) return NO_ACTION;
+                floor = TriageCategory.RED;
+            } else if (signCategory == ClinicalSignCategory.MSAT_VU) {
+                floor = TriageCategory.ORANGE;
+            } else if (signCategory == ClinicalSignCategory.MSAT_URG) {
+                floor = TriageCategory.YELLOW;
+            } else {
+                // SPECIAL — never triggers down-bump suggestions either.
+                return NO_ACTION;
+            }
+
+            // Only suggest when the patient is plausibly held at this
+            // floor by the sign that's now improving. If the visit is
+            // already below the floor, the sign wasn't driving acuity.
+            if (!isAtOrAbove(currentCategory, floor)) return NO_ACTION;
+
+            String dirLabel = newStatus == ClinicalSignStatus.ABSENT ? "resolved" : "improving";
             return new Suggest(
-                    AlertSeverity.HIGH,
-                    "Re-triage suggested: very urgent sign \"" + signLabelForMessages
-                            + "\" reported. Current category: "
-                            + safeCategoryName(currentCategory) + ".");
+                    AlertSeverity.MEDIUM,
+                    "Re-triage suggested: \"" + signLabelForMessages + "\" "
+                            + dirLabel + ". The patient may no longer require "
+                            + safeCategoryName(currentCategory)
+                            + " care if no other driving signs remain.");
         }
 
-        // mSAT Urgent → suggest if currently below YELLOW.
-        if (signCategory == ClinicalSignCategory.MSAT_URG) {
-            if (isAtOrAbove(currentCategory, TriageCategory.YELLOW)) return NO_ACTION;
-            return new Suggest(
-                    AlertSeverity.HIGH,
-                    "Re-triage suggested: urgent sign \"" + signLabelForMessages
-                            + "\" reported. Current category: "
-                            + safeCategoryName(currentCategory) + ".");
-        }
-
-        // SPECIAL — informational only; never triggers a re-triage.
+        // UNKNOWN, anything else: NoAction.
         return NO_ACTION;
+    }
+
+    /**
+     * Round 3 backwards-compatible overload — assumes no previous-status
+     * context. Equivalent to passing {@code previousStatus = null}, which
+     * disables the down-bump branch (down-bumps need to know what we
+     * came from). Existing callers that haven't yet been ported get the
+     * Round 3 behaviour unchanged.
+     */
+    public static RetriageDecision evaluate(
+            ClinicalSignCategory signCategory,
+            ClinicalSignStatus newStatus,
+            boolean isBaseline,
+            boolean isPediatric,
+            TriageCategory currentCategory,
+            String signLabelForMessages
+    ) {
+        return evaluate(signCategory, newStatus, null, isBaseline, isPediatric,
+                currentCategory, signLabelForMessages);
     }
 
     /**

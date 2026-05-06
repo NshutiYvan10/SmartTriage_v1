@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -37,4 +38,40 @@ public interface ClinicalSignEventRepository extends JpaRepository<ClinicalSignE
      */
     List<ClinicalSignEvent> findByVisitIdAndSignCodeAndIsActiveTrueOrderByRecordedAtAsc(
             UUID visitId, String signCode);
+
+    /**
+     * Round 4c — find non-baseline events recorded within the last
+     * {@code since} window that have NOT yet been processed by the
+     * re-triage engine. "Processed" is defined as: there's no
+     * triage_records row pointing back to this event, AND there's no
+     * clinical_alerts row pointing back to this event. The two NOT
+     * EXISTS subqueries cover both the AutoBump and Suggest output
+     * paths.
+     *
+     * <p>The query is intentionally conservative: it returns events
+     * that may not have warranted any action either (the inline
+     * evaluator would have decided NoAction) — re-running them is
+     * cheap and idempotent because the evaluator returns the same
+     * decision either way.
+     *
+     * <p>Capped to 200 rows to keep the scheduled job's per-tick work
+     * bounded; if the backlog grows beyond that the next tick will
+     * pick up the remainder.
+     */
+    @Query(value = "SELECT e.* FROM clinical_sign_events e " +
+            "WHERE e.is_active = true " +
+            "AND e.is_baseline = false " +
+            "AND e.recorded_at >= :since " +
+            "AND NOT EXISTS (" +
+            "    SELECT 1 FROM triage_records t " +
+            "    WHERE t.triggering_sign_event_id = e.id" +
+            ") " +
+            "AND NOT EXISTS (" +
+            "    SELECT 1 FROM clinical_alerts a " +
+            "    WHERE a.triggering_sign_event_id = e.id" +
+            ") " +
+            "ORDER BY e.recorded_at ASC " +
+            "LIMIT 200",
+            nativeQuery = true)
+    List<ClinicalSignEvent> findUnprocessedRecentEvents(@Param("since") Instant since);
 }

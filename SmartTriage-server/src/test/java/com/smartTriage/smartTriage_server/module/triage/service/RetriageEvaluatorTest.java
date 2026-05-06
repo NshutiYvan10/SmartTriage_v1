@@ -208,4 +208,123 @@ class RetriageEvaluatorTest {
                 false, false, /* not yet triaged */ null, LBL);
         assertInstanceOf(AutoBump.class, d);
     }
+
+    // ────────────────────────────────────────────────────────────────
+    // Round 4b — down-trajectory (IMPROVING / ABSENT) suggestions
+    // ────────────────────────────────────────────────────────────────
+
+    @Test
+    void downBump_emergencyPresentToAbsentAtRed_suggestsMedium() {
+        RetriageDecision d = RetriageEvaluator.evaluate(
+                ClinicalSignCategory.EMERGENCY,
+                ClinicalSignStatus.ABSENT,
+                /* previous */ ClinicalSignStatus.PRESENT,
+                false, false, TriageCategory.RED, LBL);
+        Suggest s = assertInstanceOf(Suggest.class, d);
+        assertEquals(AlertSeverity.MEDIUM, s.severity());
+        assertTrue(s.message().toLowerCase().contains("resolved"));
+    }
+
+    @Test
+    void downBump_msatVuWorseningToImprovingAtOrange_suggestsMedium() {
+        RetriageDecision d = RetriageEvaluator.evaluate(
+                ClinicalSignCategory.MSAT_VU,
+                ClinicalSignStatus.IMPROVING,
+                ClinicalSignStatus.WORSENING,
+                false, false, TriageCategory.ORANGE, LBL);
+        Suggest s = assertInstanceOf(Suggest.class, d);
+        assertEquals(AlertSeverity.MEDIUM, s.severity());
+        assertTrue(s.message().toLowerCase().contains("improving"));
+    }
+
+    @Test
+    void downBump_msatUrgPresentToAbsentAtYellow_suggestsMedium() {
+        RetriageDecision d = RetriageEvaluator.evaluate(
+                ClinicalSignCategory.MSAT_URG,
+                ClinicalSignStatus.ABSENT,
+                ClinicalSignStatus.PRESENT,
+                false, false, TriageCategory.YELLOW, LBL);
+        assertInstanceOf(Suggest.class, d);
+    }
+
+    @Test
+    void downBump_belowFloor_noAction() {
+        // Visit is already at GREEN; the sign moving to ABSENT is fine
+        // but doesn't warrant a re-triage suggestion since the sign
+        // wasn't keeping the patient at a higher acuity.
+        RetriageDecision d = RetriageEvaluator.evaluate(
+                ClinicalSignCategory.MSAT_VU,
+                ClinicalSignStatus.ABSENT,
+                ClinicalSignStatus.PRESENT,
+                false, false, TriageCategory.GREEN, LBL);
+        assertInstanceOf(NoAction.class, d);
+    }
+
+    @Test
+    void downBump_noPreviousStatus_noAction() {
+        // First-ever observation of this sign at ABSENT is meaningless
+        // for down-bump; the sign was never previously a driver.
+        RetriageDecision d = RetriageEvaluator.evaluate(
+                ClinicalSignCategory.EMERGENCY,
+                ClinicalSignStatus.ABSENT,
+                /* previous */ null,
+                false, false, TriageCategory.RED, LBL);
+        assertInstanceOf(NoAction.class, d);
+    }
+
+    @Test
+    void downBump_previouslyAbsent_noAction() {
+        // ABSENT → ABSENT (or UNKNOWN → ABSENT) is not a transition
+        // worth surfacing; the sign was never driving.
+        RetriageDecision d = RetriageEvaluator.evaluate(
+                ClinicalSignCategory.EMERGENCY,
+                ClinicalSignStatus.ABSENT,
+                ClinicalSignStatus.ABSENT,
+                false, false, TriageCategory.RED, LBL);
+        assertInstanceOf(NoAction.class, d);
+    }
+
+    @Test
+    void downBump_pedsEmergencyOnAdult_noAction() {
+        // Defensive: peds-only sign on an adult visit shouldn't suggest
+        // a down-bump either, mirroring the up-branch defensive return.
+        RetriageDecision d = RetriageEvaluator.evaluate(
+                ClinicalSignCategory.PEDIATRIC_EMERGENCY,
+                ClinicalSignStatus.ABSENT,
+                ClinicalSignStatus.PRESENT,
+                false, /* peds */ false, TriageCategory.RED, LBL);
+        assertInstanceOf(NoAction.class, d);
+    }
+
+    @Test
+    void downBump_specialCategory_noAction() {
+        RetriageDecision d = RetriageEvaluator.evaluate(
+                ClinicalSignCategory.SPECIAL,
+                ClinicalSignStatus.ABSENT,
+                ClinicalSignStatus.PRESENT,
+                false, false, TriageCategory.RED, LBL);
+        assertInstanceOf(NoAction.class, d);
+    }
+
+    @Test
+    void downBump_baselineEvent_noAction() {
+        // Baseline events never trigger anything, including down-bumps.
+        RetriageDecision d = RetriageEvaluator.evaluate(
+                ClinicalSignCategory.MSAT_VU,
+                ClinicalSignStatus.IMPROVING,
+                ClinicalSignStatus.PRESENT,
+                /* baseline */ true,
+                false, TriageCategory.ORANGE, LBL);
+        assertInstanceOf(NoAction.class, d);
+    }
+
+    // Backwards-compat overload (unchanged Round 3 signature) still works
+    @Test
+    void backwardsCompatOverload_stillRoutesUpBumps() {
+        RetriageDecision d = RetriageEvaluator.evaluate(
+                ClinicalSignCategory.EMERGENCY,
+                ClinicalSignStatus.PRESENT,
+                false, false, TriageCategory.YELLOW, LBL);
+        assertInstanceOf(AutoBump.class, d);
+    }
 }
