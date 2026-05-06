@@ -104,27 +104,29 @@ public final class RetriageEvaluator {
                         "Pediatric emergency sign positive: " + signLabelForMessages);
             }
 
-            // mSAT Very Urgent → suggest if currently below ORANGE. We don't
-            // auto-bump here because the resulting category in the Rwandan
-            // flowchart depends on additional vitals + discriminators; the
-            // nurse needs to look at the patient.
+            // mSAT Very Urgent → AutoBump to ORANGE.
+            //
+            // Round 5 policy change: previously this returned Suggest(HIGH)
+            // on the rationale that the resulting category depended on
+            // additional vitals + discriminators. In practice that left
+            // patients sitting at YELLOW with an unacknowledged alert in
+            // the queue while their actual condition was Very Urgent. The
+            // safety direction is to guarantee the floor and let manual
+            // re-triage push higher if vitals warrant it. Under-triage is
+            // not recoverable; over-triage by one category is.
             if (signCategory == ClinicalSignCategory.MSAT_VU) {
                 if (isAtOrAbove(currentCategory, TriageCategory.ORANGE)) return NO_ACTION;
-                return new Suggest(
-                        AlertSeverity.HIGH,
-                        "Re-triage suggested: very urgent sign \"" + signLabelForMessages
-                                + "\" reported. Current category: "
-                                + safeCategoryName(currentCategory) + ".");
+                return new AutoBump(
+                        TriageCategory.ORANGE,
+                        "Very urgent sign positive: " + signLabelForMessages);
             }
 
-            // mSAT Urgent → suggest if currently below YELLOW.
+            // mSAT Urgent → AutoBump to YELLOW. Same reasoning as MSAT_VU.
             if (signCategory == ClinicalSignCategory.MSAT_URG) {
                 if (isAtOrAbove(currentCategory, TriageCategory.YELLOW)) return NO_ACTION;
-                return new Suggest(
-                        AlertSeverity.HIGH,
-                        "Re-triage suggested: urgent sign \"" + signLabelForMessages
-                                + "\" reported. Current category: "
-                                + safeCategoryName(currentCategory) + ".");
+                return new AutoBump(
+                        TriageCategory.YELLOW,
+                        "Urgent sign positive: " + signLabelForMessages);
             }
 
             // SPECIAL — informational only; never triggers a re-triage.

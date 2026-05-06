@@ -57,9 +57,24 @@ interface Props {
   glassInner: React.CSSProperties;
   isDark: boolean;
   text: any;
+  /**
+   * Optional callback fired after any successful clinical-sign batch
+   * write. Recording a sign on the backend can produce a server-side
+   * auto re-triage (Round 3+5), which changes
+   * visit.currentTriageCategory and creates new TriageRecord +
+   * ClinicalAlert rows. The parent surface (VisitDetailPage) wires
+   * this to its own loadData() so the visit/triage/alerts state
+   * refreshes from authoritative storage after every sign update.
+   *
+   * Without this, the doctor sees the new sign in the timeline but
+   * the page header / Overview banner / Triage tab still show the
+   * stale category — which is the most direct cause of the "engine
+   * isn't firing" bug.
+   */
+  onVisitMayHaveChanged?: () => void;
 }
 
-export function ClinicalSignsTab({ visitId, glassCard, glassInner, isDark, text }: Props) {
+export function ClinicalSignsTab({ visitId, glassCard, glassInner, isDark, text, onVisitMayHaveChanged }: Props) {
   // ── Data ──
   const [currentState, setCurrentState] = useState<ClinicalSignEventResponse[]>([]);
   const [history, setHistory] = useState<ClinicalSignEventResponse[]>([]);
@@ -151,7 +166,15 @@ export function ClinicalSignsTab({ visitId, glassCard, glassInner, isDark, text 
           visitId={visitId}
           existingEvents={currentState}
           onClose={() => setShowRecord(false)}
-          onRecorded={() => { setShowRecord(false); loadAll(); }}
+          onRecorded={() => {
+            setShowRecord(false);
+            loadAll();
+            // The backend may have just auto-bumped the visit's triage
+            // category in response to one of the recorded signs. Tell
+            // the parent surface to re-fetch authoritative visit state
+            // so the new category appears everywhere on the page.
+            onVisitMayHaveChanged?.();
+          }}
           glassCard={glassCard}
           glassInner={glassInner}
           isDark={isDark}

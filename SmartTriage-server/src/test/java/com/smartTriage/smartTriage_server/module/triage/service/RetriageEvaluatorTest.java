@@ -89,16 +89,28 @@ class RetriageEvaluatorTest {
     }
 
     // ── MSAT_VU rows ──────────────────────────────────────────────
+    // Round 5 policy: AutoBump (was Suggest). The system guarantees
+    // the floor; manual re-triage pushes higher if vitals warrant it.
 
     @Test
-    void msatVu_belowOrange_suggestsHigh() {
+    void msatVu_belowOrange_autoBumpsToOrange() {
         RetriageDecision d = RetriageEvaluator.evaluate(
                 ClinicalSignCategory.MSAT_VU,
                 ClinicalSignStatus.PRESENT,
                 false, false, TriageCategory.YELLOW, LBL);
-        Suggest s = assertInstanceOf(Suggest.class, d);
-        assertEquals(AlertSeverity.HIGH, s.severity());
-        assertTrue(s.message().contains(LBL));
+        AutoBump bump = assertInstanceOf(AutoBump.class, d);
+        assertEquals(TriageCategory.ORANGE, bump.targetCategory());
+        assertTrue(bump.reason().contains(LBL));
+    }
+
+    @Test
+    void msatVu_belowOrangeFromGreen_autoBumpsToOrange() {
+        RetriageDecision d = RetriageEvaluator.evaluate(
+                ClinicalSignCategory.MSAT_VU,
+                ClinicalSignStatus.WORSENING,
+                false, false, TriageCategory.GREEN, LBL);
+        AutoBump bump = assertInstanceOf(AutoBump.class, d);
+        assertEquals(TriageCategory.ORANGE, bump.targetCategory());
     }
 
     @Test
@@ -120,14 +132,16 @@ class RetriageEvaluatorTest {
     }
 
     // ── MSAT_URG rows ─────────────────────────────────────────────
+    // Round 5 policy: AutoBump (was Suggest).
 
     @Test
-    void msatUrg_belowYellow_suggestsHigh() {
+    void msatUrg_belowYellow_autoBumpsToYellow() {
         RetriageDecision d = RetriageEvaluator.evaluate(
                 ClinicalSignCategory.MSAT_URG,
                 ClinicalSignStatus.PRESENT,
                 false, false, TriageCategory.GREEN, LBL);
-        assertInstanceOf(Suggest.class, d);
+        AutoBump bump = assertInstanceOf(AutoBump.class, d);
+        assertEquals(TriageCategory.YELLOW, bump.targetCategory());
     }
 
     @Test
@@ -136,6 +150,15 @@ class RetriageEvaluatorTest {
                 ClinicalSignCategory.MSAT_URG,
                 ClinicalSignStatus.PRESENT,
                 false, false, TriageCategory.YELLOW, LBL);
+        assertInstanceOf(NoAction.class, d);
+    }
+
+    @Test
+    void msatUrg_alreadyOrange_noAction() {
+        RetriageDecision d = RetriageEvaluator.evaluate(
+                ClinicalSignCategory.MSAT_URG,
+                ClinicalSignStatus.PRESENT,
+                false, false, TriageCategory.ORANGE, LBL);
         assertInstanceOf(NoAction.class, d);
     }
 

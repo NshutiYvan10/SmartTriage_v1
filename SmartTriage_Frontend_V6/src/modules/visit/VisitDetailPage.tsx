@@ -1,14 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════
    Visit Detail Page — Full Clinical Workspace
-   Tabs: Overview, Vitals, Triage, Notes, Diagnoses,
-         Investigations, Medications, Monitor, Alerts
+   Tabs: Overview, Vitals, Triage, Clinical Signs, Notes, Diagnoses,
+         Investigations, Medications, Alerts, Disposition
    ═══════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Activity, FileText, Stethoscope, ClipboardList,
-  FlaskConical, Pill, Monitor, BellRing, Heart, Thermometer,
+  FlaskConical, Pill, BellRing, Heart, Thermometer,
   Wind, Droplets, Brain, Clock, User, AlertTriangle, ChevronRight,
   Plus, Send, CheckCircle2, XCircle, Eye, Loader2, RefreshCw, LogOut,
   TrendingUp, Sparkles,
@@ -91,7 +91,6 @@ const TABS = [
   { id: 'diagnoses', label: 'Diagnoses', icon: ClipboardList },
   { id: 'investigations', label: 'Investigations', icon: FlaskConical },
   { id: 'medications', label: 'Medications', icon: Pill },
-  { id: 'monitor', label: 'Monitor', icon: Monitor },
   { id: 'alerts', label: 'Alerts', icon: BellRing },
   { id: 'disposition', label: 'Disposition', icon: LogOut },
 ] as const;
@@ -655,12 +654,11 @@ export function VisitDetailPage() {
           {activeTab === 'overview' && <OverviewTab visit={visit} latestVitals={latestVitals} latestTriage={latestTriage} notes={notes} diagnoses={diagnoses} investigations={investigations} medications={medications} alerts={visitAlerts} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'vitals' && <VitalsTab vitals={vitals} latestVitals={latestVitals} glassCard={glassCard} isDark={isDark} text={text} />}
           {activeTab === 'triage' && <TriageTab visit={visit} triageHistory={triageHistory} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
-          {activeTab === 'clinical-signs' && <ClinicalSignsTab visitId={visit.id} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
+          {activeTab === 'clinical-signs' && <ClinicalSignsTab visitId={visit.id} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} onVisitMayHaveChanged={loadData} />}
           {activeTab === 'notes' && <NotesTab notes={notes} showForm={showNoteForm} setShowForm={setShowNoteForm} onSubmit={handleCreateNote} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'diagnoses' && <DiagnosesTab diagnoses={diagnoses} showForm={showDiagnosisForm} setShowForm={setShowDiagnosisForm} onSubmit={handleCreateDiagnosis} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'investigations' && <InvestigationsTab investigations={investigations} showForm={showInvestigationForm} setShowForm={setShowInvestigationForm} onSubmit={handleOrderInvestigation} onAction={handleInvestigationAction} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} userName={userName} />}
           {activeTab === 'medications' && <MedicationsTab medications={medications} showForm={showMedicationForm} setShowForm={setShowMedicationForm} onSubmit={handlePrescribeMedication} onAction={handleMedicationAction} formLoading={formLoading} patient={patient} visit={visit} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
-          {activeTab === 'monitor' && <MonitorTab visitId={visit.id} glassCard={glassCard} isDark={isDark} text={text} />}
           {activeTab === 'alerts' && <AlertsTab alerts={visitAlerts} onAcknowledge={handleAcknowledgeAlert} visit={visit} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'disposition' && <DispositionTab visit={visit} onDisposition={handleRecordDisposition} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
         </div>
@@ -874,12 +872,11 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
 // vitals, which both duplicated the monitoring system and broke the
 // assumption that vitals always carry a source.
 //
-// Relationship to the Monitor tab:
-//   - Monitor tab  = current reading + trend, "what's happening now"
-//   - Vitals tab   = chronological history table, "show me every reading
-//                    and where it came from" for retrospective review
-//                    (e.g. "what was their HR at 04:00?", "did triage
-//                    record an SpO2?")
+// The dedicated Monitoring page (separate route) shows the live IoT
+// stream + trend; this tab is the chronological history table for
+// retrospective review (e.g. "what was their HR at 04:00?", "did
+// triage record an SpO2?"). The previously co-resident Monitor tab
+// inside this page was removed as a duplicate of that surface.
 function VitalsTab({ vitals, latestVitals, glassCard, isDark, text }: any) {
   const sorted = [...(vitals || [])].sort((a: VitalSignsResponse, b: VitalSignsResponse) => {
     const ta = a.recordedAt ? new Date(a.recordedAt).getTime() : 0;
@@ -900,7 +897,7 @@ function VitalsTab({ vitals, latestVitals, glassCard, isDark, text }: any) {
         <div>
           <h3 className={`text-base font-extrabold tracking-tight ${text.heading}`}>Vital Signs History</h3>
           <p className={`text-xs mt-0.5 ${text.muted}`}>
-            Read-only chronological record. Vitals are captured by the monitoring system; see the Monitor tab for the live view.
+            Read-only chronological record. Vitals are captured by the monitoring system; the dedicated Monitoring page shows the live view.
           </p>
         </div>
         <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg ${isDark ? 'bg-slate-500/15 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
@@ -1665,68 +1662,6 @@ function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction
 }
 
 // ═══════ MONITOR TAB ═══════
-function MonitorTab({ visitId, glassCard, isDark, text }: { visitId: string; glassCard: React.CSSProperties; isDark: boolean; text: any }) {
-  const [streamData, setStreamData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const loadStream = async () => {
-      try {
-        const { iotApi } = await import('@/api/iot');
-        const recent = await iotApi.getRecentStream(visitId, 30);
-        setStreamData(Array.isArray(recent) ? recent : []);
-      } catch {
-        setStreamData([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadStream();
-  }, [visitId]);
-
-  if (loading) {
-    return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-cyan-500" /></div>;
-  }
-
-  const latest = streamData[streamData.length - 1];
-
-  return (
-    <div className="space-y-4">
-      <h3 className={`text-base font-extrabold tracking-tight ${text.heading}`}>Real-Time Monitor</h3>
-      {latest ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="rounded-2xl p-4 text-center" style={glassCard}>
-            <Heart className="w-5 h-5 mx-auto mb-1 text-red-500" />
-            <p className="text-2xl font-black text-red-500">{latest.heartRate || '—'}</p>
-            <p className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Heart Rate</p>
-          </div>
-          <div className="rounded-2xl p-4 text-center" style={glassCard}>
-            <Droplets className="w-5 h-5 mx-auto mb-1 text-cyan-500" />
-            <p className="text-2xl font-black text-cyan-500">{latest.spo2 || '—'}%</p>
-            <p className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>SpO2</p>
-          </div>
-          <div className="rounded-2xl p-4 text-center" style={glassCard}>
-            <Wind className="w-5 h-5 mx-auto mb-1 text-blue-500" />
-            <p className="text-2xl font-black text-blue-500">{latest.respiratoryRate || '—'}</p>
-            <p className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Resp Rate</p>
-          </div>
-          <div className="rounded-2xl p-4 text-center" style={glassCard}>
-            <Thermometer className="w-5 h-5 mx-auto mb-1 text-amber-500" />
-            <p className="text-2xl font-black text-amber-500">{latest.temperature || '—'}°C</p>
-            <p className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Temp</p>
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-2xl p-8 text-center" style={glassCard}>
-          <Monitor className="w-8 h-8 mx-auto mb-2 text-slate-400" />
-          <p className={text.muted}>No real-time monitoring data available</p>
-          <p className={`text-xs mt-1 ${text.muted}`}>Connect an IoT device to start monitoring</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ═══════ ALERTS TAB ═══════
 function AlertsTab({ alerts, onAcknowledge, visit, navigate, glassCard, glassInner: _glassInner, isDark: _isDark, text }: any) {
   const severityColors: Record<string, string> = {
