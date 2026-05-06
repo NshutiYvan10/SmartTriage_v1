@@ -14,6 +14,8 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { ClinicalSignsTab } from './ClinicalSignsTab';
+import { DiagnosisPanel } from './DiagnosisPanel';
+import { InvestigationPanel } from './InvestigationPanel';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
 import { visitApi } from '@/api/visits';
@@ -113,6 +115,51 @@ const NOTE_TYPE_LABELS: Record<NoteType, string> = {
   DISCHARGE_SUMMARY: 'Discharge Summary',
   HANDOVER: 'Handover',
   OTHER: 'Other',
+};
+
+// Section suggestions per note type. Each entry is the structured frame
+// clinicians use for that kind of note — SOAP for progress notes, SBAR
+// for handovers, body systems for physical findings, etc. The doctor
+// picks a chip and the section auto-fills; free-text is still allowed for
+// the rare case the standard frame doesn't fit.
+const NOTE_SECTION_SUGGESTIONS: Record<NoteType, string[]> = {
+  PROGRESS_NOTE: ['Subjective', 'Objective', 'Assessment', 'Plan'],
+  DOCTOR_NOTE: ['Initial Assessment', 'Reassessment', 'Procedure Note', 'Consult Request', 'Handover'],
+  NURSING_NOTE: ['Care Plan', 'Intervention', 'Observation', 'Patient Response'],
+  PHYSICAL_FINDINGS: ['General', 'HEENT', 'Cardiovascular', 'Respiratory', 'Abdomen', 'Neurological', 'Skin', 'Musculoskeletal', 'Genitourinary'],
+  HISTORY_OF_PRESENTING_COMPLAINT: ['Onset', 'Duration', 'Severity', 'Aggravating Factors', 'Relieving Factors', 'Associated Symptoms'],
+  PAST_MEDICAL_HISTORY: ['Medical', 'Surgical', 'Hospitalizations', 'Immunizations'],
+  SOCIAL_HISTORY: ['Occupation', 'Smoking', 'Alcohol', 'Substance Use', 'Living Situation', 'Travel'],
+  FAMILY_HISTORY: ['Cardiac', 'Cancer', 'Diabetes', 'Hypertension', 'Mental Health', 'Other'],
+  REVIEW_OF_SYSTEMS: ['Constitutional', 'HEENT', 'Cardiac', 'Respiratory', 'GI', 'GU', 'MSK', 'Neurological', 'Psychiatric', 'Endocrine'],
+  ALLERGIES: ['Drug', 'Food', 'Environmental', 'Latex', 'Reaction Description'],
+  CURRENT_MEDICATIONS: ['Daily', 'PRN', 'Recently Started', 'Recently Stopped'],
+  TREATMENT_PLAN: ['Pharmacological', 'Non-Pharmacological', 'Monitoring', 'Disposition', 'Patient Education'],
+  TRIAGE_NOTE: ['Acuity', 'ABC', 'Disability'],
+  DISCHARGE_SUMMARY: ['Reason for Admission', 'Hospital Course', 'Treatment Given', 'Discharge Diagnosis', 'Follow-up Plan'],
+  HANDOVER: ['Situation', 'Background', 'Assessment', 'Recommendation'],
+  OTHER: [],
+};
+
+// Note-type-specific placeholder for the body field. Tells the doctor what
+// kind of content fits each frame so the form is self-describing.
+const NOTE_CONTENT_PLACEHOLDER: Record<NoteType, string> = {
+  PROGRESS_NOTE: 'Brief clinical update — what changed, what was done, what is planned next.',
+  DOCTOR_NOTE: 'Clinical observation, decision, or rationale.',
+  NURSING_NOTE: 'Nursing observation, intervention, or response.',
+  PHYSICAL_FINDINGS: 'Findings on physical exam for the selected system.',
+  HISTORY_OF_PRESENTING_COMPLAINT: 'Description of the presenting complaint as told by the patient.',
+  PAST_MEDICAL_HISTORY: 'Significant past medical or surgical history.',
+  SOCIAL_HISTORY: 'Relevant social context.',
+  FAMILY_HISTORY: 'Relevant family medical history.',
+  REVIEW_OF_SYSTEMS: 'Findings on review of the selected system.',
+  ALLERGIES: 'Allergen, reaction type, severity.',
+  CURRENT_MEDICATIONS: 'Drug name, dose, frequency, indication.',
+  TREATMENT_PLAN: 'Plan for the selected aspect of care.',
+  TRIAGE_NOTE: 'Triage observation.',
+  DISCHARGE_SUMMARY: 'Summary content for the selected section.',
+  HANDOVER: 'Handover content using the SBAR frame.',
+  OTHER: 'Clinical note content.',
 };
 
 const INVESTIGATION_STATUS_COLORS: Record<string, string> = {
@@ -605,8 +652,8 @@ export function VisitDetailPage() {
         {/* ── Tab Content ── */}
         <div className="animate-fade-up" style={{ animationDelay: '0.05s' }}>
           {activeTab === 'overview' && <OverviewTab visit={visit} latestVitals={latestVitals} latestTriage={latestTriage} notes={notes} diagnoses={diagnoses} investigations={investigations} medications={medications} alerts={visitAlerts} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
-          {activeTab === 'vitals' && <VitalsTab vitals={vitals} latestVitals={latestVitals} showForm={showVitalsForm} setShowForm={setShowVitalsForm} onSubmit={handleRecordVitals} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
-          {activeTab === 'triage' && <TriageTab visit={visit} triageHistory={triageHistory} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} navigate={navigate} />}
+          {activeTab === 'vitals' && <VitalsTab vitals={vitals} latestVitals={latestVitals} glassCard={glassCard} isDark={isDark} text={text} />}
+          {activeTab === 'triage' && <TriageTab visit={visit} triageHistory={triageHistory} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'clinical-signs' && <ClinicalSignsTab visitId={visit.id} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'notes' && <NotesTab notes={notes} showForm={showNoteForm} setShowForm={setShowNoteForm} onSubmit={handleCreateNote} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'diagnoses' && <DiagnosesTab diagnoses={diagnoses} showForm={showDiagnosisForm} setShowForm={setShowDiagnosisForm} onSubmit={handleCreateDiagnosis} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
@@ -660,8 +707,12 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
     <div className="space-y-4">
     {/* Patient profile — persistent facts (allergies, chronic conditions,
         blood type, guardian). Safety-critical: rendered first so a doctor
-        can't reach the form / orders without seeing the allergy list. */}
-    <PatientProfilePanel patientId={visit.patientId} />
+        can't reach the form / orders without seeing the allergy list.
+        editable=true enables inline pencil-icon edit on allergies and
+        chronic conditions — the doctor can correct a wrongly-recorded
+        allergy mid-visit (penicillin "allergy" that turned out to be a
+        side effect) without leaving this surface. */}
+    <PatientProfilePanel patientId={visit.patientId} editable />
 
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* Visit Info */}
@@ -763,67 +814,93 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
 }
 
 // ═══════ VITALS TAB ═══════
-function VitalsTab({ vitals, latestVitals, showForm, setShowForm, onSubmit, formLoading, glassCard, glassInner, isDark, text }: any) {
-  const [form, setForm] = useState<Partial<RecordVitalsRequest>>({
-    heartRate: undefined, respiratoryRate: undefined, systolicBp: undefined,
-    diastolicBp: undefined, temperature: undefined, spo2: undefined,
-    avpu: 'ALERT' as AvpuScore, painScore: undefined, gcsScore: 15,
-    bloodGlucose: undefined, weightKg: undefined,
-    source: 'MANUAL_ENTRY', notes: '',
+// VitalsTab — READ-ONLY by design.
+//
+// Vitals are captured by the monitoring system (IoT devices, triage form,
+// ambulance handover), NOT by the doctor on this screen. The previous
+// "Record Vitals" button created a path for the doctor to manually log
+// vitals, which both duplicated the monitoring system and broke the
+// assumption that vitals always carry a source.
+//
+// Relationship to the Monitor tab:
+//   - Monitor tab  = current reading + trend, "what's happening now"
+//   - Vitals tab   = chronological history table, "show me every reading
+//                    and where it came from" for retrospective review
+//                    (e.g. "what was their HR at 04:00?", "did triage
+//                    record an SpO2?")
+function VitalsTab({ vitals, latestVitals, glassCard, isDark, text }: any) {
+  const sorted = [...(vitals || [])].sort((a: VitalSignsResponse, b: VitalSignsResponse) => {
+    const ta = a.recordedAt ? new Date(a.recordedAt).getTime() : 0;
+    const tb = b.recordedAt ? new Date(b.recordedAt).getTime() : 0;
+    return tb - ta;
   });
+
+  const SOURCE_BADGE: Record<string, string> = {
+    IOT_DEVICE: 'text-cyan-500 bg-cyan-500/10 border-cyan-500/20',
+    MANUAL_ENTRY: 'text-slate-500 bg-slate-500/10 border-slate-500/20',
+    AMBULANCE_MONITOR: 'text-violet-500 bg-violet-500/10 border-violet-500/20',
+    IMPORTED: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
+  };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className={`text-base font-extrabold tracking-tight ${text.heading}`}>Vital Signs History</h3>
-        <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all">
-          <Plus className="w-3.5 h-3.5" /> Record Vitals
-        </button>
+        <div>
+          <h3 className={`text-base font-extrabold tracking-tight ${text.heading}`}>Vital Signs History</h3>
+          <p className={`text-xs mt-0.5 ${text.muted}`}>
+            Read-only chronological record. Vitals are captured by the monitoring system; see the Monitor tab for the live view.
+          </p>
+        </div>
+        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg ${isDark ? 'bg-slate-500/15 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
+          {sorted.length} reading{sorted.length === 1 ? '' : 's'}
+        </span>
       </div>
 
-      {showForm && (
-        <div className="rounded-2xl p-5 animate-fade-up" style={glassCard}>
-          <h4 className={`text-sm font-bold mb-4 ${text.heading}`}>Record New Vital Signs</h4>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <FormInput label="Heart Rate (bpm)" value={form.heartRate} onChange={(v: string) => setForm({ ...form, heartRate: v ? Number(v) : undefined })} glassInner={glassInner} isDark={isDark} text={text} />
-            <FormInput label="Resp Rate (/min)" value={form.respiratoryRate} onChange={(v: string) => setForm({ ...form, respiratoryRate: v ? Number(v) : undefined })} glassInner={glassInner} isDark={isDark} text={text} />
-            <FormInput label="SpO2 (%)" value={form.spo2} onChange={(v: string) => setForm({ ...form, spo2: v ? Number(v) : undefined })} glassInner={glassInner} isDark={isDark} text={text} />
-            <FormInput label="Systolic BP" value={form.systolicBp} onChange={(v: string) => setForm({ ...form, systolicBp: v ? Number(v) : undefined })} glassInner={glassInner} isDark={isDark} text={text} />
-            <FormInput label="Diastolic BP" value={form.diastolicBp} onChange={(v: string) => setForm({ ...form, diastolicBp: v ? Number(v) : undefined })} glassInner={glassInner} isDark={isDark} text={text} />
-            <FormInput label="Temperature (°C)" value={form.temperature} onChange={(v: string) => setForm({ ...form, temperature: v ? Number(v) : undefined })} glassInner={glassInner} isDark={isDark} text={text} />
-            <FormInput label="Pain Score (0-10)" value={form.painScore} onChange={(v: string) => setForm({ ...form, painScore: v ? Number(v) : undefined })} glassInner={glassInner} isDark={isDark} text={text} />
-            <FormInput label="GCS (3-15)" value={form.gcsScore} onChange={(v: string) => setForm({ ...form, gcsScore: v ? Number(v) : undefined })} glassInner={glassInner} isDark={isDark} text={text} />
-            <FormInput label="Blood Glucose" value={form.bloodGlucose} onChange={(v: string) => setForm({ ...form, bloodGlucose: v ? Number(v) : undefined })} glassInner={glassInner} isDark={isDark} text={text} />
-            <FormInput label="Weight (kg)" value={form.weightKg} onChange={(v: string) => setForm({ ...form, weightKg: v ? Number(v) : undefined })} glassInner={glassInner} isDark={isDark} text={text} />
-            <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>AVPU</label>
-              <select value={form.avpu || 'ALERT'} onChange={(e) => setForm({ ...form, avpu: e.target.value as AvpuScore })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
-                {['ALERT', 'CONFUSED', 'VERBAL', 'PAIN', 'UNRESPONSIVE'].map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
-            </div>
+      {/* Latest summary band */}
+      {latestVitals && (
+        <div className="rounded-2xl p-4" style={glassCard}>
+          <div className="flex items-center justify-between mb-3">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Most recent</span>
+            <span className={`text-xs font-bold ${text.accent}`}>
+              {latestVitals.recordedAt ? format(new Date(latestVitals.recordedAt), 'dd MMM yyyy HH:mm') : '—'}
+            </span>
           </div>
-          <div className="flex items-center gap-3 mt-4">
-            <button onClick={() => onSubmit(form)} disabled={formLoading} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
-              {formLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Save Vitals
-            </button>
-            <button onClick={() => setShowForm(false)} className={`px-4 py-2.5 text-xs font-bold rounded-xl ${text.muted}`}>Cancel</button>
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+            <MiniVital label="HR" value={latestVitals.heartRate ? `${latestVitals.heartRate}` : '—'} unit="bpm" isDark={isDark} />
+            <MiniVital label="SpO2" value={latestVitals.spo2 ? `${latestVitals.spo2}` : '—'} unit="%" isDark={isDark} />
+            <MiniVital label="RR" value={latestVitals.respiratoryRate ? `${latestVitals.respiratoryRate}` : '—'} unit="/min" isDark={isDark} />
+            <MiniVital label="BP" value={latestVitals.systolicBp ? `${latestVitals.systolicBp}/${latestVitals.diastolicBp}` : '—'} unit="" isDark={isDark} />
+            <MiniVital label="Temp" value={latestVitals.temperature ? `${latestVitals.temperature}` : '—'} unit="°C" isDark={isDark} />
+            <MiniVital label="AVPU" value={latestVitals.avpu || '—'} unit="" isDark={isDark} />
           </div>
         </div>
       )}
 
-      {/* History */}
+      {/* Chronological history — newest first. Source badge tells the
+          clinician where each reading came from, important when
+          reconciling continuous IoT samples vs. one-off manual entries. */}
       <div className="space-y-3">
-        {vitals.length === 0 ? (
+        {sorted.length === 0 ? (
           <div className="rounded-2xl p-8 text-center" style={glassCard}>
             <Activity className="w-8 h-8 mx-auto mb-2 text-slate-400" />
-            <p className={text.muted}>No vital signs recorded yet</p>
+            <p className={`text-sm ${text.heading}`}>No vital signs on record yet.</p>
+            <p className={`text-xs mt-1 ${text.muted}`}>
+              Vitals appear here as they are captured at triage, by an IoT monitor, or during ambulance handover.
+            </p>
           </div>
-        ) : vitals.map((v: VitalSignsResponse) => (
+        ) : sorted.map((v: VitalSignsResponse) => (
           <div key={v.id} className="rounded-2xl p-4" style={glassCard}>
             <div className="flex items-center justify-between mb-3">
-              <span className={`text-xs font-bold ${text.accent}`}>{v.recordedAt ? format(new Date(v.recordedAt), 'dd MMM yyyy HH:mm') : '—'}</span>
-              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg ${v.source === 'IOT_DEVICE' ? 'text-cyan-500 bg-cyan-500/10' : 'text-slate-500 bg-slate-500/10'}`}>
-                {v.source?.replace(/_/g, ' ')}
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-bold ${text.heading}`}>
+                  {v.recordedAt ? format(new Date(v.recordedAt), 'dd MMM yyyy HH:mm') : '—'}
+                </span>
+                {v.recordedByName && (
+                  <span className={`text-[10px] ${text.muted}`}>by {v.recordedByName}</span>
+                )}
+              </div>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg border ${SOURCE_BADGE[v.source ?? ''] ?? SOURCE_BADGE.MANUAL_ENTRY}`}>
+                {v.source?.replace(/_/g, ' ') || 'Source unknown'}
               </span>
             </div>
             <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-xs">
@@ -837,6 +914,13 @@ function VitalsTab({ vitals, latestVitals, showForm, setShowForm, onSubmit, form
                 <MiniVital label="Weight" value={`${v.weightKg}`} unit="kg" isDark={isDark} />
               )}
             </div>
+            {(v.painScore != null || v.gcsScore != null || v.bloodGlucose != null) && (
+              <div className="grid grid-cols-3 gap-2 text-xs mt-2 pt-2 border-t border-slate-200/10">
+                {v.painScore != null && <MiniVital label="Pain" value={`${v.painScore}`} unit="/10" isDark={isDark} />}
+                {v.gcsScore != null && <MiniVital label="GCS" value={`${v.gcsScore}`} unit="/15" isDark={isDark} />}
+                {v.bloodGlucose != null && <MiniVital label="Glucose" value={`${v.bloodGlucose}`} unit="mmol/L" isDark={isDark} />}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -845,67 +929,97 @@ function VitalsTab({ vitals, latestVitals, showForm, setShowForm, onSubmit, form
 }
 
 // ═══════ TRIAGE TAB ═══════
-function TriageTab({ visit, triageHistory, latestTriage, glassCard, glassInner, isDark, text, navigate }: any) {
+//
+// READ-ONLY by design.
+//
+// Triage is performed by the triage nurse at point of entry. By the time
+// the patient appears on the doctor's chart, triage is already done. The
+// doctor's role here is to *read* the triage record and act on it (assess,
+// prescribe, dispose) — never to start a new triage from this view.
+//
+// Re-triage when a patient deteriorates lives in the dedicated retriage
+// module (Dynamic Re-triage Engine), not on the chart-review surface.
+//
+function TriageTab({ visit, triageHistory, latestTriage, glassCard, glassInner, isDark, text }: any) {
+  const catColor = latestTriage ? CATEGORY_COLORS[latestTriage.triageCategory] : null;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className={`text-base font-extrabold tracking-tight ${text.heading}`}>Triage Records</h3>
-        <button
-          onClick={() => navigate(visit.isPediatric ? `/pediatric-triage/${visit.patientId}` : `/adult-triage/${visit.patientId}`)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all"
-        >
-          <Stethoscope className="w-3.5 h-3.5" /> {triageHistory.length > 0 ? 'Re-Triage' : 'Start Triage'}
-        </button>
+        <h3 className={`text-base font-extrabold tracking-tight ${text.heading}`}>Triage Record</h3>
+        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg ${isDark ? 'bg-slate-500/15 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
+          Read-only
+        </span>
       </div>
 
-      {latestTriage && (
-        <div className="rounded-2xl p-5" style={glassCard}>
-          <div className="flex items-center justify-between mb-4">
-            <h4 className={`text-sm font-bold ${text.heading}`}>Latest Triage Result</h4>
-            <div className="flex items-center gap-2">
-              <span className={`w-3 h-3 rounded-full ${CATEGORY_COLORS[latestTriage.triageCategory]?.dot || 'bg-slate-400'}`} />
-              <span className={`text-sm font-extrabold ${CATEGORY_COLORS[latestTriage.triageCategory]?.text || text.heading}`}>{latestTriage.triageCategory}</span>
-              <span className={`text-lg font-black ${text.accent}`}>TEWS {latestTriage.tewsScore}</span>
+      {latestTriage ? (
+        <>
+          {/* Latest triage — colored band mirrors the triage category for
+              single-glance acuity. */}
+          <div className={`rounded-2xl overflow-hidden border ${catColor?.border || 'border-slate-300'}`} style={glassCard}>
+            <div className={`h-2 ${catColor?.dot || 'bg-slate-400'}`} />
+            <div className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <span className={`w-3 h-3 rounded-full ${catColor?.dot || 'bg-slate-400'}`} />
+                  <span className={`text-base font-extrabold ${catColor?.text || text.heading}`}>{latestTriage.triageCategory}</span>
+                  <span className={`text-2xl font-black ${text.accent}`}>TEWS {latestTriage.tewsScore}</span>
+                </div>
+                <div className="text-right">
+                  <p className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Performed</p>
+                  <p className={`text-xs font-bold ${text.heading}`}>
+                    {latestTriage.triageTime ? format(new Date(latestTriage.triageTime), 'dd MMM yyyy HH:mm') : '—'}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                <InfoRow label="Triaged By" value={latestTriage.triagedByName || '—'} isDark={isDark} />
+                <InfoRow label="Chief Complaint" value={visit.chiefComplaint || '—'} isDark={isDark} />
+                <InfoRow label="Decision Path" value={latestTriage.decisionPath || '—'} isDark={isDark} />
+                <InfoRow label="Form Used" value={latestTriage.isChildForm ? 'Pediatric' : 'Adult'} isDark={isDark} />
+                {latestTriage.weightKg != null && (
+                  <InfoRow label="Weight" value={`${latestTriage.weightKg} kg`} isDark={isDark} />
+                )}
+                {latestTriage.isRetriage && (
+                  <InfoRow label="Re-triage of" value={latestTriage.previousCategory || 'previous'} isDark={isDark} />
+                )}
+              </div>
             </div>
           </div>
-          <div className="space-y-2">
-            <InfoRow label="Decision Path" value={latestTriage.decisionPath || '—'} isDark={isDark} />
-            <InfoRow label="Triaged By" value={latestTriage.triagedByName || '—'} isDark={isDark} />
-            <InfoRow label="Child Form" value={latestTriage.isChildForm ? 'Yes' : 'No'} isDark={isDark} />
-            <InfoRow label="Re-triage" value={latestTriage.isRetriage ? 'Yes' : 'No'} isDark={isDark} />
-            {latestTriage.previousCategory && (
-              <InfoRow label="Previous Category" value={latestTriage.previousCategory} isDark={isDark} />
-            )}
-            <InfoRow label="Time" value={latestTriage.triageTime ? format(new Date(latestTriage.triageTime), 'dd MMM yyyy HH:mm') : '—'} isDark={isDark} />
-          </div>
-        </div>
-      )}
 
-      {/* History */}
-      {triageHistory.length > 1 && (
-        <div className="rounded-2xl p-5" style={glassCard}>
-          <h4 className={`text-sm font-bold mb-4 ${text.heading}`}>Triage History</h4>
-          <div className="space-y-3">
-            {triageHistory.slice(1).map((t: TriageRecordResponse) => (
-              <div key={t.id} className="rounded-xl p-3" style={glassInner}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2.5 h-2.5 rounded-full ${CATEGORY_COLORS[t.triageCategory]?.dot || 'bg-slate-400'}`} />
-                    <span className={`text-xs font-bold ${text.heading}`}>{t.triageCategory} — TEWS {t.tewsScore}</span>
+          {/* Earlier triage entries, if any */}
+          {triageHistory.length > 1 && (
+            <div className="rounded-2xl p-5" style={glassCard}>
+              <h4 className={`text-sm font-bold mb-4 ${text.heading}`}>Earlier Triage Entries</h4>
+              <div className="space-y-3">
+                {triageHistory.slice(1).map((t: TriageRecordResponse) => (
+                  <div key={t.id} className="rounded-xl p-3" style={glassInner}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${CATEGORY_COLORS[t.triageCategory]?.dot || 'bg-slate-400'}`} />
+                        <span className={`text-xs font-bold ${text.heading}`}>{t.triageCategory} — TEWS {t.tewsScore}</span>
+                        {t.triagedByName && <span className={`text-[10px] ${text.muted}`}>by {t.triagedByName}</span>}
+                      </div>
+                      <span className={`text-[10px] ${text.muted}`}>{t.triageTime ? format(new Date(t.triageTime), 'dd MMM HH:mm') : ''}</span>
+                    </div>
+                    {t.decisionPath && <p className={`text-[11px] mt-1 ${text.body}`}>{t.decisionPath}</p>}
                   </div>
-                  <span className={`text-[10px] ${text.muted}`}>{t.triageTime ? format(new Date(t.triageTime), 'dd MMM HH:mm') : ''}</span>
-                </div>
-                <p className={`text-[11px] mt-1 ${text.body}`}>{t.decisionPath}</p>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {triageHistory.length === 0 && (
+            </div>
+          )}
+        </>
+      ) : (
+        // Empty-state copy is deliberate: it explains who is responsible,
+        // not how the doctor can start one. Triage is performed at entry
+        // by the triage nurse.
         <div className="rounded-2xl p-8 text-center" style={glassCard}>
           <Stethoscope className="w-8 h-8 mx-auto mb-2 text-slate-400" />
-          <p className={text.muted}>No triage records yet. Click "Start Triage" to begin.</p>
+          <p className={`text-sm font-semibold ${text.heading}`}>No triage record on this visit yet.</p>
+          <p className={`text-xs mt-1 ${text.muted}`}>
+            Triage is performed by the triage nurse at point of entry. If a record is missing, please ask
+            the triage nurse to complete it.
+          </p>
         </div>
       )}
     </div>
@@ -913,8 +1027,27 @@ function TriageTab({ visit, triageHistory, latestTriage, glassCard, glassInner, 
 }
 
 // ═══════ NOTES TAB ═══════
+//
+// Comprehensive but fast: the doctor picks a Note Type, then picks one of
+// the type-specific Section chips, then writes the body. No more typing
+// "Assessment" or "Cardiovascular" by hand.
+//
+// We keep section as free text on the wire (matches the existing backend
+// schema) — chips are just a fast-input affordance, the doctor can type
+// a custom section if none of the suggestions fit.
 function NotesTab({ notes, showForm, setShowForm, onSubmit, formLoading, glassCard, glassInner, isDark, text }: any) {
   const [form, setForm] = useState<Partial<CreateClinicalNoteRequest>>({ noteType: 'PROGRESS_NOTE' as NoteType, content: '', section: '' });
+
+  const currentNoteType = (form.noteType || 'PROGRESS_NOTE') as NoteType;
+  const sectionChips = NOTE_SECTION_SUGGESTIONS[currentNoteType] ?? [];
+  const placeholder = NOTE_CONTENT_PLACEHOLDER[currentNoteType] ?? 'Clinical note content.';
+
+  // When the user changes note type we clear the section: a chip selected
+  // for one frame is rarely valid for another (e.g. "Subjective" makes no
+  // sense for a HANDOVER note). Auto-clear protects against stale carry-over.
+  const handleTypeChange = (nt: NoteType) => {
+    setForm((f) => ({ ...f, noteType: nt, section: '' }));
+  };
 
   return (
     <div className="space-y-4">
@@ -931,21 +1064,69 @@ function NotesTab({ notes, showForm, setShowForm, onSubmit, formLoading, glassCa
           <div className="space-y-3">
             <div>
               <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Note Type</label>
-              <select value={form.noteType || 'PROGRESS_NOTE'} onChange={(e) => setForm({ ...form, noteType: e.target.value as NoteType })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
+              <select
+                value={currentNoteType}
+                onChange={(e) => handleTypeChange(e.target.value as NoteType)}
+                className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`}
+                style={glassInner}
+              >
                 {Object.entries(NOTE_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
+
+            {/* Section — chips when the note type has suggestions, free
+                text otherwise. Chips toggle: click again to clear. */}
             <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Section (optional)</label>
-              <input value={form.section || ''} onChange={(e) => setForm({ ...form, section: e.target.value })} placeholder="e.g., Assessment, Plan" className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className={`block text-[10px] font-bold uppercase tracking-wider ${text.label}`}>Section</label>
+                {sectionChips.length > 0 && (
+                  <span className={`text-[10px] ${text.muted}`}>Pick one or type custom below</span>
+                )}
+              </div>
+              {sectionChips.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {sectionChips.map((s) => {
+                    const active = (form.section || '').trim() === s;
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setForm({ ...form, section: active ? '' : s })}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors ${
+                          active
+                            ? 'bg-cyan-500 text-white'
+                            : 'bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <input
+                value={form.section || ''}
+                onChange={(e) => setForm({ ...form, section: e.target.value })}
+                placeholder={sectionChips.length > 0 ? 'Or type a custom section…' : 'Optional section heading'}
+                className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+                style={glassInner}
+              />
             </div>
+
             <div>
               <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Content</label>
-              <textarea value={form.content || ''} onChange={(e) => setForm({ ...form, content: e.target.value })} placeholder="Enter clinical note..." rows={4} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
+              <textarea
+                value={form.content || ''}
+                onChange={(e) => setForm({ ...form, content: e.target.value })}
+                placeholder={placeholder}
+                rows={5}
+                className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+                style={glassInner}
+              />
             </div>
           </div>
           <div className="flex items-center gap-3 mt-4">
-            <button onClick={() => onSubmit(form)} disabled={formLoading || !form.content} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
+            <button onClick={() => onSubmit(form)} disabled={formLoading || !form.content?.trim()} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
               {formLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Save Note
             </button>
             <button onClick={() => setShowForm(false)} className={`px-4 py-2.5 text-xs font-bold rounded-xl ${text.muted}`}>Cancel</button>
@@ -978,9 +1159,11 @@ function NotesTab({ notes, showForm, setShowForm, onSubmit, formLoading, glassCa
 }
 
 // ═══════ DIAGNOSES TAB ═══════
+//
+// Form is delegated to <DiagnosisPanel>, which owns the ICD-10 catalog
+// search and common-in-Rwanda quick-pick. This tab is the list + read view.
+//
 function DiagnosesTab({ diagnoses, showForm, setShowForm, onSubmit, formLoading, glassCard, glassInner, isDark, text }: any) {
-  const [form, setForm] = useState<Partial<CreateDiagnosisRequest>>({ diagnosisType: 'PROVISIONAL' as DiagnosisType, description: '', icdCode: '', isPrimary: false, notes: '' });
-
   const typeColors: Record<string, string> = {
     PROVISIONAL: 'text-amber-500 bg-amber-500/10',
     CONFIRMED: 'text-emerald-500 bg-emerald-500/10',
@@ -998,36 +1181,15 @@ function DiagnosesTab({ diagnoses, showForm, setShowForm, onSubmit, formLoading,
       </div>
 
       {showForm && (
-        <div className="rounded-2xl p-5 animate-fade-up" style={glassCard}>
-          <h4 className={`text-sm font-bold mb-4 ${text.heading}`}>New Diagnosis</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Type</label>
-              <select value={form.diagnosisType || 'PROVISIONAL'} onChange={(e) => setForm({ ...form, diagnosisType: e.target.value as DiagnosisType })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
-                {['PROVISIONAL', 'CONFIRMED', 'DIFFERENTIAL', 'WORKING'].map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
-            </div>
-            <FormInput label="ICD-10 Code" value={form.icdCode} onChange={(v: string) => setForm({ ...form, icdCode: v })} glassInner={glassInner} isDark={isDark} text={text} />
-            <div className="md:col-span-2">
-              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Description</label>
-              <input value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Diagnosis description" className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
-            </div>
-            <div className="md:col-span-2">
-              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Notes</label>
-              <textarea value={form.notes || ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Additional notes..." rows={2} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
-            </div>
-            <div className="flex items-center gap-2">
-              <input type="checkbox" checked={form.isPrimary || false} onChange={(e) => setForm({ ...form, isPrimary: e.target.checked })} className="rounded" />
-              <span className={`text-xs ${text.body}`}>Primary diagnosis</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 mt-4">
-            <button onClick={() => onSubmit(form)} disabled={formLoading || !form.description} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
-              {formLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Save Diagnosis
-            </button>
-            <button onClick={() => setShowForm(false)} className={`px-4 py-2.5 text-xs font-bold rounded-xl ${text.muted}`}>Cancel</button>
-          </div>
-        </div>
+        <DiagnosisPanel
+          onSubmit={async (req) => { await onSubmit(req); setShowForm(false); }}
+          onClose={() => setShowForm(false)}
+          formLoading={formLoading}
+          glassCard={glassCard}
+          glassInner={glassInner}
+          isDark={isDark}
+          text={text}
+        />
       )}
 
       <div className="space-y-3">
@@ -1060,7 +1222,6 @@ function DiagnosesTab({ diagnoses, showForm, setShowForm, onSubmit, formLoading,
 
 // ═══════ INVESTIGATIONS TAB ═══════
 function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, onAction, formLoading, glassCard, glassInner, isDark, text, userName: _userName }: any) {
-  const [form, setForm] = useState<Partial<OrderInvestigationRequest>>({ investigationType: 'LABORATORY' as InvestigationType, testName: '', priority: 'ROUTINE', notes: '' });
   // resultNumeric + resultUnit are the structured pair the eGFR check
   // (Phase 12b) reads. Free-text `result` is preserved alongside — it's
   // still the right field for "trace haemolysis, repeat sent" nuance.
@@ -1087,34 +1248,15 @@ function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, on
       </div>
 
       {showForm && (
-        <div className="rounded-2xl p-5 animate-fade-up" style={glassCard}>
-          <h4 className={`text-sm font-bold mb-4 ${text.heading}`}>Order Investigation</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Type</label>
-              <select value={form.investigationType || 'LABORATORY'} onChange={(e) => setForm({ ...form, investigationType: e.target.value as InvestigationType })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
-                {['LABORATORY', 'RADIOLOGY', 'ECG', 'ULTRASOUND', 'CT_SCAN', 'MRI', 'XRAY', 'BLOOD_GAS', 'URINALYSIS', 'RAPID_TEST', 'POINT_OF_CARE', 'OTHER'].map(v => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Priority</label>
-              <select value={form.priority || 'ROUTINE'} onChange={(e) => setForm({ ...form, priority: e.target.value })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
-                <option value="ROUTINE">Routine</option>
-                <option value="URGENT">Urgent</option>
-                <option value="STAT">STAT</option>
-              </select>
-            </div>
-            <div className="md:col-span-2">
-              <FormInput label="Test Name" value={form.testName} onChange={(v: string) => setForm({ ...form, testName: v })} glassInner={glassInner} isDark={isDark} text={text} />
-            </div>
-          </div>
-          <div className="flex items-center gap-3 mt-4">
-            <button onClick={() => onSubmit(form)} disabled={formLoading || !form.testName} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
-              {formLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Order
-            </button>
-            <button onClick={() => setShowForm(false)} className={`px-4 py-2.5 text-xs font-bold rounded-xl ${text.muted}`}>Cancel</button>
-          </div>
-        </div>
+        <InvestigationPanel
+          onSubmit={async (req) => { await onSubmit(req); setShowForm(false); }}
+          onClose={() => setShowForm(false)}
+          formLoading={formLoading}
+          glassCard={glassCard}
+          glassInner={glassInner}
+          isDark={isDark}
+          text={text}
+        />
       )}
 
       {/* Result form */}

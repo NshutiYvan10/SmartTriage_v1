@@ -82,6 +82,16 @@ interface PatientState {
     firstName: string; lastName: string; dateOfBirth?: string;
     gender: string; nationalId?: string; phoneNumber?: string;
     address?: string; emergencyContactName?: string; emergencyContactPhone?: string;
+    // Persistent clinical facts captured at registration. They surface
+    // immediately on the doctor's Overview and feed the medication
+    // safety engine without requiring a follow-up edit.
+    bloodType?: string;
+    knownAllergies?: string;
+    chronicConditions?: string;
+    guardianName?: string;
+    guardianPhone?: string;
+    guardianRelationship?: string;
+    guardianNationalId?: string;
     chiefComplaint?: string; arrivalMode?: string; hospitalId: string;
   }) => Promise<Patient | null>;
   /** Fetch active visits from backend and populate patient store */
@@ -160,6 +170,13 @@ export const usePatientStore = create<PatientState>((set, get) => ({
         address: data.address,
         emergencyContactName: data.emergencyContactName,
         emergencyContactPhone: data.emergencyContactPhone,
+        bloodType: data.bloodType,
+        knownAllergies: data.knownAllergies,
+        chronicConditions: data.chronicConditions,
+        guardianName: data.guardianName,
+        guardianPhone: data.guardianPhone,
+        guardianRelationship: data.guardianRelationship,
+        guardianNationalId: data.guardianNationalId,
         chiefComplaint: data.chiefComplaint || '',
         arrivalMode: (data.arrivalMode as any) || 'WALK_IN',
         hospitalId: data.hospitalId,

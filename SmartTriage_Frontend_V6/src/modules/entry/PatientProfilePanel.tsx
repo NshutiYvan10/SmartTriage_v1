@@ -27,6 +27,7 @@
 import { useEffect, useState } from 'react';
 import {
   ShieldAlert, Heart, Baby, Phone, AlertCircle, Loader2, Droplet, Activity,
+  Pencil, Check, X,
 } from 'lucide-react';
 import { patientApi } from '@/api/patients';
 import type { PatientResponse } from '@/api/types';
@@ -37,6 +38,113 @@ interface Props {
   patientId?: string | null;
   /** … or a fresh PatientResponse (panel uses it directly). */
   patient?: PatientResponse | null;
+  /**
+   * When true, allergies and chronic conditions show pencil icons that
+   * open inline editors (textarea + save/cancel). Saving calls
+   * patientApi.updateAllergies / updateChronicConditions and refreshes
+   * local state. Default false — read-only is the safer default for
+   * any surface that hasn't explicitly opted in (e.g. registration
+   * preview cards).
+   */
+  editable?: boolean;
+}
+
+/**
+ * Inline edit row used by `editable` mode. Shows the value in display
+ * mode with a pencil. Click pencil → textarea + save/cancel buttons.
+ * Save calls the API and (on success) updates the parent's patient
+ * state so the panel re-renders with the new value.
+ */
+function EditableMedicalRow({
+  label, value, onSave, isDark, subtleTextCls, headerTextCls, emptyText, accentColorClass,
+}: {
+  label: string;
+  value: string | null | undefined;
+  onSave: (next: string | null) => Promise<void>;
+  isDark: boolean;
+  subtleTextCls: string;
+  headerTextCls: string;
+  emptyText: string;
+  accentColorClass: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<string>(value ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Keep draft in sync when parent value changes between renders
+  // (e.g. panel re-fetches after a save).
+  useEffect(() => {
+    if (!editing) setDraft(value ?? '');
+  }, [value, editing]);
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => { setDraft(value ?? ''); setEditing(true); setError(null); }}
+        className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${accentColorClass} hover:bg-white/10 transition-colors`}
+        aria-label={`Edit ${label}`}
+      >
+        <Pencil className="w-3 h-3" /> Edit
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-1.5">
+      <textarea
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={2}
+        placeholder={emptyText}
+        className={`w-full px-2 py-1.5 text-sm rounded-md border resize-none outline-none ${
+          isDark ? 'bg-slate-800 text-white border-white/10' : 'bg-white text-slate-900 border-slate-300'
+        }`}
+      />
+      {error && (
+        <div className="text-[11px] text-red-500 flex items-center gap-1">
+          <AlertCircle className="w-3 h-3" /> {error}
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={saving}
+          onClick={async () => {
+            setSaving(true);
+            setError(null);
+            try {
+              const trimmed = draft.trim();
+              await onSave(trimmed === '' ? null : trimmed);
+              setEditing(false);
+            } catch (err: any) {
+              setError(err?.message ?? `Failed to save ${label.toLowerCase()}`);
+            } finally {
+              setSaving(false);
+            }
+          }}
+          className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save
+        </button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => { setEditing(false); setError(null); setDraft(value ?? ''); }}
+          className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-md ${
+            isDark ? 'bg-white/10 text-white' : 'bg-slate-200 text-slate-800'
+          } hover:opacity-80`}
+        >
+          <X className="w-3 h-3" /> Cancel
+        </button>
+        <span className={`text-[10px] ${subtleTextCls} ${headerTextCls === '' ? '' : ''}`}>
+          Empty saves as cleared.
+        </span>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -60,7 +168,7 @@ function isEmpty(v: string | null | undefined): boolean {
   );
 }
 
-export function PatientProfilePanel({ patientId, patient: patientProp }: Props) {
+export function PatientProfilePanel({ patientId, patient: patientProp, editable = false }: Props) {
   const { isDark, glassCard } = useTheme();
 
   const [patient, setPatient] = useState<PatientResponse | null>(patientProp ?? null);
@@ -180,10 +288,27 @@ export function PatientProfilePanel({ patientId, patient: patientProp }: Props) 
             allergiesEmpty ? subtleTextCls : 'text-red-600'
           }`} />
           <div className="flex-1 min-w-0">
-            <div className={`text-[11px] font-bold uppercase tracking-wider ${
-              allergiesEmpty ? subtleTextCls : 'text-red-700'
-            }`}>
-              Allergies
+            <div className="flex items-center justify-between gap-2">
+              <div className={`text-[11px] font-bold uppercase tracking-wider ${
+                allergiesEmpty ? subtleTextCls : 'text-red-700'
+              }`}>
+                Allergies
+              </div>
+              {editable && (
+                <EditableMedicalRow
+                  label="Allergies"
+                  value={patient.knownAllergies}
+                  onSave={async (next) => {
+                    const updated = await patientApi.updateAllergies(patient.id, next);
+                    setPatient(updated);
+                  }}
+                  isDark={isDark}
+                  subtleTextCls={subtleTextCls}
+                  headerTextCls={headerTextCls}
+                  emptyText="e.g. Penicillin (rash), latex"
+                  accentColorClass={isDark ? 'text-red-300 bg-red-500/10' : 'text-red-700 bg-red-100'}
+                />
+              )}
             </div>
             <div className={`text-sm ${
               allergiesEmpty ? subtleTextCls : 'text-red-900 font-semibold'
@@ -203,10 +328,27 @@ export function PatientProfilePanel({ patientId, patient: patientProp }: Props) 
             conditionsEmpty ? subtleTextCls : 'text-amber-600'
           }`} />
           <div className="flex-1 min-w-0">
-            <div className={`text-[11px] font-bold uppercase tracking-wider ${
-              conditionsEmpty ? subtleTextCls : 'text-amber-700'
-            }`}>
-              Chronic conditions
+            <div className="flex items-center justify-between gap-2">
+              <div className={`text-[11px] font-bold uppercase tracking-wider ${
+                conditionsEmpty ? subtleTextCls : 'text-amber-700'
+              }`}>
+                Chronic conditions
+              </div>
+              {editable && (
+                <EditableMedicalRow
+                  label="Chronic conditions"
+                  value={patient.chronicConditions}
+                  onSave={async (next) => {
+                    const updated = await patientApi.updateChronicConditions(patient.id, next);
+                    setPatient(updated);
+                  }}
+                  isDark={isDark}
+                  subtleTextCls={subtleTextCls}
+                  headerTextCls={headerTextCls}
+                  emptyText="e.g. Hypertension, type 2 diabetes"
+                  accentColorClass={isDark ? 'text-amber-300 bg-amber-500/10' : 'text-amber-700 bg-amber-100'}
+                />
+              )}
             </div>
             <div className={`text-sm ${
               conditionsEmpty ? subtleTextCls : 'text-amber-900 font-semibold'

@@ -106,12 +106,16 @@ interface FormData {
   // Nurse Assignment
   assignedNurseId: string;
   // Step 4 — Medical History
+  bloodType: string;
   allergies: string[];
   existingConditions: string[];
   currentMedications: string;
   chiefComplaints: string[];
   chiefComplaintOther: string;
 }
+
+/** ABO/Rh blood-type values supported on the backend; "" = unknown. */
+const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 
 const INITIAL_FORM: FormData = {
   firstName: '',
@@ -144,6 +148,7 @@ const INITIAL_FORM: FormData = {
   referringFacility: '',
   referralDocumentFile: null,
   assignedNurseId: '',
+  bloodType: '',
   allergies: [],
   existingConditions: [],
   currentMedications: '',
@@ -307,6 +312,9 @@ export function EntryRegistration() {
       guardianPhone:        patient.guardianPhone ?? '',
       guardianRelationship: patient.guardianRelationship ?? '',
       guardianNationalId:   patient.guardianNationalId ?? '',
+      // Blood type round-trips cleanly — the backend stores the same
+      // ABO/Rh string the chip selector emits.
+      bloodType: patient.bloodType ?? '',
       // Medical-history fields (chronicConditions/knownAllergies are free
       // text on the backend, our form uses string-array checkboxes — we
       // can't safely round-trip them into the checkboxes, so we leave the
@@ -422,6 +430,15 @@ export function EntryRegistration() {
       }
       patientId = existingPatientId;
     } else {
+      // Convert checkbox arrays → free-text the backend stores. We only
+      // emit a value when the nurse selected at least one chip; an empty
+      // array becomes undefined so the column stays NULL ("we never
+      // asked") rather than "" ("we asked, none reported"). The
+      // PatientProfilePanel treats both as "None on record" but the
+      // distinction matters for downstream audit.
+      const allergiesText = formData.allergies.length > 0 ? formData.allergies.join(', ') : undefined;
+      const conditionsText = formData.existingConditions.length > 0 ? formData.existingConditions.join(', ') : undefined;
+
       const patient = await registerPatientApi({
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
@@ -434,6 +451,18 @@ export function EntryRegistration() {
           .join(', ') || undefined,
         emergencyContactName: formData.contactPersonName || formData.guardianName || undefined,
         emergencyContactPhone: formData.contactPersonPhone || formData.guardianPhone || undefined,
+        // Persistent clinical facts captured at registration so they
+        // appear immediately on the doctor's Overview without an extra
+        // edit step. Blood type & medical history feed the medication
+        // safety engine; guardian fields drive consent paths for
+        // pediatric patients.
+        bloodType: formData.bloodType || undefined,
+        knownAllergies: allergiesText,
+        chronicConditions: conditionsText,
+        guardianName: formData.guardianName || undefined,
+        guardianPhone: formData.guardianPhone || undefined,
+        guardianRelationship: formData.guardianRelationship || undefined,
+        guardianNationalId: formData.guardianNationalId || undefined,
         chiefComplaint,
         arrivalMode: formData.arrivalMode || undefined,
         hospitalId,
@@ -1189,6 +1218,46 @@ export function EntryRegistration() {
                 </div>
               </div>
 
+              {/* Blood Type — captured at registration so the medication
+                  safety engine and any transfusion-related downstream
+                  consumer has it available without a follow-up edit.
+                  "Unknown" is a real value — empty string clears any
+                  previously-set type. */}
+              <div>
+                <label className={labelCls}>Blood Type</label>
+                <p className="text-xs text-slate-400 font-medium mb-2">Select if known. Leave Unknown if not yet typed.</p>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {BLOOD_TYPES.map((bt) => {
+                    const active = formData.bloodType === bt;
+                    return (
+                      <button
+                        key={bt}
+                        type="button"
+                        onClick={() => set('bloodType', active ? '' : bt)}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold tracking-wider transition-all duration-300 hover:-translate-y-0.5 ${active
+                          ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md shadow-red-500/20'
+                          : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                        style={!active ? glassInner : undefined}
+                      >
+                        {bt}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => set('bloodType', '')}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold tracking-wider transition-all duration-300 ${formData.bloodType === ''
+                      ? 'bg-slate-700 text-white'
+                      : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                    style={formData.bloodType !== '' ? glassInner : undefined}
+                  >
+                    Unknown
+                  </button>
+                </div>
+              </div>
+
               {/* Allergies */}
               <div>
                 <label className={labelCls}>Allergies</label>
@@ -1405,6 +1474,7 @@ export function EntryRegistration() {
                   Medical History
                 </h4>
                 {[
+                  ['Blood Type', formData.bloodType || 'Unknown'],
                   ['Allergies', formData.allergies.join(', ') || 'None reported'],
                   ['Conditions', formData.existingConditions.join(', ') || 'None reported'],
                   ['Medications', formData.currentMedications || 'None reported'],
