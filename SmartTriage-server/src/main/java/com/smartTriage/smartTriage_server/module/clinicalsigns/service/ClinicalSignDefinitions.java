@@ -130,6 +130,85 @@ public final class ClinicalSignDefinitions {
             ALL.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
                     SignMapping::code, SignMapping::category));
 
+    /**
+     * Human-readable label per sign_code. Used by Round 3 when composing
+     * audit messages (`decisionPath`, alert title) for system-triggered
+     * re-triages — we want "Cardiac arrest" in the chart, not
+     * "EMERGENCY_CARDIAC_ARREST". Mirrors the `label` field on the
+     * frontend `clinicalSignDefinitions.ts` catalog.
+     *
+     * Drift between this map and `ALL` is impossible because the keys
+     * are the same set of codes; missing labels fall back to the raw
+     * code in `labelOrCode`.
+     */
+    public static final Map<String, String> LABEL_BY_CODE = Map.ofEntries(
+            // Emergency
+            Map.entry("EMERGENCY_AIRWAY_COMPROMISE",            "Airway compromise"),
+            Map.entry("EMERGENCY_BREATHING_DISTRESS",           "Breathing distress"),
+            Map.entry("EMERGENCY_SEVERE_RESPIRATORY_DISTRESS",  "Severe respiratory distress"),
+            Map.entry("EMERGENCY_CARDIAC_ARREST",               "Cardiac arrest"),
+            Map.entry("EMERGENCY_UNCONTROLLED_HAEMORRHAGE",     "Uncontrolled haemorrhage"),
+            Map.entry("EMERGENCY_STAB_GUN_WOUND_NECK_CHEST",    "Stab / gunshot wound to neck or chest"),
+            Map.entry("EMERGENCY_CONVULSIONS",                  "Convulsions"),
+            Map.entry("EMERGENCY_COMA",                         "Coma"),
+            Map.entry("EMERGENCY_HYPOGLYCAEMIA",                "Hypoglycaemia"),
+            Map.entry("EMERGENCY_PURPURIC_RASH",                "Purpuric rash"),
+            Map.entry("EMERGENCY_BURN_FACE_INHALATION",         "Burn — face / inhalation involvement"),
+            // Pediatric Emergency
+            Map.entry("PEDS_EMERGENCY_CENTRAL_CYANOSIS",        "Central cyanosis (pediatric)"),
+            Map.entry("PEDS_EMERGENCY_PULSE_LOW_OR_ABSENT",     "Pulse low or absent (pediatric)"),
+            Map.entry("PEDS_EMERGENCY_COLD_HANDS_COMPOSITE",    "Cold hands — any associated sign"),
+            Map.entry("PEDS_EMERGENCY_COLD_HANDS_LETHARGIC",    "Cold hands + lethargic"),
+            Map.entry("PEDS_EMERGENCY_COLD_HANDS_PULSE_WEAK_FAST", "Cold hands + pulse weak / fast"),
+            Map.entry("PEDS_EMERGENCY_COLD_HANDS_CAP_REFILL",   "Cold hands + delayed capillary refill"),
+            Map.entry("PEDS_EMERGENCY_SEVERE_DEHYDRATION",      "Severe dehydration (pediatric)"),
+            Map.entry("PEDS_EMERGENCY_DEHYDRATION_SKIN_PINCH",  "Dehydration — abnormal skin pinch"),
+            Map.entry("PEDS_EMERGENCY_DEHYDRATION_LETHARGY",    "Dehydration + lethargy"),
+            Map.entry("PEDS_EMERGENCY_DEHYDRATION_SUNKEN_EYES", "Dehydration + sunken eyes"),
+            // mSAT VU
+            Map.entry("MSAT_VU_FOCAL_NEUROLOGIC_DEFICIT",       "Focal neurological deficit"),
+            Map.entry("MSAT_VU_ALTERED_MENTAL_STATUS",          "Altered mental status"),
+            Map.entry("MSAT_VU_CHEST_PAIN",                     "Chest pain"),
+            Map.entry("MSAT_VU_POISONING_OVERDOSE",             "Poisoning / overdose"),
+            Map.entry("MSAT_VU_PREGNANT_ABDOMINAL_PAIN",        "Pregnant + abdominal pain"),
+            Map.entry("MSAT_VU_COUGHING_VOMITING_BLOOD",        "Coughing or vomiting blood"),
+            Map.entry("MSAT_VU_DIABETIC_HIGH_GLUCOSE",          "Diabetic high glucose"),
+            Map.entry("MSAT_VU_AGGRESSION",                     "Aggression"),
+            Map.entry("MSAT_VU_SHORTNESS_OF_BREATH",            "Shortness of breath"),
+            Map.entry("MSAT_VU_BURN_OVER_20_PERCENT",           "Burn over 20% body surface"),
+            Map.entry("MSAT_VU_OPEN_FRACTURE",                  "Open fracture"),
+            Map.entry("MSAT_VU_THREATENED_LIMB",                "Threatened limb"),
+            Map.entry("MSAT_VU_EYE_INJURY",                     "Eye injury"),
+            Map.entry("MSAT_VU_LARGE_JOINT_DISLOCATION",        "Large-joint dislocation"),
+            Map.entry("MSAT_VU_SEVERE_MECHANISM_OF_INJURY",     "Severe mechanism of injury"),
+            Map.entry("MSAT_VU_VERY_SEVERE_PAIN",               "Very severe pain"),
+            Map.entry("MSAT_VU_PREGNANT_ABDOMINAL_TRAUMA",      "Pregnant abdominal trauma"),
+            // mSAT URG
+            Map.entry("MSAT_URG_UNABLE_TO_DRINK_VOMITS",        "Unable to drink / vomits everything"),
+            Map.entry("MSAT_URG_ABDOMINAL_PAIN",                "Abdominal pain"),
+            Map.entry("MSAT_URG_VERY_PALE",                     "Very pale"),
+            Map.entry("MSAT_URG_PREGNANT_VAGINAL_BLEEDING",     "Pregnant + vaginal bleeding"),
+            Map.entry("MSAT_URG_DIABETIC_VERY_HIGH_GLUCOSE",    "Diabetic very high glucose"),
+            Map.entry("MSAT_URG_FINGER_TOE_DISLOCATION",        "Finger / toe dislocation"),
+            Map.entry("MSAT_URG_CLOSED_FRACTURE",               "Closed fracture"),
+            Map.entry("MSAT_URG_BURN_WITHOUT_URGENT_SIGNS",     "Burn without urgent signs"),
+            Map.entry("MSAT_URG_PREGNANT_TRAUMA_NON_ABDOMINAL", "Pregnant trauma (non-abdominal)"),
+            Map.entry("MSAT_URG_MODERATE_PAIN",                 "Moderate pain"),
+            Map.entry("MSAT_URG_LACERATION_ABSCESS",            "Laceration / abscess"),
+            Map.entry("MSAT_URG_FOREIGN_BODY_ASPIRATION",       "Foreign body aspiration"),
+            // Special
+            Map.entry("SPECIAL_ACUTE_TRAUMA",                   "Acute trauma"),
+            Map.entry("SPECIAL_SEIZURE_HISTORY",                "Seizure history"),
+            Map.entry("SPECIAL_ASSAULT_ABUSE",                  "Assault / abuse"),
+            Map.entry("SPECIAL_SUICIDE_ATTEMPT",                "Suicide attempt")
+    );
+
+    /** Returns the readable label for a code, or the code itself if unmapped. */
+    public static String labelOrCode(String code) {
+        if (code == null) return null;
+        return LABEL_BY_CODE.getOrDefault(code, code);
+    }
+
     /** True when `code` is a recognised clinical sign code. */
     public static boolean isKnownCode(String code) {
         return code != null && CATEGORY_BY_CODE.containsKey(code);

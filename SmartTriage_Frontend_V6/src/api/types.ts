@@ -598,6 +598,15 @@ export interface TriageRecordResponse {
   isRetriage: boolean;
   isSystemTriggered: boolean;
   previousCategory: TriageCategory | null;
+  // Round 3 — system-triggered re-triage audit. Populated only when
+  // isSystemTriggered=true; null otherwise. The label resolves
+  // server-side from ClinicalSignDefinitions so we don't have to ship
+  // the catalog twice for the audit message.
+  triggeringSignEventId: string | null;
+  triggeringSignCode: string | null;
+  triggeringSignLabel: string | null;
+  triggeringSignStatus: 'PRESENT' | 'ABSENT' | 'IMPROVING' | 'WORSENING' | 'UNKNOWN' | null;
+  triggeringSignRecordedAt: string | null;
   triageNurseName: string;
   notifiedDoctorName: string | null;
   doctorNotifiedAt: string | null;

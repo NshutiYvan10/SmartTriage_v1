@@ -5,6 +5,8 @@ import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundExcep
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
 import com.smartTriage.smartTriage_server.module.alert.service.AlertEscalationService;
+import com.smartTriage.smartTriage_server.module.clinicalsigns.entity.ClinicalSignEvent;
+import com.smartTriage.smartTriage_server.module.clinicalsigns.service.ClinicalSignDefinitions;
 import com.smartTriage.smartTriage_server.module.triage.dto.PerformTriageRequest;
 import com.smartTriage.smartTriage_server.module.triage.dto.TriageRecordResponse;
 import com.smartTriage.smartTriage_server.module.triage.engine.RwandaTriageDecisionEngine;
@@ -379,6 +381,144 @@ public class TriageService {
         if (previous == null || current == null)
             return false;
         return current.getSeverity() > previous.getSeverity();
+    }
+
+    /**
+     * Round 3 — system-triggered re-triage.
+     *
+     * <p>Called by {@link com.smartTriage.smartTriage_server.module.clinicalsigns.service.ClinicalSignService}
+     * when the {@link RetriageEvaluator} returns an {@code AutoBump} for a
+     * freshly-recorded clinical-sign event. Builds and persists a new
+     * TriageRecord pinned to the target category, with the audit link to
+     * the trigger event, increments the visit's retriage count, updates
+     * its current category, and fires the same CRITICAL/HIGH escalation
+     * alert the manual path would have produced.
+     *
+     * <p>Idempotency: skip when the visit already has a triage record at
+     * or above the target category in the last 60 seconds. Stops a batch
+     * of three Emergency Signs from creating three duplicate RED records.
+     *
+     * <p>This method does NOT run the Rwanda decision engine. The target
+     * category is supplied by the caller's deterministic decision (e.g.
+     * EMERGENCY → RED). TEWS is preserved from the latest manual triage
+     * because the score depends on vitals, which we don't have new ones
+     * for; the doctor's own re-triage will recompute it when they arrive.
+     */
+    @Transactional
+    public TriageRecordResponse systemTriggeredRetriage(
+            Visit visit, ClinicalSignEvent triggerEvent,
+            TriageCategory targetCategory, String reason) {
+        // Idempotency window — same constant as the Rwandan triage SOP's
+        // "do not re-triage twice in less than a minute" guidance.
+        java.time.Instant since = java.time.Instant.now().minusSeconds(60);
+        java.util.List<TriageCategory> atOrAbove = java.util.Arrays.stream(TriageCategory.values())
+                .filter(c -> c.getSeverity() >= targetCategory.getSeverity())
+                .toList();
+        if (triageRecordRepository.hasRecentTriageAtOrAboveCategory(visit.getId(), since, atOrAbove)) {
+            log.info("Skipping system-triggered re-triage on visit {}: already at or above {} within idempotency window",
+                    visit.getVisitNumber(), targetCategory);
+            // Still return the latest record so the caller has something
+            // sensible to surface; the caller's tx is unaffected.
+            return getLatestTriage(visit.getId());
+        }
+
+        TriageCategory previousCategory = visit.getCurrentTriageCategory();
+        int carriedTews = visit.getCurrentTewsScore() == null ? 0 : visit.getCurrentTewsScore();
+        String label = ClinicalSignDefinitions.labelOrCode(triggerEvent.getSignCode());
+        String decisionPath = String.format(
+                "System re-triage: %s → %s. Triggered by %s (%s) at %s by %s.",
+                previousCategory == null ? "—" : previousCategory.name(),
+                targetCategory.name(),
+                label,
+                triggerEvent.getStatus(),
+                triggerEvent.getRecordedAt(),
+                triggerEvent.getRecordedByName() != null ? triggerEvent.getRecordedByName() : "system");
+
+        // Build a minimal TriageRecord — we don't have a fresh form, so
+        // the boolean flags carry over false and we lean on
+        // decisionPath + previousCategory + triggeringSignEventId for
+        // the audit trail. The doctor's manual re-triage will produce
+        // a full record with all checkboxes.
+        TriageRecord record = TriageRecord.builder()
+                .visit(visit)
+                .triagedBy(triggerEvent.getRecordedBy())
+                .triageNurseName(triggerEvent.getRecordedByName())
+                .triageTime(java.time.Instant.now())
+                .tewsScore(carriedTews)
+                .triageCategory(targetCategory)
+                .decisionPath(decisionPath)
+                .isRetriage(true)
+                .isSystemTriggered(true)
+                .previousCategory(previousCategory)
+                .triggeringSignEventId(triggerEvent.getId())
+                .clinicalNotes(reason)
+                .isChildForm(visit.isPediatric())
+                .build();
+        record = triageRecordRepository.save(record);
+
+        // Update visit
+        visit.setCurrentTriageCategory(targetCategory);
+        visit.setTriageTime(record.getTriageTime());
+        visit.setStatus(VisitStatus.TRIAGED);
+        visit.setRetriageCount(visit.getRetriageCount() + 1);
+        visitRepository.save(visit);
+
+        // Fire CRITICAL alert mirroring the manual escalation path so the
+        // existing zone-routed alert pipeline picks it up.
+        ClinicalAlert alert = ClinicalAlert.builder()
+                .visit(visit)
+                .alertType(AlertType.RETRIAGE_REQUIRED)
+                .severity(targetCategory == TriageCategory.RED ? AlertSeverity.CRITICAL : AlertSeverity.HIGH)
+                .title("Auto re-triage: " + targetCategory + " — " + label)
+                .message(String.format(
+                        "Patient %s %s (Visit %s) auto-escalated to %s after %s recorded as %s. Reason: %s",
+                        visit.getPatient().getFirstName(),
+                        visit.getPatient().getLastName(),
+                        visit.getVisitNumber(),
+                        targetCategory,
+                        label,
+                        triggerEvent.getStatus(),
+                        reason))
+                .autoGenerated(true)
+                .build();
+        clinicalAlertRepository.save(alert);
+        log.warn("AUTO RE-TRIAGE: Visit {} → {} ({})", visit.getVisitNumber(), targetCategory, label);
+
+        return TriageRecordMapper.toResponse(record, triggerEvent);
+    }
+
+    /**
+     * Round 3 — create a {@code RETRIAGE_REQUIRED} alert when the
+     * {@link RetriageEvaluator} returns a Suggest decision (mSAT VU/URG
+     * worsenings where category recomputation needs nurse judgement).
+     *
+     * <p>Idempotency: skip when an unacknowledged RETRIAGE_REQUIRED alert
+     * already exists for this visit + sign code. Re-recording the same
+     * worsening sign during the same shift shouldn't spam the queue.
+     */
+    @Transactional
+    public void createRetriageSuggestionAlert(
+            Visit visit, ClinicalSignEvent triggerEvent,
+            AlertSeverity severity, String message) {
+        String label = ClinicalSignDefinitions.labelOrCode(triggerEvent.getSignCode());
+        boolean alreadyOpen = clinicalAlertRepository
+                .existsByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(
+                        visit.getId(), AlertType.RETRIAGE_REQUIRED);
+        if (alreadyOpen) {
+            log.info("Skipping retriage-suggestion alert on visit {}: an unacked one is already open",
+                    visit.getVisitNumber());
+            return;
+        }
+        ClinicalAlert alert = ClinicalAlert.builder()
+                .visit(visit)
+                .alertType(AlertType.RETRIAGE_REQUIRED)
+                .severity(severity)
+                .title("Re-triage suggested: " + label)
+                .message(message)
+                .autoGenerated(true)
+                .build();
+        clinicalAlertRepository.save(alert);
+        log.info("RETRIAGE SUGGESTION: Visit {} ({})", visit.getVisitNumber(), label);
     }
 
     private void generateEscalationAlert(Visit visit, TriageCategory from, TriageCategory to, int tewsScore) {

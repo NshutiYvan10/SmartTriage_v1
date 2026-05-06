@@ -10,11 +10,14 @@ import com.smartTriage.smartTriage_server.module.clinicalsigns.entity.ClinicalSi
 import com.smartTriage.smartTriage_server.module.clinicalsigns.mapper.ClinicalSignMapper;
 import com.smartTriage.smartTriage_server.module.clinicalsigns.repository.ClinicalSignEventRepository;
 import com.smartTriage.smartTriage_server.module.triage.entity.TriageRecord;
+import com.smartTriage.smartTriage_server.module.triage.service.RetriageEvaluator;
+import com.smartTriage.smartTriage_server.module.triage.service.TriageService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.visit.repository.VisitRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,12 +49,30 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ClinicalSignService {
 
     private final ClinicalSignEventRepository repository;
     private final VisitRepository visitRepository;
+    /**
+     * Round 3 — wired in via @Lazy because ClinicalSignService and
+     * TriageService form a cycle: TriageService.performTriage calls
+     * recordBaselineFromTriage, and recordBatch calls back into
+     * TriageService.systemTriggeredRetriage. @Lazy resolves the
+     * Spring proxy on first use rather than at construction so the
+     * cycle doesn't blow up @RequiredArgsConstructor wiring.
+     */
+    private final TriageService triageService;
+
+    @Autowired
+    public ClinicalSignService(
+            ClinicalSignEventRepository repository,
+            VisitRepository visitRepository,
+            @Lazy TriageService triageService) {
+        this.repository = repository;
+        this.visitRepository = visitRepository;
+        this.triageService = triageService;
+    }
 
     /**
      * Auto-record baseline events from a freshly-saved triage record. Each
@@ -168,6 +189,36 @@ public class ClinicalSignService {
         List<ClinicalSignEvent> saved = repository.saveAll(toSave);
         log.info("[clinicalsigns] Recorded {} sign updates for visit {} at {}",
                 saved.size(), visit.getId(), when);
+
+        // Round 3 — feed each freshly-saved event through the
+        // RetriageEvaluator. AutoBump cases create a new TriageRecord
+        // immediately (idempotency-guarded inside TriageService);
+        // Suggest cases create a RETRIAGE_REQUIRED alert. Failures here
+        // are logged but never propagated — the batch save has already
+        // succeeded, the audit log is intact, and a missed re-triage
+        // signal is preferable to making the doctor's "Record Update"
+        // call appear failed when the events actually persisted.
+        for (ClinicalSignEvent event : saved) {
+            try {
+                String label = ClinicalSignDefinitions.labelOrCode(event.getSignCode());
+                RetriageEvaluator.RetriageDecision decision = RetriageEvaluator.evaluate(
+                        event.getSignCategory(),
+                        event.getStatus(),
+                        event.isBaseline(),
+                        visit.isPediatric(),
+                        visit.getCurrentTriageCategory(),
+                        label);
+                if (decision instanceof RetriageEvaluator.AutoBump bump) {
+                    triageService.systemTriggeredRetriage(visit, event, bump.targetCategory(), bump.reason());
+                } else if (decision instanceof RetriageEvaluator.Suggest s) {
+                    triageService.createRetriageSuggestionAlert(visit, event, s.severity(), s.message());
+                }
+            } catch (Exception ex) {
+                log.error("[clinicalsigns] Re-triage evaluation failed for event {} on visit {}: {}",
+                        event.getId(), visit.getId(), ex.getMessage(), ex);
+            }
+        }
+
         return saved.stream().map(ClinicalSignMapper::toResponse).collect(Collectors.toList());
     }
 

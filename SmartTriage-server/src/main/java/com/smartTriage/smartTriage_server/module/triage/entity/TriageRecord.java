@@ -9,6 +9,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * TriageRecord — the medico-legal record of each triage event.
@@ -375,6 +376,17 @@ public class TriageRecord extends BaseEntity {
     @Column(name = "is_system_triggered", nullable = false)
     @Builder.Default
     private boolean isSystemTriggered = false;
+
+    /**
+     * Audit link for Round 3 system-triggered re-triages: the
+     * `clinical_sign_events.id` whose recording caused this triage
+     * record to be created. Null for every manual triage. Stored as
+     * a plain UUID rather than a ManyToOne to keep the triage module
+     * independent of the clinical-signs module — the FK is enforced
+     * at the database level (see V33).
+     */
+    @Column(name = "triggering_sign_event_id")
+    private UUID triggeringSignEventId;
 
     @Column(name = "previous_category", length = 10)
     @Enumerated(EnumType.STRING)

@@ -1,5 +1,7 @@
 package com.smartTriage.smartTriage_server.module.triage.mapper;
 
+import com.smartTriage.smartTriage_server.module.clinicalsigns.entity.ClinicalSignEvent;
+import com.smartTriage.smartTriage_server.module.clinicalsigns.service.ClinicalSignDefinitions;
 import com.smartTriage.smartTriage_server.module.triage.dto.TriageRecordResponse;
 import com.smartTriage.smartTriage_server.module.triage.entity.TriageRecord;
 
@@ -14,6 +16,17 @@ public final class TriageRecordMapper {
     }
 
     public static TriageRecordResponse toResponse(TriageRecord r) {
+        return toResponse(r, null);
+    }
+
+    /**
+     * Round 3 hydration overload: when the caller can supply the
+     * triggering ClinicalSignEvent (e.g. immediately after a system-
+     * triggered re-triage where we just persisted both records), the
+     * label / status / recordedAt fields populate without a follow-up
+     * fetch. The unary overload is kept for the bulk/listing paths.
+     */
+    public static TriageRecordResponse toResponse(TriageRecord r, ClinicalSignEvent trigger) {
         TriageRecordResponse.TriageRecordResponseBuilder b = TriageRecordResponse.builder()
                 .id(r.getId())
                 .visitId(r.getVisit().getId())
@@ -134,6 +147,21 @@ public final class TriageRecordMapper {
 
         if (r.getVitalSigns() != null) {
             b.vitalSignsId(r.getVitalSigns().getId());
+        }
+
+        // Round 3 — populate the system-triggered re-triage audit fields.
+        // The id is on the entity always; the hydrated label / status / time
+        // come from the supplied trigger event when available. Without it,
+        // the frontend can render "System triggered" using just the id and
+        // fetch full details on demand.
+        if (r.getTriggeringSignEventId() != null) {
+            b.triggeringSignEventId(r.getTriggeringSignEventId());
+            if (trigger != null && trigger.getId().equals(r.getTriggeringSignEventId())) {
+                b.triggeringSignCode(trigger.getSignCode())
+                        .triggeringSignLabel(ClinicalSignDefinitions.labelOrCode(trigger.getSignCode()))
+                        .triggeringSignStatus(trigger.getStatus())
+                        .triggeringSignRecordedAt(trigger.getRecordedAt());
+            }
         }
 
         return b.build();

@@ -11,7 +11,7 @@ import {
   FlaskConical, Pill, Monitor, BellRing, Heart, Thermometer,
   Wind, Droplets, Brain, Clock, User, AlertTriangle, ChevronRight,
   Plus, Send, CheckCircle2, XCircle, Eye, Loader2, RefreshCw, LogOut,
-  TrendingUp,
+  TrendingUp, Sparkles,
 } from 'lucide-react';
 import { ClinicalSignsTab } from './ClinicalSignsTab';
 import { DiagnosisPanel } from './DiagnosisPanel';
@@ -704,8 +704,39 @@ export function VisitDetailPage() {
 function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, investigations, medications, alerts, glassCard, glassInner, isDark, text }: any) {
   const unackAlerts = alerts.filter((a: ClinicalAlertResponse) => !a.acknowledged).length;
 
+  // Round 3 — show a prominent banner when the most recent triage was
+  // created automatically by a worsening clinical sign and the matching
+  // RETRIAGE_REQUIRED alert hasn't been acknowledged yet. Once the
+  // doctor acks the alert from the Alerts tab, the banner disappears.
+  const latestSystemTriggered = latestTriage?.isSystemTriggered === true;
+  const matchingUnackedRetriageAlert = alerts.find(
+    (a: ClinicalAlertResponse) => !a.acknowledged && a.alertType === 'RETRIAGE_REQUIRED',
+  );
+  const showRetriageBanner = latestSystemTriggered && !!matchingUnackedRetriageAlert;
+  const bannerCategory = latestTriage?.triageCategory ?? 'RED';
+  const bannerCatColor = CATEGORY_COLORS[bannerCategory] ?? CATEGORY_COLORS.RED;
+
   return (
     <div className="space-y-4">
+    {showRetriageBanner && (
+      <div
+        className={`rounded-2xl p-4 border ${bannerCatColor.border} flex items-start gap-3 animate-fade-up`}
+        style={{ background: 'rgba(239,68,68,0.08)' }}
+      >
+        <AlertTriangle className={`w-5 h-5 ${bannerCatColor.text} flex-shrink-0 mt-0.5`} />
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-bold ${bannerCatColor.text}`}>
+            Re-triaged to {bannerCategory} automatically
+          </p>
+          <p className={`text-xs mt-0.5 ${text.body}`}>
+            {latestTriage.triggeringSignLabel
+              ? <>System detected <span className="font-bold">{latestTriage.triggeringSignLabel}</span>{latestTriage.triggeringSignStatus && <> reported as <span className="font-bold">{latestTriage.triggeringSignStatus}</span></>}.</>
+              : 'A worsening clinical sign moved this patient up.'}
+            {' '}Confirm the patient is being seen, then acknowledge in the Alerts tab.
+          </p>
+        </div>
+      </div>
+    )}
     {/* Patient profile — persistent facts (allergies, chronic conditions,
         blood type, guardian). Safety-critical: rendered first so a doctor
         can't reach the form / orders without seeing the allergy list.
@@ -961,10 +992,16 @@ function TriageTab({ visit, triageHistory, latestTriage, glassCard, glassInner, 
             <div className={`h-2 ${catColor?.dot || 'bg-slate-400'}`} />
             <div className="p-5">
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <span className={`w-3 h-3 rounded-full ${catColor?.dot || 'bg-slate-400'}`} />
                   <span className={`text-base font-extrabold ${catColor?.text || text.heading}`}>{latestTriage.triageCategory}</span>
                   <span className={`text-2xl font-black ${text.accent}`}>TEWS {latestTriage.tewsScore}</span>
+                  {latestTriage.isSystemTriggered && (
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-1 rounded-md bg-amber-500/15 text-amber-700 border border-amber-500/40 inline-flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" />
+                      System triggered
+                    </span>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Performed</p>
@@ -973,6 +1010,20 @@ function TriageTab({ visit, triageHistory, latestTriage, glassCard, glassInner, 
                   </p>
                 </div>
               </div>
+              {/* Round 3 — when the triage was created automatically by a
+                  worsening clinical sign, surface the trigger right under
+                  the category band so the chart explains itself. */}
+              {latestTriage.isSystemTriggered && latestTriage.triggeringSignLabel && (
+                <div className={`mb-3 p-2.5 rounded-xl text-[11px] flex items-start gap-2 ${isDark ? 'bg-amber-500/10' : 'bg-amber-50'} border border-amber-500/30`}>
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <span className={`${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
+                    Triggered by{' '}
+                    <span className="font-bold">{latestTriage.triggeringSignLabel}</span>
+                    {latestTriage.triggeringSignStatus && <> → <span className="font-bold">{latestTriage.triggeringSignStatus}</span></>}
+                    {latestTriage.triggeringSignRecordedAt && <> at {format(new Date(latestTriage.triggeringSignRecordedAt), 'dd MMM HH:mm')}</>}
+                  </span>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                 <InfoRow label="Triaged By" value={latestTriage.triagedByName || '—'} isDark={isDark} />
                 <InfoRow label="Chief Complaint" value={visit.chiefComplaint || '—'} isDark={isDark} />
@@ -996,13 +1047,25 @@ function TriageTab({ visit, triageHistory, latestTriage, glassCard, glassInner, 
                 {triageHistory.slice(1).map((t: TriageRecordResponse) => (
                   <div key={t.id} className="rounded-xl p-3" style={glassInner}>
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className={`w-2.5 h-2.5 rounded-full ${CATEGORY_COLORS[t.triageCategory]?.dot || 'bg-slate-400'}`} />
                         <span className={`text-xs font-bold ${text.heading}`}>{t.triageCategory} — TEWS {t.tewsScore}</span>
                         {t.triagedByName && <span className={`text-[10px] ${text.muted}`}>by {t.triagedByName}</span>}
+                        {t.isSystemTriggered && (
+                          <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 inline-flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5" />
+                            System
+                          </span>
+                        )}
                       </div>
                       <span className={`text-[10px] ${text.muted}`}>{t.triageTime ? format(new Date(t.triageTime), 'dd MMM HH:mm') : ''}</span>
                     </div>
+                    {t.isSystemTriggered && t.triggeringSignLabel && (
+                      <p className={`text-[10px] mt-1 ${text.muted}`}>
+                        Triggered by <span className="font-semibold">{t.triggeringSignLabel}</span>
+                        {t.triggeringSignStatus && <> → {t.triggeringSignStatus}</>}
+                      </p>
+                    )}
                     {t.decisionPath && <p className={`text-[11px] mt-1 ${text.body}`}>{t.decisionPath}</p>}
                   </div>
                 ))}

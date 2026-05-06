@@ -119,6 +119,18 @@ public class TriageRecordResponse {
     private String presentingComplaints;
     private String clinicalNotes;
 
+    // --- Round 3: System-triggered re-triage audit ---
+    /** clinical_sign_events.id whose recording caused this triage record (null for manual). */
+    private UUID triggeringSignEventId;
+    /** Sign code (e.g. EMERGENCY_CARDIAC_ARREST) — denormalised from the trigger event. */
+    private String triggeringSignCode;
+    /** Human-readable label resolved server-side via ClinicalSignDefinitions. */
+    private String triggeringSignLabel;
+    /** Status the trigger event recorded — typically PRESENT or WORSENING. */
+    private com.smartTriage.smartTriage_server.module.clinicalsigns.entity.ClinicalSignStatus triggeringSignStatus;
+    /** When the triggering sign event was recorded. */
+    private Instant triggeringSignRecordedAt;
+
     // --- Special Considerations ---
     private boolean specialAcuteTrauma;
     private boolean specialSeizureHistory;
