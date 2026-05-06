@@ -12,6 +12,7 @@ import { useTEWSHistoryStore } from '@/store/tewsHistoryStore';
 import { useTheme } from '@/hooks/useTheme';
 import { alertApi } from '@/api/alerts';
 import { vitalApi } from '@/api/vitals';
+import { triageApi } from '@/api/triage';
 import {
   validateTEWSInputs,
   getAbnormalValidations,
@@ -454,7 +455,7 @@ export function PediatricTriageForm() {
   const toggleUrgent = useCallback((id: string) => { setCheckedUrgent((p) => ({ ...p, [id]: !p[id] })); }, []);
   const handleDiscriminatorReviewed = useCallback(() => { setDiscriminatorReviewed(true); }, []);
 
-  const handleFinishTriage = useCallback(() => {
+  const handleFinishTriage = useCallback(async () => {
     if (!canFinish) return;
     setTriageFinished(true);
     const finishTime = new Date();
@@ -479,6 +480,154 @@ export function PediatricTriageForm() {
       const np = addPatient({ fullName: patientNames || 'Unknown Infant', age, gender: (gender === 'MALE' || gender === 'FEMALE' || gender === 'OTHER') ? gender : 'MALE', chiefComplaint: chiefComplaint || 'Pediatric triage', arrivalMode: 'WALK_IN', weight: parseFloat(weightVal) || undefined });
       assignCategory(np.id, categoryResult.category, tewsScoring.totalScore);
       targetPatientId = np.id;
+    }
+
+    // ────────────────────────────────────────────────────────
+    // Backend submission — the in-memory patientStore call above
+    // only updates the local browser state. Without this POST, the
+    // KFH peds-form fields, the age-banded TEWS calculator, and the
+    // peds-specific decision engine never run for this triage. The
+    // patient's authoritative triage_record (and any
+    // system-triggered re-triages, zone routing, alerts) all
+    // depend on this call.
+    //
+    // sourceVisitId from the alert click-through is the actual visit
+    // id; otherwise we fall through to targetPatientId (in-memory
+    // patient id). When neither is a real visit (demo mode) the
+    // backend call is skipped because triage_records.visit_id is
+    // a hard FK.
+    // ────────────────────────────────────────────────────────
+
+    if (sourceVisitId) {
+      const avpuMap: Record<string, 'ALERT' | 'CONFUSED' | 'VERBAL' | 'PAIN' | 'UNRESPONSIVE'> = {
+        ALERT: 'ALERT',
+        CONFUSED: 'CONFUSED',
+        VOICE: 'VERBAL',
+        PAIN: 'PAIN',
+        UNRESPONSIVE: 'UNRESPONSIVE',
+      };
+      const mobilityMap: Record<string, 'WALKING' | 'WITH_HELP' | 'STRETCHER'> = {
+        NORMAL: 'WALKING',
+        UNABLE: 'STRETCHER',
+      };
+      const glucoseValue = fieldValues['blood_glucose']
+        ? parseFloat(fieldValues['blood_glucose']) : undefined;
+      const isInfant = ageBand === 'INFANT';
+
+      try {
+        await triageApi.perform({
+          visitId: sourceVisitId,
+
+          // ── Section 1 — Emergency Signs (KFH peds form) ──
+          // Airway / Breathing
+          hasAirwayCompromise: !!checkedSigns['obstruction_stridor'],
+          hasBreathingDistress: !!checkedSigns['increased_wob']
+            || !!checkedSigns['grunting_head_bobbing'],
+          hasSevereRespiratoryDistress: !!checkedSigns['apnoea_gasping'],
+          // Peds-specific Emergency
+          childCentralCyanosis: !!checkedSigns['central_cyanosis'],
+          // Circulation — peds-specific (cold-hands composite + sub-flags
+          // covered by the engine; here we surface the cap-refill ≥3s flag)
+          childColdHandsCapRefill: !!checkedSigns['cap_refill_gt3'],
+          childColdHandsComposite: !!checkedSigns['cold_peripheries']
+            && (
+              !!checkedSigns['cap_refill_gt3']
+              || tewsInput.avpu === 'PAIN'
+              || tewsInput.avpu === 'UNRESPONSIVE'
+            ),
+          // Other emergency
+          hasConvulsions: !!checkedSigns['posturing'],
+          hasComa: tewsInput.avpu === 'PAIN' || tewsInput.avpu === 'UNRESPONSIVE',
+          hasHypoglycaemia: glucoseValue != null && glucoseValue < 3.0,
+          hasPurpuricRash: !!checkedSigns['rash_petechiae'],
+          hasUncontrolledHaemorrhage: !!checkedSigns['bruising_bleeding'],
+          // Pediatric severe-dehydration composite + sub-flags. The
+          // backend engine fires the composite when ≥2 sub-flags are
+          // ticked even if the composite isn't, so it's safe to set
+          // sub-flags individually.
+          childDehydrationSunkenEyes: !!checkedSigns['sunken_eyes_fontanel'],
+          childDehydrationSkinPinch: !!checkedSigns['reduced_skin_turgor'],
+
+          // ── Glucose context fields ──
+          // The backend reads these alongside the boolean flags;
+          // populating both keeps the audit trail complete for any
+          // downstream eGFR / hypoglycaemia path.
+          bloodGlucose: glucoseValue,
+          convulsionGlucose: !!checkedSigns['posturing'] ? glucoseValue : undefined,
+          comaGlucose: (tewsInput.avpu === 'PAIN' || tewsInput.avpu === 'UNRESPONSIVE')
+            ? glucoseValue : undefined,
+
+          // ── TEWS components ──
+          mobility: mobilityMap[tewsInput.mobility] ?? 'WALKING',
+          avpu: avpuMap[tewsInput.avpu] ?? 'ALERT',
+          traumaStatus: tewsInput.trauma ? 'TRAUMA' : 'NO_TRAUMA',
+
+          // ── Vitals (TEWS-scored + additional) ──
+          respiratoryRate: tewsInput.respiratoryRate ?? undefined,
+          heartRate: tewsInput.heartRate ?? undefined,
+          temperature: tewsInput.temperature ?? undefined,
+          spo2: spo2 ? parseInt(spo2) : undefined,
+          systolicBP: systolicBP ? parseInt(systolicBP) : undefined,
+          diastolicBp: diastolicBP ? parseInt(diastolicBP) : undefined,
+          painScore: undefined,  // pain captured via inconsolable-pain flag
+          weightKg: weightVal ? parseFloat(weightVal) : undefined,
+          heightCm: heightVal ? parseFloat(heightVal) : undefined,
+
+          // ── Very Urgent — KFH peds form ──
+          // Discriminator IDs in the lists were defined to match the
+          // PerformTriageRequest field names exactly (snake → camel),
+          // so the explicit mapping below is the safe, type-checked
+          // translation. INFANT-only / CHILD-only fields are guarded
+          // by the age band so a stale tick from a switched age
+          // doesn't false-positive.
+          vuPedsMoreSleepyThanNormal: !!checkedVeryUrgent['vu_peds_more_sleepy_than_normal'],
+          vuFocalNeurologicDeficit: !!checkedVeryUrgent['vu_focal_neuro_deficit'],
+          vuPedsInconsolableSeverePain: !!checkedVeryUrgent['vu_peds_inconsolable_severe_pain'],
+          vuPedsFloppyIrritableRestless: !!checkedVeryUrgent['vu_peds_floppy_irritable_restless'],
+          vuChestPain: !!checkedVeryUrgent['vu_chest_pain'],
+          vuPoisoningOverdose: !!checkedVeryUrgent['vu_poisoning_overdose'],
+          vuPedsTinyBabyUnder2Months: isInfant && !!checkedVeryUrgent['vu_peds_tiny_baby_under_2_months'],
+          vuPregnantAbdominalPain: !isInfant && !!checkedVeryUrgent['vu_pregnant_abdominal_pain'],
+          // Trauma
+          vuPedsBurnOver10Percent: !!checkedVeryUrgent['vu_peds_burn_over_10_percent'],
+          vuOpenFracture: !!checkedVeryUrgent['vu_open_fracture'],
+          vuThreatenedLimb: !!checkedVeryUrgent['vu_threatened_limb'],
+          vuEyeInjury: !!checkedVeryUrgent['vu_eye_injury'],
+          vuLargeJointDislocation: !!checkedVeryUrgent['vu_large_joint_dislocation'],
+          vuSevereMechanismOfInjury: !!checkedVeryUrgent['vu_severe_mechanism_of_injury'],
+          vuPregnantAbdominalTrauma: !isInfant && !!checkedVeryUrgent['vu_pregnant_abdominal_trauma'],
+
+          // ── Urgent — KFH peds form ──
+          urgPedsPittingEdemaFaceOrFeet: !!checkedUrgent['urg_peds_pitting_edema_face_or_feet'],
+          urgUnableToDrinkVomits: !!checkedUrgent['urg_unable_to_drink_vomits'],
+          urgVeryPale: !!checkedUrgent['urg_very_pale'],
+          urgPedsSomeRespiratoryDistress: !!checkedUrgent['urg_peds_some_respiratory_distress'],
+          urgPregnantVaginalBleeding: !isInfant && !!checkedUrgent['urg_pregnant_vaginal_bleeding'],
+          urgPedsSevereMalnutritionWasting: !!checkedUrgent['urg_peds_severe_malnutrition_wasting'],
+          urgPedsUnwellWithKnownDiabetes: !!checkedUrgent['urg_peds_unwell_with_known_diabetes'],
+          urgPedsDiarrheaVomitingDehydration: !!checkedUrgent['urg_peds_diarrhea_vomiting_dehydration'],
+          // Trauma URG
+          urgFingerToeDislocation: !!checkedUrgent['urg_finger_toe_dislocation'],
+          urgClosedFracture: !!checkedUrgent['urg_closed_fracture'],
+          urgBurnWithoutUrgentSigns: !!checkedUrgent['urg_burn_without_urgent_signs'],
+          urgModeratePain: !!checkedUrgent['urg_moderate_pain'],
+          urgPregnantTraumaNonAbdominal: !isInfant && !!checkedUrgent['urg_pregnant_trauma_non_abdominal'],
+
+          // ── Form metadata ──
+          presentingComplaints: chiefComplaint || undefined,
+          clinicalNotes: discriminatorNotes || undefined,
+          triageNurseName: nurseName || undefined,
+        });
+      } catch (err) {
+        // Backend submission failed — local store update has already
+        // happened, so the nurse sees the result. The audit log will
+        // show this as a sync gap. We deliberately do NOT roll back
+        // the local triage decision: the nurse's clinical
+        // determination is authoritative; backend persistence is the
+        // optimisation. A retry path (or manual re-submit by the
+        // nurse) would be the right follow-up.
+        console.error('[peds-triage] Failed to submit to backend:', err);
+      }
     }
 
     // Audit: triage completed
@@ -524,7 +673,7 @@ export function PediatricTriageForm() {
         },
       );
     }
-  }, [canFinish, patient, patientNames, patientAge, gender, chiefComplaint, weightVal, categoryResult, tewsScoring, assignCategory, setTriageStatus, addPatient, addAuditEntry, addTEWSHistoryEntry, nurseName, discriminatorNeeded, discriminatorReviewed, hasVeryUrgentSigns, hasUrgentSigns, hasAnyCriticalSign, spo2Value, triageStartedAt]);
+  }, [canFinish, patient, patientNames, patientAge, gender, chiefComplaint, weightVal, heightVal, categoryResult, tewsScoring, assignCategory, setTriageStatus, addPatient, addAuditEntry, addTEWSHistoryEntry, nurseName, discriminatorNeeded, discriminatorReviewed, discriminatorNotes, hasVeryUrgentSigns, hasUrgentSigns, hasAnyCriticalSign, spo2Value, triageStartedAt, fromAlertId, sourceVisitId, ageBand, checkedSigns, checkedVeryUrgent, checkedUrgent, fieldValues, tewsInput, spo2, systolicBP, diastolicBP]);
 
   const getVitalBg = useCallback((key: string, value: string) => {
     if (!value) return '';

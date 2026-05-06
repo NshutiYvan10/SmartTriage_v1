@@ -505,6 +505,22 @@ export interface PerformTriageRequest {
   urgModeratePain?: boolean;
   urgLacerationAbscess?: boolean;
   urgForeignBodyAspiration?: boolean;
+  // V38 — KFH peds form Very Urgent (peds-only)
+  vuPedsMoreSleepyThanNormal?: boolean;
+  vuPedsInconsolableSeverePain?: boolean;
+  vuPedsFloppyIrritableRestless?: boolean;
+  vuPedsTinyBabyUnder2Months?: boolean;
+  vuPedsBurnOver10Percent?: boolean;
+  // V38 — KFH peds form Urgent (peds-only)
+  urgPedsPittingEdemaFaceOrFeet?: boolean;
+  urgPedsSomeRespiratoryDistress?: boolean;
+  urgPedsSevereMalnutritionWasting?: boolean;
+  urgPedsUnwellWithKnownDiabetes?: boolean;
+  urgPedsDiarrheaVomitingDehydration?: boolean;
+  urgPedsDehydrationSunkenEyes?: boolean;
+  urgPedsDehydrationDryMouth?: boolean;
+  urgPedsDehydrationDecreasedUrine?: boolean;
+  urgPedsDehydrationSlowSkinPinch?: boolean;
   // Clinical Metadata
   presentingComplaints?: string;
   clinicalNotes?: string;
