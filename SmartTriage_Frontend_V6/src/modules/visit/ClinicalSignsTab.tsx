@@ -20,7 +20,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { format } from 'date-fns';
 import {
   Activity, AlertTriangle, Heart, Stethoscope, Sparkles, Plus, X,
-  Send, Loader2, Search, ChevronDown, Clock, History, RefreshCw,
+  Send, Loader2, Search, ChevronDown, ChevronUp, Clock, History, RefreshCw,
 } from 'lucide-react';
 import {
   clinicalSignsApi,
@@ -37,6 +37,9 @@ import {
   CATEGORY_TONE,
   type ClinicalSignDefinition,
 } from './clinicalSignDefinitions';
+import { SignSparkline } from './SignSparkline';
+import { ChangesSinceTriageCard } from './ChangesSinceTriageCard';
+import { buildSignTimelines } from './clinicalSignDiff';
 
 const STATUS_TONE: Record<ClinicalSignStatus, { label: string; className: string }> = {
   PRESENT:    { label: 'PRESENT',    className: 'text-red-700 bg-red-100 border-red-300' },
@@ -98,6 +101,11 @@ export function ClinicalSignsTab({ visitId, glassCard, glassInner, isDark, text 
     }
     return grouped;
   }, [currentState]);
+
+  // Per-sign chronological event list — built once from the full
+  // history and passed down so the sparkline next to each sign card
+  // doesn't have to re-derive its own slice.
+  const timelines = useMemo(() => buildSignTimelines(history), [history]);
 
   // Has anything ever been recorded? — drives empty-state copy.
   const hasAnyEvents = currentState.length > 0;
@@ -189,13 +197,27 @@ export function ClinicalSignsTab({ visitId, glassCard, glassInner, isDark, text 
           </p>
         </div>
       ) : view === 'current' ? (
-        <CurrentStateView
-          currentByCategory={currentByCategory}
-          glassCard={glassCard}
-          glassInner={glassInner}
-          isDark={isDark}
-          text={text}
-        />
+        <>
+          {/* Diff card — sits above Current State so the doctor sees
+              "what's changed since triage" before scrolling into the
+              full sign list. Renders a quiet "no changes" line when
+              nothing has moved. */}
+          <ChangesSinceTriageCard
+            history={history}
+            glassCard={glassCard}
+            glassInner={glassInner}
+            isDark={isDark}
+            text={text}
+          />
+          <CurrentStateView
+            currentByCategory={currentByCategory}
+            timelines={timelines}
+            glassCard={glassCard}
+            glassInner={glassInner}
+            isDark={isDark}
+            text={text}
+          />
+        </>
       ) : (
         <TimelineView
           history={history}
@@ -211,69 +233,110 @@ export function ClinicalSignsTab({ visitId, glassCard, glassInner, isDark, text 
 // ═══════ Current State view ═══════
 
 function CurrentStateView({
-  currentByCategory, glassCard, glassInner, isDark, text,
+  currentByCategory, timelines, glassCard, glassInner, isDark, text,
 }: {
   currentByCategory: Record<ClinicalSignCategory, ClinicalSignEventResponse[]>;
+  timelines: Map<string, ClinicalSignEventResponse[]>;
   glassCard: React.CSSProperties;
   glassInner: React.CSSProperties;
   isDark: boolean;
   text: any;
 }) {
+  // SPECIAL category collapses by default when there's a lot of it —
+  // it's typically the noisiest, least clinically actionable bucket
+  // (long-tail signs that rarely drive a treatment decision). The
+  // doctor opens it with one click when they need to scan it.
+  // Categories with ≤4 entries always render expanded; otherwise
+  // SPECIAL starts collapsed and the others stay open.
+  const [collapsed, setCollapsed] = useState<Record<ClinicalSignCategory, boolean>>({
+    EMERGENCY: false,
+    PEDIATRIC_EMERGENCY: false,
+    MSAT_VU: false,
+    MSAT_URG: false,
+    SPECIAL: (currentByCategory.SPECIAL?.length ?? 0) > 4,
+  });
+
   return (
     <div className="space-y-3">
       {CATEGORY_ORDER.map((category) => {
         const events = currentByCategory[category];
         if (!events || events.length === 0) return null;
         const tone = CATEGORY_TONE[category];
+        const isCollapsed = collapsed[category];
         return (
           <div key={category} className="rounded-2xl overflow-hidden" style={glassCard}>
-            <div className={`flex items-center gap-2 px-4 py-2.5 border-b ${tone.border} ${tone.bg}`}>
+            <button
+              type="button"
+              onClick={() => setCollapsed((prev) => ({ ...prev, [category]: !prev[category] }))}
+              className={`w-full flex items-center gap-2 px-4 py-2.5 border-b ${tone.border} ${tone.bg} hover:brightness-110 transition`}
+              aria-expanded={!isCollapsed}
+            >
               <span className={`w-2 h-2 rounded-full ${tone.dot}`} />
               <h4 className={`text-xs font-extrabold uppercase tracking-wider ${tone.text}`}>
                 {CATEGORY_LABEL[category]}
               </h4>
-              <span className={`ml-auto text-[10px] font-bold ${text.muted}`}>
-                {events.length} sign{events.length === 1 ? '' : 's'} on record
+              <span className={`ml-auto text-[10px] font-bold ${text.muted} flex items-center gap-1.5`}>
+                {events.length} sign{events.length === 1 ? '' : 's'}
+                {isCollapsed
+                  ? <ChevronDown className="w-3 h-3" />
+                  : <ChevronUp className="w-3 h-3" />}
               </span>
-            </div>
-            <div className="p-3 space-y-2">
-              {events.map((e) => {
-                const def = SIGN_BY_CODE[e.signCode];
-                const statusTone = STATUS_TONE[e.status];
-                return (
-                  <div key={e.id} className="rounded-xl p-3 flex items-start gap-3" style={glassInner}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`text-sm font-bold ${text.heading}`}>
-                          {def?.label ?? e.signCode}
-                        </span>
-                        <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md border ${statusTone.className}`}>
-                          {statusTone.label}
-                        </span>
-                        {e.isBaseline && (
-                          <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${isDark ? 'bg-slate-500/15 text-slate-400' : 'bg-slate-200/60 text-slate-600'}`}>
-                            Baseline
+            </button>
+            {!isCollapsed && (
+              <div className="p-3 space-y-2">
+                {events.map((e) => {
+                  const def = SIGN_BY_CODE[e.signCode];
+                  const statusTone = STATUS_TONE[e.status];
+                  const tl = timelines.get(e.signCode) ?? [];
+                  return (
+                    <div key={e.id} className="rounded-xl p-3 flex items-start gap-3" style={glassInner}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-sm font-bold ${text.heading}`}>
+                            {def?.label ?? e.signCode}
                           </span>
-                        )}
-                        {e.numericValue != null && (
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700">
-                            {def?.numericLabel?.replace(/\(.+\)/, '').trim() || 'value'}: {e.numericValue}
+                          <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md border ${statusTone.className}`}>
+                            {statusTone.label}
                           </span>
+                          {e.isBaseline && tl.length === 1 && (
+                            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${isDark ? 'bg-slate-500/15 text-slate-400' : 'bg-slate-200/60 text-slate-600'}`}>
+                              Baseline only
+                            </span>
+                          )}
+                          {tl.length >= 2 && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-700">
+                              {tl.length} events
+                            </span>
+                          )}
+                          {e.numericValue != null && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700">
+                              {def?.numericLabel?.replace(/\(.+\)/, '').trim() || 'value'}: {e.numericValue}
+                            </span>
+                          )}
+                        </div>
+                        {/* Per-sign sparkline — colored dots, oldest left,
+                            latest right. Hover for timestamp / status /
+                            recordedBy. Hidden when there's only one event
+                            to keep the layout calm. */}
+                        {tl.length >= 2 && (
+                          <div className="mt-1.5">
+                            <SignSparkline events={tl} isDark={isDark} />
+                          </div>
                         )}
-                      </div>
-                      {e.notes && (
-                        <p className={`text-[11px] mt-1 ${text.body}`}>{e.notes}</p>
-                      )}
-                      <div className={`text-[10px] mt-1 ${text.muted} flex items-center gap-2`}>
-                        <Clock className="w-3 h-3" />
-                        {e.recordedAt ? format(new Date(e.recordedAt), 'dd MMM yyyy HH:mm') : '—'}
-                        {e.recordedByName && <span>· by {e.recordedByName}</span>}
+                        {e.notes && (
+                          <p className={`text-[11px] mt-1 ${text.body}`}>{e.notes}</p>
+                        )}
+                        <div className={`text-[10px] mt-1 ${text.muted} flex items-center gap-2`}>
+                          <Clock className="w-3 h-3" />
+                          {e.recordedAt ? format(new Date(e.recordedAt), 'dd MMM yyyy HH:mm') : '—'}
+                          {e.recordedByName && <span>· by {e.recordedByName}</span>}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}
