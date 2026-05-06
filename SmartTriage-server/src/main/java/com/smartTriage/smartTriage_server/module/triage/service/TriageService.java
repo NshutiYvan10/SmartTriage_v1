@@ -80,6 +80,8 @@ public class TriageService {
     private final com.smartTriage.smartTriage_server.module.clinicalsigns.service.ClinicalSignService clinicalSignService;
     /** Resolves the canonical zone for a visit at triage / re-triage time. */
     private final com.smartTriage.smartTriage_server.module.visit.service.ZoneRoutingService zoneRoutingService;
+    /** Phase 2 — initiates pending zone transfers on auto-retriage. */
+    private final com.smartTriage.smartTriage_server.module.zonetransfer.service.ZoneTransferService zoneTransferService;
 
     /**
      * Perform initial triage or manual re-triage on a visit.
@@ -466,16 +468,45 @@ public class TriageService {
                 .build();
         record = triageRecordRepository.save(record);
 
-        // Update visit. Zone updates here are direct in Phase 1; the
-        // Phase 2 ZoneTransfer state machine will move this behind a
-        // PENDING_ACCEPT step so the receiving doctor explicitly
-        // takes responsibility before the patient's zone changes.
+        // Update visit's category + retriage metadata immediately —
+        // the category change is the safety guarantee. Zone change,
+        // however, goes through the Phase 2 ZoneTransfer state
+        // machine: a PENDING_ACCEPT row is created and the receiving
+        // doctor must explicitly take the patient before the
+        // visit's current_ed_zone changes.
+        EdZone fromZone = visit.getCurrentEdZone();
+        EdZone targetZone = zoneRoutingService.routeFor(visit, targetCategory);
+
         visit.setCurrentTriageCategory(targetCategory);
         visit.setTriageTime(record.getTriageTime());
         visit.setStatus(VisitStatus.TRIAGED);
         visit.setRetriageCount(visit.getRetriageCount() + 1);
-        visit.setCurrentEdZone(zoneRoutingService.routeFor(visit, targetCategory));
+        // When the patient hasn't been placed in a zone yet (rare,
+        // pre-triage), fall through to direct assignment — there's
+        // nothing to "transfer from".
+        if (fromZone == null) {
+            visit.setCurrentEdZone(targetZone);
+        }
         visitRepository.save(visit);
+
+        // Initiate the inter-zone transfer when the zone actually
+        // changes. ZoneTransferService idempotently updates an
+        // existing pending row to a higher target if one is already
+        // open, so a batch of three EMERGENCY signs produces one
+        // pending transfer to RESUS, not three.
+        if (fromZone != null && fromZone != targetZone) {
+            try {
+                zoneTransferService.initiate(
+                        visit, fromZone, targetZone,
+                        "Auto re-triage: " + label + " (" + triggerEvent.getStatus() + ")",
+                        triggerEvent.getRecordedBy(),
+                        null,
+                        triggerEvent.getId());
+            } catch (Exception e) {
+                log.warn("Failed to initiate zone transfer for visit {}: {}",
+                        visit.getVisitNumber(), e.getMessage());
+            }
+        }
 
         // Severity is calibrated to the new category's clinical urgency,
         // matching the standard alarm scale. RED → CRITICAL pages the

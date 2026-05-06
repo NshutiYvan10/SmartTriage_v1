@@ -201,6 +201,10 @@ export function VisitDetailPage() {
   // Patient is fetched separately (visit only carries patientId).
   // Used for allergy cross-checking at prescribe time.
   const [patient, setPatient] = useState<PatientResponse | null>(null);
+  // Phase 2 zone routing — current pending transfer (if any) for this
+  // visit. Drives the inter-zone handover banner. Re-fetched on every
+  // loadData so accept/decline reflects immediately.
+  const [pendingTransfer, setPendingTransfer] = useState<import('@/api/zoneTransfers').ZoneTransferResponse | null>(null);
 
   // Forms
   const [showVitalsForm, setShowVitalsForm] = useState(false);
@@ -235,7 +239,8 @@ export function VisitDetailPage() {
     if (!visitId) return;
     setLoading(true);
     try {
-      const [v, vit, lt, th, triLatest, n, d, inv, med, al] = await Promise.allSettled([
+      const { zoneTransferApi } = await import('@/api/zoneTransfers');
+      const [v, vit, lt, th, triLatest, n, d, inv, med, al, pt] = await Promise.allSettled([
         visitApi.getById(visitId),
         vitalApi.getByVisit(visitId, 0, 50),
         vitalApi.getLatest(visitId),
@@ -246,6 +251,7 @@ export function VisitDetailPage() {
         investigationApi.getAllByVisit(visitId),
         medicationApi.getAllByVisit(visitId),
         alertApi.getByVisit(visitId, 0, 50),
+        zoneTransferApi.pendingForVisit(visitId),
       ]);
 
       if (v.status === 'fulfilled') setVisit(v.value);
@@ -258,6 +264,7 @@ export function VisitDetailPage() {
       if (inv.status === 'fulfilled') setInvestigations(Array.isArray(inv.value) ? inv.value : []);
       if (med.status === 'fulfilled') setMedications(Array.isArray(med.value) ? med.value : []);
       if (al.status === 'fulfilled') setVisitAlerts(al.value.content);
+      if (pt.status === 'fulfilled') setPendingTransfer(pt.value);
     } catch (err) {
       console.error('Failed to load visit data:', err);
     } finally {
@@ -651,7 +658,7 @@ export function VisitDetailPage() {
 
         {/* ── Tab Content ── */}
         <div className="animate-fade-up" style={{ animationDelay: '0.05s' }}>
-          {activeTab === 'overview' && <OverviewTab visit={visit} latestVitals={latestVitals} latestTriage={latestTriage} notes={notes} diagnoses={diagnoses} investigations={investigations} medications={medications} alerts={visitAlerts} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
+          {activeTab === 'overview' && <OverviewTab visit={visit} latestVitals={latestVitals} latestTriage={latestTriage} notes={notes} diagnoses={diagnoses} investigations={investigations} medications={medications} alerts={visitAlerts} pendingTransfer={pendingTransfer} reload={loadData} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'vitals' && <VitalsTab vitals={vitals} latestVitals={latestVitals} glassCard={glassCard} isDark={isDark} text={text} />}
           {activeTab === 'triage' && <TriageTab visit={visit} triageHistory={triageHistory} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'clinical-signs' && <ClinicalSignsTab visitId={visit.id} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} onVisitMayHaveChanged={loadData} />}
@@ -699,7 +706,7 @@ export function VisitDetailPage() {
 }
 
 // ═══════ OVERVIEW TAB ═══════
-function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, investigations, medications, alerts, navigate, glassCard, glassInner, isDark, text }: any) {
+function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, investigations, medications, alerts, pendingTransfer, reload, navigate, glassCard, glassInner, isDark, text }: any) {
   const unackAlerts = alerts.filter((a: ClinicalAlertResponse) => !a.acknowledged).length;
 
   // Round 3 — show a prominent banner when the most recent triage was
@@ -754,6 +761,20 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
           </button>
         </div>
       </div>
+    )}
+
+    {/* Phase 2 zone routing — pending inter-zone transfer banner. The
+        patient is logically in `pendingTransfer.toZone` but physically
+        still in `pendingTransfer.fromZone` until a receiving doctor
+        accepts. Both teams see this; either can act. Until accepted,
+        the original primary clinician retains responsibility — that's
+        the safety invariant. */}
+    {pendingTransfer && (
+      <PendingTransferBanner
+        transfer={pendingTransfer}
+        reload={reload}
+        text={text}
+      />
     )}
     {/* Patient profile — persistent facts (allergies, chronic conditions,
         blood type, guardian). Safety-critical: rendered first so a doctor
@@ -1751,6 +1772,172 @@ function AlertsTab({ alerts, onAcknowledge, visit, navigate, glassCard, glassInn
 }
 
 // ═══════ HELPER COMPONENTS ═══════
+
+// ─── PendingTransferBanner ────────────────────────────────────────
+//
+// Renders the "incoming / outgoing" notice for an inter-zone transfer
+// awaiting acceptance, with three CTAs: Accept, Treat in place
+// (RESUS_IN_PLACE), Decline. Keeps the doctor's hand on the wheel —
+// no zone change happens silently.
+//
+// Defined inline rather than in its own file because it's tightly
+// coupled to OverviewTab's text/glass styling props.
+function PendingTransferBanner({
+  transfer, reload, text,
+}: {
+  transfer: import('@/api/zoneTransfers').ZoneTransferResponse;
+  reload: () => Promise<void> | void;
+  text: any;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showHandover, setShowHandover] = useState(false);
+  const [handover, setHandover] = useState('');
+  const [showDecline, setShowDecline] = useState(false);
+  const [declineReason, setDeclineReason] = useState('');
+
+  const handleAccept = async () => {
+    setBusy(true); setError(null);
+    try {
+      const { zoneTransferApi } = await import('@/api/zoneTransfers');
+      await zoneTransferApi.accept(transfer.id, handover.trim() || undefined);
+      await reload();
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to accept transfer');
+    } finally { setBusy(false); }
+  };
+
+  const handleResusInPlace = async () => {
+    setBusy(true); setError(null);
+    try {
+      const { zoneTransferApi } = await import('@/api/zoneTransfers');
+      await zoneTransferApi.markResusInPlace(transfer.id, handover.trim() || undefined);
+      await reload();
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to mark resus-in-place');
+    } finally { setBusy(false); }
+  };
+
+  const handleDecline = async () => {
+    if (!declineReason.trim()) {
+      setError('Decline reason is required.');
+      return;
+    }
+    setBusy(true); setError(null);
+    try {
+      const { zoneTransferApi } = await import('@/api/zoneTransfers');
+      await zoneTransferApi.decline(transfer.id, declineReason.trim());
+      await reload();
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to decline transfer');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="rounded-2xl p-4 border border-amber-500/40 bg-amber-500/10 flex flex-col gap-3 animate-fade-up">
+      <div className="flex items-start gap-3">
+        <RefreshCw className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-amber-900">
+            Pending zone transfer: {transfer.fromZone ?? '—'} → {transfer.toZone}
+          </p>
+          <p className={`text-xs mt-0.5 ${text.body}`}>
+            {transfer.reason ?? 'Inter-zone move requested.'} The original team
+            remains responsible until a receiving doctor accepts.
+          </p>
+          {transfer.proposedClinicianName && (
+            <p className={`text-[11px] mt-0.5 ${text.muted}`}>
+              Proposed receiver: <span className="font-semibold">{transfer.proposedClinicianName}</span>
+            </p>
+          )}
+        </div>
+      </div>
+
+      {showHandover && (
+        <div className="ml-8">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900">SBAR handover (optional)</label>
+          <textarea
+            value={handover}
+            onChange={(e) => setHandover(e.target.value)}
+            rows={2}
+            placeholder="Situation · Background · Assessment · Recommendation"
+            className="w-full mt-1 px-2 py-1.5 text-sm rounded-md border border-amber-500/40 bg-white"
+          />
+        </div>
+      )}
+
+      {showDecline && (
+        <div className="ml-8">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900">Decline reason</label>
+          <input
+            value={declineReason}
+            onChange={(e) => setDeclineReason(e.target.value)}
+            placeholder="e.g. Resus full — escalate via charge nurse"
+            className="w-full mt-1 px-2 py-1.5 text-sm rounded-md border border-amber-500/40 bg-white"
+          />
+        </div>
+      )}
+
+      {error && <p className="ml-8 text-[11px] text-red-600 font-semibold">{error}</p>}
+
+      <div className="ml-8 flex flex-wrap gap-2">
+        {!showDecline && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              if (!showHandover) { setShowHandover(true); return; }
+              await handleAccept();
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            {showHandover ? 'Accept transfer' : 'Accept'}
+          </button>
+        )}
+        {!showDecline && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              if (!showHandover) { setShowHandover(true); return; }
+              await handleResusInPlace();
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+            title="Treat patient at higher acuity in their current physical location"
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            Treat in place
+          </button>
+        )}
+        {!showHandover && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              if (!showDecline) { setShowDecline(true); return; }
+              await handleDecline();
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg bg-white text-red-700 border border-red-500/40 hover:bg-red-50 disabled:opacity-50"
+          >
+            <XCircle className="w-3.5 h-3.5" />
+            {showDecline ? 'Confirm decline' : 'Decline'}
+          </button>
+        )}
+        {(showHandover || showDecline) && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => { setShowHandover(false); setShowDecline(false); setError(null); }}
+            className={`text-[11px] font-bold px-2 py-1 ${text.muted}`}
+          >
+            Cancel
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function InfoRow({ label, value, isDark }: { label: string; value: string; isDark: boolean }) {
   return (
