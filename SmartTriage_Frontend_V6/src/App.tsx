@@ -27,6 +27,7 @@ import { HospitalManagement } from './modules/admin/HospitalManagement';
 import { UserManagement } from './modules/admin/UserManagement';
 import { ShiftAssignment } from './modules/shift/ShiftAssignment';
 import { ShiftPlannerPage } from './modules/shift/ShiftPlannerPage';
+import { PendingTransfersDashboard } from './modules/zone/PendingTransfersDashboard';
 import { DoctorWorkspace } from './modules/doctor/DoctorWorkspace';
 import { BedGridView } from './modules/beds/BedGridView';
 import { BedManagement } from './modules/beds/BedManagement';
@@ -159,6 +160,7 @@ function AppContent() {
             <Route path="/admin/users" element={<RoleGuard page="admin-users"><UserManagement /></RoleGuard>} />
             <Route path="/admin/beds" element={<RoleGuard page="admin-beds"><BedManagement /></RoleGuard>} />
             <Route path="/shift-assignment" element={<RoleGuard page="shift-assignment" allowDesignations={['CHARGE_NURSE']}><ShiftAssignment /></RoleGuard>} />
+            <Route path="/zone-transfers" element={<PendingTransfersDashboard />} />
             <Route path="/shift-planner" element={<RoleGuard page="shift-planner"><ShiftPlannerPage /></RoleGuard>} />
             <Route path="/audit-trail" element={<RoleGuard page="audit-trail"><AuditTrail /></RoleGuard>} />
             <Route path="/reports" element={<RoleGuard page="reports"><ReportsView /></RoleGuard>} />

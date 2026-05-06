@@ -84,6 +84,7 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         { id: 'triage', label: 'Triage Queue', icon: Stethoscope, badge: '5', badgeColor: 'bg-cyan-500', pageId: 'triage' as AppPage },
         { id: 'doctor-workspace', label: 'My Patients', icon: HeartPulse, pageId: 'triage' as AppPage },
         { id: 'shift-assignment', label: 'Shift Zones', icon: CalendarClock, pageId: 'shift-assignment' as AppPage },
+        { id: 'zone-transfers', label: 'Zone Transfers', icon: ArrowRightLeft, pageId: 'shift-assignment' as AppPage },
         { id: 'monitoring', label: 'Monitoring', icon: Monitor, pageId: 'monitoring' as AppPage },
         { id: 'beds', label: 'Bed Management', icon: BedDouble, pageId: 'beds' as AppPage },
         { id: 'iot-devices', label: 'IoT Devices', icon: Cpu, pageId: 'iot-devices' as AppPage },
