@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { RoleGuard } from './components/RoleGuard';
+import { DirectResusFAB } from './components/DirectResusFAB';
 import { Dashboard } from './modules/dashboard/Dashboard';
 import { EntryRegistration } from './modules/entry/EntryRegistration';
 import { PediatricTriageForm } from './modules/triage/PediatricTriageForm';
@@ -202,6 +203,14 @@ function AppContent() {
         </div>
 
       </main>
+
+      {/* ── Direct Resus floating action button (V28) ──
+          Persistent on every authenticated page so a clinician can
+          trigger Red-patient admission in one click from anywhere
+          in the app. Self-gates: hides on /entry (the registration
+          page already shows the Stable/Unstable banner), on
+          unauthenticated routes, and for non-clinical roles. */}
+      <DirectResusFAB />
     </div>
   );
 }
