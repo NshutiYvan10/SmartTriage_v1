@@ -104,7 +104,11 @@ def tachycardic_vitals(seq: int) -> dict:
         "ecgRhythm": "SINUS_TACHYCARDIA",
         "ecgQrsDuration": _vary(88, 8),
         "ecgWaveform": _generate_ecg_waveform(115, "SINUS_TACHYCARDIA"),
-        "ecgStDeviation": round(random.uniform(-0.1, 0.15), 2),(seq: int) -> dict:
+        "ecgStDeviation": round(random.uniform(-0.1, 0.15), 2),
+    }
+
+
+def hypotensive_vitals(seq: int) -> dict:
     """Low BP with compensatory tachycardia."""
     return {
         "heartRate": _vary(105, 10),           # 95–115 bpm
@@ -117,7 +121,11 @@ def tachycardic_vitals(seq: int) -> dict:
         "ecgRhythm": "SINUS_TACHYCARDIA",
         "ecgQrsDuration": _vary(92, 10),
         "ecgWaveform": _generate_ecg_waveform(105, "SINUS_TACHYCARDIA"),
-        "ecgStDeviation": round(random.uniform(-0.2, 0.3), 2),  # mild ST changes(seq: int) -> dict:
+        "ecgStDeviation": round(random.uniform(-0.2, 0.3), 2),  # mild ST changes
+    }
+
+
+def hypoxic_vitals(seq: int) -> dict:
     """Dropping SpO2 with tachypnoea."""
     return {
         "heartRate": _vary(100, 8),            # 92–108 bpm
@@ -130,7 +138,11 @@ def tachycardic_vitals(seq: int) -> dict:
         "ecgRhythm": "NSR",
         "ecgQrsDuration": _vary(90, 8),
         "ecgWaveform": _generate_ecg_waveform(100, "NSR"),
-        "ecgStDeviation": round(random.uniform(0.0, 0.2), 2),(seq: int) -> dict:
+        "ecgStDeviation": round(random.uniform(0.0, 0.2), 2),
+    }
+
+
+def febrile_vitals(seq: int) -> dict:
     """Fever with compensatory tachycardia."""
     return {
         "heartRate": _vary(105, 8),            # 97–113 bpm
@@ -143,7 +155,11 @@ def tachycardic_vitals(seq: int) -> dict:
         "ecgRhythm": "SINUS_TACHYCARDIA",
         "ecgQrsDuration": _vary(88, 8),
         "ecgWaveform": _generate_ecg_waveform(105, "SINUS_TACHYCARDIA"),
-        "ecgStDeviation": round(random.uniform(-0.05, 0.15), 2),(seq: int) -> dict:
+        "ecgStDeviation": round(random.uniform(-0.05, 0.15), 2),
+    }
+
+
+def deteriorating_vitals(seq: int) -> dict:
     """Starts normal, gradually deteriorates over ~60 readings (5 min)."""
     progress = min(seq / 60.0, 1.0)  # 0.0 → 1.0 over 60 ticks
 
@@ -167,7 +183,11 @@ def tachycardic_vitals(seq: int) -> dict:
         "ecgRhythm": rhythm,
         "ecgQrsDuration": _vary(qrs, 5),
         "ecgWaveform": _generate_ecg_waveform(hr, rhythm),
-        "ecgStDeviation": round(progress * 1.5 + random.uniform(-0.1, 0.1), 2),  # 0→1.5 mV(seq: int) -> dict:
+        "ecgStDeviation": round(progress * 1.5 + random.uniform(-0.1, 0.1), 2),  # 0→1.5 mV
+    }
+
+
+def critical_vitals(seq: int) -> dict:
     """Multiple vitals in danger zone — should trigger RED alerts."""
     return {
         "heartRate": _vary(135, 10),           # 125–145 bpm
