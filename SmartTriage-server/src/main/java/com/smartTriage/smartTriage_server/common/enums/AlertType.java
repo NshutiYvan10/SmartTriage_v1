@@ -61,5 +61,17 @@ public enum AlertType {
     //                            resolved. Targets the charge nurse.
     DIRECT_RESUS_ADMISSION,
     RESUS_OVERFLOW,
-    IDENTITY_UNRESOLVED
+    IDENTITY_UNRESOLVED,
+
+    /**
+     * High-acuity zone bed transitioned to AVAILABLE — triggered when a
+     * bed in RESUS / ACUTE / PEDIATRIC / NEONATAL becomes free (cleaning
+     * complete or returned from out-of-service). Lets the on-duty
+     * charge nurse / shift lead know capacity has been restored so an
+     * overflow patient can be transferred in or a pending admission
+     * can advance. We deliberately do NOT alert for low-acuity zones
+     * (GENERAL, AMBULATORY, OBSERVATION) where the operational tempo
+     * doesn't warrant a notification.
+     */
+    BED_AVAILABLE
 }

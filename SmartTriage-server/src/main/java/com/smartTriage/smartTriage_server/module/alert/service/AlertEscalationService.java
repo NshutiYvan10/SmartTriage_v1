@@ -152,6 +152,59 @@ public class AlertEscalationService {
                 escalateToTier3(alert, hospitalId);
             }
         }
+
+        // Time-critical clinical alerts (sepsis, ICU escalation, critical
+        // lab unack, deterioration) — separate pipeline because they don't
+        // share DOCTOR_NOTIFICATION's tier semantics, but they share the
+        // need for "if nobody ack'd this, re-broadcast to everyone".
+        // Single bump: if the alert has been unack'd for >= TIER_3_MINUTES
+        // (the most-aggressive threshold the existing pipeline uses), we
+        // re-publish hospital-wide with the audible-alarm flag so the
+        // CriticalAlertNotifier on every connected client beeps + flashes
+        // again. Idempotent — we only re-publish once per alert by
+        // tracking escalatedAt the same way the doctor pipeline does.
+        for (ClinicalAlert alert : clinicalAlertRepository.findUnacknowledgedTimeCriticalAlerts()) {
+            try {
+                if (alert.getEscalatedAt() != null) {
+                    continue; // already re-paged once
+                }
+                long minutesSinceCreate = ChronoUnit.MINUTES
+                        .between(alert.getCreatedAt() != null ? alert.getCreatedAt() : Instant.now(), Instant.now());
+                if (minutesSinceCreate < TIER_3_MINUTES) {
+                    continue; // still inside the ack window
+                }
+                UUID hospitalId = alert.getVisit().getPatient().getHospital().getId();
+                rebroadcastTimeCriticalAlert(alert, hospitalId);
+            } catch (Exception e) {
+                log.warn("Failed to escalate time-critical alert {}: {}",
+                        alert.getId(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Mark a time-critical alert as escalated and re-publish it
+     * hospital-wide with audible-alarm + escalationTier=2 so connected
+     * clients beep + flash again. Tier 3 isn't applicable here — these
+     * alert types don't have the manual ack-by-doctor flow that
+     * DOCTOR_NOTIFICATION does; the second broadcast IS the escalation.
+     */
+    private void rebroadcastTimeCriticalAlert(ClinicalAlert alert, UUID hospitalId) {
+        alert.setEscalatedAt(Instant.now());
+        alert.setEscalationTier(2);
+        alert.setSeverity(AlertSeverity.CRITICAL);
+        alert.setMessage(alert.getMessage() + "  [ESCALATED — unacknowledged for "
+                + TIER_3_MINUTES + " minutes]");
+        clinicalAlertRepository.save(alert);
+
+        java.util.Map<String, Object> alertWithAlarm = new java.util.HashMap<>();
+        alertWithAlarm.put("alert", com.smartTriage.smartTriage_server.module.alert.mapper
+                .ClinicalAlertMapper.toResponse(alert));
+        alertWithAlarm.put("audibleAlarm", true);
+        eventPublisher.publishAlert(hospitalId, alertWithAlarm);
+
+        log.warn("[escalation] {} alert {} escalated — unacked for {}+ min, hospital {}",
+                alert.getAlertType(), alert.getId(), TIER_3_MINUTES, hospitalId);
     }
 
     /**

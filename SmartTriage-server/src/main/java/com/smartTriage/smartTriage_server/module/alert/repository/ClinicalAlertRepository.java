@@ -74,6 +74,27 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
         List<ClinicalAlert> findUnacknowledgedDoctorNotifications();
 
         /**
+         * Unacknowledged time-critical clinical alerts that need their own
+         * follow-up escalation when nobody acks them. Distinct from the
+         * DOCTOR_NOTIFICATION pipeline because the action implied is
+         * different (a sepsis alert isn't acknowledged by routing to "all
+         * doctors" — it's by starting the bundle), but the principle is
+         * the same: a CRITICAL alert sitting unack'd for too long must be
+         * escalated to all-staff before it gets lost.
+         *
+         * <p>Covers: SEPSIS_SCREENING, ICU_ESCALATION_REQUESTED,
+         * CRITICAL_VALUE_UNACKNOWLEDGED, DETERIORATION_DETECTED.
+         */
+        @Query("SELECT a FROM ClinicalAlert a WHERE a.isActive = true AND a.isAcknowledged = false " +
+                        "AND a.alertType IN (" +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.SEPSIS_SCREENING, " +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.ICU_ESCALATION_REQUESTED, " +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.CRITICAL_VALUE_UNACKNOWLEDGED, " +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.DETERIORATION_DETECTED) " +
+                        "ORDER BY a.createdAt ASC")
+        List<ClinicalAlert> findUnacknowledgedTimeCriticalAlerts();
+
+        /**
          * Unacknowledged alerts for a specific zone — for zone doctor dashboard.
          */
         @Query("SELECT a FROM ClinicalAlert a JOIN a.visit v WHERE v.hospital.id = :hospitalId " +

@@ -579,10 +579,21 @@ public class TriageService {
         // + sign code travel on the alert so the frontend click-through
         // (Round 4a) can land the nurse on a pre-flagged triage form
         // without re-deriving the trigger.
+        //
+        // Audit fix — set targetZone on the alert itself so the alert
+        // centre's zone filter (and the WebSocket zone topic) route it
+        // to the right team. Previously this alert went out with
+        // targetZone=null, which made it appear hospital-wide on every
+        // alert list regardless of who was supposed to act on it. The
+        // resolved zone is the destination zone implied by the new
+        // category (RED→RESUS, ORANGE→ACUTE, …); pediatric overrides
+        // are honoured by the existing fromTriageCategory mapping.
+        EdZone retriageTargetZone = EdZone.fromTriageCategory(targetCategory);
         ClinicalAlert alert = ClinicalAlert.builder()
                 .visit(visit)
                 .alertType(AlertType.RETRIAGE_REQUIRED)
                 .severity(severity)
+                .targetZone(retriageTargetZone)
                 .title("Auto re-triage: " + targetCategory + " — " + label)
                 .message(String.format(
                         "Patient %s %s (Visit %s) auto-escalated to %s after %s recorded as %s. Reason: %s",
@@ -701,10 +712,21 @@ public class TriageService {
                     visit.getVisitNumber());
             return;
         }
+        // Audit fix — set targetZone so this routes to the visit's
+        // current zone. The patient hasn't been re-triaged yet (this is
+        // the "suggest" path that asks a nurse to make the call), so we
+        // use the visit's currentEdZone as the destination, falling
+        // back to the category-derived zone if currentEdZone is unset.
+        EdZone suggestZone = visit.getCurrentEdZone() != null
+                ? visit.getCurrentEdZone()
+                : (visit.getCurrentTriageCategory() != null
+                        ? EdZone.fromTriageCategory(visit.getCurrentTriageCategory())
+                        : null);
         ClinicalAlert alert = ClinicalAlert.builder()
                 .visit(visit)
                 .alertType(AlertType.RETRIAGE_REQUIRED)
                 .severity(severity)
+                .targetZone(suggestZone)
                 .title("Re-triage suggested: " + label)
                 .message(message)
                 .triggeringSignEventId(triggerEvent.getId())
