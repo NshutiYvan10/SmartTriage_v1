@@ -37,6 +37,15 @@ export interface RwandaLocationValue {
   sectorId?: string;
   cellId?: string;
   villageId?: string;
+  // Display names — emitted by the picker as a convenience so consumers
+  // can mirror them into legacy text fields (e.g. confirmation screens
+  // built before the FK chain existed) without doing their own lookups.
+  // Always reflect the currently-selected IDs in the same change.
+  provinceName?: string;
+  districtName?: string;
+  sectorName?: string;
+  cellName?: string;
+  villageName?: string;
 }
 
 interface Props {
@@ -163,25 +172,46 @@ export function RwandaLocationPicker({
 
   // ── Cascade reset helpers — selecting a higher level CLEARS
   //    everything below to prevent stale (province, district)
-  //    combinations like (Kigali, Kayonza). ──
+  //    combinations like (Kigali, Kayonza). Each handler also
+  //    emits the display name of the newly-selected level so the
+  //    consumer doesn't need to keep its own id→name lookup just
+  //    to render a confirmation screen. ──
+  const nameOf = (opts: LocationOption[], id?: string) =>
+    opts.find((o) => o.id === id)?.name;
+
   const onProvince = (id: string) => onChange({
     provinceId: id || undefined,
-    districtId: undefined, sectorId: undefined, cellId: undefined, villageId: undefined,
+    provinceName: nameOf(provinces, id),
+    districtId: undefined, districtName: undefined,
+    sectorId: undefined, sectorName: undefined,
+    cellId: undefined, cellName: undefined,
+    villageId: undefined, villageName: undefined,
   });
   const onDistrict = (id: string) => onChange({
-    ...value, districtId: id || undefined,
-    sectorId: undefined, cellId: undefined, villageId: undefined,
+    ...value,
+    districtId: id || undefined,
+    districtName: nameOf(districts, id),
+    sectorId: undefined, sectorName: undefined,
+    cellId: undefined, cellName: undefined,
+    villageId: undefined, villageName: undefined,
   });
   const onSector = (id: string) => onChange({
-    ...value, sectorId: id || undefined,
-    cellId: undefined, villageId: undefined,
+    ...value,
+    sectorId: id || undefined,
+    sectorName: nameOf(sectors, id),
+    cellId: undefined, cellName: undefined,
+    villageId: undefined, villageName: undefined,
   });
   const onCell = (id: string) => onChange({
-    ...value, cellId: id || undefined,
-    villageId: undefined,
+    ...value,
+    cellId: id || undefined,
+    cellName: nameOf(cells, id),
+    villageId: undefined, villageName: undefined,
   });
   const onVillage = (id: string) => onChange({
-    ...value, villageId: id || undefined,
+    ...value,
+    villageId: id || undefined,
+    villageName: nameOf(villages, id),
   });
 
   const showCells = !shallow;

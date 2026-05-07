@@ -473,7 +473,14 @@ export function EntryRegistration() {
         gender: formData.gender,
         nationalId: formData.nationalId || undefined,
         phoneNumber: formData.contactPersonPhone || undefined,
-        address: [formData.streetAddress, formData.district, formData.city, formData.province]
+        // Address is now just the street/landmark detail. The
+        // administrative location (province/district/sector/cell/
+        // village) lives on the structured FK chain below — no
+        // need to concatenate it into the address string. The
+        // legacy district/province text fields are no longer
+        // populated by the picker, so including them here would
+        // produce a degraded "Plot 5, , Kigali, " string.
+        address: [formData.streetAddress, formData.city]
           .filter(Boolean)
           .join(', ') || undefined,
         emergencyContactName: formData.contactPersonName || formData.guardianName || undefined,
@@ -916,10 +923,15 @@ export function EntryRegistration() {
                       sectorId: next.sectorId,
                       cellId: next.cellId,
                       villageId: next.villageId,
-                      // The legacy text fields stay populated only
-                      // if the user typed something free-form into
-                      // streetAddress; the backend stores the FK
-                      // chain and resolves names server-side.
+                      // Mirror the human-readable names so the Step
+                      // 4 confirmation screen ("Address Information"
+                      // panel) shows the picked values. The picker
+                      // emits these alongside the IDs.
+                      province: next.provinceName ?? '',
+                      district: next.districtName ?? '',
+                      sector: next.sectorName ?? '',
+                      cell: next.cellName ?? '',
+                      village: next.villageName ?? '',
                     }))}
                     showHeader={false}
                   />
