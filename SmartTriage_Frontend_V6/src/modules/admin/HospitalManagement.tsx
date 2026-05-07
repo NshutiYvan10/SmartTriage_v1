@@ -103,24 +103,31 @@ export function HospitalManagement() {
     }
   };
 
-  const handleDeactivate = async (h: HospitalResponse) => {
-    if (!window.confirm(`Deactivate ${h.name}? Users at this hospital will lose access until it is reactivated.`)) return;
-    try {
-      await hospitalApi.deactivate(h.id);
-      flash('success', 'Hospital deactivated');
-      loadHospitals();
-    } catch (err: any) {
-      flash('error', err?.message || 'Failed to deactivate');
-    }
-  };
+  /* ── Activation / deactivation confirm modal ── */
+  const [confirmTarget, setConfirmTarget] = useState<{ hospital: HospitalResponse; action: 'deactivate' | 'reactivate' } | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
-  const handleReactivate = async (h: HospitalResponse) => {
+  const askDeactivate = (h: HospitalResponse) => setConfirmTarget({ hospital: h, action: 'deactivate' });
+  const askReactivate = (h: HospitalResponse) => setConfirmTarget({ hospital: h, action: 'reactivate' });
+
+  const runConfirm = async () => {
+    if (!confirmTarget) return;
+    const { hospital: h, action } = confirmTarget;
+    setConfirmLoading(true);
     try {
-      await hospitalApi.reactivate(h.id);
-      flash('success', 'Hospital reactivated');
+      if (action === 'deactivate') {
+        await hospitalApi.deactivate(h.id);
+        flash('success', `${h.name} deactivated`);
+      } else {
+        await hospitalApi.reactivate(h.id);
+        flash('success', `${h.name} reactivated`);
+      }
+      setConfirmTarget(null);
       loadHospitals();
     } catch (err: any) {
-      flash('error', err?.message || 'Failed to reactivate');
+      flash('error', err?.message || `Failed to ${action}`);
+    } finally {
+      setConfirmLoading(false);
     }
   };
 
@@ -333,11 +340,11 @@ export function HospitalManagement() {
                       <Pencil className="w-3.5 h-3.5 text-slate-400" />
                     </button>
                     {h.active === false ? (
-                      <button title="Reactivate" onClick={() => handleReactivate(h)} className={`w-7 h-7 rounded-lg flex items-center justify-center hover:bg-emerald-500/10 transition-colors`}>
+                      <button title="Reactivate" onClick={() => askReactivate(h)} className={`w-7 h-7 rounded-lg flex items-center justify-center hover:bg-emerald-500/10 transition-colors`}>
                         <Power className="w-3.5 h-3.5 text-emerald-500" />
                       </button>
                     ) : (
-                      <button title="Deactivate" onClick={() => handleDeactivate(h)} className={`w-7 h-7 rounded-lg flex items-center justify-center hover:bg-rose-500/10 transition-colors`}>
+                      <button title="Deactivate" onClick={() => askDeactivate(h)} className={`w-7 h-7 rounded-lg flex items-center justify-center hover:bg-rose-500/10 transition-colors`}>
                         <PowerOff className="w-3.5 h-3.5 text-rose-500" />
                       </button>
                     )}
@@ -367,6 +374,60 @@ export function HospitalManagement() {
           </div>
         )}
       </div>
+
+      {/* Confirm activation / deactivation modal */}
+      {confirmTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="rounded-2xl p-6 max-w-md w-full animate-fade-up" style={glassCard}>
+            <div className="flex items-start gap-4">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                confirmTarget.action === 'deactivate' ? 'bg-rose-500/15' : 'bg-emerald-500/15'
+              }`}>
+                {confirmTarget.action === 'deactivate'
+                  ? <PowerOff className="w-5 h-5 text-rose-500" />
+                  : <Power className="w-5 h-5 text-emerald-500" />}
+              </div>
+              <div className="flex-1">
+                <h3 className={`text-base font-bold mb-1 ${text.heading}`}>
+                  {confirmTarget.action === 'deactivate' ? 'Deactivate hospital?' : 'Reactivate hospital?'}
+                </h3>
+                <p className={`text-sm ${text.body}`}>
+                  {confirmTarget.action === 'deactivate' ? (
+                    <>You are about to deactivate <span className="font-semibold">{confirmTarget.hospital.name}</span>. Users at this hospital will lose access until you reactivate it. Continue?</>
+                  ) : (
+                    <>Reactivate <span className="font-semibold">{confirmTarget.hospital.name}</span>? Users will regain access immediately.</>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-5">
+              <button
+                onClick={() => setConfirmTarget(null)}
+                disabled={confirmLoading}
+                className={`px-4 py-2 rounded-xl text-xs font-bold ${text.muted} hover:bg-white/5 disabled:opacity-50`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={runConfirm}
+                disabled={confirmLoading}
+                className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold text-white shadow-lg disabled:opacity-50 ${
+                  confirmTarget.action === 'deactivate'
+                    ? 'bg-gradient-to-r from-rose-600 to-rose-500'
+                    : 'bg-gradient-to-r from-emerald-600 to-emerald-500'
+                }`}
+              >
+                {confirmLoading
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : confirmTarget.action === 'deactivate'
+                    ? <PowerOff className="w-3.5 h-3.5" />
+                    : <Power className="w-3.5 h-3.5" />}
+                {confirmTarget.action === 'deactivate' ? 'Deactivate' : 'Reactivate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
