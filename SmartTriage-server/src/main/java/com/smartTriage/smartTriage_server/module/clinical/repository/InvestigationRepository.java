@@ -29,4 +29,35 @@ public interface InvestigationRepository extends JpaRepository<Investigation, UU
     Optional<Investigation> findByIdAndIsActiveTrue(UUID id);
 
     long countByVisitIdAndStatusAndIsActiveTrue(UUID visitId, InvestigationStatus status);
+
+    /**
+     * Batched count of pending (ordered or specimen-collected, not
+     * resulted) investigations for a list of visits. One row per visit
+     * with at least one match. Drives the patient-card "N pending labs"
+     * badge.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT i.visit.id, COUNT(i) FROM Investigation i " +
+            "WHERE i.visit.id IN :visitIds AND i.isActive = true " +
+            "AND i.status IN (com.smartTriage.smartTriage_server.common.enums.InvestigationStatus.ORDERED, " +
+            "                  com.smartTriage.smartTriage_server.common.enums.InvestigationStatus.SPECIMEN_COLLECTED, " +
+            "                  com.smartTriage.smartTriage_server.common.enums.InvestigationStatus.IN_PROGRESS) " +
+            "GROUP BY i.visit.id")
+    List<Object[]> countPendingByVisitIds(
+            @org.springframework.data.repository.query.Param("visitIds") java.util.Collection<UUID> visitIds);
+
+    /**
+     * Batched count of recently-resulted critical/abnormal lab values
+     * for a list of visits. Used to flag "result back, needs review"
+     * on the patient card so the inheriting doctor doesn't miss a
+     * critical lab that came back during the previous shift.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT i.visit.id, COUNT(i) FROM Investigation i " +
+            "WHERE i.visit.id IN :visitIds AND i.isActive = true " +
+            "AND i.status = com.smartTriage.smartTriage_server.common.enums.InvestigationStatus.RESULTED " +
+            "AND (i.isCritical = true OR i.isAbnormal = true) " +
+            "GROUP BY i.visit.id")
+    List<Object[]> countCriticalResultedByVisitIds(
+            @org.springframework.data.repository.query.Param("visitIds") java.util.Collection<UUID> visitIds);
 }

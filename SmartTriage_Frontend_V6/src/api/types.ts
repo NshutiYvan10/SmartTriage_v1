@@ -410,6 +410,17 @@ export interface VisitResponse {
 
   createdAt: string;
   updatedAt: string;
+
+  // ── Shift-handoff priority signals ──
+  // Populated by the backend on active-visits list endpoints (not on
+  // single visit-by-id reads — the detail page already has the full
+  // collections). Drive at-a-glance priority badges on patient cards
+  // so an inheriting doctor sees "3 pending labs, 1 critical result
+  // back, ICU pending" without opening the chart.
+  pendingInvestigationsCount?: number | null;
+  unacknowledgedCriticalResultsCount?: number | null;
+  pendingMedicationsCount?: number | null;
+  hasOpenIcuEscalation?: boolean | null;
 }
 
 // ── Direct Resus Admission (V44) ──

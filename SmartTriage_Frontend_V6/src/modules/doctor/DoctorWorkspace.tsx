@@ -19,6 +19,7 @@ import { alertApi } from '@/api/alerts';
 import type { VisitResponse, ClinicalAlertResponse, EdZone, VisitStatus, BedResponse } from '@/api/types';
 import { formatDistanceToNow } from 'date-fns';
 import { PlacePatientDialog } from '@/modules/beds/PlacePatientDialog';
+import { HandoffPriorityBadges } from '@/components/HandoffPriorityBadges';
 
 // ─── Category config ───
 const CATEGORY_CONFIG: Record<string, { label: string; color: string; bg: string; border: string; dot: string; urgency: string }> = {
@@ -433,6 +434,13 @@ function PatientCard({ visit, index, isDark, text, glassCard, bed, onAccept, onP
           <p className={`text-xs truncate ${text.body}`}>
             {visit.chiefComplaint || 'No complaint recorded'}
           </p>
+          {/* Shift-handoff priority badges — pending labs, pending meds,
+              critical results back, open ICU escalation. Renders nothing
+              when this patient has no outstanding work, so cards stay
+              clean and the present badges genuinely demand attention. */}
+          <div className="mt-1.5">
+            <HandoffPriorityBadges visit={visit} />
+          </div>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className={`text-[10px] font-bold ${statusInfo.color}`}>{statusInfo.label}</span>
             <span className={`text-[10px] flex items-center gap-1 ${text.muted}`}>

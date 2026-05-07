@@ -52,6 +52,9 @@ public class VisitService {
     private final BedService bedService;
     private final com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService shiftAssignmentService;
     private final com.smartTriage.smartTriage_server.security.ClinicalAuthz clinicalAuthz;
+    private final com.smartTriage.smartTriage_server.module.medication.repository.MedicationAdministrationRepository medicationAdministrationRepository;
+    private final com.smartTriage.smartTriage_server.module.clinical.repository.InvestigationRepository investigationRepository;
+    private final com.smartTriage.smartTriage_server.module.icu.repository.IcuEscalationRepository icuEscalationRepository;
 
     private static final AtomicLong visitCounter = new AtomicLong(0);
 
@@ -88,8 +91,59 @@ public class VisitService {
     }
 
     public Page<VisitResponse> getActiveVisits(UUID hospitalId, Pageable pageable) {
-        return visitRepository.findActiveVisits(hospitalId, pageable)
+        Page<VisitResponse> page = visitRepository.findActiveVisits(hospitalId, pageable)
                 .map(VisitMapper::toResponse);
+        enrichWithHandoverSignals(page.getContent());
+        return page;
+    }
+
+    /**
+     * Populate the shift-handoff aggregate fields on a list of
+     * {@link VisitResponse} rows in three batched queries:
+     * pending-meds, pending+critical-resulted labs, open ICU
+     * escalations. Idempotent and safe on empty input. Mutates the
+     * passed-in objects rather than returning new ones — callers
+     * that already have a {@code Page<VisitResponse>} keep their
+     * pagination metadata.
+     *
+     * <p>Not called on single-record reads (visit-by-id) because the
+     * detail page already loads each underlying collection in full;
+     * computing aggregate counts there would be wasted effort.
+     */
+    private void enrichWithHandoverSignals(java.util.List<VisitResponse> responses) {
+        if (responses == null || responses.isEmpty()) return;
+        java.util.List<UUID> visitIds = responses.stream()
+                .map(VisitResponse::getId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toList());
+        if (visitIds.isEmpty()) return;
+
+        java.util.Map<UUID, Long> pendingMeds = toMap(
+                medicationAdministrationRepository.countPendingByVisitIds(visitIds));
+        java.util.Map<UUID, Long> pendingLabs = toMap(
+                investigationRepository.countPendingByVisitIds(visitIds));
+        java.util.Map<UUID, Long> criticalResults = toMap(
+                investigationRepository.countCriticalResultedByVisitIds(visitIds));
+        java.util.Set<UUID> openEscalations = new java.util.HashSet<>(
+                icuEscalationRepository.findVisitIdsWithOpenEscalation(visitIds));
+
+        for (VisitResponse r : responses) {
+            UUID id = r.getId();
+            r.setPendingMedicationsCount(pendingMeds.getOrDefault(id, 0L).intValue());
+            r.setPendingInvestigationsCount(pendingLabs.getOrDefault(id, 0L).intValue());
+            r.setUnacknowledgedCriticalResultsCount(criticalResults.getOrDefault(id, 0L).intValue());
+            r.setHasOpenIcuEscalation(openEscalations.contains(id));
+        }
+    }
+
+    private static java.util.Map<UUID, Long> toMap(java.util.List<Object[]> rows) {
+        java.util.Map<UUID, Long> out = new java.util.HashMap<>();
+        for (Object[] r : rows) {
+            if (r != null && r.length >= 2 && r[0] instanceof UUID id && r[1] instanceof Number n) {
+                out.put(id, n.longValue());
+            }
+        }
+        return out;
     }
 
     public Page<VisitResponse> getVisitsByPatient(UUID patientId, Pageable pageable) {
@@ -137,12 +191,14 @@ public class VisitService {
      * PEDIATRIC zones that the previous category-mapping couldn't.
      */
     public List<VisitResponse> getVisitsByZone(UUID hospitalId, EdZone zone) {
-        return visitRepository.findActiveVisitsInZones(
+        List<VisitResponse> rows = visitRepository.findActiveVisitsInZones(
                 hospitalId, java.util.List.of(zone),
                 org.springframework.data.domain.PageRequest.of(0, 200))
                 .stream()
                 .map(VisitMapper::toResponse)
                 .collect(Collectors.toList());
+        enrichWithHandoverSignals(rows);
+        return rows;
     }
 
     /**
@@ -156,8 +212,10 @@ public class VisitService {
         if (zones == null || zones.isEmpty()) {
             return org.springframework.data.domain.Page.empty(pageable);
         }
-        return visitRepository.findActiveVisitsInZones(hospitalId, zones, pageable)
+        Page<VisitResponse> page = visitRepository.findActiveVisitsInZones(hospitalId, zones, pageable)
                 .map(VisitMapper::toResponse);
+        enrichWithHandoverSignals(page.getContent());
+        return page;
     }
 
     /**

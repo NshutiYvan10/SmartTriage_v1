@@ -67,4 +67,46 @@ public class VisitResponse {
 
     private Instant createdAt;
     private Instant updatedAt;
+
+    // ── Shift-handoff priority signals ──
+    // Aggregate counts so the frontend can render at-a-glance priority
+    // badges on patient cards (Doctor Workspace, Monitoring, dashboard
+    // lists) without an N+1 fetch per card. Computed by a single
+    // batched query when an active-visits list is loaded; not
+    // populated on individual visit-by-id reads (would be wasteful
+    // for the detail page that already loads the full collections).
+
+    /**
+     * Investigations on this visit with status ORDERED or
+     * SPECIMEN_COLLECTED — i.e., labs that have been requested but
+     * have not yet returned a result. The most-missed handoff signal:
+     * a CBC ordered at 14:22 by the day team that is still pending at
+     * 19:00 when the night doctor takes over.
+     */
+    private Integer pendingInvestigationsCount;
+
+    /**
+     * Investigations whose result came back in the last 4 hours but
+     * are still flagged abnormal/critical and not yet acknowledged.
+     * Distinct from "pending" because the inheriting doctor has a
+     * different action: read it, decide, ack.
+     */
+    private Integer unacknowledgedCriticalResultsCount;
+
+    /**
+     * Medications with status PRESCRIBED but no administeredAt — i.e.,
+     * orders waiting on nursing administration. Surfaced as a badge so
+     * an inheriting doctor sees "3 meds awaiting administration"
+     * without opening the medication tab.
+     */
+    private Integer pendingMedicationsCount;
+
+    /**
+     * True when the visit currently has an open ICU escalation in any
+     * non-terminal state (REQUESTED, ICU_NOTIFIED, ICU_RESPONDED,
+     * BED_ASSIGNED). Lets the doctor card render a red "ICU pending"
+     * badge so an outstanding referral cannot be lost across a shift
+     * boundary.
+     */
+    private Boolean hasOpenIcuEscalation;
 }

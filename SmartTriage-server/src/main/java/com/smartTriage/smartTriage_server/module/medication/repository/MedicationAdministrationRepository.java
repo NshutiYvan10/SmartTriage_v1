@@ -37,4 +37,20 @@ public interface MedicationAdministrationRepository extends JpaRepository<Medica
            "WHERE m.visit.patient.id = :patientId AND m.isActive = true " +
            "ORDER BY m.prescribedAt DESC")
     List<MedicationAdministration> findByPatientIdAcrossVisits(@Param("patientId") UUID patientId);
+
+    /**
+     * Batched count of "prescribed but not yet administered" medications
+     * for a list of visits. Returns one row per visit that has at least
+     * one such medication. Drives the patient-card "N pending meds"
+     * badge in the active-visits list.
+     *
+     * <p>Visits with zero matching rows are absent from the result —
+     * the caller treats them as count = 0.
+     */
+    @Query("SELECT m.visit.id, COUNT(m) FROM MedicationAdministration m " +
+           "WHERE m.visit.id IN :visitIds AND m.isActive = true " +
+           "AND m.status = com.smartTriage.smartTriage_server.common.enums.MedicationStatus.PRESCRIBED " +
+           "AND m.administeredAt IS NULL " +
+           "GROUP BY m.visit.id")
+    List<Object[]> countPendingByVisitIds(@Param("visitIds") java.util.Collection<UUID> visitIds);
 }

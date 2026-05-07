@@ -42,4 +42,16 @@ public interface IcuEscalationRepository extends JpaRepository<IcuEscalation, UU
             "AND e.status NOT IN (com.smartTriage.smartTriage_server.common.enums.IcuEscalationStatus.TRANSFERRED_TO_ICU, " +
             "com.smartTriage.smartTriage_server.common.enums.IcuEscalationStatus.CANCELLED)")
     boolean existsActiveEscalationForVisit(@Param("visitId") UUID visitId);
+
+    /**
+     * Batched lookup for the patient-card "ICU pending" badge — returns
+     * the visit IDs (from the supplied set) that currently have a
+     * non-terminal active escalation. Caller treats absent visits as
+     * "no open escalation". One DB round trip regardless of page size.
+     */
+    @Query("SELECT DISTINCT e.visit.id FROM IcuEscalation e " +
+            "WHERE e.visit.id IN :visitIds AND e.isActive = true " +
+            "AND e.status NOT IN (com.smartTriage.smartTriage_server.common.enums.IcuEscalationStatus.TRANSFERRED_TO_ICU, " +
+            "com.smartTriage.smartTriage_server.common.enums.IcuEscalationStatus.CANCELLED)")
+    List<UUID> findVisitIdsWithOpenEscalation(@Param("visitIds") java.util.Collection<UUID> visitIds);
 }
