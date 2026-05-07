@@ -24,6 +24,14 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
 
         Optional<Visit> findByVisitNumberAndIsActiveTrue(String visitNumber);
 
+        /**
+         * Lightweight projection used by ClinicalAuthz to verify a visit
+         * belongs to a given hospital without hydrating the entity. Returns
+         * empty when no visit with that id exists.
+         */
+        @Query("SELECT v.hospital.id FROM Visit v WHERE v.id = :visitId")
+        Optional<UUID> findHospitalIdByVisitId(@Param("visitId") UUID visitId);
+
         Page<Visit> findByHospitalIdAndIsActiveTrue(UUID hospitalId, Pageable pageable);
 
         Page<Visit> findByPatientIdAndIsActiveTrue(UUID patientId, Pageable pageable);

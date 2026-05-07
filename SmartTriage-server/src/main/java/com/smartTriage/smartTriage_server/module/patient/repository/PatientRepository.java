@@ -20,6 +20,14 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
 
     Page<Patient> findByHospitalIdAndIsActiveTrue(UUID hospitalId, Pageable pageable);
 
+    /**
+     * Lightweight projection used by ClinicalAuthz to verify a patient
+     * belongs to a given hospital without hydrating the entity. Returns
+     * empty when the patient id does not exist.
+     */
+    @Query("SELECT p.hospital.id FROM Patient p WHERE p.id = :patientId")
+    Optional<UUID> findHospitalIdByPatientId(@Param("patientId") UUID patientId);
+
     // ── Tier 1: deterministic identifiers (partial-unique within hospital) ──
 
     Optional<Patient> findByNationalIdAndHospitalIdAndIsActiveTrue(String nationalId, UUID hospitalId);
