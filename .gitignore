@@ -109,3 +109,8 @@ env/
 *.tsbuildinfo
 .eslintcache
 .stylelintcache
+
+# ── Claude Code session / agent state ───────────────────────────────
+# Per-session transcripts, plans, agent worktrees. Local-only —
+# never committed.
+.claude/
