@@ -12,8 +12,10 @@ import {
   Send, MapPin, Phone, User,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
 import { useAuthStore } from '@/store/authStore';
 import { referralApi } from '@/api/referral';
+import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
 import type { Referral } from '@/api/referral';
 import { format } from 'date-fns';
 
@@ -93,6 +95,7 @@ export function ReferralManagement() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
+  const access = useCanSeeAllZones();
 
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [totalElements, setTotalElements] = useState(0);
@@ -116,7 +119,7 @@ export function ReferralManagement() {
 
   /* ── Load referrals ── */
   const loadReferrals = useCallback(async () => {
-    if (!hospitalId) return;
+    if (!hospitalId || !access.canSeeAllZones) return;
     setLoading(true);
     try {
       const data = await referralApi.getActive(hospitalId, page);
@@ -128,7 +131,7 @@ export function ReferralManagement() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, page]);
+  }, [hospitalId, page, access.canSeeAllZones]);
 
   useEffect(() => { loadReferrals(); }, [loadReferrals]);
 
@@ -252,6 +255,16 @@ export function ReferralManagement() {
 
   /* ── Pagination ── */
   const totalPages = Math.ceil(totalElements / 20);
+
+  if (!access.canSeeAllZones) {
+    return (
+      <CrossZoneRestrictedPanel
+        pageTitle="Referrals"
+        zone={access.zone ?? null}
+        reason={access.reason === 'OFF_SHIFT' ? 'OFF_SHIFT' : 'ZONE_SCOPED'}
+      />
+    );
+  }
 
   return (
     <div className="min-h-full">

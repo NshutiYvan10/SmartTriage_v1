@@ -10,8 +10,10 @@ import {
   XCircle, Zap, User, Activity, ShieldCheck,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
 import { useAuthStore } from '@/store/authStore';
 import { icuApi } from '@/api/icu';
+import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
 import type { IcuEscalation, IcuCapacity } from '@/api/icu';
 import { format } from 'date-fns';
 
@@ -60,6 +62,7 @@ export function IcuEscalationView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
+  const access = useCanSeeAllZones();
 
   const [escalations, setEscalations] = useState<IcuEscalation[]>([]);
   const [totalElements, setTotalElements] = useState(0);
@@ -84,7 +87,7 @@ export function IcuEscalationView() {
 
   /* ── Load escalations ── */
   const loadEscalations = useCallback(async () => {
-    if (!hospitalId) return;
+    if (!hospitalId || !access.canSeeAllZones) return;
     setLoading(true);
     try {
       const data = await icuApi.getActive(hospitalId, page);
@@ -96,18 +99,18 @@ export function IcuEscalationView() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, page]);
+  }, [hospitalId, page, access.canSeeAllZones]);
 
   /* ── Load capacity ── */
   const loadCapacity = useCallback(async () => {
-    if (!hospitalId) return;
+    if (!hospitalId || !access.canSeeAllZones) return;
     try {
       const data = await icuApi.getCapacity(hospitalId);
       setCapacity(data);
     } catch (err) {
       console.error('Failed to load ICU capacity:', err);
     }
-  }, [hospitalId]);
+  }, [hospitalId, access.canSeeAllZones]);
 
   useEffect(() => { loadEscalations(); }, [loadEscalations]);
   useEffect(() => { loadCapacity(); }, [loadCapacity]);
@@ -200,6 +203,16 @@ export function IcuEscalationView() {
   const totalPages = Math.ceil(totalElements / 20);
 
   const occ = capacity ? occupancyColor(capacity.occupancyPercent) : null;
+
+  if (!access.canSeeAllZones) {
+    return (
+      <CrossZoneRestrictedPanel
+        pageTitle="ICU Escalation"
+        zone={access.zone ?? null}
+        reason={access.reason === 'OFF_SHIFT' ? 'OFF_SHIFT' : 'ZONE_SCOPED'}
+      />
+    );
+  }
 
   return (
     <div className="min-h-full">

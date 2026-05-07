@@ -10,8 +10,10 @@ import {
   CircleDot, FileCheck,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
 import { useAuthStore } from '@/store/authStore';
 import { fasttrackApi } from '@/api/fasttrack';
+import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
 import type { FastTrackActivation } from '@/api/fasttrack';
 import { format } from 'date-fns';
 
@@ -50,6 +52,7 @@ export function FastTrackDashboard() {
   const { glassCard, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
+  const access = useCanSeeAllZones();
 
   const [activations, setActivations] = useState<FastTrackActivation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +73,7 @@ export function FastTrackDashboard() {
 
   /* ── Load active activations ── */
   const loadActivations = useCallback(async () => {
-    if (!hospitalId) return;
+    if (!hospitalId || !access.canSeeAllZones) return;
     setLoading(true);
     try {
       const data = await fasttrackApi.getActive(hospitalId);
@@ -81,7 +84,7 @@ export function FastTrackDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId]);
+  }, [hospitalId, access.canSeeAllZones]);
 
   useEffect(() => { loadActivations(); }, [loadActivations]);
 
@@ -150,6 +153,16 @@ export function FastTrackDashboard() {
       setActionLoading(null);
     }
   };
+
+  if (!access.canSeeAllZones) {
+    return (
+      <CrossZoneRestrictedPanel
+        pageTitle="Fast-Track Activations"
+        zone={access.zone ?? null}
+        reason={access.reason === 'OFF_SHIFT' ? 'OFF_SHIFT' : 'ZONE_SCOPED'}
+      />
+    );
+  }
 
   return (
     <div className="min-h-full">

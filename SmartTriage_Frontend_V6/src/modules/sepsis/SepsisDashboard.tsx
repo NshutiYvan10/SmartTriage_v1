@@ -10,8 +10,10 @@ import {
   Droplets, Syringe, Pill, FlaskConical, RotateCcw,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
 import { useAuthStore } from '@/store/authStore';
 import { sepsisApi } from '@/api/sepsis';
+import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
 import type { SepsisScreening } from '@/api/sepsis';
 import { format } from 'date-fns';
 
@@ -60,6 +62,7 @@ export function SepsisDashboard() {
   const { glassCard, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
+  const access = useCanSeeAllZones();
 
   const [screenings, setScreenings] = useState<SepsisScreening[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +73,7 @@ export function SepsisDashboard() {
 
   /* ── Load active screenings ── */
   const loadScreenings = useCallback(async () => {
-    if (!hospitalId) return;
+    if (!hospitalId || !access.canSeeAllZones) return;
     setLoading(true);
     try {
       const data = await sepsisApi.getActive(hospitalId);
@@ -81,7 +84,7 @@ export function SepsisDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId]);
+  }, [hospitalId, access.canSeeAllZones]);
 
   useEffect(() => { loadScreenings(); }, [loadScreenings]);
 
@@ -145,6 +148,19 @@ export function SepsisDashboard() {
     if (minutes >= 45) return 'text-amber-500';
     return 'text-emerald-500';
   };
+
+  // Hospital-wide sepsis screening list is gated server-side by
+  // canSeeAllZonesAtHospital. Render the explanation panel for users
+  // without that authority instead of letting the request 403.
+  if (!access.canSeeAllZones) {
+    return (
+      <CrossZoneRestrictedPanel
+        pageTitle="Sepsis Screening"
+        zone={access.zone ?? null}
+        reason={access.reason === 'OFF_SHIFT' ? 'OFF_SHIFT' : 'ZONE_SCOPED'}
+      />
+    );
+  }
 
   return (
     <div className="min-h-full">

@@ -14,6 +14,8 @@ import { safetyApi } from '@/api/safety';
 import type { SafetyIncident, ReportIncidentRequest } from '@/api/safety';
 import { format } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
+import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
+import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
 
 // ── Constants ──
 
@@ -54,6 +56,7 @@ export function SafetyIncidentView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
+  const access = useCanSeeAllZones();
 
   // ── Data state ──
   const [incidents, setIncidents] = useState<SafetyIncident[]>([]);
@@ -99,7 +102,7 @@ export function SafetyIncidentView() {
 
   // ── Load data ──
   const loadIncidents = useCallback(async () => {
-    if (!hospitalId) return;
+    if (!hospitalId || !access.canSeeAllZones) return;
     setLoading(true);
     try {
       const res = await safetyApi.getForHospital(hospitalId, page);
@@ -111,7 +114,7 @@ export function SafetyIncidentView() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, page]);
+  }, [hospitalId, page, access.canSeeAllZones]);
 
   useEffect(() => { loadIncidents(); }, [loadIncidents]);
 
@@ -207,6 +210,16 @@ export function SafetyIncidentView() {
 
   // ── Helpers ──
   const totalPages = Math.ceil(totalElements / 20);
+
+  if (!access.canSeeAllZones) {
+    return (
+      <CrossZoneRestrictedPanel
+        pageTitle="Safety Incidents"
+        zone={access.zone ?? null}
+        reason={access.reason === 'OFF_SHIFT' ? 'OFF_SHIFT' : 'ZONE_SCOPED'}
+      />
+    );
+  }
 
   return (
     <div className="min-h-full">

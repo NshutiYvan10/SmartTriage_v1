@@ -16,6 +16,8 @@ import { handoverApi } from '@/api/handover';
 import type { HandoverReport } from '@/api/handover';
 import { format } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
+import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
+import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
 
 // ── Constants ──
 
@@ -51,6 +53,7 @@ export function HandoverView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
+  const access = useCanSeeAllZones();
 
   // ── Data state ──
   const [reports, setReports] = useState<HandoverReport[]>([]);
@@ -77,7 +80,7 @@ export function HandoverView() {
 
   // ── Load data ──
   const loadReports = useCallback(async () => {
-    if (!hospitalId) return;
+    if (!hospitalId || !access.canSeeAllZones) return;
     setLoading(true);
     try {
       const res = await handoverApi.getForHospital(hospitalId, page);
@@ -89,7 +92,7 @@ export function HandoverView() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, page]);
+  }, [hospitalId, page, access.canSeeAllZones]);
 
   useEffect(() => { loadReports(); }, [loadReports]);
 
@@ -145,6 +148,16 @@ export function HandoverView() {
   };
 
   const totalPages = Math.ceil(totalElements / 20);
+
+  if (!access.canSeeAllZones) {
+    return (
+      <CrossZoneRestrictedPanel
+        pageTitle="Handover Reports"
+        zone={access.zone ?? null}
+        reason={access.reason === 'OFF_SHIFT' ? 'OFF_SHIFT' : 'ZONE_SCOPED'}
+      />
+    );
+  }
 
   return (
     <div className="min-h-full">

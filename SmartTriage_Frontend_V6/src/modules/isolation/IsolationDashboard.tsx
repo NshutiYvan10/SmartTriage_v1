@@ -10,8 +10,10 @@ import {
   Shield, Eye, Hand, Shirt,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
 import { useAuthStore } from '@/store/authStore';
 import { isolationApi } from '@/api/isolation';
+import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
 import type { InfectionScreening } from '@/api/isolation';
 import { format } from 'date-fns';
 
@@ -36,6 +38,7 @@ export function IsolationDashboard() {
   const { glassCard, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
+  const access = useCanSeeAllZones();
 
   const [isolations, setIsolations] = useState<InfectionScreening[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,7 +50,7 @@ export function IsolationDashboard() {
 
   /* ── Data loading ──────────────────────────────────────── */
   const loadIsolations = useCallback(async () => {
-    if (!hospitalId) return;
+    if (!hospitalId || !access.canSeeAllZones) return;
     setLoading(true);
     try {
       const data = await isolationApi.getActiveIsolations(hospitalId);
@@ -58,7 +61,7 @@ export function IsolationDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId]);
+  }, [hospitalId, access.canSeeAllZones]);
 
   useEffect(() => { loadIsolations(); }, [loadIsolations]);
 
@@ -120,6 +123,16 @@ export function IsolationDashboard() {
       </div>
     );
   };
+
+  if (!access.canSeeAllZones) {
+    return (
+      <CrossZoneRestrictedPanel
+        pageTitle="Infection / Isolation"
+        zone={access.zone ?? null}
+        reason={access.reason === 'OFF_SHIFT' ? 'OFF_SHIFT' : 'ZONE_SCOPED'}
+      />
+    );
+  }
 
   return (
     <div className="min-h-full">
