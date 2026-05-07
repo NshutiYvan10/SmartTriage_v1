@@ -4,6 +4,35 @@ This directory holds the **lower-level** (sector / cell / village) data
 for Rwanda's 5-level administrative hierarchy. The 5 provinces and 30
 districts are seeded by Flyway migration `V47` and don't need a CSV.
 
+## Currently loaded — Phase 1 (DevRW @devrw/rwanda-location v1.1.2)
+
+The shipping CSVs were generated from
+[`@devrw/rwanda-location` v1.1.2](https://www.npmjs.com/package/@devrw/rwanda-location)
+(MIT-licensed, last released 2025-10-25), the most recently maintained
+machine-readable Rwanda-administrative-units dataset publicly available
+at the time of import.
+
+Counts on import (verified against the official tallies):
+
+| Level     | Loaded | Official tally | Δ |
+|-----------|-------:|---------------:|--:|
+| Sectors   |    416 |            416 |  0 |
+| Cells     |  2,148 |          2,148 |  0 |
+| Villages  | 14,842 |         14,837 | +5 |
+
+The 5-village delta is from the upstream dataset (DevRW carries the
+extras; the conversion script is deterministic and does not invent
+rows). **Phase 2 will validate this against the NISR / RGB
+authoritative source before the system handles real patient records.**
+Until that validation lands, the village layer should be considered
+"best available" rather than "officially stamped".
+
+Code scheme: districts use the V47 codes (`RW.<province>.<district>`,
+e.g. `RW.01.03` for Nyarugenge). Sectors / cells / villages extend
+their parent code with a deterministic alphabetical sequence
+(`.S01`, `.C01`, `.V001`) so the codes remain stable across regenerations
+and patient/hospital FK references survive a re-import.
+
 ## What goes here
 
 Three CSV files. All UTF-8, comma-separated, with a single header row.

@@ -78,56 +78,101 @@ public class RwandaLocationCsvLoader {
     }
 
     private void loadSectors() {
-        readCsv("rw-locations/sectors.csv", "sectors").forEach(row -> {
+        // Pre-cache existing codes (idempotency gate) and the parent
+        // entities (FK resolution) so the per-row work is O(1). With
+        // 416 sectors this is overkill; the same pattern at village
+        // level (14k+ rows) is what makes startup fast.
+        java.util.Set<String> existing = new java.util.HashSet<>();
+        sectors.findAll().forEach(s -> existing.add(s.getCode()));
+        Map<String, RwDistrict> districtsByCode = new HashMap<>();
+        districts.findAll().forEach(d -> districtsByCode.put(d.getCode(), d));
+
+        int inserted = 0, skippedExisting = 0, skippedOrphan = 0;
+        for (String[] row : readCsv("rw-locations/sectors.csv", "sectors")) {
             String districtCode = row[0], sectorCode = row[1], sectorName = row[2];
-            if (sectors.findByCode(sectorCode).isPresent()) return;
-            Optional<RwDistrict> d = districts.findByCode(districtCode);
-            if (d.isEmpty()) {
+            if (existing.contains(sectorCode)) { skippedExisting++; continue; }
+            RwDistrict d = districtsByCode.get(districtCode);
+            if (d == null) {
                 log.warn("[rw-locations] sectors.csv row references unknown district code '{}' — skipping",
                         districtCode);
-                return;
+                skippedOrphan++;
+                continue;
             }
             sectors.save(RwSector.builder()
-                    .district(d.get()).code(sectorCode).name(sectorName).build());
-        });
+                    .district(d).code(sectorCode).name(sectorName).build());
+            inserted++;
+        }
+        if (inserted + skippedOrphan > 0) {
+            log.info("[rw-locations] sectors: inserted={} existing={} orphan={}",
+                    inserted, skippedExisting, skippedOrphan);
+        }
     }
 
     private void loadCells() {
-        // Build a sector-code → entity cache once so the per-row lookup
-        // doesn't query the DB per cell.
-        Map<String, RwSector> byCode = new HashMap<>();
-        sectors.findAll().forEach(s -> byCode.put(s.getCode(), s));
+        java.util.Set<String> existing = new java.util.HashSet<>();
+        cells.findAll().forEach(c -> existing.add(c.getCode()));
+        Map<String, RwSector> sectorsByCode = new HashMap<>();
+        sectors.findAll().forEach(s -> sectorsByCode.put(s.getCode(), s));
 
-        readCsv("rw-locations/cells.csv", "cells").forEach(row -> {
+        int inserted = 0, skippedExisting = 0, skippedOrphan = 0;
+        for (String[] row : readCsv("rw-locations/cells.csv", "cells")) {
             String sectorCode = row[0], cellCode = row[1], cellName = row[2];
-            if (cells.findByCode(cellCode).isPresent()) return;
-            RwSector s = byCode.get(sectorCode);
+            if (existing.contains(cellCode)) { skippedExisting++; continue; }
+            RwSector s = sectorsByCode.get(sectorCode);
             if (s == null) {
                 log.warn("[rw-locations] cells.csv row references unknown sector code '{}' — skipping",
                         sectorCode);
-                return;
+                skippedOrphan++;
+                continue;
             }
             cells.save(RwCell.builder()
                     .sector(s).code(cellCode).name(cellName).build());
-        });
+            inserted++;
+        }
+        if (inserted + skippedOrphan > 0) {
+            log.info("[rw-locations] cells: inserted={} existing={} orphan={}",
+                    inserted, skippedExisting, skippedOrphan);
+        }
     }
 
     private void loadVillages() {
-        Map<String, RwCell> byCode = new HashMap<>();
-        cells.findAll().forEach(c -> byCode.put(c.getCode(), c));
+        // Pre-cache existing village codes and parent cells. With ~14.8k
+        // villages this is the hot path: skipping individual findByCode
+        // round-trips drops idempotent restart from O(N) DB queries to
+        // a single bulk SELECT.
+        java.util.Set<String> existing = new java.util.HashSet<>();
+        villages.findAll().forEach(v -> existing.add(v.getCode()));
+        Map<String, RwCell> cellsByCode = new HashMap<>();
+        cells.findAll().forEach(c -> cellsByCode.put(c.getCode(), c));
 
-        readCsv("rw-locations/villages.csv", "villages").forEach(row -> {
+        int inserted = 0, skippedExisting = 0, skippedOrphan = 0;
+        long t0 = System.currentTimeMillis();
+        for (String[] row : readCsv("rw-locations/villages.csv", "villages")) {
             String cellCode = row[0], villageCode = row[1], villageName = row[2];
-            if (villages.findByCode(villageCode).isPresent()) return;
-            RwCell c = byCode.get(cellCode);
+            if (existing.contains(villageCode)) { skippedExisting++; continue; }
+            RwCell c = cellsByCode.get(cellCode);
             if (c == null) {
                 log.warn("[rw-locations] villages.csv row references unknown cell code '{}' — skipping",
                         cellCode);
-                return;
+                skippedOrphan++;
+                continue;
             }
             villages.save(RwVillage.builder()
                     .cell(c).code(villageCode).name(villageName).build());
-        });
+            inserted++;
+            // First-time bootstrap will insert ~15k rows; emit progress
+            // every 2000 so an admin watching the log knows it's making
+            // headway, not stalled.
+            if (inserted % 2000 == 0) {
+                log.info("[rw-locations] villages: inserted {} so far ({}ms elapsed)…",
+                        inserted, System.currentTimeMillis() - t0);
+            }
+        }
+        if (inserted + skippedOrphan > 0) {
+            log.info("[rw-locations] villages: inserted={} existing={} orphan={} ({}ms)",
+                    inserted, skippedExisting, skippedOrphan,
+                    System.currentTimeMillis() - t0);
+        }
     }
 
     /**
