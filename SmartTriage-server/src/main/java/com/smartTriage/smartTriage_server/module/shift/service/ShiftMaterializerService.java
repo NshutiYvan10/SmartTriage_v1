@@ -68,14 +68,14 @@ public class ShiftMaterializerService {
      * shift-lead. Lower number = more senior. Anyone not in the map
      * (or null designation) gets a sentinel high value so they're
      * picked last. The designation enum is the source of truth — this
-     * only orders them.
+     * only orders them. Triage is a ShiftFunction, not a designation
+     * (see V45), so it doesn't appear here.
      */
     private static final Map<Designation, Integer> NURSE_SENIORITY = Map.of(
             Designation.CHARGE_NURSE,  0,
             Designation.SENIOR_NURSE,  1,
-            Designation.TRIAGE_NURSE,  2,
-            Designation.STAFF_NURSE,   3,
-            Designation.STUDENT_NURSE, 4
+            Designation.STAFF_NURSE,   2,
+            Designation.STUDENT_NURSE, 3
     );
 
     /**

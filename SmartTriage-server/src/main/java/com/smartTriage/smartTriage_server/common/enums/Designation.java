@@ -38,24 +38,20 @@ public enum Designation {
     INTERN("Intern", Role.DOCTOR),
 
     // ── Nurse designations ──
-    // All nurses fall under Role.NURSE. The designation captures the
-    // long-term function the nurse performs:
-    //   CHARGE_NURSE — unit management (see class doc for permission lift)
-    //   TRIAGE_NURSE — intake/assessment specialist. Re-introduced after
-    //                  V39 collapsed TRIAGE_NURSE the *Role* into NURSE.
-    //                  Many EDs dedicate specific staff to triage as a
-    //                  long-term assignment, distinct from the per-shift
-    //                  ShiftFunction.TRIAGE_NURSE which records who is
-    //                  AT the triage station today. Both can co-exist:
-    //                  a nurse with Designation.TRIAGE_NURSE is a triage
-    //                  specialist year-round, and the same nurse may or
-    //                  may not be the ShiftFunction.TRIAGE_NURSE on any
-    //                  given shift.
+    // All nurses fall under Role.NURSE. Designations capture seniority
+    // + the one permanent management authority (Charge Nurse). Triage
+    // is intentionally NOT a designation — it's a per-shift station
+    // captured by ShiftFunction.TRIAGE_NURSE on the daily roster.
+    //
+    //   CHARGE_NURSE — unit management; carries canAssign authority
+    //                  (see class doc for permission lift).
     //   SENIOR / STAFF / STUDENT — bedside seniority ladder.
-    // A user picks one designation — a nurse cannot simultaneously hold
-    // Charge Nurse and Triage Nurse; those are different jobs.
+    //
+    // V45 demoted Designation.TRIAGE_NURSE → STAFF_NURSE. Triage station
+    // assignments going forward live in ShiftAssignment.shiftFunction =
+    // TRIAGE_NURSE. "Who's at triage today?" is a query on the active
+    // shift, not a column on the user.
     CHARGE_NURSE("Charge Nurse", Role.NURSE),
-    TRIAGE_NURSE("Triage Nurse", Role.NURSE),
     SENIOR_NURSE("Senior Nurse", Role.NURSE),
     STAFF_NURSE("Staff Nurse", Role.NURSE),
     STUDENT_NURSE("Student Nurse", Role.NURSE),
@@ -89,12 +85,12 @@ public enum Designation {
         return switch (role) {
             case DOCTOR ->
                 new Designation[] { ED_HEAD, CONSULTANT, SENIOR_MEDICAL_OFFICER, MEDICAL_OFFICER, RESIDENT, INTERN };
-            // Full nurse career ladder. CHARGE_NURSE = unit management,
-            // TRIAGE_NURSE = intake/assessment specialist (year-round
-            // assignment, separate from the per-shift ShiftFunction).
-            // The remaining three are the bedside seniority ladder.
+            // Nurse career ladder. CHARGE_NURSE confers unit-management
+            // authority; SENIOR / STAFF / STUDENT are seniority levels.
+            // Triage is NOT a designation — it's a per-shift station
+            // assignment via ShiftFunction.TRIAGE_NURSE. See V45.
             case NURSE ->
-                new Designation[] { CHARGE_NURSE, TRIAGE_NURSE, SENIOR_NURSE, STAFF_NURSE, STUDENT_NURSE };
+                new Designation[] { CHARGE_NURSE, SENIOR_NURSE, STAFF_NURSE, STUDENT_NURSE };
             case LAB_TECHNICIAN -> new Designation[] { HEAD_LAB_TECHNICIAN, Designation.LAB_TECHNICIAN };
             case REGISTRAR -> new Designation[] { SENIOR_REGISTRAR, Designation.REGISTRAR };
             case PARAMEDIC -> new Designation[] { SENIOR_PARAMEDIC, Designation.PARAMEDIC };
