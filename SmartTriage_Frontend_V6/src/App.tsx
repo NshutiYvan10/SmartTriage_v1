@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from
 import { Sidebar } from './components/Sidebar';
 import { RoleGuard } from './components/RoleGuard';
 import { DirectResusFAB } from './components/DirectResusFAB';
+import { CriticalAlertNotifier } from './components/CriticalAlertNotifier';
 import { Dashboard } from './modules/dashboard/Dashboard';
 import { EntryRegistration } from './modules/entry/EntryRegistration';
 import { PediatricTriageForm } from './modules/triage/PediatricTriageForm';
@@ -210,6 +211,12 @@ function AppContent() {
           in the app. Self-gates: hides on /entry, on unauthenticated
           routes, and for non-clinical roles. */}
       <DirectResusFAB />
+
+      {/* ── Global critical-alert notifier ──
+          Beeps + flashes + toasts when a new CRITICAL alert lands in
+          the store from the WebSocket. Self-quiets on the alert center
+          pages where the user is already looking at alerts. */}
+      <CriticalAlertNotifier />
     </div>
   );
 }

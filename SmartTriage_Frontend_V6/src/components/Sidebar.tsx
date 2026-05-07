@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { useThemeStore } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
+import { useAlertStore } from '@/store/alertStore';
 import { canAccessPage, ROLE_META } from '@/types/roles';
 import type { AppPage } from '@/types/roles';
 import { useMyShift } from '@/hooks/useMyShift';
@@ -65,6 +66,16 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
   // V44+ off-duty signal — drives the "On Leave" badge below.
   const { isOnApprovedLeave } = useMyShift();
 
+  // Live count of unacknowledged alerts — drives the "AI Alerts" badge.
+  // Previously the badge was hardcoded "2" which lied about system state;
+  // a real ED needs the count to reflect what's actually pending.
+  const unackAlertCount = useAlertStore((s) =>
+    s.alerts.filter((a) => !a.acknowledged).length,
+  );
+  const criticalUnackCount = useAlertStore((s) =>
+    s.alerts.filter((a) => !a.acknowledged && a.severity === 'CRITICAL').length,
+  );
+
   useEffect(() => {
     if (parentIsExpanded !== undefined) {
       setIsExpanded(parentIsExpanded);
@@ -85,7 +96,7 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
     {
       label: 'Triage',
       items: [
-        { id: 'triage', label: 'Triage Queue', icon: Stethoscope, badge: '5', badgeColor: 'bg-cyan-500', pageId: 'triage' as AppPage },
+        { id: 'triage', label: 'Triage Queue', icon: Stethoscope, pageId: 'triage' as AppPage },
         { id: 'doctor-workspace', label: 'My Patients', icon: HeartPulse, pageId: 'triage' as AppPage },
         { id: 'monitoring', label: 'Monitoring', icon: Monitor, pageId: 'monitoring' as AppPage },
         { id: 'beds', label: 'Bed Management', icon: BedDouble, pageId: 'beds' as AppPage },
@@ -133,7 +144,13 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
     {
       label: 'Analytics',
       items: [
-        { id: 'alerts', label: 'AI Alerts', badge: '2', badgeColor: 'bg-rose-500', icon: BellRing, pageId: 'alerts' as AppPage },
+        {
+          id: 'alerts', label: 'AI Alerts', icon: BellRing, pageId: 'alerts' as AppPage,
+          // Live unack count, with red ring when at least one CRITICAL is
+          // pending so the sidebar reflects actual urgency.
+          badge: unackAlertCount > 0 ? String(unackAlertCount) : undefined,
+          badgeColor: criticalUnackCount > 0 ? 'bg-rose-500 animate-pulse' : 'bg-amber-500',
+        },
         { id: 'alert-dashboard', label: 'Alert Center', icon: ShieldAlert, pageId: 'alerts' as AppPage },
         { id: 'med-safety/overrides', label: 'Override Audit', icon: Pill, pageId: 'med-safety-overrides' as AppPage },
         { id: 'quality', label: 'Quality Metrics', icon: BarChart3, pageId: 'quality' as AppPage },

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { alertApi } from '@/api/alerts';
+import { subscribeToAlerts } from '@/api/websocket';
 import type { ClinicalAlertResponse } from '@/api/types';
 import { formatDistanceToNow } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
@@ -89,11 +90,26 @@ export function AlertsView() {
 
   useEffect(() => { loadAlerts(); }, [loadAlerts]);
 
-  // Auto-refresh every 30s
+  // Live WebSocket subscription. Replaces the previous 30-second poll
+  // so a CRITICAL alert appears here instantly, not on the next tick.
+  // The hospital topic catches everything; cross-zone reach is the
+  // server's responsibility to gate. Backstop refresh every 5 minutes
+  // catches the rare case of a missed frame during reconnect.
   useEffect(() => {
-    const iv = setInterval(loadAlerts, 30000);
-    return () => clearInterval(iv);
-  }, [loadAlerts]);
+    if (!hospitalId) return;
+    const unsub = subscribeToAlerts(hospitalId, (incoming) => {
+      setAlerts((prev) => {
+        // Dedupe by id — the server publishes both create and update
+        // events, and the user-targeted topic may overlap with the
+        // hospital topic.
+        const next = prev.filter((a) => a.id !== incoming.id);
+        next.unshift(incoming);
+        return next;
+      });
+    });
+    const iv = setInterval(loadAlerts, 5 * 60 * 1000);
+    return () => { unsub(); clearInterval(iv); };
+  }, [hospitalId, loadAlerts]);
 
   // ── Filtering ──
   const filteredAlerts = alerts
