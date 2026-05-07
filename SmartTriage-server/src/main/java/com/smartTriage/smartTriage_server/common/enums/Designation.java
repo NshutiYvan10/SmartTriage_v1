@@ -38,11 +38,15 @@ public enum Designation {
     INTERN("Intern", Role.DOCTOR),
 
     // ── Nurse designations ──
-    // Charge Nurse covers unit-management responsibilities; no separate
-    // NURSE_MANAGER designation exists. A Triage Nurse cannot be a Charge
-    // Nurse because triage nurses are dedicated to intake assessment, not
-    // unit management — see forRole() below for the split.
+    // Every nurse holds Role.NURSE. The designation captures the function
+    // she performs on the unit. A nurse can only hold ONE designation at
+    // a time, so the system naturally prevents impossible combinations
+    // (e.g. a single nurse cannot simultaneously be Charge Nurse AND
+    // Triage Nurse — those are different jobs on the same shift).
+    //
+    // V29: TRIAGE_NURSE was previously a top-level Role; it lives here now.
     CHARGE_NURSE("Charge Nurse", Role.NURSE),
+    TRIAGE_NURSE("Triage Nurse", Role.NURSE),
     SENIOR_NURSE("Senior Nurse", Role.NURSE),
     STAFF_NURSE("Staff Nurse", Role.NURSE),
     STUDENT_NURSE("Student Nurse", Role.NURSE),
@@ -76,13 +80,12 @@ public enum Designation {
         return switch (role) {
             case DOCTOR ->
                 new Designation[] { ED_HEAD, CONSULTANT, SENIOR_MEDICAL_OFFICER, MEDICAL_OFFICER, RESIDENT, INTERN };
-            // Full nurse career ladder — includes Charge Nurse (unit management).
+            // Full nurse career ladder. CHARGE_NURSE = unit management,
+            // TRIAGE_NURSE = intake/assessment specialist, the others =
+            // seniority on the bedside ladder. A user picks one — a single
+            // nurse cannot simultaneously be Charge Nurse and Triage Nurse.
             case NURSE ->
-                new Designation[] { CHARGE_NURSE, SENIOR_NURSE, STAFF_NURSE, STUDENT_NURSE };
-            // Triage nurses are dedicated to intake/assessment and cannot hold
-            // a Charge Nurse title (that's a unit-management responsibility).
-            case TRIAGE_NURSE ->
-                new Designation[] { SENIOR_NURSE, STAFF_NURSE, STUDENT_NURSE };
+                new Designation[] { CHARGE_NURSE, TRIAGE_NURSE, SENIOR_NURSE, STAFF_NURSE, STUDENT_NURSE };
             case LAB_TECHNICIAN -> new Designation[] { HEAD_LAB_TECHNICIAN, Designation.LAB_TECHNICIAN };
             case REGISTRAR -> new Designation[] { SENIOR_REGISTRAR, Designation.REGISTRAR };
             case PARAMEDIC -> new Designation[] { SENIOR_PARAMEDIC, Designation.PARAMEDIC };

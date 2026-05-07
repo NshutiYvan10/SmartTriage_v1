@@ -28,7 +28,7 @@ public class VitalSignsController {
     private final VitalSignsService vitalSignsService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE', 'PARAMEDIC')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'PARAMEDIC')")
     public ResponseEntity<ApiResponse<VitalSignsResponse>> recordVitals(
             @Valid @RequestBody RecordVitalsRequest request) {
         VitalSignsResponse response = vitalSignsService.recordVitals(request);

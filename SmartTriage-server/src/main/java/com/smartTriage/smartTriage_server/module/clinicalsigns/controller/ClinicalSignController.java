@@ -22,10 +22,11 @@ import java.util.UUID;
  *   GET  /api/v1/clinical-signs/visit/{visitId}/sign/{signCode} — per-sign timeline
  *   POST /api/v1/clinical-signs                          — batch record updates
  *
- * Recording is gated to clinical roles (DOCTOR, NURSE, TRIAGE_NURSE,
- * SUPER_ADMIN). Reading is open to the same set plus HOSPITAL_ADMIN
- * for chart audit. REGISTRAR / PARAMEDIC / LAB_TECHNICIAN are excluded —
- * clinical-sign updates are clinician-only territory.
+ * Recording is gated to clinical roles (DOCTOR, NURSE — including
+ * charge / triage / staff designations — and SUPER_ADMIN). Reading is
+ * open to the same set plus HOSPITAL_ADMIN for chart audit. REGISTRAR
+ * / PARAMEDIC / LAB_TECHNICIAN are excluded — clinical-sign updates
+ * are clinician-only territory.
  */
 @RestController
 @RequestMapping("/api/v1/clinical-signs")
@@ -35,28 +36,28 @@ public class ClinicalSignController {
     private final ClinicalSignService service;
 
     @GetMapping("/visit/{visitId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<List<ClinicalSignEventResponse>>> getHistory(
             @PathVariable UUID visitId) {
         return ResponseEntity.ok(ApiResponse.success(service.getHistoryForVisit(visitId)));
     }
 
     @GetMapping("/visit/{visitId}/current")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<List<ClinicalSignEventResponse>>> getCurrentState(
             @PathVariable UUID visitId) {
         return ResponseEntity.ok(ApiResponse.success(service.getCurrentStateForVisit(visitId)));
     }
 
     @GetMapping("/visit/{visitId}/sign/{signCode}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<List<ClinicalSignEventResponse>>> getSignHistory(
             @PathVariable UUID visitId, @PathVariable String signCode) {
         return ResponseEntity.ok(ApiResponse.success(service.getSignHistory(visitId, signCode)));
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<List<ClinicalSignEventResponse>>> recordBatch(
             @Valid @RequestBody RecordClinicalSignsBatchRequest request) {
         List<ClinicalSignEventResponse> created = service.recordBatch(request);

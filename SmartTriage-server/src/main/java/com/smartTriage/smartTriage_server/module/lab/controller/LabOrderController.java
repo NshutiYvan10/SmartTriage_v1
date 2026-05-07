@@ -44,7 +44,7 @@ public class LabOrderController {
     // ====================================================================
 
     @PostMapping("/order")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR')")
     public ResponseEntity<ApiResponse<LabOrderResponse>> orderLab(
             @Valid @RequestBody OrderLabRequest request) {
         LabOrderResponse response = labOrderService.orderLab(request.getVisitId(), request);
@@ -57,7 +57,7 @@ public class LabOrderController {
     // ====================================================================
 
     @PutMapping("/{orderId}/collect-specimen")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<LabOrderResponse>> collectSpecimen(
             @PathVariable UUID orderId,
             @RequestParam(required = false) String collectedByName) {
@@ -66,7 +66,7 @@ public class LabOrderController {
     }
 
     @PutMapping("/{orderId}/receive")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<LabOrderResponse>> receiveInLab(
             @PathVariable UUID orderId) {
         LabOrderResponse response = labOrderService.receiveInLab(orderId);
@@ -74,7 +74,7 @@ public class LabOrderController {
     }
 
     @PutMapping("/{orderId}/result")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<LabOrderResponse>> recordResult(
             @PathVariable UUID orderId,
             @Valid @RequestBody RecordLabResultRequest request) {
@@ -83,7 +83,7 @@ public class LabOrderController {
     }
 
     @PutMapping("/{orderId}/acknowledge-critical")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<LabOrderResponse>> acknowledgeCriticalValue(
             @PathVariable UUID orderId,
             @RequestParam String acknowledgedBy) {
@@ -106,7 +106,7 @@ public class LabOrderController {
     // ====================================================================
 
     @GetMapping("/visit/{visitId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<Page<LabOrderResponse>>> getOrdersForVisit(
             @PathVariable UUID visitId,
             @PageableDefault(size = 50) Pageable pageable) {
@@ -115,7 +115,7 @@ public class LabOrderController {
     }
 
     @GetMapping("/hospital/{hospitalId}/pending")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<Page<LabOrderResponse>>> getPendingOrders(
             @PathVariable UUID hospitalId,
             @PageableDefault(size = 50) Pageable pageable) {
@@ -124,7 +124,7 @@ public class LabOrderController {
     }
 
     @GetMapping("/hospital/{hospitalId}/critical")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<List<CriticalValueResponse>>> getCriticalResults(
             @PathVariable UUID hospitalId) {
         List<CriticalValueResponse> response = labOrderService.getCriticalResults(hospitalId);
@@ -132,7 +132,7 @@ public class LabOrderController {
     }
 
     @GetMapping("/hospital/{hospitalId}/stat")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<List<LabOrderResponse>>> getStatOrders(
             @PathVariable UUID hospitalId) {
         List<LabOrderResponse> response = labOrderService.getStatOrders(hospitalId);

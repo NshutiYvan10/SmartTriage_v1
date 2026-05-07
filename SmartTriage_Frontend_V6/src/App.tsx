@@ -174,8 +174,12 @@ function AppContent() {
             <Route path="/admin/hospitals" element={<RoleGuard page="admin-hospitals"><HospitalManagement /></RoleGuard>} />
             <Route path="/admin/users" element={<RoleGuard page="admin-users"><UserManagement /></RoleGuard>} />
             <Route path="/admin/beds" element={<RoleGuard page="admin-beds"><BedManagement /></RoleGuard>} />
+            {/* V29: Both shift pages now require Charge Nurse designation
+                (or SUPER_ADMIN / HOSPITAL_ADMIN as a fallback if explicitly
+                permitted by ROLE_PAGES — currently neither). The Charge
+                Nurse owns shift management on the floor. */}
             <Route path="/shift-assignment" element={<RoleGuard page="shift-assignment" allowDesignations={['CHARGE_NURSE']}><ShiftAssignment /></RoleGuard>} />
-            <Route path="/shift-planner" element={<RoleGuard page="shift-planner"><ShiftPlannerPage /></RoleGuard>} />
+            <Route path="/shift-planner" element={<RoleGuard page="shift-planner" allowDesignations={['CHARGE_NURSE']}><ShiftPlannerPage /></RoleGuard>} />
             <Route path="/audit-trail" element={<RoleGuard page="audit-trail"><AuditTrail /></RoleGuard>} />
             <Route path="/reports" element={<RoleGuard page="reports"><ReportsView /></RoleGuard>} />
             <Route path="/notifications" element={<NotificationsPage />} />

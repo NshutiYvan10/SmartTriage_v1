@@ -66,7 +66,7 @@ public class ClinicalAlertController {
     }
 
     @PatchMapping("/{alertId}/acknowledge")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<ClinicalAlertResponse>> acknowledgeAlert(@PathVariable UUID alertId) {
         ClinicalAlert alert = clinicalAlertService.acknowledgeAlert(alertId);
         return ResponseEntity.ok(ApiResponse.success("Alert acknowledged", ClinicalAlertMapper.toResponse(alert)));

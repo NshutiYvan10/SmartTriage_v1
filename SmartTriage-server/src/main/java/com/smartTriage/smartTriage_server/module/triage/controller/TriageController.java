@@ -28,7 +28,7 @@ public class TriageController {
     private final TriageService triageService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<TriageRecordResponse>> performTriage(
             @Valid @RequestBody PerformTriageRequest request) {
         TriageRecordResponse response = triageService.performTriage(request);

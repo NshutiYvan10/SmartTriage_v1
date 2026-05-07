@@ -39,14 +39,18 @@ interface AuthState {
   clearError: () => void;
 }
 
-/** Map backend Role to frontend UserRole */
-function mapRole(backendRole: Role): UserRole {
+/** Map backend Role to frontend UserRole. */
+function mapRole(backendRole: Role | 'TRIAGE_NURSE'): UserRole {
   switch (backendRole) {
     case 'SUPER_ADMIN': return 'SUPER_ADMIN';
     case 'HOSPITAL_ADMIN': return 'HOSPITAL_ADMIN';
     case 'DOCTOR': return 'DOCTOR';
-    case 'TRIAGE_NURSE': return 'TRIAGE_NURSE';
     case 'NURSE': return 'NURSE';
+    // V29 defensive mapping: legacy tokens issued before the Role/Designation
+    // restructure may still carry role=TRIAGE_NURSE for a brief transition
+    // window. Map them to NURSE so the user can still log in. Their backend
+    // row was migrated to role=NURSE + designation=TRIAGE_NURSE by V29.
+    case 'TRIAGE_NURSE': return 'NURSE';
     case 'REGISTRAR': return 'REGISTRAR';
     case 'PARAMEDIC': return 'PARAMEDIC';
     case 'LAB_TECHNICIAN': return 'LAB_TECHNICIAN';
@@ -106,15 +110,9 @@ const DEMO_USERS: Record<UserRole, AuthUser> = {
     hospital: 'King Faisal Hospital',
     hospitalId: 'a0000000-0000-0000-0000-000000000001',
   },
-  TRIAGE_NURSE: {
-    id: 'U005',
-    fullName: 'Habimana Claude',
-    email: 'claude.habimana@kfh.rw',
-    role: 'TRIAGE_NURSE',
-    department: 'Emergency Triage',
-    hospital: 'King Faisal Hospital',
-    hospitalId: 'a0000000-0000-0000-0000-000000000001',
-  },
+  // V29: TRIAGE_NURSE seed user folded into NURSE with the corresponding
+  // designation. The role-switcher / dev login now exposes a charge nurse
+  // and triage nurse via the NURSE entry plus an explicit designation.
   REGISTRAR: {
     id: 'U007',
     fullName: 'Mugisha Eric',

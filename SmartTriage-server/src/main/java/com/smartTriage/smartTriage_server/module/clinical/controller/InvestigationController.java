@@ -41,7 +41,7 @@ public class InvestigationController {
     private final InvestigationService investigationService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR')")
     public ResponseEntity<ApiResponse<InvestigationResponse>> orderInvestigation(
             @Valid @RequestBody OrderInvestigationRequest request) {
         InvestigationResponse response = investigationService.orderInvestigation(request);
@@ -50,7 +50,7 @@ public class InvestigationController {
     }
 
     @PatchMapping("/{id}/specimen-collected")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<InvestigationResponse>> markSpecimenCollected(
             @PathVariable UUID id) {
         InvestigationResponse response = investigationService.markSpecimenCollected(id);
@@ -58,7 +58,7 @@ public class InvestigationController {
     }
 
     @PatchMapping("/{id}/in-progress")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<InvestigationResponse>> markInProgress(
             @PathVariable UUID id) {
         InvestigationResponse response = investigationService.markInProgress(id);
@@ -66,7 +66,7 @@ public class InvestigationController {
     }
 
     @PatchMapping("/{id}/result")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<InvestigationResponse>> recordResult(
             @PathVariable UUID id,
             @Valid @RequestBody RecordInvestigationResultRequest request) {

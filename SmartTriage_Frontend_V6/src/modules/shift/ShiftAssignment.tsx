@@ -108,7 +108,10 @@ export function ShiftAssignment() {
       setShiftDate(shiftInfo.shiftDate);
       setShiftPeriod(shiftInfo.shiftPeriod);
       setAssignments(currentAssignments);
-      setUsers(allUsers.content.filter((u: UserResponse) => ['DOCTOR', 'NURSE', 'TRIAGE_NURSE'].includes(u.role)));
+      // V29: TRIAGE_NURSE is no longer a Role — it's a designation under
+      // NURSE. Filter by Role only; the per-shift function (Triage / Zone /
+      // Charge) is selected separately when the assignment is created.
+      setUsers(allUsers.content.filter((u: UserResponse) => ['DOCTOR', 'NURSE'].includes(u.role)));
     } catch (err) {
       console.error('Failed to load shift data:', err);
       showToast('Failed to load shift data', 'error');

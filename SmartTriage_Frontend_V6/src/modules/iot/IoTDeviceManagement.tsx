@@ -47,7 +47,8 @@ export function IoTDeviceManagement() {
 
   const isClinicalStaff = useMemo(() => {
     const role = user?.role;
-    return role === 'NURSE' || role === 'TRIAGE_NURSE' || role === 'DOCTOR';
+    // V29: TRIAGE_NURSE folded into NURSE — covered by the NURSE check.
+    return role === 'NURSE' || role === 'DOCTOR';
   }, [user?.role]);
 
   // Hospital selector state (SUPER_ADMIN can pick any hospital)

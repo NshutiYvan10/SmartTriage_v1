@@ -158,9 +158,10 @@ export function ShiftPlannerPage() {
       });
       setTemplates(byPeriod);
 
+      // V29: TRIAGE_NURSE folded into NURSE. Filter by Role only.
       setUsers(
         userPage.content.filter((u: UserResponse) =>
-          ['DOCTOR', 'NURSE', 'TRIAGE_NURSE'].includes(u.role),
+          ['DOCTOR', 'NURSE'].includes(u.role),
         ),
       );
 

@@ -23,7 +23,8 @@ import java.util.UUID;
 
 /**
  * Patient registration and lookup endpoints.
- * Accessible by REGISTRAR, NURSE, TRIAGE_NURSE, DOCTOR roles.
+ * Accessible by REGISTRAR, NURSE, DOCTOR roles. Triage/charge nurses
+ * are NURSE-role users with a designation — see Designation enum.
  */
 @RestController
 @RequestMapping("/api/v1/patients")
@@ -33,7 +34,7 @@ public class PatientController {
     private final PatientService patientService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'TRIAGE_NURSE', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR')")
     public ResponseEntity<ApiResponse<PatientResponse>> createPatient(
             @Valid @RequestBody CreatePatientRequest request) {
         PatientResponse response = patientService.createPatient(request);
@@ -46,7 +47,7 @@ public class PatientController {
      * Prevents the issue where a patient record exists but no matching visit.
      */
     @PostMapping("/register")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'TRIAGE_NURSE', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR')")
     public ResponseEntity<ApiResponse<RegisterPatientResponse>> registerPatient(
             @Valid @RequestBody RegisterPatientRequest request) {
         RegisterPatientResponse response = patientService.registerPatientWithVisit(request);
@@ -82,7 +83,7 @@ public class PatientController {
      * Not available to REGISTRAR (non-clinical role).
      */
     @PatchMapping("/{id}/pregnancy-status")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'TRIAGE_NURSE', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR')")
     public ResponseEntity<ApiResponse<PatientResponse>> updatePregnancyStatus(
             @PathVariable UUID id,
             @Valid @RequestBody UpdatePregnancyStatusRequest request) {
@@ -98,7 +99,7 @@ public class PatientController {
      * is a clinical decision.
      */
     @PatchMapping("/{id}/allergies")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'TRIAGE_NURSE', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR')")
     public ResponseEntity<ApiResponse<PatientResponse>> updateAllergies(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateAllergiesRequest request) {
@@ -108,7 +109,7 @@ public class PatientController {
 
     /** Update the patient's free-text chronic conditions. */
     @PatchMapping("/{id}/chronic-conditions")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'TRIAGE_NURSE', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR')")
     public ResponseEntity<ApiResponse<PatientResponse>> updateChronicConditions(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateChronicConditionsRequest request) {

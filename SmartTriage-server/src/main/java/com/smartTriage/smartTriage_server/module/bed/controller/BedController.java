@@ -121,7 +121,7 @@ public class BedController {
     // ====================================================================
 
     @PostMapping("/{id}/place")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<BedResponse>> placePatient(
             @PathVariable UUID id,
             @Valid @RequestBody PlacePatientRequest request) {
@@ -131,7 +131,7 @@ public class BedController {
     }
 
     @PostMapping("/{id}/transfer")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<BedResponse>> transferPatient(
             @PathVariable UUID id,
             @Valid @RequestBody TransferPatientRequest request) {
@@ -140,7 +140,7 @@ public class BedController {
     }
 
     @PostMapping("/{id}/discharge")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<BedResponse>> dischargePatient(
             @PathVariable UUID id,
             @RequestParam(required = false) String reason) {
@@ -153,7 +153,7 @@ public class BedController {
     // ====================================================================
 
     @PostMapping("/{id}/mark-cleaned")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<BedResponse>> markCleaned(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success("Bed marked clean", bedService.markCleaned(id)));
     }

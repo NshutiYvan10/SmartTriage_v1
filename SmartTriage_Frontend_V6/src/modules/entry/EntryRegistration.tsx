@@ -57,8 +57,19 @@ const CHIEF_COMPLAINTS = [
 const RELATIONSHIPS = ['Parent', 'Spouse', 'Sibling', 'Child', 'Guardian', 'Friend', 'Colleague', 'Other'];
 const GUARDIAN_RELATIONSHIPS = ['Mother', 'Father', 'Guardian', 'Grandparent', 'Aunt/Uncle', 'Sibling', 'Other'];
 
-/* Only triage nurses can be assigned for triage */
-const TRIAGE_ROLES = ['TRIAGE_NURSE'];
+/* Triage assignments: V29 — TRIAGE_NURSE is now a designation under
+ * NURSE, not its own role. We filter by role=NURSE then narrow down to
+ * the triage-capable designations (Triage Nurse + Charge Nurse — a
+ * Charge Nurse can step into triage when needed). The filtered list
+ * still excludes purely bedside designations (Senior / Staff / Student
+ * Nurse) so the dropdown surfaces the right specialists. */
+const TRIAGE_ELIGIBLE_DESIGNATIONS = ['TRIAGE_NURSE', 'CHARGE_NURSE'];
+function isTriageEligible(u: UserResponse): boolean {
+  if (u.role !== 'NURSE') return false;
+  // u.designation may be undefined / null on legacy rows — treat as eligible
+  // so we don't accidentally hide nurses whose designation hasn't been set.
+  return !u.designation || TRIAGE_ELIGIBLE_DESIGNATIONS.includes(u.designation);
+}
 
 const STEPS = [
   { id: 1, label: 'Personal', icon: User },
@@ -202,10 +213,12 @@ export function EntryRegistration() {
     userApi.getByHospital(hospitalId, 0, 100)
       .then((res) => {
         const list = (res.content || [])
-          .filter((u: UserResponse) => TRIAGE_ROLES.includes(u.role))
+          .filter(isTriageEligible)
           .map((u: UserResponse) => ({ id: u.id, name: `${u.firstName} ${u.lastName}` }));
-        // Also include the current user if they're a nurse-type role and not already listed
-        if (authUser && TRIAGE_ROLES.includes(authUser.role as any) && !list.find((n: {id: string}) => n.id === authUser.id)) {
+        // Also include the current user if they're triage-capable and not already listed.
+        // The auth user shape doesn't carry the full UserResponse, so we approximate
+        // eligibility by role=NURSE — the backend authorisation is the real gate.
+        if (authUser && authUser.role === 'NURSE' && !list.find((n: {id: string}) => n.id === authUser.id)) {
           list.unshift({ id: authUser.id, name: authUser.fullName });
         }
         // If no nurses found from API, add current user as fallback

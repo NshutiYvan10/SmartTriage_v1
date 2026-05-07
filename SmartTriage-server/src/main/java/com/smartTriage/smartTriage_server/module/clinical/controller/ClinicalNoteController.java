@@ -38,7 +38,7 @@ public class ClinicalNoteController {
     private final ClinicalNoteService clinicalNoteService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<ClinicalNoteResponse>> createNote(
             @Valid @RequestBody CreateClinicalNoteRequest request) {
         ClinicalNoteResponse response = clinicalNoteService.createNote(request);
@@ -47,7 +47,7 @@ public class ClinicalNoteController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<ClinicalNoteResponse>> updateNote(
             @PathVariable UUID id,
             @Valid @RequestBody CreateClinicalNoteRequest request) {

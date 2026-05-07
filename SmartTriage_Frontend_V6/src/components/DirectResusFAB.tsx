@@ -46,10 +46,12 @@ const CLINICAL_ROLES: UserRole[] = [
   'HOSPITAL_ADMIN',
   'DOCTOR',
   'NURSE',
-  'TRIAGE_NURSE',
   'REGISTRAR',
   'PARAMEDIC',
 ];
+// V29 note: TRIAGE_NURSE was previously listed here. It's no longer a Role
+// — triage nurses are NURSE-role users with Designation.TRIAGE_NURSE, so
+// they're already covered by the NURSE entry above.
 
 /** Routes where the FAB is hidden to avoid duplicating the registration banner. */
 const HIDDEN_ROUTE_PREFIXES = [

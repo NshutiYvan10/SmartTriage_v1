@@ -37,14 +37,14 @@ import java.util.UUID;
  *
  * <p>Permissions: Direct Resus Admission is open to every front-line
  * clinical role that could plausibly receive a coding patient at the
- * door — DOCTOR, NURSE, TRIAGE_NURSE, REGISTRAR, PARAMEDIC, plus
- * HOSPITAL_ADMIN and SUPER_ADMIN. We deliberately err on the side of
- * including REGISTRAR and PARAMEDIC: in real Rwandan EDs the patient's
- * first contact is often the registration clerk or a paramedic, and
- * blocking them from triggering the resus pathway would re-introduce
- * exactly the latency this whole feature exists to remove. Identity
- * resolution accepts the same set (the receiving doctor often resolves
- * identity at handover).
+ * door — DOCTOR, NURSE (including charge / triage / staff designations),
+ * REGISTRAR, PARAMEDIC, plus HOSPITAL_ADMIN and SUPER_ADMIN. We
+ * deliberately err on the side of including REGISTRAR and PARAMEDIC:
+ * in real Rwandan EDs the patient's first contact is often the
+ * registration clerk or a paramedic, and blocking them from triggering
+ * the resus pathway would re-introduce exactly the latency this whole
+ * feature exists to remove. Identity resolution accepts the same set
+ * (the receiving doctor often resolves identity at handover).
  */
 @RestController
 @RequiredArgsConstructor
@@ -58,7 +58,7 @@ public class DirectResusController {
     // ════════════════════════════════════════════════════════════════
 
     @PostMapping("/api/v1/admissions/direct-resus")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE', 'REGISTRAR', 'PARAMEDIC')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'REGISTRAR', 'PARAMEDIC')")
     public ResponseEntity<ApiResponse<DirectResusAdmissionResponse>> admit(
             @Valid @RequestBody DirectResusAdmissionRequest request) {
         DirectResusAdmissionResponse response = directResusService.admit(request);
@@ -70,7 +70,7 @@ public class DirectResusController {
     }
 
     @PostMapping("/api/v1/admissions/{visitId}/confirm-arrival")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE', 'REGISTRAR', 'PARAMEDIC')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'REGISTRAR', 'PARAMEDIC')")
     public ResponseEntity<ApiResponse<DirectResusAdmissionResponse>> confirmArrival(
             @PathVariable UUID visitId) {
         DirectResusAdmissionResponse response = directResusService.confirmArrival(visitId);
@@ -82,7 +82,7 @@ public class DirectResusController {
     // ════════════════════════════════════════════════════════════════
 
     @PostMapping("/api/v1/patients/{patientId}/resolve-identity")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE', 'REGISTRAR', 'PARAMEDIC')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'REGISTRAR', 'PARAMEDIC')")
     public ResponseEntity<ApiResponse<PatientResponse>> resolveIdentity(
             @PathVariable UUID patientId,
             @Valid @RequestBody ResolveIdentityRequest request) {

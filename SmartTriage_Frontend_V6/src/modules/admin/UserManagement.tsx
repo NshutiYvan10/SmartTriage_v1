@@ -18,7 +18,6 @@ const ROLE_COLORS: Record<string, { color: string; bg: string }> = {
   HOSPITAL_ADMIN: { color: 'text-violet-500', bg: 'bg-violet-500/10' },
   DOCTOR:         { color: 'text-cyan-500', bg: 'bg-cyan-500/10' },
   NURSE:          { color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-  TRIAGE_NURSE:   { color: 'text-orange-500', bg: 'bg-orange-500/10' },
   REGISTRAR:      { color: 'text-blue-500', bg: 'bg-blue-500/10' },
   PARAMEDIC:      { color: 'text-amber-500', bg: 'bg-amber-500/10' },
   LAB_TECHNICIAN: { color: 'text-pink-500', bg: 'bg-pink-500/10' },
@@ -31,7 +30,11 @@ const STATUS_STYLES: Record<AccountStatus, { color: string; bg: string; label: s
   DEACTIVATED:        { color: 'text-slate-500', bg: 'bg-slate-500/10', label: 'Deactivated' },
 };
 
-const ROLES = ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE', 'REGISTRAR', 'PARAMEDIC', 'LAB_TECHNICIAN', 'READ_ONLY'];
+// V29: TRIAGE_NURSE removed from Role list. Triage nurses are created as
+// Role.NURSE with Designation.TRIAGE_NURSE — pick the role first, then the
+// designation dropdown surfaces TRIAGE_NURSE / CHARGE_NURSE / SENIOR_NURSE
+// / STAFF_NURSE / STUDENT_NURSE for the NURSE role.
+const ROLES = ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'REGISTRAR', 'PARAMEDIC', 'LAB_TECHNICIAN', 'READ_ONLY'];
 
 export function UserManagement() {
   const { glassCard, glassInner, isDark, text } = useTheme();

@@ -141,21 +141,24 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
     },
   ];
 
-  // Shift Zones: Hospital Admin / Super Admin by role, OR Charge Nurse by
-  // designation. Regular nurses and triage nurses must NOT see this item —
-  // they manage their own assignment via the Profile page. (NURSE_MANAGER
-  // designation was removed; Charge Nurse now covers unit management.)
-  const canSeeShiftZones =
-    canAccessPage(userRole, 'shift-assignment') ||
-    user?.designation === 'CHARGE_NURSE';
+  // V29: Shift management (Shift Zones + Shift Planner) belongs to the
+  // Charge Nurse on the floor. The Designation.CHARGE_NURSE override
+  // surfaces both items even though Role.NURSE alone does not. Hospital
+  // Admin and Super Admin no longer see these as default sidebar items —
+  // they're not running daily shifts. The backend ShiftAssignmentAuthz
+  // still permits HOSPITAL_ADMIN as fallback authority if explicitly
+  // invoked, but it's not a default UI surface.
+  const isChargeNurse = user?.designation === 'CHARGE_NURSE';
 
   // Filter sections based on role permissions
   const sections = allSections
     .map((section) => ({
       ...section,
       items: section.items.filter((item) => {
-        // Special case: Shift Zones restricted to Charge Nurse + Hospital Admin
-        if (item.id === 'shift-assignment') return canSeeShiftZones;
+        // Charge-nurse-managed pages — designation override.
+        if (item.id === 'shift-assignment' || item.id === 'shift-planner') {
+          return canAccessPage(userRole, item.pageId) || isChargeNurse;
+        }
         // Doctor Workspace only for DOCTOR
         if (item.id === 'doctor-workspace') return userRole === 'DOCTOR';
         return canAccessPage(userRole, item.pageId);

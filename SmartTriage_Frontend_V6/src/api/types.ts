@@ -25,7 +25,11 @@ export interface Page<T> {
 // ── Enums ──
 
 export type Gender = 'MALE' | 'FEMALE' | 'OTHER' | 'UNKNOWN';
-export type Role = 'SUPER_ADMIN' | 'HOSPITAL_ADMIN' | 'DOCTOR' | 'TRIAGE_NURSE' | 'NURSE' | 'REGISTRAR' | 'PARAMEDIC' | 'LAB_TECHNICIAN' | 'READ_ONLY';
+// V29: TRIAGE_NURSE is no longer a top-level Role — it moved to the
+// Designation enum (Designation.TRIAGE_NURSE under Role.NURSE) because
+// a triage nurse is still a nurse. Backend migration V29 re-points any
+// existing users with role=TRIAGE_NURSE to role=NURSE + designation=TRIAGE_NURSE.
+export type Role = 'SUPER_ADMIN' | 'HOSPITAL_ADMIN' | 'DOCTOR' | 'NURSE' | 'REGISTRAR' | 'PARAMEDIC' | 'LAB_TECHNICIAN' | 'READ_ONLY';
 export type ArrivalMode = 'WALK_IN' | 'AMBULANCE' | 'REFERRAL' | 'POLICE' | 'HELICOPTER' | 'OTHER';
 export type VisitStatus = 'REGISTERED' | 'AWAITING_TRIAGE' | 'TRIAGED' | 'AWAITING_ASSESSMENT' | 'UNDER_ASSESSMENT' | 'UNDER_TREATMENT' | 'UNDER_OBSERVATION' | 'PENDING_DISPOSITION' | 'DISCHARGED' | 'ADMITTED' | 'TRANSFERRED' | 'ICU_ADMITTED' | 'LEFT_WITHOUT_BEING_SEEN' | 'DECEASED';
 export type TriageCategory = 'RED' | 'ORANGE' | 'YELLOW' | 'GREEN' | 'BLUE';

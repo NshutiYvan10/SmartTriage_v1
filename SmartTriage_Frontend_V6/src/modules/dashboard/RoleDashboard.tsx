@@ -80,10 +80,9 @@ function getActionsForRole(role: UserRole): QuickAction[] {
       // Full clinical: patients, triage, monitoring, alerts
       return [base.patients, base.triage, base.monitoring, base.alerts, base.reports];
     case 'NURSE':
-      // Clinical care: register, triage, patients, monitoring
-      return [base.register, base.triage, base.patients, base.monitoring, base.alerts];
-    case 'TRIAGE_NURSE':
-      // Triage-focused: register, triage, patients, monitoring
+      // V29: covers all nurse designations (Charge / Triage / Senior /
+      // Staff / Student). Designation-specific tiles can be added later
+      // if needed (e.g. Charge Nurse → Shift Planner shortcut).
       return [base.register, base.triage, base.patients, base.monitoring, base.alerts];
     case 'REGISTRAR':
       // Registration only
@@ -192,7 +191,7 @@ export function RoleDashboard() {
         </div>
 
         {/* ── Quick Stats (for clinical roles) ── */}
-        {['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'TRIAGE_NURSE', 'REGISTRAR', 'PARAMEDIC'].includes(user.role) && (
+        {['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'REGISTRAR', 'PARAMEDIC'].includes(user.role) && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard label="Total Patients" value={stats.total} icon={Users} accent="bg-blue-500" />
             <StatCard label="Waiting" value={stats.waiting} icon={Activity} accent="bg-amber-500" />
@@ -219,19 +218,26 @@ export function RoleDashboard() {
         <div className="bg-white rounded-2xl border border-gray-200 p-5">
           <h2 className="text-sm font-bold text-gray-900 mb-3">Your Access</h2>
           <div className="flex flex-wrap gap-2">
-            {accessiblePages.filter(p => p !== 'profile' && p !== 'notifications').map((page) => {
-              const Icon = PAGE_ICONS[page];
-              return (
-                <button
-                  key={page}
-                  onClick={() => navigate(`/${page}`)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-100 hover:border-gray-300 transition-all duration-200"
-                >
-                  <Icon className="w-3.5 h-3.5 text-gray-400" />
-                  {PAGE_LABELS[page]}
-                </button>
-              );
-            })}
+            {accessiblePages
+              .filter((p) => p !== 'profile' && p !== 'notifications')
+              .map((page) => {
+                const Icon = PAGE_ICONS[page];
+                const label = PAGE_LABELS[page];
+                // Skip pages without an icon/label registered — happens for
+                // designation-only pages (e.g. shift-planner) that show via
+                // the sidebar designation override but don't need a tile here.
+                if (!Icon || !label) return null;
+                return (
+                  <button
+                    key={page}
+                    onClick={() => navigate(`/${page}`)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-100 hover:border-gray-300 transition-all duration-200"
+                  >
+                    <Icon className="w-3.5 h-3.5 text-gray-400" />
+                    {label}
+                  </button>
+                );
+              })}
           </div>
         </div>
       </div>

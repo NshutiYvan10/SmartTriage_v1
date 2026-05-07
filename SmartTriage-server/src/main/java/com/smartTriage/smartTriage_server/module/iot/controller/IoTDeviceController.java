@@ -96,7 +96,7 @@ public class IoTDeviceController {
     // ====================================================================
 
     @PostMapping("/monitoring/start")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<DeviceSessionResponse>> startMonitoring(
             @Valid @RequestBody StartMonitoringRequest request) {
         DeviceSessionResponse response = deviceService.startMonitoring(request);
@@ -105,7 +105,7 @@ public class IoTDeviceController {
     }
 
     @PostMapping("/monitoring/stop/{sessionId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'TRIAGE_NURSE', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<DeviceSessionResponse>> stopMonitoring(
             @PathVariable UUID sessionId,
             @RequestParam(required = false) String endedByName,

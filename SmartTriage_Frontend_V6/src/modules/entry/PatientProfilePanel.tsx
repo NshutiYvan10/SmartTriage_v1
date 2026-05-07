@@ -39,8 +39,7 @@ const PREGNANCY_STATUS_LABELS: Record<PregnancyStatus, string> = {
 };
 
 const CAN_EDIT_PREGNANCY_STATUS: UserRole[] = [
-  'NURSE',
-  'TRIAGE_NURSE',
+  'NURSE',     // includes triage / charge / staff nurse designations
   'DOCTOR',
   'HOSPITAL_ADMIN',
   'SUPER_ADMIN',
