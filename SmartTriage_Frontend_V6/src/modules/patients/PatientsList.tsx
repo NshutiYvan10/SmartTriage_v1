@@ -19,6 +19,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
 import type { Patient } from '@/types';
+import { HandoffPriorityBadges } from '@/components/HandoffPriorityBadges';
 
 /* ─── Arrival mode config ─── */
 const arrivalModeConfig: Record<string, { label: string; icon: string; bg: string; text: string; border: string }> = {
@@ -379,6 +380,13 @@ export function PatientsList() {
 
                       {/* Arrow */}
                       <ChevronRightIcon className="w-4 h-4 text-slate-300 group-hover:text-cyan-500 transition-colors flex-shrink-0" />
+                    </div>
+
+                    {/* Shift-handoff priority badges — pending labs, pending
+                        meds, critical results back, open ICU escalation.
+                        Self-hides when this patient has nothing outstanding. */}
+                    <div className="mt-2 ml-[52px]">
+                      <HandoffPriorityBadges signals={patient} />
                     </div>
 
                     {/* Bottom row: Detail pills — responsive wrap */}

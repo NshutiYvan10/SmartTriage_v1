@@ -106,6 +106,15 @@ export interface Patient {
   registrationCompletedAt?: Date;
   registeredBy?: string; // clinician who registered
   trendStatus?: 'WORSENING' | 'STABLE' | 'IMPROVING' | 'UNKNOWN';
+
+  // Shift-handoff aggregate signals — backend populates these on
+  // active-visits list endpoints; the patient store mapper carries
+  // them through. Drive the HandoffPriorityBadges component on
+  // patient cards across Doctor Workspace, PatientsList, Monitoring.
+  pendingInvestigationsCount?: number;
+  unacknowledgedCriticalResultsCount?: number;
+  pendingMedicationsCount?: number;
+  hasOpenIcuEscalation?: boolean;
 }
 
 // Vital Signs (IoT)

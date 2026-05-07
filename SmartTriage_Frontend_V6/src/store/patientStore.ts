@@ -70,6 +70,15 @@ function mapToPatient(p: PatientResponse, v?: VisitResponse): Patient & Record<s
     medicalRecordNumber: p.medicalRecordNumber || undefined,
     dateOfBirth: p.dateOfBirth || undefined,
     referringFacility: v?.referringFacility || undefined,
+    // Shift-handoff aggregate signals — backend populates these on
+    // active-visits list endpoints. Carry them through so patient-card
+    // surfaces (Monitoring, PatientsList) can render priority badges
+    // without re-fetching per row. Absent when the source response
+    // didn't include them (e.g. a single visit-by-id read).
+    pendingInvestigationsCount: v?.pendingInvestigationsCount ?? undefined,
+    unacknowledgedCriticalResultsCount: v?.unacknowledgedCriticalResultsCount ?? undefined,
+    pendingMedicationsCount: v?.pendingMedicationsCount ?? undefined,
+    hasOpenIcuEscalation: v?.hasOpenIcuEscalation ?? undefined,
   };
 }
 

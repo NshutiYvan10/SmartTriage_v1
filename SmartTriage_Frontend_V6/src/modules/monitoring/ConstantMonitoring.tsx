@@ -19,6 +19,7 @@ import { useAlertStore } from '@/store/alertStore';
 import { subscribeToVitals, subscribeToTrendChanges } from '@/api/websocket';
 import { iotApi } from '@/api/iot';
 import type { Patient, VitalSigns, AIAlert } from '@/types';
+import { HandoffPriorityBadges } from '@/components/HandoffPriorityBadges';
 import {
   SIGNAL_QUALITY_META,
   getBatteryColor,
@@ -868,6 +869,13 @@ export function ConstantMonitoring() {
                             {patient.trend === 'worsening' && (
                               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
                             )}
+                            {/* Urgent-only handoff badges. Monitoring is the
+                                real-time deterioration page — pending labs /
+                                meds would be noise here, but an open ICU
+                                escalation or a critical lab result coming
+                                back during the previous shift absolutely
+                                demands this page's attention. */}
+                            <HandoffPriorityBadges signals={patient} mode="urgent-only" />
                           </div>
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="text-[11px] text-slate-500 font-semibold whitespace-nowrap flex-shrink-0"

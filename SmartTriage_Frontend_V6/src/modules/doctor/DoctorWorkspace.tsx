@@ -439,7 +439,7 @@ function PatientCard({ visit, index, isDark, text, glassCard, bed, onAccept, onP
               when this patient has no outstanding work, so cards stay
               clean and the present badges genuinely demand attention. */}
           <div className="mt-1.5">
-            <HandoffPriorityBadges visit={visit} />
+            <HandoffPriorityBadges signals={visit} />
           </div>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className={`text-[10px] font-bold ${statusInfo.color}`}>{statusInfo.label}</span>
