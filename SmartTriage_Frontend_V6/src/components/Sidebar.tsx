@@ -68,13 +68,13 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
     }
   }, [parentIsExpanded]);
 
-  // Sections: Navigation, Triage, Clinical Tools, Lab & Investigations, Analytics, Administration, System
+  // Sections: Navigation, Triage, Shift Management, Clinical Tools,
+  //           Lab & Docs, Analytics, Administration, System
   const allSections = [
     {
       label: 'Navigation',
       items: [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, pageId: 'dashboard' as AppPage },
-        { id: 'my-schedule', label: 'My Schedule', icon: CalendarClock, pageId: 'my-schedule' as AppPage },
         { id: 'entry', label: 'Registration', icon: UserPlus, pageId: 'entry' as AppPage },
         { id: 'patients', label: 'Patients', icon: ClipboardList, pageId: 'patients' as AppPage },
       ],
@@ -84,11 +84,27 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
       items: [
         { id: 'triage', label: 'Triage Queue', icon: Stethoscope, badge: '5', badgeColor: 'bg-cyan-500', pageId: 'triage' as AppPage },
         { id: 'doctor-workspace', label: 'My Patients', icon: HeartPulse, pageId: 'triage' as AppPage },
-        { id: 'shift-assignment', label: 'Shift Zones', icon: CalendarClock, pageId: 'shift-assignment' as AppPage },
-        { id: 'zone-transfers', label: 'Zone Transfers', icon: ArrowRightLeft, pageId: 'shift-assignment' as AppPage },
         { id: 'monitoring', label: 'Monitoring', icon: Monitor, pageId: 'monitoring' as AppPage },
         { id: 'beds', label: 'Bed Management', icon: BedDouble, pageId: 'beds' as AppPage },
         { id: 'iot-devices', label: 'IoT Devices', icon: Cpu, pageId: 'iot-devices' as AppPage },
+      ],
+    },
+    {
+      // ── Shift Management ────────────────────────────────────────
+      // All shift-related screens live in one logical section so they
+      // are easy to find. Per-item visibility is then controlled by
+      // ROLE_PAGES + the CHARGE_NURSE designation override (cnPages
+      // below). Ordered self-service → operational → approvals.
+      label: 'Shift Management',
+      items: [
+        { id: 'my-schedule',     label: 'My Schedule',     icon: CalendarClock,   pageId: 'my-schedule'     as AppPage },
+        { id: 'shift-assignment',label: 'Shift Zones',     icon: CalendarClock,   pageId: 'shift-assignment' as AppPage },
+        { id: 'zone-transfers',  label: 'Zone Transfers',  icon: ArrowRightLeft,  pageId: 'shift-assignment' as AppPage },
+        { id: 'shift-calendar',  label: 'Shift Calendar',  icon: CalendarDays,    pageId: 'shift-calendar'  as AppPage },
+        { id: 'shift-planner',   label: 'Shift Planner',   icon: CalendarDays,    pageId: 'shift-planner'   as AppPage },
+        { id: 'swap-approvals',  label: 'Swap Approvals',  icon: ClipboardCheck,  pageId: 'swap-approvals'  as AppPage },
+        { id: 'leave-approvals', label: 'Leave Approvals', icon: ClipboardCheck,  pageId: 'leave-approvals' as AppPage },
+        { id: 'delegations',     label: 'Delegations',     icon: ShieldCheck,     pageId: 'delegations'     as AppPage },
       ],
     },
     {
@@ -130,11 +146,9 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         { id: 'admin/hospitals', label: 'Hospitals', icon: Building2, pageId: 'admin-hospitals' as AppPage },
         { id: 'admin/users', label: 'Users', icon: Users, pageId: 'admin-users' as AppPage },
         { id: 'admin/beds', label: 'Bed Inventory', icon: BedDouble, pageId: 'admin-beds' as AppPage },
-        { id: 'shift-planner', label: 'Shift Planner', icon: CalendarDays, pageId: 'shift-planner' as AppPage },
-        { id: 'shift-calendar', label: 'Shift Calendar', icon: CalendarDays, pageId: 'shift-calendar' as AppPage },
-        { id: 'swap-approvals', label: 'Swap Approvals', icon: ClipboardCheck, pageId: 'swap-approvals' as AppPage },
-        { id: 'leave-approvals', label: 'Leave Approvals', icon: ClipboardCheck, pageId: 'leave-approvals' as AppPage },
-        { id: 'delegations', label: 'Delegations', icon: ShieldCheck, pageId: 'delegations' as AppPage },
+        // Shift management items moved to their own "Shift Management"
+        // section above so charge-nurse and admin shift surfaces are
+        // grouped together and visually consistent.
         { id: 'safety-incidents', label: 'Safety Incidents', icon: ShieldAlert, pageId: 'safety-incidents' as AppPage },
         { id: 'moh-reports', label: 'MoH Reports', icon: FileBarChart, pageId: 'moh-reports' as AppPage },
         { id: 'governance', label: 'Governance', icon: Scale, pageId: 'governance' as AppPage },
@@ -148,30 +162,49 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
     },
   ];
 
-  // Shift management surface: every charge-nurse-only sidebar item is
-  // gated by either ROLE_PAGES (no roles currently have these by default
-  // since HOSPITAL_ADMIN / SUPER_ADMIN were stripped) OR a designation
-  // override for Designation.CHARGE_NURSE. Regular NURSE users see the
-  // self-service surfaces (shift-assignment, shift-calendar, my-schedule)
-  // via their ROLE_PAGES grant; the approvals / delegations / planner
-  // are CN-only.
+  // ─── Per-role access matrix for the Shift Management section ───
+  // The sidebar surfaces three classes of shift items:
+  //
+  //   1. Self-service (every staff member who works shifts):
+  //      my-schedule, shift-assignment (Shift Zones — read your own
+  //      zone & shift-lead status), shift-calendar (your own week).
+  //      Visibility comes from ROLE_PAGES on the user's role.
+  //
+  //   2. Charge-Nurse-only (the unit-management surfaces):
+  //      zone-transfers (cross-zone pending transfers dashboard),
+  //      shift-planner (rota templates), swap-approvals,
+  //      leave-approvals, delegations. Charge Nurses see them via
+  //      Designation.CHARGE_NURSE, never via Role. Hospital admins
+  //      retain backend fallback authority for emergencies but the
+  //      sidebar does not surface these by default.
+  //
+  //   3. Admin-also-allowed: zone-transfers — admins may need to
+  //      view cross-zone transfer state for governance, even though
+  //      they don't run the floor. Surfaced for HOSPITAL_ADMIN and
+  //      SUPER_ADMIN as well.
   const isChargeNurse = user?.designation === 'CHARGE_NURSE';
-  const cnPages = new Set([
-    'shift-assignment', 'zone-transfers',  // ZT shares the shift-assignment pageId
-    'shift-planner', 'shift-calendar',
-    'swap-approvals', 'leave-approvals', 'delegations',
-  ]);
+  const isAdmin = userRole === 'HOSPITAL_ADMIN' || userRole === 'SUPER_ADMIN';
+
+  // CN-only sidebar items — NEVER fall through to the user's
+  // ROLE_PAGES grant. Required: CHARGE_NURSE designation.
+  const chargeNurseOnly = new Set(['shift-planner', 'swap-approvals', 'leave-approvals', 'delegations']);
+
+  // CN-or-admin sidebar items — same, but admins may also view.
+  const chargeNurseOrAdmin = new Set(['zone-transfers']);
 
   // Filter sections based on role permissions
   const sections = allSections
     .map((section) => ({
       ...section,
       items: section.items.filter((item) => {
-        // Charge-nurse-managed pages — designation override extends the
-        // ROLE_PAGES check so a Charge Nurse sees them even though
-        // Role.NURSE alone does not grant the CN-only ones.
-        if (cnPages.has(item.id)) {
-          return canAccessPage(userRole, item.pageId) || isChargeNurse;
+        // Charge-nurse-only — admins do NOT see these by default.
+        if (chargeNurseOnly.has(item.id)) {
+          return isChargeNurse;
+        }
+        // Charge-nurse-or-admin — both Charge Nurse + Hospital Admin
+        // see Zone Transfers (governance / oversight).
+        if (chargeNurseOrAdmin.has(item.id)) {
+          return isChargeNurse || isAdmin;
         }
         // Doctor Workspace only for DOCTOR
         if (item.id === 'doctor-workspace') return userRole === 'DOCTOR';

@@ -157,7 +157,18 @@ export function PendingTransfersDashboard() {
     );
   }
 
-  if (!isShiftLead) {
+  // Access gate: a Charge Nurse (Designation.CHARGE_NURSE) is responsible
+  // for the unit's transfers as a permanent appointment — they need this
+  // dashboard whether or not they happen to hold the shift-lead badge for
+  // an active shift right now. The shift-lead-badge holder also keeps
+  // access (covers acting charge nurses on a single shift). HOSPITAL_ADMIN
+  // and SUPER_ADMIN retain fallback authority. Regular nurses and zoned
+  // doctors continue to see only their own zone via the My Patients
+  // banner — unchanged behaviour.
+  const isChargeNurse = user?.designation === 'CHARGE_NURSE';
+  const isAdmin = user?.role === 'HOSPITAL_ADMIN' || user?.role === 'SUPER_ADMIN';
+  const canViewDashboard = isChargeNurse || isShiftLead || isAdmin;
+  if (!canViewDashboard) {
     return (
       <div className="p-6 rounded-2xl border border-amber-500/40 bg-amber-50">
         <div className="flex items-start gap-3">
@@ -165,9 +176,10 @@ export function PendingTransfersDashboard() {
           <div>
             <p className="text-sm font-bold text-amber-900">Charge-nurse role required</p>
             <p className="text-xs mt-0.5 text-amber-800">
-              The pending-transfers dashboard is visible to the shift lead
-              (charge nurse) only. Doctors see pending transfers into
-              their own zone via the My Patients banner.
+              The pending-transfers dashboard is visible to charge nurses,
+              the active shift lead, and hospital admins. Zoned doctors see
+              pending transfers into their own zone via the My Patients
+              banner.
             </p>
           </div>
         </div>
