@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Building2, Plus, RefreshCw, Loader2, Pencil, Send,
-  MapPin, Phone, Globe, Hash, Users, CheckCircle2, AlertTriangle, X,
+  MapPin, Phone, Globe, CheckCircle2, AlertTriangle, X, Power, PowerOff,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { hospitalApi } from '@/api/hospitals';
@@ -31,6 +31,11 @@ export function HospitalManagement() {
   const emptyForm = {
     name: '', hospitalCode: '', address: '',
     phoneNumber: '', email: '', tier: 'DISTRICT',
+    bedCapacity: '' as string,
+    edCapacity: '' as string,
+    icuCapacity: '' as string,
+    hasPediatricResus: false,
+    hasNeonatalUnit: false,
     // V46+ structured Rwanda location IDs.
     provinceId: undefined as string | undefined,
     districtId: undefined as string | undefined,
@@ -57,14 +62,34 @@ export function HospitalManagement() {
   useEffect(() => { loadHospitals(); }, [loadHospitals]);
 
   const handleSave = async () => {
-    if (!form.name || !form.hospitalCode) return;
+    if (!form.name) return;
     setFormLoading(true);
     try {
+      const toNum = (v: string) => (v === '' ? undefined : Number(v));
+      const payload: any = {
+        name: form.name,
+        address: form.address || undefined,
+        phoneNumber: form.phoneNumber || undefined,
+        email: form.email || undefined,
+        tier: form.tier,
+        bedCapacity: toNum(form.bedCapacity),
+        edCapacity: toNum(form.edCapacity),
+        icuCapacity: toNum(form.icuCapacity),
+        hasPediatricResus: form.hasPediatricResus,
+        hasNeonatalUnit: form.hasNeonatalUnit,
+        provinceId: form.provinceId,
+        districtId: form.districtId,
+        sectorId: form.sectorId,
+        cellId: form.cellId,
+        villageId: form.villageId,
+      };
       if (editId) {
-        await hospitalApi.update(editId, form);
+        // hospitalCode is intentionally not part of update payload
+        await hospitalApi.update(editId, payload);
         flash('success', 'Hospital updated successfully');
       } else {
-        await hospitalApi.create(form);
+        // hospitalCode omitted on create → server auto-generates
+        await hospitalApi.create(payload);
         flash('success', 'Hospital created successfully');
       }
       setShowForm(false);
@@ -78,6 +103,27 @@ export function HospitalManagement() {
     }
   };
 
+  const handleDeactivate = async (h: HospitalResponse) => {
+    if (!window.confirm(`Deactivate ${h.name}? Users at this hospital will lose access until it is reactivated.`)) return;
+    try {
+      await hospitalApi.deactivate(h.id);
+      flash('success', 'Hospital deactivated');
+      loadHospitals();
+    } catch (err: any) {
+      flash('error', err?.message || 'Failed to deactivate');
+    }
+  };
+
+  const handleReactivate = async (h: HospitalResponse) => {
+    try {
+      await hospitalApi.reactivate(h.id);
+      flash('success', 'Hospital reactivated');
+      loadHospitals();
+    } catch (err: any) {
+      flash('error', err?.message || 'Failed to reactivate');
+    }
+  };
+
   const startEdit = (h: HospitalResponse) => {
     setForm({
       name: h.name || '',
@@ -86,14 +132,16 @@ export function HospitalManagement() {
       phoneNumber: h.phoneNumber || '',
       email: h.email || '',
       tier: h.tier || 'DISTRICT',
-      // Structured location: HospitalResponse may not surface these
-      // FKs yet; leave undefined and the picker starts blank. The
-      // user can re-pick to populate.
-      provinceId: undefined,
-      districtId: undefined,
-      sectorId: undefined,
-      cellId: undefined,
-      villageId: undefined,
+      bedCapacity: h.bedCapacity != null ? String(h.bedCapacity) : '',
+      edCapacity: h.edCapacity != null ? String(h.edCapacity) : '',
+      icuCapacity: h.icuCapacity != null ? String(h.icuCapacity) : '',
+      hasPediatricResus: !!h.hasPediatricResus,
+      hasNeonatalUnit: !!h.hasNeonatalUnit,
+      provinceId: h.provinceId ?? undefined,
+      districtId: h.districtId ?? undefined,
+      sectorId: h.sectorId ?? undefined,
+      cellId: h.cellId ?? undefined,
+      villageId: h.villageId ?? undefined,
     });
     setEditId(h.id);
     setShowForm(true);
@@ -153,7 +201,6 @@ export function HospitalManagement() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {([
                 { label: 'Hospital Name', key: 'name', placeholder: 'e.g., King Faisal Hospital' },
-                { label: 'Code', key: 'hospitalCode', placeholder: 'e.g., KFH-001' },
                 { label: 'Address', key: 'address', placeholder: 'Kigali, Rwanda' },
                 { label: 'Phone', key: 'phoneNumber', placeholder: '+250 788 000 000' },
                 { label: 'Email', key: 'email', placeholder: 'info@hospital.rw' },
@@ -163,13 +210,57 @@ export function HospitalManagement() {
                   <input value={(form as any)[key] || ''} onChange={(e) => setForm({ ...form, [key]: e.target.value })} placeholder={placeholder} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
                 </div>
               ))}
+              {editId && (
+                <div>
+                  <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Code (auto-generated)</label>
+                  <input value={form.hospitalCode} readOnly className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none font-mono opacity-70 ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner} />
+                </div>
+              )}
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Tier</label>
                 <select value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
                   {TIERS.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
                 </select>
               </div>
+              {([
+                { label: 'Bed Capacity', key: 'bedCapacity', placeholder: 'Total inpatient beds' },
+                { label: 'ED Capacity', key: 'edCapacity', placeholder: 'Emergency dept beds' },
+                { label: 'ICU Capacity', key: 'icuCapacity', placeholder: 'Intensive care beds' },
+              ] as const).map(({ label, key, placeholder }) => (
+                <div key={key}>
+                  <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>{label}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={(form as any)[key]}
+                    onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                    placeholder={placeholder}
+                    className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+                    style={glassInner}
+                  />
+                </div>
+              ))}
             </div>
+
+            {/* Pediatric / Neonatal capability toggles — drive triage routing
+                (a hospital without pediatric resus cannot accept a RED peds
+                case; neonatal flag controls neonate referral). */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              <label className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer" style={glassInner}>
+                <input type="checkbox" checked={form.hasPediatricResus} onChange={(e) => setForm({ ...form, hasPediatricResus: e.target.checked })} className="w-4 h-4 accent-cyan-500" />
+                <span className={`text-xs font-semibold ${text.body}`}>Has Pediatric Resuscitation</span>
+              </label>
+              <label className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer" style={glassInner}>
+                <input type="checkbox" checked={form.hasNeonatalUnit} onChange={(e) => setForm({ ...form, hasNeonatalUnit: e.target.checked })} className="w-4 h-4 accent-cyan-500" />
+                <span className={`text-xs font-semibold ${text.body}`}>Has Neonatal Unit</span>
+              </label>
+            </div>
+
+            {!editId && (
+              <p className={`text-[11px] mt-2 ${text.muted}`}>
+                Hospital code will be auto-generated from the hospital name (e.g. "King Faisal Hospital" → KFH-001).
+              </p>
+            )}
 
             {/* Cascading Rwanda location picker — V46+. Replaces the
                 free-text location guesswork on the Address field with a
@@ -195,7 +286,7 @@ export function HospitalManagement() {
             </div>
 
             <div className="flex items-center gap-3 mt-4">
-              <button onClick={handleSave} disabled={formLoading || !form.name || !form.hospitalCode} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
+              <button onClick={handleSave} disabled={formLoading || !form.name} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
                 {formLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} {editId ? 'Update' : 'Register'}
               </button>
               <button onClick={() => { setShowForm(false); setEditId(null); }} className={`px-4 py-2.5 text-xs font-bold rounded-xl ${text.muted}`}>Cancel</button>
@@ -233,10 +324,23 @@ export function HospitalManagement() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg text-emerald-500 bg-emerald-500/10">Active</span>
-                    <button onClick={() => startEdit(h)} className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'} transition-colors`}>
+                    {h.active === false ? (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg text-rose-500 bg-rose-500/10">Inactive</span>
+                    ) : (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg text-emerald-500 bg-emerald-500/10">Active</span>
+                    )}
+                    <button title="Edit" onClick={() => startEdit(h)} className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'} transition-colors`}>
                       <Pencil className="w-3.5 h-3.5 text-slate-400" />
                     </button>
+                    {h.active === false ? (
+                      <button title="Reactivate" onClick={() => handleReactivate(h)} className={`w-7 h-7 rounded-lg flex items-center justify-center hover:bg-emerald-500/10 transition-colors`}>
+                        <Power className="w-3.5 h-3.5 text-emerald-500" />
+                      </button>
+                    ) : (
+                      <button title="Deactivate" onClick={() => handleDeactivate(h)} className={`w-7 h-7 rounded-lg flex items-center justify-center hover:bg-rose-500/10 transition-colors`}>
+                        <PowerOff className="w-3.5 h-3.5 text-rose-500" />
+                      </button>
+                    )}
                   </div>
                 </div>
 

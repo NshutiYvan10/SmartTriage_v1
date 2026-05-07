@@ -107,7 +107,8 @@ export interface AuthResponse {
 
 export interface CreateHospitalRequest {
   name: string;
-  hospitalCode: string;
+  /** Optional. Server auto-generates from name initials (e.g. "King Faisal Hospital" → "KFH-001") when omitted. */
+  hospitalCode?: string;
   address?: string;
   city?: string;
   province?: string;
@@ -118,6 +119,14 @@ export interface CreateHospitalRequest {
   bedCapacity?: number;
   edCapacity?: number;
   icuCapacity?: number;
+  hasPediatricResus?: boolean;
+  hasNeonatalUnit?: boolean;
+  // Structured Rwanda location FKs (V46+)
+  provinceId?: string;
+  districtId?: string;
+  sectorId?: string;
+  cellId?: string;
+  villageId?: string;
 }
 
 export interface HospitalResponse {
@@ -134,6 +143,14 @@ export interface HospitalResponse {
   bedCapacity: number;
   edCapacity: number;
   icuCapacity: number;
+  hasPediatricResus: boolean;
+  hasNeonatalUnit: boolean;
+  active: boolean;
+  provinceId: string | null;
+  districtId: string | null;
+  sectorId: string | null;
+  cellId: string | null;
+  villageId: string | null;
   createdAt: string;
   updatedAt: string;
 }

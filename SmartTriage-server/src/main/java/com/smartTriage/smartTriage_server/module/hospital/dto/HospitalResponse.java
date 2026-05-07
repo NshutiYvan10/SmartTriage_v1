@@ -27,6 +27,29 @@ public class HospitalResponse {
     private Integer bedCapacity;
     private Integer edCapacity;
     private Integer icuCapacity;
+
+    /** True when this hospital has paeds resus inside its PEDIATRIC zone. */
+    private boolean hasPediatricResus;
+
+    /** True when this hospital has a dedicated neonatal unit. */
+    private boolean hasNeonatalUnit;
+
+    /**
+     * Active flag — false means the hospital has been deactivated. No
+     * clinical operations should accept new visits or staff while in
+     * this state. Reactivate via the dedicated reactivate endpoint.
+     */
+    private boolean active;
+
+    // ── Structured location IDs (V46+) ──
+    // Surfaced so the admin Edit form can pre-fill the cascading
+    // RwandaLocationPicker without an extra round trip.
+    private UUID provinceId;
+    private UUID districtId;
+    private UUID sectorId;
+    private UUID cellId;
+    private UUID villageId;
+
     private Instant createdAt;
     private Instant updatedAt;
 }

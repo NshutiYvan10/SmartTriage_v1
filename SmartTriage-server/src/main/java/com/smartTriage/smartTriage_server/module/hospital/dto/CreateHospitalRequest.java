@@ -18,9 +18,32 @@ public class CreateHospitalRequest {
     @Size(max = 255, message = "Hospital name must not exceed 255 characters")
     private String name;
 
-    @NotBlank(message = "Hospital code is required")
+    /**
+     * Optional. When omitted (or blank), the server auto-generates a
+     * unique code from the hospital name (e.g. "King Faisal Hospital"
+     * → "KFH-001"). Operators can still supply a specific code if
+     * they want to mirror an external system's identifier; uniqueness
+     * is enforced either way.
+     */
     @Size(max = 20, message = "Hospital code must not exceed 20 characters")
     private String hospitalCode;
+
+    /**
+     * True when this hospital has full resuscitation capability inside
+     * its dedicated PEDIATRIC zone (paeds defibrillator, paeds drug
+     * calcs, full ETT range). Affects RED-pediatric placement: when
+     * true, RED peds go to PEDIATRIC; when false they go to RESUS.
+     * Defaults to false — the conservative direction.
+     */
+    private Boolean hasPediatricResus;
+
+    /**
+     * True when this hospital has a dedicated neonatal unit with
+     * neonatal-specific equipment and trained staff. Affects neonatal
+     * (≤28 days) placement: when true, they go to NEONATAL regardless
+     * of category; when false they fall through to pediatric routing.
+     */
+    private Boolean hasNeonatalUnit;
 
     private String address;
     private String city;

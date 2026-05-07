@@ -20,4 +20,10 @@ export const hospitalApi = {
 
   delete: (id: string) =>
     del<void>(`/hospitals/${id}`),
+
+  deactivate: (id: string) =>
+    del<void>(`/hospitals/${id}`),
+
+  reactivate: (id: string) =>
+    post<HospitalResponse>(`/hospitals/${id}/reactivate`, {}),
 };

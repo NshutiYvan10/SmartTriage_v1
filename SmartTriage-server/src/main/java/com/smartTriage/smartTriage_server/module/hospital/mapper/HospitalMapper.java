@@ -26,6 +26,8 @@ public final class HospitalMapper {
                 .bedCapacity(request.getBedCapacity())
                 .edCapacity(request.getEdCapacity())
                 .icuCapacity(request.getIcuCapacity())
+                .hasPediatricResus(Boolean.TRUE.equals(request.getHasPediatricResus()))
+                .hasNeonatalUnit(Boolean.TRUE.equals(request.getHasNeonatalUnit()))
                 .build();
     }
 
@@ -44,6 +46,14 @@ public final class HospitalMapper {
                 .bedCapacity(hospital.getBedCapacity())
                 .edCapacity(hospital.getEdCapacity())
                 .icuCapacity(hospital.getIcuCapacity())
+                .hasPediatricResus(hospital.isHasPediatricResus())
+                .hasNeonatalUnit(hospital.isHasNeonatalUnit())
+                .active(hospital.isActive())
+                .provinceId(hospital.getProvinceRef() != null ? hospital.getProvinceRef().getId() : null)
+                .districtId(hospital.getDistrictRef() != null ? hospital.getDistrictRef().getId() : null)
+                .sectorId(hospital.getSectorRef() != null ? hospital.getSectorRef().getId() : null)
+                .cellId(hospital.getCellRef() != null ? hospital.getCellRef().getId() : null)
+                .villageId(hospital.getVillageRef() != null ? hospital.getVillageRef().getId() : null)
                 .createdAt(hospital.getCreatedAt())
                 .updatedAt(hospital.getUpdatedAt())
                 .build();
