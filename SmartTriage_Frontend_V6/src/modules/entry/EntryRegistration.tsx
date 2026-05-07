@@ -40,7 +40,8 @@ import { RwandaLocationPicker } from '@/components/RwandaLocationPicker';
 /* ─── Constants ─── */
 const ALLERGIES = ['Penicillin', 'Latex', 'Pollen', 'Food', 'Dairy', 'Other'];
 const CONDITIONS = ['Diabetes', 'HIV/AIDS', 'Heart Disease', 'Hypertension', 'Asthma', 'Other'];
-const PROVINCES = ['Kigali City', 'Eastern', 'Western', 'Northern', 'Southern'];
+// PROVINCES constant removed — provinces now come from the live
+// /api/v1/locations/rw/provinces endpoint via RwandaLocationPicker.
 const CHIEF_COMPLAINTS = [
   'Chest Pain',
   'Shortness of Breath',
@@ -85,9 +86,12 @@ interface FormData {
   weight: string;
   dateOfBirth: string;
   // Step 2 — Address
+  // streetAddress is the building / landmark (e.g. "near KK 15 Avenue
+  // church, plot 27") — Rwandan addresses are described relationally,
+  // not by numbered streets, so this field is now optional. Province
+  // → village granularity comes from the structured FK chain below.
   streetAddress: string;
   zipcode: string;
-  city: string;
   province: string;
   district: string;
   sector: string;
@@ -144,7 +148,6 @@ const INITIAL_FORM: FormData = {
   dateOfBirth: '',
   streetAddress: '',
   zipcode: '',
-  city: '',
   province: '',
   district: '',
   sector: '',
@@ -375,14 +378,15 @@ export function EntryRegistration() {
     }
 
     if (s === 2) {
-      if (!formData.streetAddress.trim()) e.streetAddress = 'Street address is required';
-      if (!formData.city.trim()) e.city = 'City is required';
       // Structured-location validation: require at least province +
       // district. Sector/cell/village are encouraged but optional —
       // a clinician may legitimately know only down to district when
       // registering a stranger or an unconscious patient. The
       // RwandaLocationPicker enforces cascade integrity so we never
       // get a (province, district) pair that doesn't match.
+      // streetAddress (building / landmark) is now optional — Rwandan
+      // addresses are mostly relational and many patients won't have
+      // one to give.
       if (!formData.provinceId) e.province = 'Province is required';
       if (!formData.districtId) e.district = 'District is required';
     }
@@ -473,16 +477,10 @@ export function EntryRegistration() {
         gender: formData.gender,
         nationalId: formData.nationalId || undefined,
         phoneNumber: formData.contactPersonPhone || undefined,
-        // Address is now just the street/landmark detail. The
-        // administrative location (province/district/sector/cell/
-        // village) lives on the structured FK chain below — no
-        // need to concatenate it into the address string. The
-        // legacy district/province text fields are no longer
-        // populated by the picker, so including them here would
-        // produce a degraded "Plot 5, , Kigali, " string.
-        address: [formData.streetAddress, formData.city]
-          .filter(Boolean)
-          .join(', ') || undefined,
+        // Address is the optional building / landmark string. The
+        // administrative location (province → village) lives on the
+        // structured FK chain below.
+        address: formData.streetAddress.trim() || undefined,
         emergencyContactName: formData.contactPersonName || formData.guardianName || undefined,
         emergencyContactPhone: formData.contactPersonPhone || formData.guardianPhone || undefined,
         // Persistent clinical facts captured at registration so they
@@ -873,31 +871,37 @@ export function EntryRegistration() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div>
-                  <label className={labelCls}>Street Address <span className="text-red-400">*</span></label>
-                  <input type="text" className={inputClass('streetAddress')} style={glassInner} value={formData.streetAddress} onChange={(e) => set('streetAddress', e.target.value)} placeholder="Enter street address" />
-                  {errors.streetAddress && <p className="text-red-500 text-xs mt-1.5 ml-1 font-medium">{errors.streetAddress}</p>}
+                {/* Building / Landmark — optional free-text for the
+                    local detail Rwandan addresses describe relationally
+                    ("near KK 15 Avenue church", "next to the primary
+                    school", "Block A, plot 27"). Street auto-population
+                    is not feasible: there is no comprehensive village→
+                    street register for Rwanda, and reverse-geocoding
+                    via GPS would only give Google-Maps-style
+                    approximations. The structured location below
+                    (Province → Village) handles the administrative
+                    granularity. */}
+                <div className="sm:col-span-2">
+                  <label className={labelCls}>
+                    Building / Landmark
+                    <span className="ml-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider">Optional</span>
+                  </label>
+                  <input
+                    type="text"
+                    className={inputClass('streetAddress')}
+                    style={glassInner}
+                    value={formData.streetAddress}
+                    onChange={(e) => set('streetAddress', e.target.value)}
+                    placeholder="e.g. near KK 15 Ave Church, Block A plot 27"
+                  />
                 </div>
 
                 <div>
-                  <label className={labelCls}>Zipcode</label>
+                  <label className={labelCls}>
+                    Zipcode
+                    <span className="ml-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider">Optional</span>
+                  </label>
                   <input type="text" className={inputClass('zipcode')} style={glassInner} value={formData.zipcode} onChange={(e) => set('zipcode', e.target.value)} placeholder="Enter zipcode" />
-                </div>
-
-                <div>
-                  <label className={labelCls}>City <span className="text-red-400">*</span></label>
-                  <select className={selectClass('city')} style={glassInner} value={formData.city} onChange={(e) => set('city', e.target.value)}>
-                    <option value="">Select City</option>
-                    <option value="Kigali">Kigali</option>
-                    <option value="Butare">Butare</option>
-                    <option value="Gitarama">Gitarama</option>
-                    <option value="Ruhengeri">Ruhengeri</option>
-                    <option value="Gisenyi">Gisenyi</option>
-                    <option value="Byumba">Byumba</option>
-                    <option value="Cyangugu">Cyangugu</option>
-                    <option value="Kibungo">Kibungo</option>
-                  </select>
-                  {errors.city && <p className="text-red-500 text-xs mt-1.5 ml-1 font-medium">{errors.city}</p>}
                 </div>
 
                 {/* Cascading Rwanda location picker — V46+
@@ -1431,8 +1435,7 @@ export function EntryRegistration() {
                   Address Information
                 </h4>
                 {[
-                  ['Street Address', formData.streetAddress],
-                  ['City', formData.city],
+                  ['Building / Landmark', formData.streetAddress],
                   ['Province', formData.province],
                   ['District', formData.district],
                   ['Sector / Cell / Village', [formData.sector, formData.cell, formData.village].filter(Boolean).join(' / ')],
