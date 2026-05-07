@@ -21,6 +21,12 @@ interface MyShiftInfo {
   isShiftLead: boolean;
   /** True when there is any active shift assignment for this user. */
   isOnShift: boolean;
+  /**
+   * V44+ off-duty indicator. True when the user has an APPROVED leave
+   * row covering today. Backend canAssign denies all shift-management
+   * actions for this user; the sidebar surfaces an "On Leave" badge.
+   */
+  isOnApprovedLeave: boolean;
   /** Full shift assignment details (null when off-shift). */
   assignment: ShiftAssignmentResponse | null;
   /** Whether the initial fetch is still in flight. */
@@ -33,6 +39,7 @@ export function useMyShift(): MyShiftInfo {
   const user = useAuthStore((s) => s.user);
   const refreshAuthShift = useAuthStore((s) => s.refreshCurrentShift);
   const [assignment, setAssignment] = useState<ShiftAssignmentResponse | null>(null);
+  const [isOnApprovedLeave, setIsOnApprovedLeave] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchShift = useCallback(async () => {
@@ -42,15 +49,18 @@ export function useMyShift(): MyShiftInfo {
     }
     setIsLoading(true);
     try {
-      const { assignment: a } = await shiftApi.getMyCurrent();
+      const res = await shiftApi.getMyCurrent();
       // Backend sentinel: '' or null means "no active shift".
-      setAssignment(a ? (a as ShiftAssignmentResponse) : null);
+      setAssignment(res.assignment ? (res.assignment as ShiftAssignmentResponse) : null);
+      // V44+ off-duty signal — drives the sidebar "On Leave" badge.
+      setIsOnApprovedLeave(!!res.isOnApprovedLeave);
       // Also push the result into the auth store so other components
       // reading user.currentZone / user.isShiftLead stay consistent.
       await refreshAuthShift();
     } catch (err) {
       console.error('[useMyShift] Failed to fetch shift:', err);
       setAssignment(null);
+      setIsOnApprovedLeave(false);
     } finally {
       setIsLoading(false);
     }
@@ -64,6 +74,7 @@ export function useMyShift(): MyShiftInfo {
     zone: assignment?.zone ?? null,
     isShiftLead: !!assignment?.isShiftLead,
     isOnShift: !!assignment,
+    isOnApprovedLeave,
     assignment,
     isLoading,
     refresh: fetchShift,

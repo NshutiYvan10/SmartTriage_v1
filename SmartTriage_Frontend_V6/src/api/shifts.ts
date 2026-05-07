@@ -62,5 +62,15 @@ export const shiftApi = {
    * user's currently-assigned zone + shift-lead status.
    */
   getMyCurrent: () =>
-    get<{ assignment: ShiftAssignmentResponse | null | '' }>('/shifts/me/current'),
+    get<{
+      assignment: ShiftAssignmentResponse | null | '';
+      /**
+       * V44+ off-duty indicator. TRUE when the authenticated user has an
+       * APPROVED StaffLeave row covering today (Africa/Kigali). Drives
+       * the "On Leave" badge in the sidebar header so the user knows
+       * their shift-management actions are blocked server-side and
+       * colleagues see they're off the floor.
+       */
+      isOnApprovedLeave: boolean;
+    }>('/shifts/me/current'),
 };

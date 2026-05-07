@@ -2,6 +2,7 @@ package com.smartTriage.smartTriage_server.module.user.service;
 
 import com.smartTriage.smartTriage_server.common.enums.Designation;
 import com.smartTriage.smartTriage_server.common.enums.Role;
+import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.DuplicateResourceException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
@@ -86,6 +87,14 @@ public class UserService implements UserDetailsService {
     @Transactional
     public void deactivateUser(UUID id) {
         User user = findUserOrThrow(id);
+        // V44+ at-least-one-CN invariant: deactivating the last Charge
+        // Nurse at a hospital would leave the floor without designated
+        // unit-management authority. Block until an admin appoints a
+        // replacement first.
+        if (user.getDesignation() == Designation.CHARGE_NURSE
+                && user.getHospital() != null) {
+            assertNotLastChargeNurse(user, "deactivate");
+        }
         user.softDelete();
         userRepository.save(user);
         log.info("User deactivated: {}", user.getEmail());
@@ -99,6 +108,13 @@ public class UserService implements UserDetailsService {
     public UserResponse updateDesignation(UUID userId, Designation designation) {
         User user = findUserOrThrow(userId);
         validateRoleDesignationPair(user.getRole(), designation);
+        // V44+ at-least-one-CN invariant: prevent demotion of the last
+        // Charge Nurse via designation change.
+        if (user.getDesignation() == Designation.CHARGE_NURSE
+                && designation != Designation.CHARGE_NURSE
+                && user.getHospital() != null) {
+            assertNotLastChargeNurse(user, "demote");
+        }
         user.setDesignation(designation);
         user = userRepository.save(user);
         log.info("User {} designation updated to {}", user.getEmail(), designation);
@@ -112,6 +128,17 @@ public class UserService implements UserDetailsService {
     public UserResponse updateUser(UUID userId, UpdateUserRequest request) {
         User user = findUserOrThrow(userId);
         validateRoleDesignationPair(request.getRole(), request.getDesignation());
+        // V44+ at-least-one-CN invariant: catch the case where the admin
+        // edit either changes the designation away from CHARGE_NURSE or
+        // changes the role away from NURSE (which makes the CN designation
+        // illegal). Both effectively remove the last CN if no replacement
+        // has been appointed.
+        boolean wasChargeNurse = user.getDesignation() == Designation.CHARGE_NURSE;
+        boolean willBeChargeNurse = request.getRole() == Role.NURSE
+                && request.getDesignation() == Designation.CHARGE_NURSE;
+        if (wasChargeNurse && !willBeChargeNurse && user.getHospital() != null) {
+            assertNotLastChargeNurse(user, "remove CHARGE_NURSE designation from");
+        }
         user.setFirstName(request.getFirstName());
         user.setLastName(request.getLastName());
         user.setPhoneNumber(request.getPhoneNumber());
@@ -126,6 +153,27 @@ public class UserService implements UserDetailsService {
         user = userRepository.save(user);
         log.info("User updated: {} {}", user.getFirstName(), user.getLastName());
         return UserMapper.toResponse(user);
+    }
+
+    /**
+     * Throws if removing this user's CHARGE_NURSE designation (via
+     * deactivate / role change / designation change) would leave their
+     * hospital with zero active charge nurses. Admins must appoint a
+     * replacement first — every hospital floor needs at least one
+     * permanent unit-management authority.
+     */
+    private void assertNotLastChargeNurse(User user, String actionVerb) {
+        UUID hospitalId = user.getHospital().getId();
+        long currentCount = userRepository
+                .countByHospitalIdAndDesignationAndIsActiveTrue(hospitalId, Designation.CHARGE_NURSE);
+        // currentCount includes the user being changed. After the change
+        // the count would drop by 1 — block when that would hit 0.
+        if (currentCount <= 1) {
+            throw new ClinicalBusinessException(
+                    "Cannot " + actionVerb + " user " + user.getEmail()
+                            + " — they are the only Charge Nurse at this hospital. "
+                            + "Appoint another Charge Nurse first, then retry.");
+        }
     }
 
     public User findUserOrThrow(UUID id) {

@@ -4,6 +4,7 @@ import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.module.shift.dto.CreateShiftAssignmentRequest;
 import com.smartTriage.smartTriage_server.module.shift.dto.ShiftAssignmentResponse;
+import com.smartTriage.smartTriage_server.module.shift.repository.StaffLeaveRepository;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import jakarta.validation.Valid;
@@ -14,6 +15,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,6 +33,7 @@ import java.util.UUID;
 public class ShiftAssignmentController {
 
     private final ShiftAssignmentService shiftAssignmentService;
+    private final StaffLeaveRepository staffLeaveRepository;
 
     /**
      * Assign a staff member to a zone for the current shift.
@@ -95,15 +99,30 @@ public class ShiftAssignmentController {
     @GetMapping("/me/current")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getMyCurrentShift() {
         User user = currentUser();
+        Map<String, Object> body = new HashMap<>();
         if (user == null) {
-            return ResponseEntity.ok(ApiResponse.success(
-                    Map.of("assignment", "")));
+            body.put("assignment", "");
+            body.put("isOnApprovedLeave", false);
+            return ResponseEntity.ok(ApiResponse.success(body));
         }
         Optional<ShiftAssignmentResponse> assignment =
                 shiftAssignmentService.getCurrentShiftForUser(user.getId());
-        return ResponseEntity.ok(ApiResponse.success(
-                assignment.<Map<String, Object>>map(a -> Map.of("assignment", (Object) a))
-                        .orElseGet(() -> Map.of("assignment", ""))));
+        body.put("assignment", assignment.<Object>map(a -> a).orElse(""));
+
+        // V44+ off-duty indicator: tell the frontend whether the
+        // authenticated user has an APPROVED leave row covering today.
+        // Drives the "On Leave" badge in the sidebar header so a CN
+        // who's officially off the floor sees an unmistakable cue
+        // (and so colleagues looking at their profile know not to
+        // route work to them). Approval gates on the backend already
+        // block any accidental shift-management actions; this is the
+        // matching UX cue.
+        LocalDate todayKigali = LocalDate.now(ZoneId.of("Africa/Kigali"));
+        boolean onLeave = !staffLeaveRepository
+                .findApprovedCovering(user.getId(), todayKigali).isEmpty();
+        body.put("isOnApprovedLeave", onLeave);
+
+        return ResponseEntity.ok(ApiResponse.success(body));
     }
 
     /** Resolves the User from the JWT-authenticated principal. */

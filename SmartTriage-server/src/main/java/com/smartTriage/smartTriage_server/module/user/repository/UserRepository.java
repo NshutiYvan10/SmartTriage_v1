@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.user.repository;
 
+import com.smartTriage.smartTriage_server.common.enums.Designation;
 import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import org.springframework.data.domain.Page;
@@ -37,4 +38,12 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      */
     @Query("SELECT u.hospital.id FROM User u WHERE u.id = :userId AND u.isActive = true")
     Optional<UUID> findHospitalIdByUserId(@Param("userId") UUID userId);
+
+    /**
+     * Count active users at this hospital with the given designation.
+     * Used to enforce the "at least one Charge Nurse per hospital"
+     * invariant — admins cannot demote the last CN without explicitly
+     * appointing a replacement first. See {@code UserService.updateUser}.
+     */
+    long countByHospitalIdAndDesignationAndIsActiveTrue(UUID hospitalId, Designation designation);
 }

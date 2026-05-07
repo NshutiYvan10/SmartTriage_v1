@@ -3,7 +3,12 @@ package com.smartTriage.smartTriage_server.module.shift.service;
 import com.smartTriage.smartTriage_server.common.enums.Designation;
 import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.module.shift.entity.ShiftAssignment;
+import com.smartTriage.smartTriage_server.module.shift.entity.ShiftSwapRequest;
+import com.smartTriage.smartTriage_server.module.shift.entity.StaffLeave;
+import com.smartTriage.smartTriage_server.module.shift.repository.ChargeNurseDelegationRepository;
 import com.smartTriage.smartTriage_server.module.shift.repository.ShiftAssignmentRepository;
+import com.smartTriage.smartTriage_server.module.shift.repository.ShiftSwapRequestRepository;
+import com.smartTriage.smartTriage_server.module.shift.repository.StaffLeaveRepository;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +17,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -36,6 +44,12 @@ import java.util.UUID;
  *   <li>The user who held the badge in the previous shift, within the
  *       {@link ShiftAssignmentService#SHIFT_LEAD_GRACE grace window}, so
  *       the changeover never has an authority gap.</li>
+ *   <li>An <b>acting Charge Nurse</b> with a currently-valid
+ *       {@link com.smartTriage.smartTriage_server.module.shift.entity.ChargeNurseDelegation}
+ *       row pointing at them — used when the on-duty CN has formally
+ *       delegated authority for a defined window (off-site meeting,
+ *       short absence) without leaving the unit without a single point
+ *       of authority.</li>
  * </ol>
  *
  * <h2>Exception-safety</h2>
@@ -65,6 +79,9 @@ public class ShiftAssignmentAuthz {
     private final ShiftAssignmentService shiftAssignmentService;
     private final ShiftAssignmentRepository shiftAssignmentRepository;
     private final UserRepository userRepository;
+    private final ChargeNurseDelegationRepository chargeNurseDelegationRepository;
+    private final StaffLeaveRepository staffLeaveRepository;
+    private final ShiftSwapRequestRepository shiftSwapRequestRepository;
 
     /**
      * @return true if the authenticated user may assign staff for the given
@@ -86,8 +103,26 @@ public class ShiftAssignmentAuthz {
             boolean sameHospital = belongsToHospital(user, hospitalId);
 
             // Hospital admin for the target hospital — fallback authority.
+            // Admins remain accountable even on leave (governance reach is
+            // their job); only clinicians are gated by the leave check below.
             if (user.getRole() == Role.HOSPITAL_ADMIN && sameHospital) {
                 return true;
+            }
+
+            // V44+ off-duty guard: a clinician (DOCTOR / NURSE / etc.) on
+            // approved leave covering today is not on the floor. Their
+            // role-based authority — including CHARGE_NURSE designation,
+            // shift-lead badge, and any active delegation — is suspended
+            // until the leave window ends. Without this check, a CN whose
+            // own leave is APPROVED could still rubber-stamp swap/leave
+            // approvals from home, defeating the approval path's intent.
+            //
+            // Admins (SUPER_ADMIN / HOSPITAL_ADMIN) above this point are
+            // already returned; they're not affected by this guard.
+            if (isOnApprovedLeaveToday(user.getId())) {
+                log.debug("canAssign denied for {} — user is on approved leave today",
+                        user.getEmail());
+                return false;
             }
 
             // Charge nurses manage the unit in Rwandan EDs — they own zone
@@ -110,6 +145,20 @@ public class ShiftAssignmentAuthz {
 
             // Previous shift-lead, still inside the grace window.
             if (shiftAssignmentService.isUserWithinShiftLeadGrace(user.getId(), hospitalId)) {
+                return true;
+            }
+
+            // Acting Charge Nurse — a CN has formally delegated authority
+            // to this user for a defined window (see ChargeNurseDelegation
+            // and V41). Active rows here grant canAssign authority just
+            // like the CN designation would; only NURSE-role users with
+            // sameHospital are eligible (defence-in-depth: prevents a
+            // stale row pointing at a non-nurse from leaking authority).
+            if (sameHospital
+                    && user.getRole() == Role.NURSE
+                    && chargeNurseDelegationRepository
+                            .findActiveDelegationForDelegate(hospitalId, user.getId(), Instant.now())
+                            .isPresent()) {
                 return true;
             }
 
@@ -145,6 +194,45 @@ public class ShiftAssignmentAuthz {
         } catch (Exception e) {
             log.error("canAssignForAssignment evaluation error for assignment {}: {}",
                     assignmentId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Resolve hospital from a leave row, then delegate to {@link #canAssign}.
+     * Used by {@code @PreAuthorize} on leave-decision endpoints — the
+     * caller doesn't pass {@code hospitalId} explicitly because it lives
+     * on the leave row itself.
+     */
+    @Transactional(readOnly = true)
+    public boolean canAssignForLeave(Authentication authentication, UUID leaveId) {
+        try {
+            if (leaveId == null) return false;
+            return staffLeaveRepository.findById(leaveId)
+                    .map(StaffLeave::getHospital)
+                    .map(h -> canAssign(authentication, h.getId()))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAssignForLeave evaluation error for leave {}: {}",
+                    leaveId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Resolve hospital from a swap request, then delegate to {@link #canAssign}.
+     */
+    @Transactional(readOnly = true)
+    public boolean canAssignForSwap(Authentication authentication, UUID swapId) {
+        try {
+            if (swapId == null) return false;
+            return shiftSwapRequestRepository.findById(swapId)
+                    .map(ShiftSwapRequest::getHospital)
+                    .map(h -> canAssign(authentication, h.getId()))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAssignForSwap evaluation error for swap {}: {}",
+                    swapId, e.getMessage(), e);
             return false;
         }
     }
@@ -198,5 +286,25 @@ public class ShiftAssignmentAuthz {
         }
         Optional<UUID> resolved = userRepository.findHospitalIdByUserId(user.getId());
         return resolved.map(hospitalId::equals).orElse(false);
+    }
+
+    /**
+     * V44+ off-duty guard. True when the user has at least one approved
+     * StaffLeave row whose [startsOn, endsOn] window covers today
+     * (Africa/Kigali — the operational time zone of the deployment).
+     *
+     * <p>Used by {@link #canAssign} to deny shift-management actions
+     * (assignments, approvals, delegation creation) for clinicians who
+     * are formally off the floor. Admins are not gated by this check;
+     * they bypass to true earlier in {@code canAssign}.
+     */
+    private boolean isOnApprovedLeaveToday(UUID userId) {
+        if (userId == null) return false;
+        // Africa/Kigali is the system's operational timezone (Rwanda).
+        // We compute "today" in that zone so a leave row that ends today
+        // still blocks today, regardless of where the JVM happens to think
+        // the date boundary sits.
+        LocalDate today = LocalDate.now(ZoneId.of("Africa/Kigali"));
+        return !staffLeaveRepository.findApprovedCovering(userId, today).isEmpty();
     }
 }

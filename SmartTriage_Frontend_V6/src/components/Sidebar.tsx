@@ -41,6 +41,7 @@ import { useThemeStore } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { canAccessPage, ROLE_META } from '@/types/roles';
 import type { AppPage } from '@/types/roles';
+import { useMyShift } from '@/hooks/useMyShift';
 import { useNavigate } from 'react-router-dom';
 
 interface SidebarProps {
@@ -61,6 +62,8 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
   const sidebarNavigate = useNavigate();
   const userRole = (user?.role && user.role in ROLE_META) ? user.role : 'NURSE';
   const roleMeta = ROLE_META[userRole];
+  // V44+ off-duty signal — drives the "On Leave" badge below.
+  const { isOnApprovedLeave } = useMyShift();
 
   useEffect(() => {
     if (parentIsExpanded !== undefined) {
@@ -522,7 +525,23 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
             />
           </div>
           <div className="flex flex-col flex-1 min-w-0 text-left">
-            <span className="font-semibold text-white text-[13px] truncate leading-tight">{user?.fullName || 'User'}</span>
+            <span className="font-semibold text-white text-[13px] truncate leading-tight flex items-center gap-1.5">
+              {user?.fullName || 'User'}
+              {/* V44+ off-duty badge — visible whenever the authenticated
+                  user has an APPROVED leave row covering today. Backend
+                  canAssign denies their shift-management actions; this
+                  is the matching visual cue. */}
+              {isOnApprovedLeave && (
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full
+                             bg-amber-500/25 border border-amber-400/60 text-amber-200
+                             text-[9px] font-bold uppercase tracking-wider flex-shrink-0"
+                  title="You have an approved leave row covering today. Shift-management actions are blocked while on leave."
+                >
+                  On Leave
+                </span>
+              )}
+            </span>
             <span className="text-slate-400 text-[11px] truncate leading-tight flex items-center gap-1">
               <Shield className="w-3 h-3" />
               {user?.designationLabel || roleMeta.label}
