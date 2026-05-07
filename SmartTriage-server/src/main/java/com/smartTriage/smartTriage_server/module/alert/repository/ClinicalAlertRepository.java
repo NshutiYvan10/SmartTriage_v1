@@ -24,6 +24,15 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
         Page<ClinicalAlert> findByVisitIdAndIsActiveTrueOrderByCreatedAtDesc(UUID visitId, Pageable pageable);
 
         /**
+         * Idempotency check used by the identity-overdue scheduler — has
+         * an alert of the given type already been raised for this visit
+         * and is it still active (acknowledged or not)? Prevents the job
+         * from re-firing every tick while the placeholder remains.
+         */
+        boolean existsByVisitIdAndAlertTypeAndIsActiveTrue(UUID visitId,
+                                                          com.smartTriage.smartTriage_server.common.enums.AlertType alertType);
+
+        /**
          * All alerts for a hospital (acknowledged + unacknowledged) — for the full
          * alert history view.
          */

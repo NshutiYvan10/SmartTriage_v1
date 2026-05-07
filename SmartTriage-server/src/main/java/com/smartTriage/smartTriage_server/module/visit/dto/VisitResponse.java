@@ -41,6 +41,30 @@ public class VisitResponse {
     /** Doctor of record (soft binding); null until first clinical action. */
     private UUID primaryClinicianId;
     private String primaryClinicianName;
+
+    // ── Direct Resus Admission flags (V44) ──
+    /**
+     * TRUE when the visit was admitted to RESUS but no bed was available.
+     * Frontend renders the resus-overflow banner + transfer prompt.
+     */
+    @JsonProperty("pendingResusOverflow")
+    private boolean pendingResusOverflow;
+
+    /**
+     * TRUE when this visit was created from an ambulance call-ahead
+     * before the patient physically arrived. Door clock has not started
+     * unless arrivalConfirmedAt is non-null.
+     */
+    @JsonProperty("ambulancePreArrival")
+    private boolean ambulancePreArrival;
+
+    /**
+     * For ambulance pre-arrival visits: when the patient was confirmed
+     * to have physically arrived. NULL until confirmed. Used as the
+     * door-clock anchor for arrival-time metrics.
+     */
+    private Instant arrivalConfirmedAt;
+
     private Instant createdAt;
     private Instant updatedAt;
 }

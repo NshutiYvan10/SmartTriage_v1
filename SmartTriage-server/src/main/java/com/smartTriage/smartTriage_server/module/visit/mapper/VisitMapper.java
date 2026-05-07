@@ -1,5 +1,7 @@
 package com.smartTriage.smartTriage_server.module.visit.mapper;
 
+import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
+import com.smartTriage.smartTriage_server.module.patient.service.UnidentifiedPatientNameService;
 import com.smartTriage.smartTriage_server.module.visit.dto.VisitResponse;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 
@@ -12,7 +14,7 @@ public final class VisitMapper {
                 .id(visit.getId())
                 .visitNumber(visit.getVisitNumber())
                 .patientId(visit.getPatient().getId())
-                .patientName(visit.getPatient().getFirstName() + " " + visit.getPatient().getLastName())
+                .patientName(formatPatientName(visit))
                 .hospitalId(visit.getHospital().getId())
                 .arrivalMode(visit.getArrivalMode())
                 .arrivalTime(visit.getArrivalTime())
@@ -29,6 +31,10 @@ public final class VisitMapper {
                 .isPediatric(visit.isPediatric())
                 .retriageCount(visit.getRetriageCount())
                 .currentEdZone(visit.getCurrentEdZone())
+                // Direct Resus Admission flags (V44)
+                .pendingResusOverflow(visit.isPendingResusOverflow())
+                .ambulancePreArrival(visit.isAmbulancePreArrival())
+                .arrivalConfirmedAt(visit.getArrivalConfirmedAt())
                 .createdAt(visit.getCreatedAt())
                 .updatedAt(visit.getUpdatedAt());
         if (visit.getPrimaryClinician() != null) {
@@ -38,5 +44,23 @@ public final class VisitMapper {
                                     + visit.getPrimaryClinician().getLastName());
         }
         return b.build();
+    }
+
+    /**
+     * Format the patient name for display. For unidentified patients
+     * (Direct Resus placeholder), uses the phonetic display name
+     * ("Unknown Alpha (child)") so the visit list and search results
+     * read correctly in every UI surface without each surface having
+     * to re-implement the formatting.
+     */
+    private static String formatPatientName(Visit visit) {
+        Patient p = visit.getPatient();
+        if (p == null) return "Unknown patient";
+        if (p.isUnidentified()) {
+            return UnidentifiedPatientNameService.buildDisplayName(
+                    p.getPlaceholderLabel(), visit.isPediatric());
+        }
+        return ((p.getFirstName() != null ? p.getFirstName() : "") + " "
+                + (p.getLastName() != null ? p.getLastName() : "")).trim();
     }
 }

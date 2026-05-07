@@ -4,6 +4,7 @@ import com.smartTriage.smartTriage_server.common.entity.BaseEntity;
 import com.smartTriage.smartTriage_server.common.enums.Gender;
 import com.smartTriage.smartTriage_server.common.enums.PregnancyStatus;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -133,6 +134,51 @@ public class Patient extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "hospital_id", nullable = false)
     private Hospital hospital;
+
+    // ═══════════════════════════════════════════════════════════════
+    // Unidentified-patient identity placeholder (V44 — Direct Resus)
+    //
+    // When a Red patient arrives without identity (cardiac arrest at
+    // the door, unconscious trauma, etc.), the Direct Resus pathway
+    // creates a Patient with first_name="Unknown" and a NATO phonetic
+    // last_name ("Alpha", "Bravo", ...). Care begins immediately;
+    // identity is back-filled once the resus team has bandwidth or
+    // family arrives. The partial index idx_patient_unidentified is
+    // defined in the V44 migration directly because JPA @Index does
+    // not support WHERE.
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * TRUE while this patient row is a phonetic placeholder. Flips to
+     * FALSE the moment a clinician resolves identity (typing the real
+     * name, or merging into an existing MPI record). Drives the
+     * "?" badge in the UI and the identity-overdue alerts.
+     */
+    @Column(name = "is_unidentified", nullable = false)
+    @Builder.Default
+    private boolean isUnidentified = false;
+
+    /**
+     * The phonetic label assigned at admission ("Alpha", "Bravo-2", ...).
+     * Preserved as an audit anchor even after identity is resolved —
+     * a chart review of "Marie Uwimana" can still see she was admitted
+     * as Unknown Alpha at 14:32.
+     */
+    @Column(name = "placeholder_label", length = 50)
+    private String placeholderLabel;
+
+    /** When the placeholder was assigned. Drives the identity-overdue clock. */
+    @Column(name = "placeholder_assigned_at")
+    private Instant placeholderAssignedAt;
+
+    /** When identity was resolved. NULL while still unidentified. */
+    @Column(name = "identified_at")
+    private Instant identifiedAt;
+
+    /** The clinician who resolved the identity. NULL while still unidentified. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "identified_by_user_id")
+    private User identifiedBy;
 
     /**
      * Returns true if patient is pediatric (< 13 years old).

@@ -47,5 +47,19 @@ public enum AlertType {
 
     // ICU escalation alert types
     ICU_ESCALATION_REQUESTED,
-    ICU_BED_UNAVAILABLE
+    ICU_BED_UNAVAILABLE,
+
+    // Direct Resus Admission alert types (V44)
+    // - DIRECT_RESUS_ADMISSION:  CRITICAL alert fanned to the resus zone
+    //                            the moment a nurse declares Direct Resus.
+    // - RESUS_OVERFLOW:          CRITICAL alert when the new admission has
+    //                            no available RESUS bed; carries the
+    //                            transfer-candidate ranking in the message.
+    // - IDENTITY_UNRESOLVED:     HIGH alert raised by the scheduled job
+    //                            when an unidentified patient has been in
+    //                            the system >= 2h without identity being
+    //                            resolved. Targets the charge nurse.
+    DIRECT_RESUS_ADMISSION,
+    RESUS_OVERFLOW,
+    IDENTITY_UNRESOLVED
 }

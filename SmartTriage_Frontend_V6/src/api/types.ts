@@ -274,6 +274,25 @@ export interface PatientResponse {
   ageInYears: number;
   isPediatric: boolean;
   hospitalId: string;
+
+  // ── Direct Resus placeholder (V44) ──
+  /**
+   * TRUE while this patient was admitted as a phonetic placeholder
+   * via Direct Resus and identity has not yet been resolved.
+   * Drives the "?" badge / italic display name in the UI.
+   */
+  isUnidentified: boolean;
+  /**
+   * Phonetic label assigned at admission ("Alpha", "Bravo-2"). Preserved
+   * across identity resolution as an audit anchor — chart review of the
+   * resolved patient can still see they were admitted as Unknown Alpha.
+   * NULL for normally-registered patients.
+   */
+  placeholderLabel: string | null;
+  placeholderAssignedAt: string | null;
+  identifiedAt: string | null;
+  identifiedByName: string | null;
+
   createdAt: string;
   updatedAt: string;
 }
@@ -373,8 +392,103 @@ export interface VisitResponse {
   /** Doctor of record (soft binding); null until first clinical action. */
   primaryClinicianId: string | null;
   primaryClinicianName: string | null;
+
+  // ── Direct Resus Admission flags (V44) ──
+  /**
+   * TRUE when the visit was admitted to RESUS but no bed was available.
+   * Frontend surfaces the resus-overflow banner + transfer prompt.
+   */
+  pendingResusOverflow: boolean;
+  /**
+   * TRUE when the visit was created from an ambulance call-ahead before
+   * the patient physically arrived. Door clock has not started until
+   * arrivalConfirmedAt is set.
+   */
+  ambulancePreArrival: boolean;
+  /** Door-clock anchor for ambulance pre-arrivals. Null until confirmed. */
+  arrivalConfirmedAt: string | null;
+
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Direct Resus Admission (V44) ──
+
+/**
+ * Request for POST /api/v1/admissions/direct-resus.
+ *
+ * Two modes:
+ * - existing patient: set `patientId`
+ * - unidentified arrival: leave `patientId` null and set `hospitalId`;
+ *   the server creates a placeholder Patient ("Unknown Alpha")
+ */
+export interface DirectResusAdmissionRequest {
+  patientId?: string | null;
+  hospitalId?: string | null;
+  /** One short clinical phrase ("cardiac arrest", "GSW to chest"). Required. */
+  reason: string;
+  isPediatric: boolean;
+  arrivalMode?: ArrivalMode | null;
+  /** TRUE for ambulance call-aheads — patient not yet physically present. */
+  ambulancePreArrival?: boolean;
+  /** Pre-hospital interventions, vitals, ETA — free text. */
+  preArrivalNotes?: string | null;
+  /** "MALE" / "FEMALE" / "OTHER" — used only for unidentified arrivals. */
+  estimatedGender?: string | null;
+}
+
+export interface TransferCandidateInfo {
+  visitId: string;
+  visitNumber: string;
+  bedId: string;
+  bedCode: string;
+  patientDisplayName: string;
+  currentCategory: string;
+  admitCategory: string;
+  placedAt: string | null;
+  minutesInBed: number;
+  suggestedDestinationZone: EdZone | null;
+  rationale: string;
+}
+
+export interface DirectResusAdmissionResponse {
+  visitId: string;
+  visitNumber: string;
+  patientId: string;
+  patientFirstName: string;
+  patientLastName: string;
+  isUnidentified: boolean;
+  /** Phonetic label ("Alpha", "Bravo-2") if patient was created as placeholder. */
+  placeholderLabel: string | null;
+  triageRecordId: string;
+  bedId: string | null;
+  bedCode: string | null;
+  bedZone: EdZone | null;
+  bedHasMonitor: boolean;
+  /** TRUE when no RESUS bed was available; transferCandidates is populated. */
+  overflow: boolean;
+  transferCandidates: TransferCandidateInfo[];
+  /** TRUE when the patient was admitted as unidentified — show "Set Identity" CTA. */
+  identityRequired: boolean;
+  arrivalTime: string | null;
+  ambulancePreArrival: boolean;
+}
+
+/**
+ * Request for POST /api/v1/patients/{id}/resolve-identity.
+ * Either firstName + lastName, OR mergeIntoPatientId, is required.
+ */
+export interface ResolveIdentityRequest {
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string;
+  gender?: Gender;
+  nationalId?: string;
+  phoneNumber?: string;
+  address?: string;
+  /** Set to merge the placeholder into an existing patient record. */
+  mergeIntoPatientId?: string;
+  resolutionNote?: string;
 }
 
 // ── Vital Signs ──

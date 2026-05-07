@@ -213,6 +213,16 @@ public class VisitService {
     }
 
     private String generateVisitNumber(String hospitalCode) {
+        return nextVisitNumber(hospitalCode);
+    }
+
+    /**
+     * Public visit-number generator. Used by other admission paths
+     * (Direct Resus) that need to construct a {@link com.smartTriage.smartTriage_server.module.visit.entity.Visit}
+     * directly while still drawing a unique visit number from the
+     * shared in-memory counter.
+     */
+    public String nextVisitNumber(String hospitalCode) {
         String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         long sequence = visitCounter.incrementAndGet();
         return String.format("V-%s-%s-%05d", hospitalCode, date, sequence);

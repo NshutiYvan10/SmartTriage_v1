@@ -66,4 +66,17 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
     Page<Patient> searchPatients(@Param("hospitalId") UUID hospitalId,
                                  @Param("query") String query,
                                  Pageable pageable);
+
+    /**
+     * Unidentified patients whose placeholder is older than the given
+     * threshold. Used by the identity-overdue scheduler to raise an
+     * IDENTITY_UNRESOLVED alert on patients still bearing a phonetic
+     * label after the configured wait time. Filtered to active patients.
+     */
+    @Query("SELECT p FROM Patient p " +
+            "WHERE p.isActive = true " +
+            "AND p.isUnidentified = true " +
+            "AND p.placeholderAssignedAt IS NOT NULL " +
+            "AND p.placeholderAssignedAt <= :threshold")
+    java.util.List<Patient> findUnidentifiedOlderThan(@Param("threshold") java.time.Instant threshold);
 }
