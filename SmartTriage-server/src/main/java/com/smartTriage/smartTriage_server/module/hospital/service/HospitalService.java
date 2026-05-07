@@ -25,15 +25,15 @@ public class HospitalService {
 
     private final HospitalRepository hospitalRepository;
     @org.springframework.beans.factory.annotation.Autowired
-    private com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwProvinceRepository rwProvinceRepository;
+    private com.smartTriage.smartTriage_server.module.location.repository.RwProvinceRepository rwProvinceRepository;
     @org.springframework.beans.factory.annotation.Autowired
-    private com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwDistrictRepository rwDistrictRepository;
+    private com.smartTriage.smartTriage_server.module.location.repository.RwDistrictRepository rwDistrictRepository;
     @org.springframework.beans.factory.annotation.Autowired
-    private com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwSectorRepository rwSectorRepository;
+    private com.smartTriage.smartTriage_server.module.location.repository.RwSectorRepository rwSectorRepository;
     @org.springframework.beans.factory.annotation.Autowired
-    private com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwCellRepository rwCellRepository;
+    private com.smartTriage.smartTriage_server.module.location.repository.RwCellRepository rwCellRepository;
     @org.springframework.beans.factory.annotation.Autowired
-    private com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwVillageRepository rwVillageRepository;
+    private com.smartTriage.smartTriage_server.module.location.repository.RwVillageRepository rwVillageRepository;
 
     /**
      * BedService is injected lazily to break a constructor-time cycle:

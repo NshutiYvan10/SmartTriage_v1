@@ -46,11 +46,11 @@ public class PatientService {
     private final PatientRepository patientRepository;
     private final VisitRepository visitRepository;
     private final HospitalService hospitalService;
-    private final com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwProvinceRepository rwProvinceRepository;
-    private final com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwDistrictRepository rwDistrictRepository;
-    private final com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwSectorRepository rwSectorRepository;
-    private final com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwCellRepository rwCellRepository;
-    private final com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwVillageRepository rwVillageRepository;
+    private final com.smartTriage.smartTriage_server.module.location.repository.RwProvinceRepository rwProvinceRepository;
+    private final com.smartTriage.smartTriage_server.module.location.repository.RwDistrictRepository rwDistrictRepository;
+    private final com.smartTriage.smartTriage_server.module.location.repository.RwSectorRepository rwSectorRepository;
+    private final com.smartTriage.smartTriage_server.module.location.repository.RwCellRepository rwCellRepository;
+    private final com.smartTriage.smartTriage_server.module.location.repository.RwVillageRepository rwVillageRepository;
 
     // Simple MRN counter — in production, this would use a database sequence
     private static final AtomicLong mrnCounter = new AtomicLong(100000);
