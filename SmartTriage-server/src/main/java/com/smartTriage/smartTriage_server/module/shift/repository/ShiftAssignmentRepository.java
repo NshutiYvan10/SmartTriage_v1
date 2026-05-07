@@ -78,6 +78,14 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
             UUID hospitalId, LocalDate shiftDate);
 
     /**
+     * All active assignments at a hospital across an inclusive date range.
+     * Used by the copy-week bulk operation to read every row in the source
+     * week in a single query, regardless of period.
+     */
+    List<ShiftAssignment> findByHospitalIdAndShiftDateBetweenAndIsActiveTrue(
+            UUID hospitalId, LocalDate from, LocalDate to);
+
+    /**
      * Find a user's shift history.
      */
     List<ShiftAssignment> findByUserIdAndIsActiveTrueOrderByShiftDateDescShiftPeriodDesc(UUID userId);

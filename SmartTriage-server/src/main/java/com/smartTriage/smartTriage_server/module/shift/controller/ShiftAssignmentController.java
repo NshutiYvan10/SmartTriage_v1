@@ -2,10 +2,14 @@ package com.smartTriage.smartTriage_server.module.shift.controller;
 
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
+import com.smartTriage.smartTriage_server.module.shift.dto.ApplyTemplateRequest;
+import com.smartTriage.smartTriage_server.module.shift.dto.BulkPlanResult;
+import com.smartTriage.smartTriage_server.module.shift.dto.CopyWeekRequest;
 import com.smartTriage.smartTriage_server.module.shift.dto.CreateShiftAssignmentRequest;
 import com.smartTriage.smartTriage_server.module.shift.dto.ShiftAssignmentResponse;
 import com.smartTriage.smartTriage_server.module.shift.repository.StaffLeaveRepository;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
+import com.smartTriage.smartTriage_server.module.shift.service.ShiftPlanningService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +37,7 @@ import java.util.UUID;
 public class ShiftAssignmentController {
 
     private final ShiftAssignmentService shiftAssignmentService;
+    private final ShiftPlanningService shiftPlanningService;
     private final StaffLeaveRepository staffLeaveRepository;
 
     /**
@@ -212,5 +217,38 @@ public class ShiftAssignmentController {
             @PathVariable UUID assignmentId) {
         ShiftAssignmentResponse response = shiftAssignmentService.setShiftLead(assignmentId);
         return ResponseEntity.ok(ApiResponse.success("Shift-lead badge transferred", response));
+    }
+
+    /* ════════════════════════ BULK PLANNING OPS ════════════════════════ */
+
+    /**
+     * Copy a full week of active assignments into another week, preserving
+     * (zone, function, period, isShiftLead, day-offset). Idempotent per
+     * slot — any target (date, period) that already has rows is skipped.
+     * The response reports per-slot outcomes so the UI can show partial
+     * success.
+     */
+    @PostMapping("/hospital/{hospitalId}/copy-week")
+    @PreAuthorize("@shiftAssignmentAuthz.canAssign(authentication, #hospitalId)")
+    public ResponseEntity<ApiResponse<BulkPlanResult>> copyWeek(
+            @PathVariable UUID hospitalId,
+            @Valid @RequestBody CopyWeekRequest request) {
+        BulkPlanResult result = shiftPlanningService.copyWeek(hospitalId, request);
+        return ResponseEntity.ok(ApiResponse.success("Week copied", result));
+    }
+
+    /**
+     * Materialise a specific template into every (date, period) in the
+     * supplied range. Idempotent per slot. Useful when a CN edits a
+     * template and wants the next N days to reflect it immediately
+     * instead of waiting for the daily scheduler.
+     */
+    @PostMapping("/hospital/{hospitalId}/apply-template")
+    @PreAuthorize("@shiftAssignmentAuthz.canAssign(authentication, #hospitalId)")
+    public ResponseEntity<ApiResponse<BulkPlanResult>> applyTemplate(
+            @PathVariable UUID hospitalId,
+            @Valid @RequestBody ApplyTemplateRequest request) {
+        BulkPlanResult result = shiftPlanningService.applyTemplate(hospitalId, request);
+        return ResponseEntity.ok(ApiResponse.success("Template applied", result));
     }
 }

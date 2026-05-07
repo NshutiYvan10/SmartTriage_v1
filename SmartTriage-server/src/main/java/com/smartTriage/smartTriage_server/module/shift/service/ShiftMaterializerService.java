@@ -128,6 +128,53 @@ public class ShiftMaterializerService {
         return created;
     }
 
+    /**
+     * Materialise a specific named template into one (date, period) slot.
+     * Used by the planning bulk-ops path (apply-template) where the CN
+     * picks the exact template — distinct from {@link #materializeShift}
+     * which always uses the active template for the period.
+     *
+     * <p>Idempotency: if the slot already has any active assignments, this
+     * method is a no-op and returns 0. Same leave-aware + auto-promote
+     * guarantees as the daily scheduler.
+     *
+     * @return rows created (0 if slot was already populated).
+     */
+    @Transactional
+    public int materializeFromTemplateExplicit(
+            ShiftTemplate template, Hospital hospital,
+            LocalDate shiftDate, ShiftPeriod shiftPeriod) {
+        List<ShiftAssignment> existing = shiftAssignmentRepository
+                .findByHospitalIdAndShiftDateAndShiftPeriodAndIsActiveTrue(
+                        hospital.getId(), shiftDate, shiftPeriod);
+        if (!existing.isEmpty()) {
+            return 0;
+        }
+        int created = materializeFromTemplate(template, hospital, shiftDate, shiftPeriod);
+        ensureActingShiftLead(hospital, shiftDate, shiftPeriod);
+        return created;
+    }
+
+    /**
+     * Run only the auto-promotion step on an already-materialised shift.
+     * Used by bulk-ops (e.g. copy-week) after they bulk-insert rows
+     * directly: the rows didn't go through {@link #materializeShift}, so
+     * the auto-promote safeguard hasn't run yet.
+     */
+    @Transactional
+    public void ensureActingShiftLeadPublic(Hospital hospital, LocalDate shiftDate, ShiftPeriod shiftPeriod) {
+        ensureActingShiftLead(hospital, shiftDate, shiftPeriod);
+    }
+
+    /**
+     * True when the user has approved leave covering this date. Exposed for
+     * planning services that copy/apply rows outside the materialiser's
+     * normal entry points and need the same leave-aware filter.
+     */
+    public boolean isOnApprovedLeavePublic(java.util.UUID userId, LocalDate shiftDate) {
+        return isOnApprovedLeave(userId, shiftDate);
+    }
+
     private int materializeFromTemplate(
             ShiftTemplate template, Hospital hospital, LocalDate shiftDate, ShiftPeriod shiftPeriod) {
         Instant now = Instant.now();

@@ -12,6 +12,7 @@ import com.smartTriage.smartTriage_server.module.shift.dto.ShiftAssignmentRespon
 import com.smartTriage.smartTriage_server.module.shift.entity.ShiftAssignment;
 import com.smartTriage.smartTriage_server.module.shift.mapper.ShiftAssignmentMapper;
 import com.smartTriage.smartTriage_server.module.shift.repository.ShiftAssignmentRepository;
+import com.smartTriage.smartTriage_server.module.shift.repository.StaffLeaveRepository;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -31,15 +33,22 @@ import java.util.stream.Collectors;
 /**
  * Shift Assignment Service — manages zone-based staff assignments per shift.
  *
- * KFH ED operates 3 shifts:
- * MORNING 07:00 – 13:00
- * AFTERNOON 13:00 – 19:00
- * NIGHT 19:00 – 07:00
+ * <p>The Rwandan EDs SmartTriage targets (KFH, CHUK, RMH, district hospitals)
+ * operate a 2-shift roster — see {@link ShiftPeriod}:
+ * <ul>
+ *   <li>{@code DAY}   — 07:00 – 19:00</li>
+ *   <li>{@code NIGHT} — 19:00 – 07:00 (crosses midnight)</li>
+ * </ul>
  *
- * The charge nurse assigns doctors and nurses to ED zones (RESUS, ACUTE,
- * GENERAL, etc.)
- * at the start of each shift. This mapping is used by the alert system to route
- * notifications to the correct zone doctor.
+ * <p>The Charge Nurse assigns doctors and nurses to ED zones (RESUS, ACUTE,
+ * GENERAL, AMBULATORY, PEDIATRIC, NEONATAL, ISOLATION, OBSERVATION) at the
+ * start of each shift. This mapping drives alert routing and per-user
+ * patient-list scoping.
+ *
+ * <p>Authority for staffing decisions is checked by
+ * {@link ShiftAssignmentAuthz#canAssign}; the on-duty Charge Nurse (or an
+ * acting CN per {@link com.smartTriage.smartTriage_server.module.shift.entity.ChargeNurseDelegation})
+ * is the primary actor, with HOSPITAL_ADMIN and SUPER_ADMIN as fallback.
  */
 @Slf4j
 @Service
@@ -50,6 +59,7 @@ public class ShiftAssignmentService {
     private final ShiftAssignmentRepository shiftAssignmentRepository;
     private final UserRepository userRepository;
     private final HospitalRepository hospitalRepository;
+    private final StaffLeaveRepository staffLeaveRepository;
 
     /**
      * Determine the current shift period based on current time.
@@ -83,7 +93,32 @@ public class ShiftAssignmentService {
     }
 
     /**
-     * Assign a staff member to a zone for the current shift.
+     * Assign a staff member to a zone for a specific shift.
+     *
+     * <p>If the request omits {@code shiftDate} and {@code shiftPeriod}, the
+     * assignment lands on the current shift (today's DAY or NIGHT, computed
+     * via {@link #getCurrentShiftDate()} / {@link #getCurrentShiftPeriod()}).
+     * If both are provided, the assignment targets that specific shift —
+     * this is how the calendar's quick-assign drawer schedules a future
+     * date from inside today's UI.
+     *
+     * <p>Server-side guards (in this order):
+     * <ol>
+     *   <li>If exactly one of {@code shiftDate} / {@code shiftPeriod} is set,
+     *       reject — both must be set together or both omitted.</li>
+     *   <li>{@code shiftDate} must not be in the past (Africa/Kigali).
+     *       Backdating roster history would corrupt audit trails.</li>
+     *   <li>The user cannot be on approved leave that covers
+     *       {@code shiftDate}. Cross-checked against
+     *       {@link StaffLeaveRepository#findApprovedCovering}.</li>
+     * </ol>
+     *
+     * <p>Conflict handling: if the user is already on the active roster
+     * for the same (date, period), the existing row is soft-ended before
+     * the new one is inserted — same behaviour as the today-only path.
+     * If the request sets {@code isShiftLead=true}, the existing badge
+     * holder for that shift is cleared first to satisfy the partial
+     * unique index.
      */
     @Transactional
     public ShiftAssignmentResponse assignToZone(UUID hospitalId, CreateShiftAssignmentRequest request) {
@@ -93,17 +128,63 @@ public class ShiftAssignmentService {
         User user = userRepository.findByIdAndIsActiveTrue(request.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", request.getUserId()));
 
-        LocalDate shiftDate = getCurrentShiftDate();
-        ShiftPeriod shiftPeriod = getCurrentShiftPeriod();
+        LocalDate shiftDate;
+        ShiftPeriod shiftPeriod;
 
-        // Deactivate any existing assignment for this user on this shift
+        // Both date and period must be specified together — targeting one
+        // without the other is ambiguous.
+        boolean hasDate = request.getShiftDate() != null;
+        boolean hasPeriod = request.getShiftPeriod() != null;
+        if (hasDate ^ hasPeriod) {
+            throw new ClinicalBusinessException(
+                    "shiftDate and shiftPeriod must be provided together. "
+                            + "Either set both for a specific future shift, or omit both "
+                            + "for today's current shift.");
+        }
+
+        if (hasDate) {
+            shiftDate = request.getShiftDate();
+            shiftPeriod = request.getShiftPeriod();
+
+            // Past-date guard. Africa/Kigali is the operational time zone.
+            // We compare against today rather than getCurrentShiftDate() —
+            // the night-shift-after-midnight roll-back applies only to
+            // "what shift am I on RIGHT NOW", not to "what dates can I
+            // schedule for". A CN at 02:00 should still be able to
+            // schedule the upcoming Wednesday.
+            LocalDate todayKigali = LocalDate.now(ZoneId.of("Africa/Kigali"));
+            if (shiftDate.isBefore(todayKigali)) {
+                throw new ClinicalBusinessException(
+                        "Cannot schedule a shift assignment for a past date ("
+                                + shiftDate + "). Past rosters are read-only — "
+                                + "edits would corrupt the clinical-action audit trail.");
+            }
+        } else {
+            shiftDate = getCurrentShiftDate();
+            shiftPeriod = getCurrentShiftPeriod();
+        }
+
+        // Leave-aware guard. A user with approved leave covering the target
+        // date cannot be scheduled on that date — the materialiser already
+        // skips them at daily roll-over (Fix #2 from the absence audit);
+        // the manual scheduling path enforces the same rule so a CN can't
+        // accidentally re-introduce the conflict via the calendar UI.
+        if (!staffLeaveRepository.findApprovedCovering(user.getId(), shiftDate).isEmpty()) {
+            throw new ClinicalBusinessException(
+                    user.getEmail() + " has approved leave covering "
+                            + shiftDate + " and cannot be scheduled on that date. "
+                            + "Cancel the leave first or pick a different date.");
+        }
+
+        // Deactivate any existing assignment for this user on this shift —
+        // matches the historical behaviour of the today-only path.
         shiftAssignmentRepository.findByUserIdAndShiftDateAndShiftPeriodAndIsActiveTrue(
                 user.getId(), shiftDate, shiftPeriod).ifPresent(existing -> {
                     existing.setActive(false);
                     existing.setEndedAt(Instant.now());
                     shiftAssignmentRepository.save(existing);
-                    log.info("Deactivated previous assignment for user {} on {} {}", user.getEmail(), shiftDate,
-                            shiftPeriod);
+                    log.info("Deactivated previous assignment for user {} on {} {}",
+                            user.getEmail(), shiftDate, shiftPeriod);
                 });
 
         boolean makeShiftLead = Boolean.TRUE.equals(request.getIsShiftLead());
