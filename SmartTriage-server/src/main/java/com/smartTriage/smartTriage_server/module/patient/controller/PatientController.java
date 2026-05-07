@@ -62,6 +62,7 @@ public class PatientController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("@clinicalAuthz.canAccessPatient(authentication, #id)")
     public ResponseEntity<ApiResponse<PatientResponse>> getPatient(@PathVariable UUID id) {
         PatientResponse response = patientService.getPatientById(id);
         return ResponseEntity.ok(ApiResponse.success(response));
@@ -81,7 +82,8 @@ public class PatientController {
      * scan correctly.
      */
     @PatchMapping("/{id}/pregnancy-status")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessPatient(authentication, #id)")
     public ResponseEntity<ApiResponse<PatientResponse>> updatePregnancyStatus(
             @PathVariable UUID id,
             @Valid @RequestBody UpdatePregnancyStatusRequest request) {
@@ -100,7 +102,8 @@ public class PatientController {
      * (e.g. when a previously-recorded allergy turns out to be wrong).
      */
     @PatchMapping("/{id}/allergies")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessPatient(authentication, #id)")
     public ResponseEntity<ApiResponse<PatientResponse>> updateAllergies(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateAllergiesRequest request) {
@@ -111,7 +114,8 @@ public class PatientController {
     /** Update the patient's free-text chronic conditions. Same semantics
      *  as updateAllergies — full replacement, null clears. */
     @PatchMapping("/{id}/chronic-conditions")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessPatient(authentication, #id)")
     public ResponseEntity<ApiResponse<PatientResponse>> updateChronicConditions(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateChronicConditionsRequest request) {
@@ -120,6 +124,7 @@ public class PatientController {
     }
 
     @GetMapping("/hospital/{hospitalId}")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<PatientResponse>>> getPatientsByHospital(
             @PathVariable UUID hospitalId,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -128,6 +133,7 @@ public class PatientController {
     }
 
     @GetMapping("/hospital/{hospitalId}/search")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<PatientResponse>>> searchPatients(
             @PathVariable UUID hospitalId,
             @RequestParam String query,
@@ -148,7 +154,8 @@ public class PatientController {
      * Returns an empty list if no identifiers are supplied.
      */
     @GetMapping("/hospital/{hospitalId}/lookup")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<PatientLookupCandidate>>> lookupPatients(
             @PathVariable UUID hospitalId,
             @RequestParam(required = false) String nationalId,

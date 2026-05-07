@@ -40,7 +40,7 @@ import java.util.stream.Collectors;
  * system-generated.
  */
 @Slf4j
-@Service
+@Service("visitService")
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class VisitService {
@@ -50,6 +50,8 @@ public class VisitService {
     private final HospitalService hospitalService;
     private final DeviceSessionRepository deviceSessionRepository;
     private final BedService bedService;
+    private final com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService shiftAssignmentService;
+    private final com.smartTriage.smartTriage_server.security.ClinicalAuthz clinicalAuthz;
 
     private static final AtomicLong visitCounter = new AtomicLong(0);
 
@@ -156,6 +158,67 @@ public class VisitService {
         }
         return visitRepository.findActiveVisitsInZones(hospitalId, zones, pageable)
                 .map(VisitMapper::toResponse);
+    }
+
+    /**
+     * Caller-aware active visit list. Routes cross-zone actors
+     * (admins, shift-lead, Charge Nurse) through the full hospital
+     * roster; everyone else gets only their assigned zone.
+     *
+     * <p>An off-shift clinician without a zone assignment gets an empty
+     * page — not an error. Frontend renders that as "you're not on shift,
+     * no patients to monitor" so the user has a clear next action
+     * (pick up a shift) instead of a blank dashboard with a 403.
+     */
+    public Page<VisitResponse> getActiveVisitsForCaller(
+            UUID hospitalId,
+            org.springframework.security.core.Authentication authentication,
+            Pageable pageable) {
+        if (clinicalAuthz.canSeeAllZonesAtHospital(authentication, hospitalId)) {
+            return getActiveVisits(hospitalId, pageable);
+        }
+        // Resolve the caller's zone via /shifts/me/current semantics.
+        Object principal = authentication == null ? null : authentication.getPrincipal();
+        if (!(principal instanceof com.smartTriage.smartTriage_server.module.user.entity.User user)) {
+            return org.springframework.data.domain.Page.empty(pageable);
+        }
+        return shiftAssignmentService
+                .getCurrentShiftForUser(user.getId())
+                .map(sa -> sa.getZone())
+                .map(zone -> visitRepository
+                        .findActiveVisitsInZones(hospitalId, java.util.List.of(zone), pageable)
+                        .map(VisitMapper::toResponse))
+                .orElseGet(() -> org.springframework.data.domain.Page.empty(pageable));
+    }
+
+    /**
+     * SpEL helper used by {@code @PreAuthorize} on
+     * {@code GET /visits/hospital/{hospitalId}/zone/{zone}} — true when
+     * the caller's active shift assignment is on the requested zone.
+     * Lets a doctor view their own zone's roster without granting
+     * cross-zone access. Returns false for off-shift callers.
+     */
+    public boolean callerIsAssignedToZone(
+            org.springframework.security.core.Authentication authentication,
+            UUID hospitalId,
+            EdZone zone) {
+        try {
+            if (authentication == null || hospitalId == null || zone == null) {
+                return false;
+            }
+            Object principal = authentication.getPrincipal();
+            if (!(principal instanceof com.smartTriage.smartTriage_server.module.user.entity.User user)) {
+                return false;
+            }
+            return shiftAssignmentService
+                    .getCurrentShiftForUser(user.getId())
+                    .map(sa -> zone.equals(sa.getZone())
+                            && hospitalId.equals(sa.getHospitalId()))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("callerIsAssignedToZone error: {}", e.getMessage(), e);
+            return false;
+        }
     }
 
     // ====================================================================

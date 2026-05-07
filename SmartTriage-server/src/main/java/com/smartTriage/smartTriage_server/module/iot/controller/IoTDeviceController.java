@@ -61,17 +61,20 @@ public class IoTDeviceController {
     }
 
     @GetMapping("/devices/{id}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<DeviceResponse>> getDevice(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(deviceService.getDevice(id)));
     }
 
     @GetMapping("/devices/hospital/{hospitalId}")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<DeviceResponse>>> getDevicesByHospital(
             @PathVariable UUID hospitalId, Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.success(deviceService.getDevicesByHospital(hospitalId, pageable)));
     }
 
     @GetMapping("/devices/available/{hospitalId}")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<DeviceResponse>>> getAvailableDevices(
             @PathVariable UUID hospitalId) {
         return ResponseEntity.ok(ApiResponse.success(deviceService.getAvailableDevices(hospitalId)));
@@ -115,27 +118,31 @@ public class IoTDeviceController {
     }
 
     @GetMapping("/monitoring/active/{hospitalId}")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<DeviceSessionResponse>>> getActiveSessions(
             @PathVariable UUID hospitalId) {
         return ResponseEntity.ok(ApiResponse.success(deviceService.getActiveSessions(hospitalId)));
     }
 
     @GetMapping("/monitoring/session/{sessionId}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<DeviceSessionResponse>> getSession(@PathVariable UUID sessionId) {
         return ResponseEntity.ok(ApiResponse.success(deviceService.getSession(sessionId)));
     }
 
     @GetMapping("/monitoring/history/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<Page<DeviceSessionResponse>>> getSessionHistory(
             @PathVariable UUID visitId, Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.success(deviceService.getSessionHistory(visitId, pageable)));
     }
 
     // ====================================================================
-    // VITAL STREAM DATA
+    // VITAL STREAM DATA — every read is gated against the visit's hospital
     // ====================================================================
 
     @GetMapping("/stream/latest/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<VitalStreamResponse>> getLatestReading(@PathVariable UUID visitId) {
         VitalStreamResponse response = vitalStreamService.getLatestReading(visitId);
         if (response == null) {
@@ -145,6 +152,7 @@ public class IoTDeviceController {
     }
 
     @GetMapping("/stream/recent/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<VitalStreamResponse>>> getRecentReadings(
             @PathVariable UUID visitId,
             @RequestParam(defaultValue = "60") int count) {
@@ -152,12 +160,14 @@ public class IoTDeviceController {
     }
 
     @GetMapping("/stream/history/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<Page<VitalStreamResponse>>> getStreamHistory(
             @PathVariable UUID visitId, Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.success(vitalStreamService.getStreamHistory(visitId, pageable)));
     }
 
     @GetMapping("/stream/session/{sessionId}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<Page<VitalStreamResponse>>> getSessionStream(
             @PathVariable UUID sessionId, Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.success(vitalStreamService.getSessionStreamHistory(sessionId, pageable)));

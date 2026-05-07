@@ -41,12 +41,22 @@ public class VisitController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #id)")
     public ResponseEntity<ApiResponse<VisitResponse>> getVisit(@PathVariable UUID id) {
         VisitResponse response = visitService.getVisitById(id);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    /**
+     * Hospital-wide active visit list. Reserved for cross-zone actors —
+     * SUPER_ADMIN, HOSPITAL_ADMIN at this hospital, the active shift-lead,
+     * and Charge Nurse designation. Regular clinicians MUST call
+     * {@code /hospital/{id}/active/mine} which returns only their zone.
+     * Without this gate a doctor on GENERAL would see every RESUS / ACUTE /
+     * PEDIATRIC patient — exactly the cross-zone leak the audit found.
+     */
     @GetMapping("/hospital/{hospitalId}/active")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<VisitResponse>>> getActiveVisits(
             @PathVariable UUID hospitalId,
             @PageableDefault(size = 50) Pageable pageable) {
@@ -54,7 +64,26 @@ public class VisitController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    /**
+     * Zone-scoped active visit list for the authenticated user. Routes
+     * cross-zone actors through the full hospital list; everyone else
+     * gets exactly their zone. Empty when the user is off-shift, which
+     * the frontend renders as "you're not on shift" rather than treating
+     * it as an error.
+     */
+    @GetMapping("/hospital/{hospitalId}/active/mine")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    public ResponseEntity<ApiResponse<Page<VisitResponse>>> getMyActiveVisits(
+            @PathVariable UUID hospitalId,
+            @PageableDefault(size = 50) Pageable pageable,
+            org.springframework.security.core.Authentication authentication) {
+        Page<VisitResponse> response = visitService.getActiveVisitsForCaller(
+                hospitalId, authentication, pageable);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
     @GetMapping("/patient/{patientId}")
+    @PreAuthorize("@clinicalAuthz.canAccessPatient(authentication, #patientId)")
     public ResponseEntity<ApiResponse<Page<VisitResponse>>> getVisitsByPatient(
             @PathVariable UUID patientId,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -63,6 +92,7 @@ public class VisitController {
     }
 
     @GetMapping("/hospital/{hospitalId}/status/{status}")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<VisitResponse>>> getVisitsByStatus(
             @PathVariable UUID hospitalId,
             @PathVariable VisitStatus status,
@@ -89,7 +119,17 @@ public class VisitController {
      * this zone.
      * Used by doctors to see only patients assigned to their zone.
      */
+    /**
+     * Get the active visit list for a specific zone. Allowed only for
+     * cross-zone actors (admins, shift-lead, Charge Nurse) OR a clinician
+     * whose own active assignment is on this exact zone. Without this
+     * gate any doctor could request another zone's roster by changing
+     * the URL — the same trap the original "/hospital/{id}/active"
+     * endpoint had at the hospital level.
+     */
     @GetMapping("/hospital/{hospitalId}/zone/{zone}")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId) "
+            + "or @visitService.callerIsAssignedToZone(authentication, #hospitalId, #zone)")
     public ResponseEntity<ApiResponse<List<VisitResponse>>> getVisitsByZone(
             @PathVariable UUID hospitalId,
             @PathVariable EdZone zone) {

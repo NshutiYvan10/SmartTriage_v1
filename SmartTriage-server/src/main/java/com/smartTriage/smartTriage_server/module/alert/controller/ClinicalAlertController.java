@@ -30,6 +30,7 @@ public class ClinicalAlertController {
     private final ClinicalAlertService clinicalAlertService;
 
     @GetMapping("/visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<Page<ClinicalAlertResponse>>> getAlertsForVisit(
             @PathVariable UUID visitId,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -39,6 +40,7 @@ public class ClinicalAlertController {
     }
 
     @GetMapping("/hospital/{hospitalId}/unacknowledged")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<ClinicalAlertResponse>>> getUnacknowledgedAlerts(
             @PathVariable UUID hospitalId,
             @PageableDefault(size = 50) Pageable pageable) {
@@ -48,6 +50,7 @@ public class ClinicalAlertController {
     }
 
     @GetMapping("/hospital/{hospitalId}/all")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<ClinicalAlertResponse>>> getAllAlerts(
             @PathVariable UUID hospitalId,
             @PageableDefault(size = 100) Pageable pageable) {
@@ -57,6 +60,7 @@ public class ClinicalAlertController {
     }
 
     @GetMapping("/hospital/{hospitalId}/critical")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<ClinicalAlertResponse>>> getCriticalAlerts(
             @PathVariable UUID hospitalId,
             @PageableDefault(size = 50) Pageable pageable) {
@@ -77,6 +81,7 @@ public class ClinicalAlertController {
      *              down.
      */
     @GetMapping("/hospital/{hospitalId}/safety-overrides")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<ClinicalAlertResponse>>> getSafetyOverrides(
             @PathVariable UUID hospitalId,
             @RequestParam(required = false, defaultValue = "all") String range,
@@ -99,9 +104,15 @@ public class ClinicalAlertController {
     // ====================================================================
 
     /**
-     * Get unacknowledged alerts for a specific ED zone — for zone doctor dashboard.
+     * Get unacknowledged alerts for a specific ED zone. Allowed for
+     * cross-zone actors (admins, shift-lead, Charge Nurse) and for any
+     * clinician whose own active assignment is on this zone. Without
+     * this gate a doctor on GENERAL could request RESUS alerts by
+     * URL-tampering — the same trap the hospital-wide endpoint had.
      */
     @GetMapping("/hospital/{hospitalId}/zone/{zone}")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId) "
+            + "or @visitService.callerIsAssignedToZone(authentication, #hospitalId, #zone)")
     public ResponseEntity<ApiResponse<List<ClinicalAlertResponse>>> getZoneAlerts(
             @PathVariable UUID hospitalId,
             @PathVariable EdZone zone) {
@@ -113,10 +124,16 @@ public class ClinicalAlertController {
     }
 
     /**
-     * Get alerts targeted at a specific doctor.
+     * Get alerts targeted at a specific doctor. Restricted to:
+     * the doctor themselves (reading their own alert queue), HOSPITAL_ADMIN
+     * for the doctor's hospital, and SUPER_ADMIN. Without the
+     * self-or-admin check any DOCTOR could fetch any other doctor's
+     * alert queue cross-hospital.
      */
     @GetMapping("/doctor/{doctorId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR')")
+    @PreAuthorize("hasRole('SUPER_ADMIN') "
+            + "or (hasAnyRole('DOCTOR', 'HOSPITAL_ADMIN') "
+            + "    and @clinicalAuthz.canAccessUser(authentication, #doctorId))")
     public ResponseEntity<ApiResponse<List<ClinicalAlertResponse>>> getDoctorAlerts(
             @PathVariable UUID doctorId) {
         List<ClinicalAlertResponse> alerts = clinicalAlertService.getAlertsForDoctor(doctorId)

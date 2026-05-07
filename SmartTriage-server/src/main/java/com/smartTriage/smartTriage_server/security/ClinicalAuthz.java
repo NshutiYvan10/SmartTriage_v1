@@ -128,6 +128,31 @@ public class ClinicalAuthz {
     }
 
     /**
+     * @return true when the {@code targetUserId} is the caller themselves OR
+     *         belongs to the caller's hospital. Used by endpoints keyed on a
+     *         user id (e.g. {@code /alerts/doctor/{doctorId}}) so a DOCTOR
+     *         can read their own queue but not a colleague's at another
+     *         hospital.
+     */
+    @Transactional(readOnly = true)
+    public boolean canAccessUser(Authentication authentication, UUID targetUserId) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null || targetUserId == null) return false;
+            if (user.getRole() == Role.SUPER_ADMIN) return true;
+            if (targetUserId.equals(user.getId())) return true;
+            // Same hospital — resolve the target's hospital_id via projection.
+            Optional<UUID> targetHospitalId = userRepository.findHospitalIdByUserId(targetUserId);
+            if (targetHospitalId.isEmpty()) return false;
+            return targetHospitalId.get().equals(
+                    userRepository.findHospitalIdByUserId(user.getId()).orElse(null));
+        } catch (Exception e) {
+            log.error("canAccessUser error for user {}: {}", targetUserId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
      * @return true if the patient identified by {@code patientId} belongs to
      *         the authenticated user's hospital.
      */

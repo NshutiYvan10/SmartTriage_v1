@@ -55,8 +55,17 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // IoT device endpoints — authenticated via API key header, not JWT
-                        .requestMatchers("/api/v1/iot/stream/**").permitAll()
+                        // IoT device-write endpoints — authenticated via API key header,
+                        // not JWT. ONLY /ingest and /heartbeat (in IoTStreamController)
+                        // are device-driven; everything else under /api/v1/iot/** is a
+                        // clinical-read endpoint (vital streams, monitoring sessions,
+                        // device inventory) and MUST flow through the JWT chain so
+                        // ClinicalAuthz can gate it. The earlier broad
+                        // /api/v1/iot/stream/** rule unintentionally exposed
+                        // /api/v1/iot/stream/latest/{visitId} (and siblings on
+                        // IoTDeviceController) to anonymous callers.
+                        .requestMatchers("/api/v1/iot/stream/ingest",
+                                          "/api/v1/iot/stream/heartbeat").permitAll()
 
                         // WebSocket endpoint
                         .requestMatchers("/ws/**").permitAll()
