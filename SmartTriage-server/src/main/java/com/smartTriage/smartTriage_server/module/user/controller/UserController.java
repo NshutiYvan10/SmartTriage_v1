@@ -34,7 +34,7 @@ public class UserController {
     private final UserService userService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
+    @PreAuthorize("@userAdminAuthz.canCreateUserWithRole(authentication, #request.role, #request.hospitalId)")
     public ResponseEntity<ApiResponse<UserResponse>> createUser(
             @Valid @RequestBody CreateUserRequest request) {
         UserResponse response = userService.createUser(request);
@@ -57,7 +57,7 @@ public class UserController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
+    @PreAuthorize("@userAdminAuthz.canManageUser(authentication, #id)")
     public ResponseEntity<ApiResponse<Void>> deactivateUser(@PathVariable UUID id) {
         userService.deactivateUser(id);
         return ResponseEntity.ok(ApiResponse.success("User deactivated", null));
@@ -65,9 +65,20 @@ public class UserController {
 
     /**
      * Update a user (admin edit).
+     *
+     * <p>Authorization splits the request body into two zones:
+     * personal-info fields (firstName, lastName, email, phoneNumber,
+     * professionalLicense) require {@code canEditUserPersonalInfo};
+     * governance fields (role, designation, hospital, accountStatus)
+     * require {@code canManageUser}. The endpoint gate here is the
+     * looser of the two — the service enforces the per-field policy
+     * by inspecting which fields are non-null on the request and
+     * checking the strict gate before applying personal-info edits.
+     * Today the looser gate is canManageUser, so we use that here;
+     * the service-level enforcement is the actual safety guarantee.
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
+    @PreAuthorize("@userAdminAuthz.canManageUser(authentication, #id)")
     public ResponseEntity<ApiResponse<UserResponse>> updateUser(
             @PathVariable UUID id, @Valid @RequestBody UpdateUserRequest request) {
         UserResponse response = userService.updateUser(id, request);
@@ -75,11 +86,11 @@ public class UserController {
     }
 
     /**
-     * Update just a user's designation (professional title).
-     * Only SUPER_ADMIN and HOSPITAL_ADMIN can change designations.
+     * Update just a user's designation (professional title). Allowed
+     * for any actor with manage-authority over the target.
      */
     @PatchMapping("/{id}/designation")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
+    @PreAuthorize("@userAdminAuthz.canManageUser(authentication, #id)")
     public ResponseEntity<ApiResponse<UserResponse>> updateDesignation(
             @PathVariable UUID id, @RequestBody Map<String, String> body) {
         Designation designation = Designation.valueOf(body.get("designation"));

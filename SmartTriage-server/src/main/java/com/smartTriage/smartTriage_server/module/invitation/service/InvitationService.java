@@ -168,6 +168,51 @@ public class InvitationService {
     }
 
     /**
+     * Cancel a pending invitation.
+     *
+     * <p>Reversible by sending a fresh invite to the same email later.
+     * Implementation: soft-delete the user (sets {@code is_active=false})
+     * AND invalidate any outstanding tokens so the existing email link
+     * stops working immediately. The user row stays in the DB so audit
+     * trails referencing it (alerts, signatures, …) remain valid.
+     *
+     * <p>Only valid for users in {@code PENDING_ACTIVATION} status. An
+     * already-activated user must be deactivated through the regular
+     * deactivate flow, which is a different action with different
+     * cleanup (open shift assignments, in-flight transfers).
+     */
+    @Transactional
+    public void cancelInvitation(UUID userId) {
+        User user = userRepository.findByIdAndIsActiveTrue(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+
+        if (user.getAccountStatus() != AccountStatus.PENDING_ACTIVATION) {
+            throw new IllegalStateException(
+                    "Can only cancel invitations for pending accounts. "
+                            + "For an already-activated user, use deactivate instead.");
+        }
+
+        // Invalidate any outstanding token so the email link is dead
+        // the instant cancellation hits, even before the soft-delete
+        // fully propagates.
+        tokenRepository.findFirstByUserIdAndUsedAtIsNullAndIsActiveTrueOrderByCreatedAtDesc(userId)
+                .ifPresent(tok -> {
+                    tok.softDelete();
+                    tokenRepository.save(tok);
+                });
+
+        // Soft-delete the user. The account remains in the DB but
+        // findByIdAndIsActiveTrue (the standard lookup) will skip it,
+        // and the unique-by-email index allows the same address to be
+        // re-invited later.
+        user.softDelete();
+        userRepository.save(user);
+
+        log.info("Cancelled pending invitation for {} (user id {})",
+                user.getEmail(), userId);
+    }
+
+    /**
      * Validate a token without consuming it — used by the frontend to show
      * the activation form or an error message.
      */

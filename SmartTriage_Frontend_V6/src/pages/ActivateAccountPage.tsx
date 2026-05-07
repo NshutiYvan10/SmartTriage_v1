@@ -193,6 +193,14 @@ export function ActivateAccountPage() {
                   value={form.firstName}
                   onChange={(e) => setForm({ ...form, firstName: e.target.value })}
                   placeholder="John"
+                  // autoComplete="off" + a non-standard name= keeps the
+                  // browser from auto-filling the invitee's name fields
+                  // with the currently-logged-in admin's profile data
+                  // (the bug that surfaced as "Last Name pre-filled with
+                  // admin's email"). Browsers ignore custom names for
+                  // their autofill heuristics.
+                  name="invitee-given-name"
+                  autoComplete="off"
                   className="w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:border-cyan-500/50 transition-colors"
                 />
               </div>
@@ -205,6 +213,8 @@ export function ActivateAccountPage() {
                   value={form.lastName}
                   onChange={(e) => setForm({ ...form, lastName: e.target.value })}
                   placeholder="Doe"
+                  name="invitee-family-name"
+                  autoComplete="off"
                   className="w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:border-cyan-500/50 transition-colors"
                 />
               </div>

@@ -33,7 +33,52 @@ const STATUS_STYLES: Record<AccountStatus, { color: string; bg: string; label: s
 // Role dropdown values. Triage-station assignment is a per-shift
 // function (ShiftAssignment.shiftFunction = TRIAGE_NURSE), not a
 // separate role — a NURSE who works triage today is still a NURSE.
-const ROLES = ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'REGISTRAR', 'PARAMEDIC', 'LAB_TECHNICIAN', 'READ_ONLY'];
+//
+// Privilege escalation guard: SUPER_ADMIN cannot be created via the
+// admin UI (system-bootstrap concern); HOSPITAL_ADMIN cannot be
+// created by another HOSPITAL_ADMIN (no peer-creation, prevents a
+// HA from minting peers). The `rolesAvailableTo` helper below applies
+// these limits at the render layer; the backend's UserAdminAuthz
+// enforces the same rules independently.
+const ALL_ROLES = ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'REGISTRAR', 'PARAMEDIC', 'LAB_TECHNICIAN', 'READ_ONLY'];
+
+function rolesAvailableTo(callerRole: string | undefined): string[] {
+  // SUPER_ADMIN cannot be minted via the API even by another SA.
+  const noSA = ALL_ROLES.filter((r) => r !== 'SUPER_ADMIN');
+  if (callerRole === 'SUPER_ADMIN') return noSA;
+  if (callerRole === 'HOSPITAL_ADMIN') return noSA.filter((r) => r !== 'HOSPITAL_ADMIN');
+  return [];
+}
+
+/**
+ * Common Rwandan hospital departments. Free-text on the backend, but
+ * a closed list on the UI to stop spelling drift ("Emergency" vs "ED"
+ * vs "Casualty"). Sourced from the standard MoH facility-services
+ * taxonomy used in District / Provincial / Referral hospitals.
+ */
+const DEPARTMENTS = [
+  'Emergency Department',
+  'Outpatient (OPD)',
+  'Internal Medicine',
+  'Pediatrics',
+  'Obstetrics & Gynecology',
+  'Surgery',
+  'Anesthesia & Critical Care',
+  'Intensive Care (ICU)',
+  'Maternity',
+  'Cardiology',
+  'Oncology',
+  'Mental Health',
+  'Radiology / Imaging',
+  'Laboratory',
+  'Pharmacy',
+  'Physiotherapy',
+  'Dental',
+  'Ophthalmology',
+  'Health Records',
+  'Administration',
+  'IT / Informatics',
+];
 
 export function UserManagement() {
   const { glassCard, glassInner, isDark, text } = useTheme();
@@ -66,7 +111,10 @@ export function UserManagement() {
   const [inviteForm, setInviteForm] = useState(emptyInviteForm);
 
   /* ── Edit form (existing users) ── */
-  const emptyEditForm = { firstName: '', lastName: '', email: '', phoneNumber: '', role: 'NURSE', designation: '', hospitalId };
+  const emptyEditForm = {
+    firstName: '', lastName: '', email: '', phoneNumber: '',
+    role: 'NURSE', designation: '', department: '', hospitalId,
+  };
   const [editForm, setEditForm] = useState(emptyEditForm);
 
   const [designationOptions, setDesignationOptions] = useState<{ value: string; label: string }[]>([]);
@@ -185,6 +233,30 @@ export function UserManagement() {
     }
   };
 
+  /* ── Cancel pending invitation ── */
+  const handleCancelInvite = async (u: UserResponse) => {
+    if (!confirm(`Cancel the invitation to ${u.email}? The activation link will stop working immediately. You can re-invite later.`)) return;
+    try {
+      await userApi.cancelInvite(u.id);
+      flash('success', 'Invitation cancelled');
+      loadUsers();
+    } catch (err: any) {
+      flash('error', err?.message || 'Failed to cancel invitation');
+    }
+  };
+
+  /* ── Deactivate active user ── */
+  const handleDeactivate = async (u: UserResponse) => {
+    if (!confirm(`Deactivate ${u.firstName} ${u.lastName}? They will no longer be able to log in. Their clinical history is preserved.`)) return;
+    try {
+      await userApi.delete(u.id);
+      flash('success', `${u.firstName} ${u.lastName} deactivated`);
+      loadUsers();
+    } catch (err: any) {
+      flash('error', err?.message || 'Failed to deactivate user');
+    }
+  };
+
   const startEdit = (u: UserResponse) => {
     setEditForm({
       firstName: u.firstName || '',
@@ -193,6 +265,7 @@ export function UserManagement() {
       phoneNumber: u.phoneNumber || '',
       role: u.role || 'NURSE',
       designation: u.designation || '',
+      department: (u as unknown as { department?: string }).department || '',
       hospitalId: u.hospitalId || hospitalId,
     });
     setEditId(u.id);
@@ -288,7 +361,7 @@ export function UserManagement() {
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Role *</label>
                 <select value={inviteForm.role} onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value, designation: '' })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
-                  {ROLES.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                  {rolesAvailableTo(authUser?.role).map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
                 </select>
               </div>
               <div>
@@ -300,7 +373,10 @@ export function UserManagement() {
               </div>
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Department</label>
-                <input value={inviteForm.department} onChange={(e) => setInviteForm({ ...inviteForm, department: e.target.value })} placeholder="Emergency" className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
+                <select value={inviteForm.department} onChange={(e) => setInviteForm({ ...inviteForm, department: e.target.value })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
+                  <option value="">Select department...</option>
+                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
               </div>
             </div>
             <div className="flex items-center gap-3 mt-4">
@@ -319,24 +395,57 @@ export function UserManagement() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>First Name</label>
-                <input value={editForm.firstName} onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })} placeholder="John" className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
+                <input
+                  value={editForm.firstName}
+                  onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                  placeholder="John"
+                  name="given-name"
+                  autoComplete="off"
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+                  style={glassInner}
+                />
               </div>
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Last Name</label>
-                <input value={editForm.lastName} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} placeholder="Doe" className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
+                <input
+                  value={editForm.lastName}
+                  onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                  placeholder="Doe"
+                  name="family-name"
+                  autoComplete="off"
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+                  style={glassInner}
+                />
               </div>
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Email</label>
-                <input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="john@hospital.rw" type="email" className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
+                <input
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  placeholder="john@hospital.rw"
+                  type="email"
+                  name="email-target"
+                  autoComplete="off"
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+                  style={glassInner}
+                />
               </div>
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Phone</label>
-                <input value={editForm.phoneNumber} onChange={(e) => setEditForm({ ...editForm, phoneNumber: e.target.value })} placeholder="+250 788 000 000" className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
+                <input
+                  value={editForm.phoneNumber}
+                  onChange={(e) => setEditForm({ ...editForm, phoneNumber: e.target.value })}
+                  placeholder="+250 788 000 000"
+                  name="tel-target"
+                  autoComplete="off"
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+                  style={glassInner}
+                />
               </div>
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Role</label>
                 <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value, designation: '' })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
-                  {ROLES.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                  {rolesAvailableTo(authUser?.role).map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
                 </select>
               </div>
               <div>
@@ -344,6 +453,13 @@ export function UserManagement() {
                 <select value={editForm.designation} onChange={(e) => setEditForm({ ...editForm, designation: e.target.value })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
                   <option value="">Select designation...</option>
                   {designationOptions.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Department</label>
+                <select value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
+                  <option value="">Select department...</option>
+                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
             </div>
@@ -428,22 +544,62 @@ export function UserManagement() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
+                          {/* Row actions, ordered by frequency of use:
+                              resend / cancel for pending invites,
+                              edit + deactivate for active users.
+                              All four buttons gate themselves on the
+                              backend's UserAdminAuthz; the UI just
+                              hides clearly out-of-scope ones (e.g.
+                              SUPER_ADMIN row never shows an action
+                              button to a HOSPITAL_ADMIN viewer). */}
                           <div className="flex items-center gap-1">
                             {isPending && (
-                              <button
-                                onClick={() => handleResend(u.id)}
-                                disabled={resendingId === u.id}
-                                title="Resend invitation"
-                                className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'} transition-colors disabled:opacity-50`}
-                              >
-                                {resendingId === u.id
-                                  ? <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
-                                  : <RotateCw className="w-3.5 h-3.5 text-amber-400" />}
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleResend(u.id)}
+                                  disabled={resendingId === u.id}
+                                  title="Resend invitation email"
+                                  className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'} transition-colors disabled:opacity-50`}
+                                >
+                                  {resendingId === u.id
+                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                                    : <RotateCw className="w-3.5 h-3.5 text-amber-400" />}
+                                </button>
+                                <button
+                                  onClick={() => handleCancelInvite(u)}
+                                  title="Cancel invitation"
+                                  className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-rose-500/15' : 'hover:bg-rose-50'} transition-colors`}
+                                >
+                                  <X className="w-3.5 h-3.5 text-rose-500" />
+                                </button>
+                              </>
                             )}
-                            <button onClick={() => startEdit(u)} className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'} transition-colors`}>
-                              <Pencil className="w-3.5 h-3.5 text-slate-400" />
-                            </button>
+                            {!isPending && u.accountStatus !== 'DEACTIVATED' && u.role !== 'SUPER_ADMIN' && (
+                              <>
+                                <button
+                                  onClick={() => startEdit(u)}
+                                  title="Edit user"
+                                  className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'} transition-colors`}
+                                >
+                                  <Pencil className="w-3.5 h-3.5 text-slate-400" />
+                                </button>
+                                {/* Deactivate hidden for the row that
+                                    represents the logged-in user
+                                    (foot-gun: deactivating yourself)
+                                    and for HOSPITAL_ADMIN rows when the
+                                    viewer is not a SUPER_ADMIN. */}
+                                {u.id !== authUser?.id
+                                 && (u.role !== 'HOSPITAL_ADMIN' || authUser?.role === 'SUPER_ADMIN') && (
+                                  <button
+                                    onClick={() => handleDeactivate(u)}
+                                    title="Deactivate user"
+                                    className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-rose-500/15' : 'hover:bg-rose-50'} transition-colors`}
+                                  >
+                                    <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
+                                  </button>
+                                )}
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>

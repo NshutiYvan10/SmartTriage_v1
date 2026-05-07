@@ -39,6 +39,7 @@ public class UserService implements UserDetailsService {
     private final UserRepository userRepository;
     private final HospitalService hospitalService;
     private final PasswordEncoder passwordEncoder;
+    private final com.smartTriage.smartTriage_server.security.UserAdminAuthz userAdminAuthz;
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
@@ -139,6 +140,36 @@ public class UserService implements UserDetailsService {
         if (wasChargeNurse && !willBeChargeNurse && user.getHospital() != null) {
             assertNotLastChargeNurse(user, "remove CHARGE_NURSE designation from");
         }
+        // Two-zone authorization on this endpoint:
+        //   • Personal-info fields (firstName, lastName, email, phone,
+        //     professionalLicense, employeeNumber) require the strict
+        //     gate canEditUserPersonalInfo. SUPER_ADMIN deliberately
+        //     does NOT have this authority over HOSPITAL_ADMINs — see
+        //     UserAdminAuthz Javadoc for the full rationale (separation
+        //     of duties / preventing silent identity-attribute drift).
+        //   • Governance fields (role, designation, department) require
+        //     canManageUser, which the controller already gated.
+        // If the request includes personal-info changes that the caller
+        // is not allowed to make, fail the whole update — silent skip
+        // would be confusing for the admin who just clicked Save.
+        org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder
+                        .getContext().getAuthentication();
+        boolean changesPersonalInfo =
+                differs(request.getFirstName(),         user.getFirstName())
+             || differs(request.getLastName(),          user.getLastName())
+             || differs(request.getPhoneNumber(),       user.getPhoneNumber())
+             || differs(request.getEmployeeNumber(),    user.getEmployeeNumber())
+             || differs(request.getProfessionalLicense(), user.getProfessionalLicense());
+        if (changesPersonalInfo
+                && !userAdminAuthz.canEditUserPersonalInfo(auth, userId)) {
+            throw new com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException(
+                    "You are not authorized to edit personal information for this user. "
+                            + "A super-admin can change role / designation / status, but personal-info "
+                            + "edits (name, phone, license) are reserved to the user themselves and "
+                            + "their hospital admin. Ask the user to update their profile.");
+        }
+
         user.setFirstName(request.getFirstName());
         user.setLastName(request.getLastName());
         user.setPhoneNumber(request.getPhoneNumber());
@@ -200,5 +231,18 @@ public class UserService implements UserDetailsService {
                     "Designation " + designation + " is not valid for role " + role
                             + ". Allowed: " + java.util.Arrays.toString(Designation.forRole(role)));
         }
+    }
+
+    /**
+     * True when the requested value would actually change the stored
+     * value. Treats null and "" as equivalent so a request omitting a
+     * field doesn't trip the personal-info gate.
+     */
+    private static boolean differs(String requested, String current) {
+        String r = requested == null ? null : requested.trim();
+        String c = current == null ? null : current.trim();
+        if ((r == null || r.isEmpty()) && (c == null || c.isEmpty())) return false;
+        if (r == null || c == null) return true;
+        return !r.equals(c);
     }
 }

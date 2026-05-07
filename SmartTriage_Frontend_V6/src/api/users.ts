@@ -14,6 +14,15 @@ export const userApi = {
   resendInvite: (userId: string) =>
     post<void>(`/users/${userId}/resend-invite`, {}),
 
+  /**
+   * Cancel a pending invitation. Soft-deletes the user and invalidates
+   * any outstanding token so the email link stops working immediately.
+   * Only valid for accounts in PENDING_ACTIVATION status — for an
+   * already-activated user, call {@link delete} (deactivate) instead.
+   */
+  cancelInvite: (userId: string) =>
+    del<void>(`/users/${userId}/invite`),
+
   update: (id: string, data: Partial<CreateUserRequest>) =>
     put<UserResponse>(`/users/${id}`, data),
 
