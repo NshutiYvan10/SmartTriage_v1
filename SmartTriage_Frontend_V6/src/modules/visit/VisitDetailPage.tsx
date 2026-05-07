@@ -33,7 +33,14 @@ import { investigationApi } from '@/api/investigations';
 import { medicationApi } from '@/api/medications';
 import { alertApi } from '@/api/alerts';
 import { patientApi } from '@/api/patients';
-import { Pencil, Save } from 'lucide-react';
+import { Pencil, Save, UserCheck } from 'lucide-react';
+import { IdentityResolutionModal } from '@/modules/admission/IdentityResolutionModal';
+import { UnidentifiedBadge } from '@/modules/admission/UnidentifiedBadge';
+import {
+  identityOverdueTier,
+  minutesSincePlaceholderAssigned,
+  formatPatientDisplayName,
+} from '@/modules/admission/displayName';
 import type {
   VisitResponse, VitalSignsResponse, TriageRecordResponse,
   ClinicalNoteResponse, DiagnosisResponse, InvestigationResponse,
@@ -151,6 +158,7 @@ export function VisitDetailPage() {
   // medication had no allergy banner, no weight for pediatric dosing, no
   // pregnancy flag for teratogen risk.
   const [patient, setPatient] = useState<PatientResponse | null>(null);
+  const [showIdentityModal, setShowIdentityModal] = useState(false);
   const [vitals, setVitals] = useState<VitalSignsResponse[]>([]);
   const [latestVitals, setLatestVitals] = useState<VitalSignsResponse | null>(null);
   const [triageHistory, setTriageHistory] = useState<TriageRecordResponse[]>([]);
@@ -421,8 +429,18 @@ export function VisitDetailPage() {
                 <ArrowLeft className="w-5 h-5 text-white" />
               </button>
               <div className="flex-1">
-                <div className="flex items-center gap-3">
-                  <h1 className="text-lg font-bold text-white tracking-wide">{visit.patientName}</h1>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h1 className={`text-lg font-bold text-white tracking-wide ${patient?.isUnidentified ? 'italic' : ''}`}>
+                    {/* Use the centralised display-name helper so the (child)
+                        marker comes through even if the backend's patientName
+                        was cached pre-V28. */}
+                    {patient?.isUnidentified
+                      ? formatPatientDisplayName(patient, visit.isPediatric)
+                      : visit.patientName}
+                  </h1>
+                  {patient?.isUnidentified && (
+                    <UnidentifiedBadge patient={patient} showLabel showAge />
+                  )}
                   {category && (
                     <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg ${catColor.bg} ${catColor.text} border ${catColor.border}`}>
                       {category}
@@ -431,6 +449,14 @@ export function VisitDetailPage() {
                   <span className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-white/10 text-white/70">
                     {visit.status.replace(/_/g, ' ')}
                   </span>
+                  {patient?.isUnidentified && (
+                    <button
+                      onClick={() => setShowIdentityModal(true)}
+                      className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-[10px] font-bold bg-white text-cyan-700 hover:bg-cyan-50 shadow-sm"
+                    >
+                      <UserCheck className="w-3 h-3" /> Set Patient Identity
+                    </button>
+                  )}
                 </div>
                 <div className="flex items-center gap-4 mt-1">
                   <p className="text-white/70 text-xs font-medium">Visit: {visit.visitNumber}</p>
@@ -447,6 +473,51 @@ export function VisitDetailPage() {
               </button>
             </div>
           </div>
+
+          {/* ── Identity-overdue banner (V28 — Direct Resus) ──
+              Soft amber prompt at 30 min, hard rose alert at 2 h. Never
+              blocks care — just nudges the team to find ID, contact
+              family, or open the chart's Set Patient Identity action.
+              Backend's IdentityOverdueScheduler raises a persistent
+              CRITICAL alert at the 2 h mark; this banner is the at-a-
+              glance UI cue. */}
+          {patient?.isUnidentified && (() => {
+            const minutes = minutesSincePlaceholderAssigned(patient);
+            const tier = identityOverdueTier(minutes);
+            if (tier === 'none') return null;
+            const isHard = tier === 'hard';
+            return (
+              <div className={`mx-4 mt-3 rounded-xl px-4 py-2.5 flex items-center gap-3 border ${
+                isHard
+                  ? 'bg-rose-50 border-rose-300 text-rose-900'
+                  : 'bg-amber-50 border-amber-300 text-amber-900'
+              }`}>
+                <UserCheck className={`w-4 h-4 flex-shrink-0 ${isHard ? 'text-rose-700' : 'text-amber-700'}`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold">
+                    {isHard
+                      ? 'Patient identity unresolved (>2 hours) — escalated'
+                      : 'Identity check needed'}
+                  </p>
+                  <p className="text-[10px] mt-0.5 leading-relaxed">
+                    Patient has been in the system for {minutes} min as <span className="italic font-bold">
+                    {formatPatientDisplayName(patient, visit.isPediatric)}</span>.
+                    Find ID, contact family, or open Set Patient Identity from the chart header.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowIdentityModal(true)}
+                  className={`text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-sm flex-shrink-0 ${
+                    isHard
+                      ? 'bg-rose-700 text-white hover:bg-rose-600'
+                      : 'bg-amber-700 text-white hover:bg-amber-600'
+                  }`}
+                >
+                  Resolve identity
+                </button>
+              </div>
+            );
+          })()}
 
           {/* ── Patient Safety Banner ──
               Always visible regardless of active tab. The doctor must NEVER
@@ -499,6 +570,19 @@ export function VisitDetailPage() {
           {activeTab === 'disposition' && <DispositionTab visit={visit} onDisposition={handleRecordDisposition} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
         </div>
       </div>
+
+      {/* ── Identity Resolution modal (V28 — Direct Resus follow-up) ── */}
+      {showIdentityModal && patient && (
+        <IdentityResolutionModal
+          patient={patient}
+          hospitalId={visit.hospitalId}
+          onClose={() => setShowIdentityModal(false)}
+          onResolved={(resolved) => {
+            setPatient(resolved);
+            setShowIdentityModal(false);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -31,7 +31,10 @@ export type AuditAction =
   | 'VITALS_RECORDED'
   | 'ALERT_ACKNOWLEDGED'
   | 'NURSE_ASSIGNED'
-  | 'DEMOGRAPHICS_EDITED';
+  | 'DEMOGRAPHICS_EDITED'
+  // Direct Resus Admission (V28)
+  | 'DIRECT_RESUS_ADMISSION'
+  | 'PATIENT_IDENTITY_RESOLVED';
 
 export interface AuditLogEntry {
   id: string;

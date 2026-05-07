@@ -106,4 +106,37 @@ public class Visit extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "current_bed_id")
     private Bed currentBed;
+
+    // ═══════════════════════════════════════════════════════════════
+    // Direct Resus Admission flags (V28)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * TRUE when the visit was admitted to RESUS but no bed was
+     * available. Patient is on a stretcher in the resus area; the
+     * charge nurse sees a transfer prompt to free up a bed by
+     * moving out a stabilised occupant. Cleared as soon as the
+     * patient is placed in an actual bed.
+     */
+    @Column(name = "pending_resus_overflow", nullable = false)
+    @Builder.Default
+    private boolean pendingResusOverflow = false;
+
+    /**
+     * TRUE when this visit was created from an ambulance call-ahead
+     * (radio handover, ETA known) before the patient physically
+     * arrived. The bed is reserved, the team is alerted, but the
+     * door clock has not started.
+     */
+    @Column(name = "ambulance_pre_arrival", nullable = false)
+    @Builder.Default
+    private boolean ambulancePreArrival = false;
+
+    /**
+     * For ambulance pre-arrival visits: when the nurse confirms the
+     * patient has actually walked through the door. Only set if
+     * ambulancePreArrival was true. NULL until confirmation.
+     */
+    @Column(name = "arrival_confirmed_at")
+    private Instant arrivalConfirmedAt;
 }

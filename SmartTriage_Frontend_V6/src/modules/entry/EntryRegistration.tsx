@@ -30,7 +30,9 @@ import { Gender, ArrivalMode, Mobility } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
 import { userApi } from '@/api/users';
-import type { UserResponse } from '@/api/types';
+import type { DirectResusAdmissionResponse, UserResponse } from '@/api/types';
+import { DirectResusModal } from '@/modules/admission/DirectResusModal';
+import { ResusOverflowModal } from '@/modules/admission/ResusOverflowModal';
 
 /* ─── Constants ─── */
 const ALLERGIES = ['Penicillin', 'Latex', 'Pollen', 'Food', 'Dairy', 'Other'];
@@ -166,6 +168,32 @@ export function EntryRegistration() {
   const [formData, setFormData] = useState<FormData>(INITIAL_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showSuccess, setShowSuccess] = useState(false);
+
+  // ── Direct Resus Admission (V28) ──
+  // Surfaces a Stable/Unstable choice at the top of the registration page.
+  // Unstable opens DirectResusModal; on success we either go straight
+  // to the visit page (bed assigned) or open the resus-overflow prompt.
+  const [showDirectResusModal, setShowDirectResusModal] = useState(false);
+  const [overflowResponse, setOverflowResponse] = useState<DirectResusAdmissionResponse | null>(null);
+
+  const hospitalIdForAdmission = authUser?.hospitalId || 'a0000000-0000-0000-0000-000000000001';
+
+  const handleDirectResusSuccess = (response: DirectResusAdmissionResponse) => {
+    addAuditEntry({
+      action: 'DIRECT_RESUS_ADMISSION',
+      performedBy: authUser?.email || authUser?.id || 'UNKNOWN',
+      performedByName: authUser?.fullName || 'Unknown',
+      patientId: response.patientId,
+      details: `Direct Resus admission. Visit ${response.visitNumber}. Patient: ${response.isUnidentified ? `Unknown ${response.placeholderLabel}` : `${response.patientFirstName} ${response.patientLastName}`}.${response.overflow ? ' OVERFLOW — no bed available.' : ` Bed ${response.bedCode}.`}`,
+      newValue: 'RED',
+    });
+    setShowDirectResusModal(false);
+    if (response.overflow) {
+      setOverflowResponse(response);
+    } else {
+      navigate(`/visit/${response.visitId}`);
+    }
+  };
 
   /* ── Load real nurses from backend ── */
   const [nurses, setNurses] = useState<{ id: string; name: string }[]>([]);
@@ -436,6 +464,62 @@ export function EntryRegistration() {
               <span className={progress === 100 ? 'text-emerald-600' : progress > 0 ? 'text-emerald-500' : 'text-slate-400'}>{Math.round(progress)}%</span>
               <span className="text-slate-400 ml-1">complete</span>
             </div>
+          </div>
+        </div>
+
+        {/* ──────────────────────────────────────────────────────────
+            Stable / Unstable triage decision (V28 — Direct Resus)
+
+            The first decision a triage nurse makes is "is this patient
+            stable enough for vitals to be taken before clinical
+            intervention?" That decision lives at the TOP of the page,
+            not buried behind a form. Unstable patients (cardiac arrest,
+            severe trauma, obstructed airway) take the right-hand path
+            straight to the resus bay.
+        ────────────────────────────────────────────────────────── */}
+        <div
+          className="rounded-2xl overflow-hidden border border-slate-200/60 animate-fade-up"
+          style={{ animationDelay: '0.04s', background: isDark ? 'rgba(15,23,42,0.4)' : 'rgba(255,255,255,0.7)' }}
+        >
+          <div className="px-4 py-2.5 bg-gradient-to-r from-slate-700 to-slate-900 text-white">
+            <p className="text-[10px] font-bold uppercase tracking-wider">Clinical-eye decision — first</p>
+            <p className="text-xs font-semibold mt-0.5">Is this patient stable enough to be triaged through the standard form?</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3">
+            {/* Stable path — implicit (continue with the form below) */}
+            <div className="rounded-xl border border-emerald-300 bg-emerald-50/60 p-3 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-emerald-600 flex items-center justify-center flex-shrink-0">
+                <Heart className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-emerald-900">Stable — continue with this form</p>
+                <p className="text-[10px] text-emerald-700 mt-0.5 leading-relaxed">
+                  Take vitals, complete the registration steps, then triage normally.
+                  This is the path you're on.
+                </p>
+              </div>
+            </div>
+
+            {/* Unstable — Direct Resus */}
+            <button
+              type="button"
+              onClick={() => setShowDirectResusModal(true)}
+              className="rounded-xl border-2 border-rose-400 bg-gradient-to-br from-rose-50 to-red-50 p-3 flex items-start gap-3 hover:from-rose-100 hover:to-red-100 hover:border-rose-500 active:scale-[0.99] transition-all text-left shadow-sm hover:shadow-md"
+            >
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-rose-600 to-red-700 flex items-center justify-center flex-shrink-0 shadow-md">
+                <Siren className="w-4 h-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                  Unstable — Direct Resus Admission
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </p>
+                <p className="text-[10px] text-rose-700 mt-0.5 leading-relaxed">
+                  One-click. Patient lands in a RESUS bed; resus team alerted.
+                  Form gets back-filled later.
+                </p>
+              </div>
+            </button>
           </div>
         </div>
 
@@ -1351,6 +1435,38 @@ export function EntryRegistration() {
           </div>
         </form>
       </div>
+
+      {/* ── Direct Resus Admission modal (V28) ── */}
+      {showDirectResusModal && (
+        <DirectResusModal
+          hospitalId={hospitalIdForAdmission}
+          initialIsPediatric={false}
+          onClose={() => setShowDirectResusModal(false)}
+          onSuccess={handleDirectResusSuccess}
+        />
+      )}
+
+      {/* ── Resus-overflow transfer prompt — only when admit returned overflow=true ── */}
+      {overflowResponse && (
+        <ResusOverflowModal
+          newAdmissionVisitId={overflowResponse.visitId}
+          newAdmissionVisitNumber={overflowResponse.visitNumber}
+          newAdmissionPatientName={
+            overflowResponse.isUnidentified
+              ? `Unknown ${overflowResponse.placeholderLabel ?? ''}`
+              : `${overflowResponse.patientFirstName} ${overflowResponse.patientLastName}`
+          }
+          candidates={overflowResponse.transferCandidates ?? []}
+          onClose={() => {
+            setOverflowResponse(null);
+            navigate(`/visit/${overflowResponse.visitId}`);
+          }}
+          onTransferComplete={() => {
+            setOverflowResponse(null);
+            navigate(`/visit/${overflowResponse.visitId}`);
+          }}
+        />
+      )}
     </div>
   );
 }

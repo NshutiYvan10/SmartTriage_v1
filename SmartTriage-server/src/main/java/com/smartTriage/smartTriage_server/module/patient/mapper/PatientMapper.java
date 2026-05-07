@@ -59,8 +59,23 @@ public final class PatientMapper {
                 .pregnancyStatus(patient.getPregnancyStatus())
                 .pregnancyStatusRecordedAt(patient.getPregnancyStatusRecordedAt())
                 .hospitalId(patient.getHospital().getId())
+                // Direct Resus placeholder (V28)
+                .isUnidentified(patient.isUnidentified())
+                .placeholderLabel(patient.getPlaceholderLabel())
+                .placeholderAssignedAt(patient.getPlaceholderAssignedAt())
+                .identifiedAt(patient.getIdentifiedAt())
+                .identifiedByName(patient.getIdentifiedBy() != null
+                        ? formatUserDisplayName(patient.getIdentifiedBy().getFirstName(),
+                                                patient.getIdentifiedBy().getLastName(),
+                                                patient.getIdentifiedBy().getUsername())
+                        : null)
                 .createdAt(patient.getCreatedAt())
                 .updatedAt(patient.getUpdatedAt())
                 .build();
+    }
+
+    private static String formatUserDisplayName(String firstName, String lastName, String username) {
+        String full = ((firstName != null ? firstName : "") + " " + (lastName != null ? lastName : "")).trim();
+        return full.isEmpty() ? username : full;
     }
 }

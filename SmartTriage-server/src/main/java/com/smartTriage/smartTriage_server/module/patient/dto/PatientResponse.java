@@ -55,6 +55,34 @@ public class PatientResponse {
     private PregnancyStatus pregnancyStatus;
     private Instant pregnancyStatusRecordedAt;
     private UUID hospitalId;
+
+    // ── Unidentified-patient placeholder (V28 — Direct Resus) ──
+    /**
+     * TRUE while this patient was admitted as a phonetic placeholder
+     * via Direct Resus and identity has not yet been resolved.
+     * Frontend uses this flag to render the "?" badge / italic name.
+     * @see #placeholderLabel
+     */
+    @JsonProperty("isUnidentified")
+    private boolean isUnidentified;
+
+    /**
+     * Phonetic label assigned at admission ("Alpha", "Bravo-2"). Preserved
+     * across identity resolution so a chart review of the resolved
+     * patient can still reconstruct that they were admitted as Unknown
+     * Alpha at 14:32. NULL for normally-registered patients.
+     */
+    private String placeholderLabel;
+
+    /** When the placeholder was assigned. Anchors the identity-overdue clock. */
+    private Instant placeholderAssignedAt;
+
+    /** When identity was resolved. NULL while still unidentified. */
+    private Instant identifiedAt;
+
+    /** Display name of the clinician who resolved the identity. */
+    private String identifiedByName;
+
     private Instant createdAt;
     private Instant updatedAt;
 }
