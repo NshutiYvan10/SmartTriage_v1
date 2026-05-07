@@ -68,6 +68,7 @@ import type {
   AvpuScore, TriageCategory, DispositionType,
 } from '@/api/types';
 import { format } from 'date-fns';
+import { RecentActivityBanner } from './RecentActivityBanner';
 
 // ── Category color config ──
 const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string; dot: string }> = {
@@ -655,6 +656,21 @@ export function VisitDetailPage() {
             })}
           </div>
         </div>
+
+        {/* ── Recent activity (shift-handover affordance) ──
+            Shows what's new on this patient since the doctor came on
+            shift (or last N hours). Lets an inheriting clinician spot
+            new vitals / lab results / meds / alerts at a glance instead
+            of scrolling the full timeline. */}
+        <RecentActivityBanner
+          vitals={vitals}
+          triageHistory={triageHistory}
+          notes={notes}
+          diagnoses={diagnoses}
+          investigations={investigations}
+          medications={medications}
+          alerts={visitAlerts}
+        />
 
         {/* ── Tab Content ── */}
         <div className="animate-fade-up" style={{ animationDelay: '0.05s' }}>
