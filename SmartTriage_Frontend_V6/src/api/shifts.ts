@@ -1,5 +1,13 @@
 import { get, post, put, patch, del } from './client';
-import type { CreateShiftAssignmentRequest, ShiftAssignmentResponse, ShiftPeriodInfo, EdZone } from './types';
+import type {
+  ApplyTemplateRequest,
+  BulkPlanResult,
+  CopyWeekRequest,
+  CreateShiftAssignmentRequest,
+  EdZone,
+  ShiftAssignmentResponse,
+  ShiftPeriodInfo,
+} from './types';
 
 export const shiftApi = {
   /** Assign a staff member to a zone for the current shift */
@@ -73,4 +81,31 @@ export const shiftApi = {
        */
       isOnApprovedLeave: boolean;
     }>('/shifts/me/current'),
+
+  /**
+   * Schedule a single shift assignment on a specific future date / period.
+   * Convenience wrapper around `assign` that always sends `shiftDate` +
+   * `shiftPeriod`. Server rejects past dates and dates the user is on
+   * approved leave for.
+   */
+  assignForDate: (
+    hospitalId: string,
+    data: CreateShiftAssignmentRequest & { shiftDate: string; shiftPeriod: 'DAY' | 'NIGHT' },
+  ) => post<ShiftAssignmentResponse>(`/shifts/hospital/${hospitalId}/assign`, data),
+
+  /**
+   * Bulk: copy a full week of assignments to another week. Idempotent per
+   * (date, period) — slots that already have rows are skipped. Returns a
+   * per-slot outcome list so the UI can show partial success.
+   */
+  copyWeek: (hospitalId: string, data: CopyWeekRequest) =>
+    post<BulkPlanResult>(`/shifts/hospital/${hospitalId}/copy-week`, data),
+
+  /**
+   * Bulk: materialise a specific template across a date range. Idempotent
+   * per slot. Used after a CN edits a template and wants the next N days
+   * to reflect it immediately.
+   */
+  applyTemplate: (hospitalId: string, data: ApplyTemplateRequest) =>
+    post<BulkPlanResult>(`/shifts/hospital/${hospitalId}/apply-template`, data),
 };

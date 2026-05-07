@@ -26,7 +26,6 @@ import { AlertDashboard } from './modules/alerts/AlertDashboard';
 import { IoTDeviceManagement } from './modules/iot/IoTDeviceManagement';
 import { HospitalManagement } from './modules/admin/HospitalManagement';
 import { UserManagement } from './modules/admin/UserManagement';
-import { ShiftAssignment } from './modules/shift/ShiftAssignment';
 import { ShiftPlannerPage } from './modules/shift/ShiftPlannerPage';
 import { ShiftCalendarPage } from './modules/shift/ShiftCalendarPage';
 import { MySchedulePage } from './modules/shift/MySchedulePage';
@@ -165,7 +164,10 @@ function AppContent() {
             <Route path="/admin/hospitals" element={<RoleGuard page="admin-hospitals"><HospitalManagement /></RoleGuard>} />
             <Route path="/admin/users" element={<RoleGuard page="admin-users"><UserManagement /></RoleGuard>} />
             <Route path="/admin/beds" element={<RoleGuard page="admin-beds"><BedManagement /></RoleGuard>} />
-            <Route path="/shift-assignment" element={<RoleGuard page="shift-assignment" allowDesignations={['CHARGE_NURSE']}><ShiftAssignment /></RoleGuard>} />
+            {/* Today-only ShiftAssignment page is retired — calendar is now the
+                single planning surface. Redirect any old links / bookmarks to
+                the calendar landing on today. */}
+            <Route path="/shift-assignment" element={<Navigate to="/shift-calendar" replace />} />
             <Route path="/zone-transfers" element={<PendingTransfersDashboard />} />
             <Route path="/shift-planner" element={<RoleGuard page="shift-planner" allowDesignations={['CHARGE_NURSE']}><ShiftPlannerPage /></RoleGuard>} />
             <Route path="/shift-calendar" element={<RoleGuard page="shift-calendar" allowDesignations={['CHARGE_NURSE']}><ShiftCalendarPage /></RoleGuard>} />

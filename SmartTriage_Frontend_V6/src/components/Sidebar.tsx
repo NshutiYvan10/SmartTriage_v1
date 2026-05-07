@@ -101,10 +101,9 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
       label: 'Shift Management',
       items: [
         { id: 'my-schedule',     label: 'My Schedule',     icon: CalendarClock,   pageId: 'my-schedule'     as AppPage },
-        { id: 'shift-assignment',label: 'Shift Zones',     icon: CalendarClock,   pageId: 'shift-assignment' as AppPage },
-        { id: 'zone-transfers',  label: 'Zone Transfers',  icon: ArrowRightLeft,  pageId: 'shift-assignment' as AppPage },
         { id: 'shift-calendar',  label: 'Shift Calendar',  icon: CalendarDays,    pageId: 'shift-calendar'  as AppPage },
-        { id: 'shift-planner',   label: 'Shift Planner',   icon: CalendarDays,    pageId: 'shift-planner'   as AppPage },
+        { id: 'shift-planner',   label: 'Shift Templates', icon: CalendarDays,    pageId: 'shift-planner'   as AppPage },
+        { id: 'zone-transfers',  label: 'Zone Transfers',  icon: ArrowRightLeft,  pageId: 'shift-assignment' as AppPage },
         { id: 'swap-approvals',  label: 'Swap Approvals',  icon: ClipboardCheck,  pageId: 'swap-approvals'  as AppPage },
         { id: 'leave-approvals', label: 'Leave Approvals', icon: ClipboardCheck,  pageId: 'leave-approvals' as AppPage },
         { id: 'delegations',     label: 'Delegations',     icon: ShieldCheck,     pageId: 'delegations'     as AppPage },
@@ -196,8 +195,8 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
   // CN-only sidebar items — NEVER fall through to the user's
   // ROLE_PAGES grant. Required: CHARGE_NURSE designation.
   const chargeNurseOnly = new Set([
-    'shift-assignment',   // Shift Zones — zone reassignment + shift-lead transfer
-    'shift-planner',      // Rota template editing
+    'shift-calendar',     // Interactive calendar — single planning surface for the CN
+    'shift-planner',      // Rota templates (renamed from "Shift Planner" → "Shift Templates")
     'swap-approvals',     // Approve / decline swap requests
     'leave-approvals',    // Approve / decline leave requests
     'delegations',        // Configure CN authority delegations

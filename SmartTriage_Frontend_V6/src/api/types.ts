@@ -1099,6 +1099,47 @@ export interface CreateShiftAssignmentRequest {
   shiftFunction: ShiftFunction;
   /** Optional — set to true to also grant the shift-lead badge (transfers it from any current holder). */
   isShiftLead?: boolean;
+  /**
+   * Target shift date (ISO yyyy-MM-dd). Optional — when omitted the server
+   * uses today's current shift. When set, {@link shiftPeriod} must also be
+   * set; both-or-neither is enforced server-side. Past dates are rejected.
+   */
+  shiftDate?: string;
+  /** Target shift period. Must be set together with {@link shiftDate}. */
+  shiftPeriod?: ShiftPeriod;
+}
+
+/** Bulk shift-planning op: copy one full week of assignments to another. */
+export interface CopyWeekRequest {
+  /** Monday of the source week, ISO yyyy-MM-dd. */
+  fromWeekStart: string;
+  /** Monday of the target week, ISO yyyy-MM-dd. */
+  toWeekStart: string;
+}
+
+/** Bulk shift-planning op: materialise a template across a date range. */
+export interface ApplyTemplateRequest {
+  templateId: string;
+  fromDate: string;
+  toDate: string;
+  /** Periods to apply the template to. Server rejects period mismatches. */
+  periods: ShiftPeriod[];
+}
+
+export interface BulkPlanResultSlot {
+  date: string;
+  period: 'DAY' | 'NIGHT';
+  /** "FILLED" | "SKIPPED_EXISTING" | "SKIPPED_NO_SOURCE" */
+  status: string;
+  rowsCreated: number;
+  note: string | null;
+}
+
+export interface BulkPlanResult {
+  slotsFilled: number;
+  slotsSkipped: number;
+  rowsCreated: number;
+  slots: BulkPlanResultSlot[];
 }
 
 export interface ShiftAssignmentResponse {
@@ -1250,4 +1291,138 @@ export interface ZoneOccupancyResponse {
   cleaning: number;
   outOfService: number;
   beds: BedResponse[];
+}
+
+/* ─────────────────────── Charge Nurse Delegation ─────────────────────── */
+
+export interface ChargeNurseDelegationResponse {
+  id: string;
+  hospitalId: string;
+  delegatingUserId: string;
+  delegatingUserName: string;
+  delegateUserId: string;
+  delegateUserName: string;
+  startsAt: string;
+  endsAt: string | null;
+  reason: string;
+  revokedAt: string | null;
+  revokedById: string | null;
+  revokedByName: string | null;
+  revocationReason: string | null;
+  currentlyActive: boolean;
+}
+
+export interface CreateChargeNurseDelegationRequest {
+  delegateUserId: string;
+  startsAt: string;
+  endsAt?: string | null;
+  reason: string;
+}
+
+export interface RevokeChargeNurseDelegationRequest {
+  revocationReason?: string;
+}
+
+/* ─────────────────────── Staff Leave ─────────────────────── */
+
+export type LeaveType =
+  | 'ANNUAL'
+  | 'SICK'
+  | 'MATERNITY'
+  | 'BEREAVEMENT'
+  | 'COMPASSIONATE'
+  | 'STUDY'
+  | 'OTHER';
+
+export type LeaveStatus = 'REQUESTED' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+
+export interface StaffLeaveResponse {
+  id: string;
+  hospitalId: string;
+  userId: string;
+  userName: string;
+  leaveType: LeaveType;
+  leaveStatus: LeaveStatus;
+  startsOn: string;   // YYYY-MM-DD
+  endsOn: string;     // YYYY-MM-DD
+  reason: string | null;
+  requestedAt: string;
+  requestedById: string | null;
+  requestedByName: string | null;
+  approvedAt: string | null;
+  approvedById: string | null;
+  approvedByName: string | null;
+  rejectedAt: string | null;
+  rejectedById: string | null;
+  rejectedByName: string | null;
+  rejectionReason: string | null;
+  cancelledAt: string | null;
+  cancelledById: string | null;
+  cancelledByName: string | null;
+  externalReference: string | null;
+}
+
+export interface CreateStaffLeaveRequest {
+  /** Omit to file leave for yourself; CN/admin only when present. */
+  userId?: string;
+  leaveType: LeaveType;
+  startsOn: string;
+  endsOn: string;
+  reason?: string;
+  /** CN-only: create the row already in APPROVED status. */
+  autoApprove?: boolean;
+}
+
+export interface LeaveDecisionRequest {
+  note?: string;
+}
+
+/* ─────────────────────── Shift Swap ─────────────────────── */
+
+export type SwapStatus =
+  | 'REQUESTED'
+  | 'PENDING_PARTNER_ACCEPT'
+  | 'PENDING_CHARGE_APPROVAL'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED';
+
+export interface SwapAssignmentSnapshot {
+  assignmentId: string;
+  userId: string;
+  userName: string;
+  shiftDate: string;
+  shiftPeriod: ShiftPeriod;
+  zone: EdZone;
+  shiftFunction: ShiftFunction;
+}
+
+export interface ShiftSwapResponse {
+  id: string;
+  hospitalId: string;
+  status: SwapStatus;
+  requestReason: string | null;
+  requesterSide: SwapAssignmentSnapshot;
+  partnerSide: SwapAssignmentSnapshot;
+  createdAt: string;
+  partnerRespondedAt: string | null;
+  partnerResponseNote: string | null;
+  chargeRespondedAt: string | null;
+  chargeResponderId: string | null;
+  chargeResponderName: string | null;
+  chargeResponseNote: string | null;
+  cancelledAt: string | null;
+  cancelledById: string | null;
+  cancelledByName: string | null;
+  rejectionReason: string | null;
+}
+
+export interface CreateShiftSwapRequest {
+  requesterAssignmentId: string;
+  partnerAssignmentId: string;
+  requestReason?: string;
+}
+
+export interface SwapDecisionRequest {
+  note?: string;
 }
