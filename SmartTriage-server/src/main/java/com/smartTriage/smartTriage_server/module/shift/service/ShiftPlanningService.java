@@ -105,9 +105,14 @@ public class ShiftPlanningService {
         }
 
         LocalDate today = LocalDate.now(KIGALI);
-        if (toMonday.isBefore(today)) {
+        // Reject only if the entire target week (Mon..Sun) is in the past.
+        // A CN doing mid-week housekeeping on Wed should still be able to
+        // copy a previous week into the current week — Mon/Tue rows will
+        // be reported per-slot as SKIPPED_PAST, the rest will fill normally.
+        if (toMonday.plusDays(6).isBefore(today)) {
             throw new ClinicalBusinessException(
-                    "Target week (" + toMonday + ") is in the past. Past rosters are read-only.");
+                    "Target week (" + toMonday + " .. " + toMonday.plusDays(6)
+                            + ") is entirely in the past. Past rosters are read-only.");
         }
 
         // Source rows for the entire 7-day window, all periods.
@@ -152,7 +157,7 @@ public class ShiftPlanningService {
             // it are skipped (not failed) so the CN gets a clear partial
             // result.
             if (targetDate.isBefore(today)) {
-                outcome.setStatus("SKIPPED_EXISTING");
+                outcome.setStatus("SKIPPED_PAST");
                 outcome.setNote("Target date is in the past; skipped.");
                 result.getSlots().add(outcome);
                 result.setSlotsSkipped(result.getSlotsSkipped() + 1);

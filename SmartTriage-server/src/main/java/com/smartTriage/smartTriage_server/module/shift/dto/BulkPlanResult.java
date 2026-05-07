@@ -46,7 +46,7 @@ public class BulkPlanResult {
     public static class SlotOutcome {
         private LocalDate date;
         private String period; // "DAY" / "NIGHT"
-        /** "FILLED", "SKIPPED_EXISTING", "SKIPPED_NO_SOURCE" */
+        /** "FILLED", "SKIPPED_EXISTING", "SKIPPED_NO_SOURCE", "SKIPPED_PAST" */
         private String status;
         private int rowsCreated;
         private String note;

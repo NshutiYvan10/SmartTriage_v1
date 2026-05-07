@@ -1129,7 +1129,7 @@ export interface ApplyTemplateRequest {
 export interface BulkPlanResultSlot {
   date: string;
   period: 'DAY' | 'NIGHT';
-  /** "FILLED" | "SKIPPED_EXISTING" | "SKIPPED_NO_SOURCE" */
+  /** "FILLED" | "SKIPPED_EXISTING" | "SKIPPED_NO_SOURCE" | "SKIPPED_PAST" */
   status: string;
   rowsCreated: number;
   note: string | null;
