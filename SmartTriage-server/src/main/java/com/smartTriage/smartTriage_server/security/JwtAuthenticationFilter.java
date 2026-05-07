@@ -52,7 +52,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
 
-                if (jwtService.isTokenValid(jwt, userDetails)) {
+                // isEnabled() folds in both the user soft-delete flag and the
+                // hospital active flag (SUPER_ADMIN exempt — see User entity).
+                // Without this gate, a clinician's access token issued before
+                // their hospital was deactivated would keep working until its
+                // 15-min expiry. With it, deactivation is effective immediately
+                // on the next request.
+                if (jwtService.isTokenValid(jwt, userDetails) && userDetails.isEnabled()) {
                     UsernamePasswordAuthenticationToken authToken =
                             new UsernamePasswordAuthenticationToken(
                                     userDetails,

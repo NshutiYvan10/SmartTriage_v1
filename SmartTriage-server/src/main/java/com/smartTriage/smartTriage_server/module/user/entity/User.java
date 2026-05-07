@@ -115,8 +115,23 @@ public class User extends BaseEntity implements UserDetails {
         return true;
     }
 
+    /**
+     * A user is enabled when:
+     *   1. The user row itself is active (not soft-deleted), AND
+     *   2. The owning hospital is active.
+     *
+     * SUPER_ADMINs are exempt from the hospital check because they
+     * manage the hospital lifecycle — if a SUPER_ADMIN deactivates a
+     * hospital they happen to belong to, they must still be able to
+     * sign in and reactivate it. For every other role, hospital
+     * deactivation immediately revokes login (DaoAuthenticationProvider
+     * checks isEnabled) and revokes any in-flight JWT (the filter
+     * checks isEnabled per-request).
+     */
     @Override
     public boolean isEnabled() {
-        return this.isActive();
+        if (!this.isActive()) return false;
+        if (this.role == com.smartTriage.smartTriage_server.common.enums.Role.SUPER_ADMIN) return true;
+        return this.hospital != null && this.hospital.isActive();
     }
 }

@@ -18,6 +18,16 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByEmailAndIsActiveTrue(String email);
 
+    /**
+     * Auth-path lookup: eagerly fetches hospital so that isEnabled()
+     * can read hospital.isActive() outside a transaction (the JWT
+     * filter does not run inside @Transactional, and accessing the
+     * lazy hospital association there would throw
+     * LazyInitializationException).
+     */
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.hospital WHERE u.email = :email AND u.isActive = true")
+    Optional<User> findByEmailWithHospital(@Param("email") String email);
+
     Optional<User> findByIdAndIsActiveTrue(UUID id);
 
     boolean existsByEmail(String email);

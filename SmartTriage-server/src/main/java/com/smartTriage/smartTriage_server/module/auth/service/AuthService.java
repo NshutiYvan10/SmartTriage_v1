@@ -1,6 +1,7 @@
 package com.smartTriage.smartTriage_server.module.auth.service;
 
 import com.smartTriage.smartTriage_server.common.enums.AccountStatus;
+import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.module.auth.dto.AuthResponse;
 import com.smartTriage.smartTriage_server.module.auth.dto.LoginRequest;
 import com.smartTriage.smartTriage_server.module.auth.dto.RefreshTokenRequest;
@@ -50,6 +51,19 @@ public class AuthService {
         if (user.isAccountLocked()) {
             throw new BadCredentialsException(
                     "Account is locked due to too many failed login attempts. Contact administrator.");
+        }
+
+        // Block sign-in when the user's hospital has been deactivated.
+        // SUPER_ADMINs bypass this — they need to be able to log in to
+        // reactivate the hospital. Every other role is locked out until
+        // the hospital is re-enabled by a SUPER_ADMIN.
+        if (user.getRole() != Role.SUPER_ADMIN
+                && user.getHospital() != null
+                && !user.getHospital().isActive()) {
+            log.warn("Login blocked — hospital {} is deactivated (user: {})",
+                    user.getHospital().getHospitalCode(), user.getEmail());
+            throw new BadCredentialsException(
+                    "Your hospital account has been deactivated. Please contact a system administrator.");
         }
 
         try {
@@ -111,6 +125,15 @@ public class AuthService {
 
         if (!jwtService.isTokenValid(refreshToken, user)) {
             throw new BadCredentialsException("Refresh token is expired or invalid");
+        }
+
+        // Same gate as login — a refresh issued before deactivation
+        // must not let a clinician keep sliding new access tokens.
+        if (user.getRole() != Role.SUPER_ADMIN
+                && user.getHospital() != null
+                && !user.getHospital().isActive()) {
+            throw new BadCredentialsException(
+                    "Your hospital account has been deactivated. Please contact a system administrator.");
         }
 
         String newAccessToken = jwtService.generateAccessToken(

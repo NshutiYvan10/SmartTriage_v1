@@ -43,7 +43,10 @@ public class UserService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        return userRepository.findByEmailAndIsActiveTrue(email)
+        // Eagerly join the hospital so isEnabled() can resolve
+        // hospital.isActive() in non-transactional contexts (the JWT
+        // filter, in particular).
+        return userRepository.findByEmailWithHospital(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
     }
 
