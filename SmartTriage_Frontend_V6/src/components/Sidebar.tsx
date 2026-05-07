@@ -166,31 +166,44 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
   // The sidebar surfaces three classes of shift items:
   //
   //   1. Self-service (every staff member who works shifts):
-  //      my-schedule, shift-assignment (Shift Zones — read your own
-  //      zone & shift-lead status), shift-calendar (your own week).
-  //      Visibility comes from ROLE_PAGES on the user's role.
+  //      my-schedule (your own roster) and shift-calendar (read the
+  //      team week, no edits). Visibility from ROLE_PAGES on the
+  //      user's role.
   //
   //   2. Charge-Nurse-only (the unit-management surfaces):
-  //      zone-transfers (cross-zone pending transfers dashboard),
-  //      shift-planner (rota templates), swap-approvals,
-  //      leave-approvals, delegations. Charge Nurses see them via
-  //      Designation.CHARGE_NURSE, never via Role. Hospital admins
-  //      retain backend fallback authority for emergencies but the
-  //      sidebar does not surface these by default.
+  //      shift-assignment (Shift Zones — also exposes zone reassignment
+  //      and shift-lead badge transfer, abuse risk if regular nurses
+  //      could change others' zones), shift-planner (rota templates),
+  //      swap-approvals, leave-approvals, delegations. Granted via
+  //      Designation.CHARGE_NURSE only — never via Role. Hospital
+  //      admins retain backend fallback authority for emergencies via
+  //      ShiftAssignmentAuthz, but the sidebar does not surface these
+  //      by default.
   //
-  //   3. Admin-also-allowed: zone-transfers — admins may need to
-  //      view cross-zone transfer state for governance, even though
-  //      they don't run the floor. Surfaced for HOSPITAL_ADMIN and
-  //      SUPER_ADMIN as well.
+  //   3. Charge-Nurse + Hospital-Admin: zone-transfers — Hospital
+  //      Admin needs cross-zone transfer visibility for governance.
+  //      SUPER_ADMIN is intentionally excluded: super-admin is a
+  //      system-level role (multi-hospital configuration, governance,
+  //      MoH reporting), not an operational floor role; pending
+  //      zone transfers are floor-level concerns the on-site
+  //      Hospital Admin owns.
   const isChargeNurse = user?.designation === 'CHARGE_NURSE';
-  const isAdmin = userRole === 'HOSPITAL_ADMIN' || userRole === 'SUPER_ADMIN';
+  const isHospitalAdmin = userRole === 'HOSPITAL_ADMIN';
 
   // CN-only sidebar items — NEVER fall through to the user's
   // ROLE_PAGES grant. Required: CHARGE_NURSE designation.
-  const chargeNurseOnly = new Set(['shift-planner', 'swap-approvals', 'leave-approvals', 'delegations']);
+  const chargeNurseOnly = new Set([
+    'shift-assignment',   // Shift Zones — zone reassignment + shift-lead transfer
+    'shift-planner',      // Rota template editing
+    'swap-approvals',     // Approve / decline swap requests
+    'leave-approvals',    // Approve / decline leave requests
+    'delegations',        // Configure CN authority delegations
+  ]);
 
-  // CN-or-admin sidebar items — same, but admins may also view.
-  const chargeNurseOrAdmin = new Set(['zone-transfers']);
+  // CN-or-Hospital-Admin sidebar items.
+  // SUPER_ADMIN is NOT included — super admin is the system role, not
+  // an operational floor role. Pending zone transfers are floor-level.
+  const chargeNurseOrHospitalAdmin = new Set(['zone-transfers']);
 
   // Filter sections based on role permissions
   const sections = allSections
@@ -201,10 +214,9 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         if (chargeNurseOnly.has(item.id)) {
           return isChargeNurse;
         }
-        // Charge-nurse-or-admin — both Charge Nurse + Hospital Admin
-        // see Zone Transfers (governance / oversight).
-        if (chargeNurseOrAdmin.has(item.id)) {
-          return isChargeNurse || isAdmin;
+        // Charge Nurse + Hospital Admin — Zone Transfers governance.
+        if (chargeNurseOrHospitalAdmin.has(item.id)) {
+          return isChargeNurse || isHospitalAdmin;
         }
         // Doctor Workspace only for DOCTOR
         if (item.id === 'doctor-workspace') return userRole === 'DOCTOR';

@@ -210,13 +210,15 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'documentation', 'handover', 'lab',
     // Safety reporting
     'safety-incidents',
-    // Shift planning surfaces — Charge Nurses use these; access is
-    // page-level only and the actual mutation endpoints check
-    // designation server-side via @shiftAssignmentAuthz. Note that
-    // 'swap-approvals' is intentionally NOT in this list — it's a
-    // CN-only surface, granted via RoleGuard.allowDesignations on
-    // the route, so a regular nurse can't open it by accident.
-    'shift-assignment', 'shift-calendar', 'my-schedule',
+    // Self-service shift surfaces only. A regular nurse sees their own
+    // schedule and can read the team calendar — they CANNOT see the
+    // Shift Zones board (which exposes zone reassignment + shift-lead
+    // badge transfer; abuse risk if every nurse could change someone
+    // else's zone). 'shift-assignment' is gated to Charge Nurse via
+    // designation override in the Sidebar + RoleGuard. Same for
+    // shift-planner / swap-approvals / leave-approvals / delegations
+    // — explicitly NOT in this list.
+    'shift-calendar', 'my-schedule',
   ],
 
   // ── Registration only ──

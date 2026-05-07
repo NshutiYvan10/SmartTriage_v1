@@ -162,12 +162,16 @@ export function PendingTransfersDashboard() {
   // dashboard whether or not they happen to hold the shift-lead badge for
   // an active shift right now. The shift-lead-badge holder also keeps
   // access (covers acting charge nurses on a single shift). HOSPITAL_ADMIN
-  // and SUPER_ADMIN retain fallback authority. Regular nurses and zoned
+  // gets governance access as the on-site administrator who answers for
+  // cross-zone transfer state. SUPER_ADMIN is deliberately excluded:
+  // super-admin is a system-level role (multi-hospital configuration,
+  // MoH reporting), not an operational floor role, and pending zone
+  // transfers are a floor-level concern. Regular nurses and zoned
   // doctors continue to see only their own zone via the My Patients
   // banner — unchanged behaviour.
   const isChargeNurse = user?.designation === 'CHARGE_NURSE';
-  const isAdmin = user?.role === 'HOSPITAL_ADMIN' || user?.role === 'SUPER_ADMIN';
-  const canViewDashboard = isChargeNurse || isShiftLead || isAdmin;
+  const isHospitalAdmin = user?.role === 'HOSPITAL_ADMIN';
+  const canViewDashboard = isChargeNurse || isShiftLead || isHospitalAdmin;
   if (!canViewDashboard) {
     return (
       <div className="p-6 rounded-2xl border border-amber-500/40 bg-amber-50">
