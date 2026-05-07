@@ -85,6 +85,7 @@ public class InvestigationController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<InvestigationResponse>> getInvestigation(
             @PathVariable UUID id) {
         InvestigationResponse response = investigationService.getInvestigation(id);
@@ -92,6 +93,7 @@ public class InvestigationController {
     }
 
     @GetMapping("/visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<Page<InvestigationResponse>>> getInvestigationsByVisit(
             @PathVariable UUID visitId,
             @PageableDefault(size = 50) Pageable pageable) {
@@ -101,6 +103,7 @@ public class InvestigationController {
     }
 
     @GetMapping("/visit/{visitId}/all")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<InvestigationResponse>>> getAllInvestigationsForVisit(
             @PathVariable UUID visitId) {
         List<InvestigationResponse> response = investigationService
@@ -109,6 +112,7 @@ public class InvestigationController {
     }
 
     @GetMapping("/visit/{visitId}/type/{type}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<InvestigationResponse>>> getInvestigationsByType(
             @PathVariable UUID visitId,
             @PathVariable InvestigationType type) {
@@ -118,6 +122,7 @@ public class InvestigationController {
     }
 
     @GetMapping("/visit/{visitId}/pending")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<InvestigationResponse>>> getPendingInvestigations(
             @PathVariable UUID visitId) {
         List<InvestigationResponse> response = investigationService

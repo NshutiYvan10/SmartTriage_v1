@@ -62,12 +62,14 @@ public class DiagnosisController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<DiagnosisResponse>> getDiagnosis(@PathVariable UUID id) {
         DiagnosisResponse response = diagnosisService.getDiagnosis(id);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<Page<DiagnosisResponse>>> getDiagnosesByVisit(
             @PathVariable UUID visitId,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -76,6 +78,7 @@ public class DiagnosisController {
     }
 
     @GetMapping("/visit/{visitId}/all")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<DiagnosisResponse>>> getAllDiagnosesForVisit(
             @PathVariable UUID visitId) {
         List<DiagnosisResponse> response = diagnosisService.getAllDiagnosesForVisit(visitId);
@@ -83,6 +86,7 @@ public class DiagnosisController {
     }
 
     @GetMapping("/visit/{visitId}/type/{type}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<DiagnosisResponse>>> getDiagnosesByType(
             @PathVariable UUID visitId,
             @PathVariable DiagnosisType type) {

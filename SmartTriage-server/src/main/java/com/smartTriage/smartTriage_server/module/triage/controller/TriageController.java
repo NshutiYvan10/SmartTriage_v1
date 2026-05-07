@@ -37,6 +37,7 @@ public class TriageController {
     }
 
     @GetMapping("/visit/{visitId}/history")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<Page<TriageRecordResponse>>> getTriageHistory(
             @PathVariable UUID visitId,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -45,6 +46,7 @@ public class TriageController {
     }
 
     @GetMapping("/visit/{visitId}/latest")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<TriageRecordResponse>> getLatestTriage(
             @PathVariable UUID visitId) {
         TriageRecordResponse response = triageService.getLatestTriage(visitId);

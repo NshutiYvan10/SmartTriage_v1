@@ -115,12 +115,14 @@ public class MedicationController {
     // ====================================================================
 
     @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<MedicationResponse>> getMedication(@PathVariable UUID id) {
         MedicationResponse response = medicationService.getMedication(id);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<Page<MedicationResponse>>> getMedicationsByVisit(
             @PathVariable UUID visitId,
             @PageableDefault(size = 50) Pageable pageable) {
@@ -129,6 +131,7 @@ public class MedicationController {
     }
 
     @GetMapping("/visit/{visitId}/all")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<MedicationResponse>>> getAllMedicationsForVisit(
             @PathVariable UUID visitId) {
         List<MedicationResponse> response = medicationService.getAllMedicationsForVisit(visitId);
@@ -138,10 +141,13 @@ public class MedicationController {
     /**
      * Patient-level medication history — every active prescription this
      * patient has had across all their visits, newest first. Drives the
-     * doctor's "Reorder" affordance in the prescribing UI.
+     * doctor's "Reorder" affordance in the prescribing UI. Cross-hospital
+     * read is blocked by canAccessPatient — without it any DOCTOR/NURSE
+     * could fetch any other hospital's medication trail by guessing IDs.
      */
     @GetMapping("/patient/{patientId}/history")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessPatient(authentication, #patientId)")
     public ResponseEntity<ApiResponse<List<MedicationResponse>>> getPatientMedicationHistory(
             @PathVariable UUID patientId) {
         List<MedicationResponse> response = medicationService.getMedicationHistoryForPatient(patientId);

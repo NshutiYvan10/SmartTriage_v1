@@ -37,6 +37,7 @@ public class VitalSignsController {
     }
 
     @GetMapping("/visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<Page<VitalSignsResponse>>> getVitalsByVisit(
             @PathVariable UUID visitId,
             @PageableDefault(size = 50) Pageable pageable) {
@@ -45,6 +46,7 @@ public class VitalSignsController {
     }
 
     @GetMapping("/visit/{visitId}/latest")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<VitalSignsResponse>> getLatestVitals(
             @PathVariable UUID visitId) {
         VitalSignsResponse response = vitalSignsService.getLatestVitals(visitId);

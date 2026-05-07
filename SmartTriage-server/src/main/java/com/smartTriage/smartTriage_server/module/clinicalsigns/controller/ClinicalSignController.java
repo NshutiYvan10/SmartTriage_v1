@@ -35,21 +35,24 @@ public class ClinicalSignController {
     private final ClinicalSignService service;
 
     @GetMapping("/visit/{visitId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<ClinicalSignEventResponse>>> getHistory(
             @PathVariable UUID visitId) {
         return ResponseEntity.ok(ApiResponse.success(service.getHistoryForVisit(visitId)));
     }
 
     @GetMapping("/visit/{visitId}/current")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<ClinicalSignEventResponse>>> getCurrentState(
             @PathVariable UUID visitId) {
         return ResponseEntity.ok(ApiResponse.success(service.getCurrentStateForVisit(visitId)));
     }
 
     @GetMapping("/visit/{visitId}/sign/{signCode}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<ClinicalSignEventResponse>>> getSignHistory(
             @PathVariable UUID visitId, @PathVariable String signCode) {
         return ResponseEntity.ok(ApiResponse.success(service.getSignHistory(visitId, signCode)));

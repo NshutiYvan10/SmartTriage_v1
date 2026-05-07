@@ -84,12 +84,14 @@ public class ClinicalNoteController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<ClinicalNoteResponse>> getNote(@PathVariable UUID id) {
         ClinicalNoteResponse response = clinicalNoteService.getNote(id);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<Page<ClinicalNoteResponse>>> getNotesByVisit(
             @PathVariable UUID visitId,
             @PageableDefault(size = 50) Pageable pageable) {
@@ -98,6 +100,7 @@ public class ClinicalNoteController {
     }
 
     @GetMapping("/visit/{visitId}/all")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<ClinicalNoteResponse>>> getAllNotesForVisit(
             @PathVariable UUID visitId) {
         List<ClinicalNoteResponse> response = clinicalNoteService.getAllNotesForVisit(visitId);
@@ -105,6 +108,7 @@ public class ClinicalNoteController {
     }
 
     @GetMapping("/visit/{visitId}/type/{type}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<ClinicalNoteResponse>>> getNotesByType(
             @PathVariable UUID visitId,
             @PathVariable NoteType type) {
@@ -113,6 +117,7 @@ public class ClinicalNoteController {
     }
 
     @GetMapping("/visit/{visitId}/type/{type}/latest")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<ClinicalNoteResponse>> getLatestNoteByType(
             @PathVariable UUID visitId,
             @PathVariable NoteType type) {
