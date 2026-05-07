@@ -10,6 +10,7 @@ import {
 import { useTheme } from '@/hooks/useTheme';
 import { hospitalApi } from '@/api/hospitals';
 import type { HospitalResponse } from '@/api/types';
+import { RwandaLocationPicker } from '@/components/RwandaLocationPicker';
 
 export function HospitalManagement() {
   const { glassCard, glassInner, isDark, text } = useTheme();
@@ -27,7 +28,16 @@ export function HospitalManagement() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  const emptyForm = { name: '', hospitalCode: '', address: '', phoneNumber: '', email: '', tier: 'DISTRICT' };
+  const emptyForm = {
+    name: '', hospitalCode: '', address: '',
+    phoneNumber: '', email: '', tier: 'DISTRICT',
+    // V46+ structured Rwanda location IDs.
+    provinceId: undefined as string | undefined,
+    districtId: undefined as string | undefined,
+    sectorId: undefined as string | undefined,
+    cellId: undefined as string | undefined,
+    villageId: undefined as string | undefined,
+  };
   const [form, setForm] = useState(emptyForm);
 
   const loadHospitals = useCallback(async () => {
@@ -76,6 +86,14 @@ export function HospitalManagement() {
       phoneNumber: h.phoneNumber || '',
       email: h.email || '',
       tier: h.tier || 'DISTRICT',
+      // Structured location: HospitalResponse may not surface these
+      // FKs yet; leave undefined and the picker starts blank. The
+      // user can re-pick to populate.
+      provinceId: undefined,
+      districtId: undefined,
+      sectorId: undefined,
+      cellId: undefined,
+      villageId: undefined,
     });
     setEditId(h.id);
     setShowForm(true);
@@ -152,6 +170,30 @@ export function HospitalManagement() {
                 </select>
               </div>
             </div>
+
+            {/* Cascading Rwanda location picker — V46+. Replaces the
+                free-text location guesswork on the Address field with a
+                FK chain that maps to the same units MoH uses. */}
+            <div className="mt-4">
+              <RwandaLocationPicker
+                value={{
+                  provinceId: form.provinceId,
+                  districtId: form.districtId,
+                  sectorId: form.sectorId,
+                  cellId: form.cellId,
+                  villageId: form.villageId,
+                }}
+                onChange={(next) => setForm((f) => ({
+                  ...f,
+                  provinceId: next.provinceId,
+                  districtId: next.districtId,
+                  sectorId: next.sectorId,
+                  cellId: next.cellId,
+                  villageId: next.villageId,
+                }))}
+              />
+            </div>
+
             <div className="flex items-center gap-3 mt-4">
               <button onClick={handleSave} disabled={formLoading || !form.name || !form.hospitalCode} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
                 {formLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} {editId ? 'Update' : 'Register'}

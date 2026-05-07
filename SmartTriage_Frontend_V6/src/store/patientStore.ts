@@ -102,6 +102,9 @@ interface PatientState {
     guardianRelationship?: string;
     guardianNationalId?: string;
     chiefComplaint?: string; arrivalMode?: string; hospitalId: string;
+    // V46+ structured Rwanda location IDs — any subset accepted.
+    provinceId?: string; districtId?: string; sectorId?: string;
+    cellId?: string; villageId?: string;
   }) => Promise<Patient | null>;
   /** Fetch active visits from backend and populate patient store */
   fetchActiveVisits: (hospitalId: string) => Promise<void>;
@@ -198,6 +201,11 @@ export const usePatientStore = create<PatientState>((set, get) => ({
         chiefComplaint: data.chiefComplaint || '',
         arrivalMode: (data.arrivalMode as any) || 'WALK_IN',
         hospitalId: data.hospitalId,
+        provinceId: data.provinceId,
+        districtId: data.districtId,
+        sectorId: data.sectorId,
+        cellId: data.cellId,
+        villageId: data.villageId,
       });
 
       // Map and add to local store

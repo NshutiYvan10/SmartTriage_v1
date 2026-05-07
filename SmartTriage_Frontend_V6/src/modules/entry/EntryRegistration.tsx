@@ -35,6 +35,7 @@ import type { UserResponse, PatientResponse } from '@/api/types';
 import { PatientLookupPanel } from './PatientLookupPanel';
 import { PatientHistoryPanel } from './PatientHistoryPanel';
 import { PatientProfilePanel } from './PatientProfilePanel';
+import { RwandaLocationPicker } from '@/components/RwandaLocationPicker';
 
 /* ─── Constants ─── */
 const ALLERGIES = ['Penicillin', 'Latex', 'Pollen', 'Food', 'Dairy', 'Other'];
@@ -92,6 +93,15 @@ interface FormData {
   sector: string;
   cell: string;
   village: string;
+  // V46+ structured IDs alongside the legacy free-text fields above.
+  // The picker fills these; the free-text fields are kept populated
+  // (with the human-readable name) so legacy address concatenation
+  // continues to work without a separate name lookup.
+  provinceId?: string;
+  districtId?: string;
+  sectorId?: string;
+  cellId?: string;
+  villageId?: string;
   // Step 3 — Contact, Arrival, Guardian, Nurse
   phoneNumber: string;
   emergencyContactName: string;
@@ -367,11 +377,14 @@ export function EntryRegistration() {
     if (s === 2) {
       if (!formData.streetAddress.trim()) e.streetAddress = 'Street address is required';
       if (!formData.city.trim()) e.city = 'City is required';
-      if (!formData.province) e.province = 'Province is required';
-      if (!formData.district.trim()) e.district = 'District is required';
-      if (!formData.sector.trim()) e.sector = 'Sector is required';
-      if (!formData.cell.trim()) e.cell = 'Cell is required';
-      if (!formData.village.trim()) e.village = 'Village is required';
+      // Structured-location validation: require at least province +
+      // district. Sector/cell/village are encouraged but optional —
+      // a clinician may legitimately know only down to district when
+      // registering a stranger or an unconscious patient. The
+      // RwandaLocationPicker enforces cascade integrity so we never
+      // get a (province, district) pair that doesn't match.
+      if (!formData.provinceId) e.province = 'Province is required';
+      if (!formData.districtId) e.district = 'District is required';
     }
 
     if (s === 3) {
@@ -480,6 +493,16 @@ export function EntryRegistration() {
         chiefComplaint,
         arrivalMode: formData.arrivalMode || undefined,
         hospitalId,
+        // V46+ structured Rwanda location IDs — sent to the backend
+        // alongside the legacy concatenated `address` for the FK
+        // chain. The picker enforces cascade integrity (a district
+        // is always under its province, etc.) so we never produce
+        // an incompatible (province, district) pair.
+        provinceId: formData.provinceId || undefined,
+        districtId: formData.districtId || undefined,
+        sectorId: formData.sectorId || undefined,
+        cellId: formData.cellId || undefined,
+        villageId: formData.villageId || undefined,
       });
 
       if (!patient) {
@@ -870,70 +893,41 @@ export function EntryRegistration() {
                   {errors.city && <p className="text-red-500 text-xs mt-1.5 ml-1 font-medium">{errors.city}</p>}
                 </div>
 
-                <div>
-                  <label className={labelCls}>Province <span className="text-red-400">*</span></label>
-                  <select className={selectClass('province')} style={glassInner} value={formData.province} onChange={(e) => set('province', e.target.value)}>
-                    <option value="">Select Province</option>
-                    {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                  {errors.province && <p className="text-red-500 text-xs mt-1.5 ml-1 font-medium">{errors.province}</p>}
-                </div>
-
-                <div>
-                  <label className={labelCls}>District <span className="text-red-400">*</span></label>
-                  <select className={selectClass('district')} style={glassInner} value={formData.district} onChange={(e) => set('district', e.target.value)}>
-                    <option value="">Select District</option>
-                    <option value="Gasabo">Gasabo</option>
-                    <option value="Kicukiro">Kicukiro</option>
-                    <option value="Nyarugenge">Nyarugenge</option>
-                    <option value="Burera">Burera</option>
-                    <option value="Gakenke">Gakenke</option>
-                    <option value="Gicumbi">Gicumbi</option>
-                    <option value="Musanze">Musanze</option>
-                    <option value="Rulindo">Rulindo</option>
-                  </select>
-                  {errors.district && <p className="text-red-500 text-xs mt-1.5 ml-1 font-medium">{errors.district}</p>}
-                </div>
-
-                <div>
-                  <label className={labelCls}>Sector <span className="text-red-400">*</span></label>
-                  <select className={selectClass('sector')} style={glassInner} value={formData.sector} onChange={(e) => set('sector', e.target.value)}>
-                    <option value="">Select Sector</option>
-                    <option value="Remera">Remera</option>
-                    <option value="Kimironko">Kimironko</option>
-                    <option value="Kacyiru">Kacyiru</option>
-                    <option value="Kimihurura">Kimihurura</option>
-                    <option value="Gisozi">Gisozi</option>
-                    <option value="Jali">Jali</option>
-                    <option value="Kanombe">Kanombe</option>
-                  </select>
-                  {errors.sector && <p className="text-red-500 text-xs mt-1.5 ml-1 font-medium">{errors.sector}</p>}
-                </div>
-
-                <div>
-                  <label className={labelCls}>Cell <span className="text-red-400">*</span></label>
-                  <select className={selectClass('cell')} style={glassInner} value={formData.cell} onChange={(e) => set('cell', e.target.value)}>
-                    <option value="">Select Cell</option>
-                    <option value="Rukiri I">Rukiri I</option>
-                    <option value="Rukiri II">Rukiri II</option>
-                    <option value="Nyabisindu">Nyabisindu</option>
-                    <option value="Gasharu">Gasharu</option>
-                    <option value="Kabeza">Kabeza</option>
-                  </select>
-                  {errors.cell && <p className="text-red-500 text-xs mt-1.5 ml-1 font-medium">{errors.cell}</p>}
-                </div>
-
-                <div>
-                  <label className={labelCls}>Village <span className="text-red-400">*</span></label>
-                  <select className={selectClass('village')} style={glassInner} value={formData.village} onChange={(e) => set('village', e.target.value)}>
-                    <option value="">Select Village</option>
-                    <option value="Umujyi">Umujyi</option>
-                    <option value="Ingenzi">Ingenzi</option>
-                    <option value="Urukundo">Urukundo</option>
-                    <option value="Isangano">Isangano</option>
-                    <option value="Ubumwe">Ubumwe</option>
-                  </select>
-                  {errors.village && <p className="text-red-500 text-xs mt-1.5 ml-1 font-medium">{errors.village}</p>}
+                {/* Cascading Rwanda location picker — V46+
+                    replaces the old flat dropdowns that mixed Kigali
+                    City districts with Northern districts in one
+                    list. Picking province narrows district, etc.
+                    Backend persists the FK chain; the free-text
+                    `streetAddress` field above stays for
+                    building/landmark detail. */}
+                <div className="sm:col-span-2">
+                  <RwandaLocationPicker
+                    value={{
+                      provinceId: formData.provinceId,
+                      districtId: formData.districtId,
+                      sectorId: formData.sectorId,
+                      cellId: formData.cellId,
+                      villageId: formData.villageId,
+                    }}
+                    onChange={(next) => setFormData((f) => ({
+                      ...f,
+                      provinceId: next.provinceId,
+                      districtId: next.districtId,
+                      sectorId: next.sectorId,
+                      cellId: next.cellId,
+                      villageId: next.villageId,
+                      // The legacy text fields stay populated only
+                      // if the user typed something free-form into
+                      // streetAddress; the backend stores the FK
+                      // chain and resolves names server-side.
+                    }))}
+                    showHeader={false}
+                  />
+                  {(errors.province || errors.district || errors.sector) && (
+                    <p className="text-red-500 text-xs mt-2 ml-1 font-medium">
+                      {errors.province || errors.district || errors.sector}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

@@ -227,6 +227,16 @@ export interface CreatePatientRequest {
   guardianName?: string;
   guardianRelationship?: string;
   hospitalId: string;
+  // ── V46+ structured Rwanda location IDs ──
+  // All five levels are independent inputs; pass any subset. Backend
+  // resolves IDs to entity FKs and silently drops unknown IDs after
+  // logging, so a partially-loaded reference dataset doesn't block
+  // registration.
+  provinceId?: string;
+  districtId?: string;
+  sectorId?: string;
+  cellId?: string;
+  villageId?: string;
 }
 
 /** Combined registration request — creates Patient + Visit atomically */
