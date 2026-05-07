@@ -1,7 +1,10 @@
 package com.smartTriage.smartTriage_server.module.location.service;
 
 import com.smartTriage.smartTriage_server.module.location.entity.*;
-import com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.*;
+import com.smartTriage.smartTriage_server.module.location.repository.RwDistrictRepository;
+import com.smartTriage.smartTriage_server.module.location.repository.RwSectorRepository;
+import com.smartTriage.smartTriage_server.module.location.repository.RwCellRepository;
+import com.smartTriage.smartTriage_server.module.location.repository.RwVillageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;

@@ -1,7 +1,11 @@
 package com.smartTriage.smartTriage_server.module.location.service;
 
 import com.smartTriage.smartTriage_server.module.location.dto.LocationDtos.LocationOption;
-import com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.*;
+import com.smartTriage.smartTriage_server.module.location.repository.RwProvinceRepository;
+import com.smartTriage.smartTriage_server.module.location.repository.RwDistrictRepository;
+import com.smartTriage.smartTriage_server.module.location.repository.RwSectorRepository;
+import com.smartTriage.smartTriage_server.module.location.repository.RwCellRepository;
+import com.smartTriage.smartTriage_server.module.location.repository.RwVillageRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
