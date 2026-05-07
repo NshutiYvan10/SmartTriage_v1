@@ -69,7 +69,8 @@ public class MedicationSafetyController {
     // ====================================================================
 
     @GetMapping("/visit/{visitId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<Page<MedicationSafetyCheckResponse>>> getChecksForVisit(
             @PathVariable UUID visitId,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -82,7 +83,8 @@ public class MedicationSafetyController {
     // ====================================================================
 
     @GetMapping("/formulary/{hospitalId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<DrugFormularyResponse>>> getFormulary(
             @PathVariable UUID hospitalId,
             @PageableDefault(size = 50) Pageable pageable) {

@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -40,6 +41,7 @@ public class FastTrackController {
     }
 
     @GetMapping("/visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<FastTrackResponse>> getFastTrackForVisit(
             @PathVariable UUID visitId) {
         FastTrackResponse response = FastTrackMapper.toResponse(
@@ -48,6 +50,7 @@ public class FastTrackController {
     }
 
     @GetMapping("/hospital/{hospitalId}/active")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<FastTrackResponse>>> getActiveFastTracks(
             @PathVariable UUID hospitalId) {
         List<FastTrackResponse> responses = fastTrackService.getActiveFastTracks(hospitalId)

@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -105,6 +106,7 @@ public class ReferralController {
     }
 
     @GetMapping("/hospital/{hospitalId}/active")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<ReferralResponse>>> getActiveReferrals(
             @PathVariable UUID hospitalId) {
         List<ReferralResponse> responses = referralService.getActiveReferrals(hospitalId)
@@ -115,6 +117,7 @@ public class ReferralController {
     }
 
     @GetMapping("/visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<ReferralResponse>> getReferralForVisit(
             @PathVariable UUID visitId) {
         ReferralResponse response = ReferralMapper.toResponse(
@@ -123,6 +126,7 @@ public class ReferralController {
     }
 
     @GetMapping("/{id}/summary")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<ReferralSummaryResponse>> generateReferralSummary(
             @PathVariable UUID id) {
         ReferralSummaryResponse response = referralService.generateReferralSummary(id);

@@ -14,6 +14,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -48,6 +49,7 @@ public class SepsisController {
      * Get screening history for a visit.
      */
     @GetMapping("/visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<Page<SepsisScreeningResponse>>> getScreenings(
             @PathVariable UUID visitId,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -60,6 +62,7 @@ public class SepsisController {
      * Get the current active screening for a visit.
      */
     @GetMapping("/visit/{visitId}/active")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<SepsisScreeningResponse>> getActiveScreening(
             @PathVariable UUID visitId) {
         SepsisScreening screening = sepsisService.getActiveScreening(visitId);
@@ -94,6 +97,7 @@ public class SepsisController {
      * Get all active sepsis cases at a hospital.
      */
     @GetMapping("/hospital/{hospitalId}/active")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<SepsisScreeningResponse>>> getActiveSepsisCases(
             @PathVariable UUID hospitalId) {
         List<SepsisScreeningResponse> response = sepsisService.getActiveSepsisCases(hospitalId)

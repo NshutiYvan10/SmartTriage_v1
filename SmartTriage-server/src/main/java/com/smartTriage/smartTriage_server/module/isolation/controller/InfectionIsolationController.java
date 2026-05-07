@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -40,6 +41,7 @@ public class InfectionIsolationController {
     }
 
     @GetMapping("/visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<InfectionScreeningResponse>>> getScreeningsForVisit(
             @PathVariable UUID visitId) {
         List<InfectionScreeningResponse> responses = isolationService.getScreeningsForVisit(visitId)
@@ -50,6 +52,7 @@ public class InfectionIsolationController {
     }
 
     @GetMapping("/hospital/{hospitalId}/active")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<InfectionScreeningResponse>>> getActiveIsolations(
             @PathVariable UUID hospitalId) {
         List<InfectionScreeningResponse> responses = isolationService.getActiveIsolations(hospitalId)
@@ -87,6 +90,7 @@ public class InfectionIsolationController {
     }
 
     @GetMapping("/hospital/{hospitalId}/notifiable-diseases")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<InfectionScreeningResponse>>> getNotifiableDiseases(
             @PathVariable UUID hospitalId) {
         List<InfectionScreeningResponse> responses = isolationService.getNotifiableDiseases(hospitalId)

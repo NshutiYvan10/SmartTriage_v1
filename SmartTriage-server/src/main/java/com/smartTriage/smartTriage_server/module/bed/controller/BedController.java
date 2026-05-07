@@ -81,17 +81,20 @@ public class BedController {
     // ====================================================================
 
     @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<BedResponse>> getBed(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(bedService.getBed(id)));
     }
 
     @GetMapping("/hospital/{hospitalId}")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<BedResponse>>> getBedsForHospital(
             @PathVariable UUID hospitalId) {
         return ResponseEntity.ok(ApiResponse.success(bedService.getBedsForHospital(hospitalId)));
     }
 
     @GetMapping("/hospital/{hospitalId}/zone/{zone}")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<BedResponse>>> getBedsByZone(
             @PathVariable UUID hospitalId,
             @PathVariable EdZone zone) {
@@ -103,6 +106,7 @@ public class BedController {
      * bed-grid header ("6 of 8 occupied"). One call per zone view.
      */
     @GetMapping("/hospital/{hospitalId}/zone/{zone}/occupancy")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<ZoneOccupancyResponse>> getZoneOccupancy(
             @PathVariable UUID hospitalId,
             @PathVariable EdZone zone) {
@@ -110,6 +114,7 @@ public class BedController {
     }
 
     @GetMapping("/hospital/{hospitalId}/zone/{zone}/available")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<BedResponse>>> getAvailableInZone(
             @PathVariable UUID hospitalId,
             @PathVariable EdZone zone) {

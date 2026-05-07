@@ -15,6 +15,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Optional;
@@ -114,6 +115,7 @@ public class IcuEscalationController {
      * Get paginated active (non-terminal) escalations for a hospital.
      */
     @GetMapping("/hospital/{hospitalId}/active")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<IcuEscalationResponse>>> getActiveEscalations(
             @PathVariable UUID hospitalId,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -127,6 +129,7 @@ public class IcuEscalationController {
      * Get the active escalation for a specific visit.
      */
     @GetMapping("/visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<IcuEscalationResponse>> getEscalationForVisit(@PathVariable UUID visitId) {
         Optional<IcuEscalation> escalation = icuEscalationService.getEscalationForVisit(visitId);
         if (escalation.isPresent()) {
@@ -139,6 +142,7 @@ public class IcuEscalationController {
      * Get ICU bed capacity information for a hospital.
      */
     @GetMapping("/hospital/{hospitalId}/capacity")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<IcuCapacityResponse>> getIcuCapacity(@PathVariable UUID hospitalId) {
         IcuCapacityResponse capacity = icuEscalationService.getIcuCapacity(hospitalId);
         return ResponseEntity.ok(ApiResponse.success(capacity));

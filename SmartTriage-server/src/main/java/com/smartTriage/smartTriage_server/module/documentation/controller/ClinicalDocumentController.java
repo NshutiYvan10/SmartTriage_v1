@@ -95,6 +95,7 @@ public class ClinicalDocumentController {
     // ====================================================================
 
     @GetMapping("/visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<Page<ClinicalDocumentResponse>>> getDocumentsForVisit(
             @PathVariable UUID visitId,
             @PageableDefault(size = 50) Pageable pageable) {
@@ -103,6 +104,7 @@ public class ClinicalDocumentController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<ClinicalDocumentResponse>> getDocument(@PathVariable UUID id) {
         ClinicalDocumentResponse response = documentService.getDocument(id);
         return ResponseEntity.ok(ApiResponse.success(response));

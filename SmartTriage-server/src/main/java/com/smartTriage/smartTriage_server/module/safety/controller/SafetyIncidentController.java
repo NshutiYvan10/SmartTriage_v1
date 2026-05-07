@@ -13,6 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -94,6 +95,7 @@ public class SafetyIncidentController {
     }
 
     @GetMapping("/hospital/{hospitalId}")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<SafetyIncidentResponse>>> getIncidentsByHospital(
             @PathVariable UUID hospitalId,
             @RequestParam(required = false) IncidentType type,
@@ -110,6 +112,7 @@ public class SafetyIncidentController {
     }
 
     @GetMapping("/hospital/{hospitalId}/open")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<SafetyIncidentResponse>>> getOpenIncidents(
             @PathVariable UUID hospitalId) {
         List<SafetyIncidentResponse> responses = safetyIncidentService.getOpenIncidents(hospitalId)
@@ -120,6 +123,7 @@ public class SafetyIncidentController {
     }
 
     @GetMapping("/hospital/{hospitalId}/stats")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<IncidentStatsResponse>> getIncidentStats(
             @PathVariable UUID hospitalId,
             @RequestParam Instant from,
@@ -129,6 +133,7 @@ public class SafetyIncidentController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> getIncident(
             @PathVariable UUID id) {
         SafetyIncidentResponse response = SafetyIncidentMapper.toResponse(

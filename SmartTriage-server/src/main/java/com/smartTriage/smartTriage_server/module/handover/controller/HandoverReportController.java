@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -80,6 +81,7 @@ public class HandoverReportController {
      * Get all handover reports for a visit.
      */
     @GetMapping("/visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<HandoverReportResponse>>> getReportsForVisit(
             @PathVariable UUID visitId) {
         List<HandoverReportResponse> responses = handoverReportService.getReportsForVisit(visitId)
@@ -94,6 +96,7 @@ public class HandoverReportController {
      * Defaults to last 12 hours if no parameters provided.
      */
     @GetMapping("/hospital/{hospitalId}/shift")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<HandoverReportResponse>>> getReportsForShift(
             @PathVariable UUID hospitalId,
             @RequestParam(required = false) Instant shiftStart,
@@ -116,6 +119,7 @@ public class HandoverReportController {
      * Get a single handover report by ID.
      */
     @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<HandoverReportResponse>> getReport(@PathVariable UUID id) {
         HandoverReport report = handoverReportService.getReport(id);
         return ResponseEntity.ok(ApiResponse.success(HandoverReportMapper.toResponse(report)));
