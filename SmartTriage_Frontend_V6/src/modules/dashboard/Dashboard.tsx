@@ -21,6 +21,7 @@ import { Patient, TriageCategory } from '@/types';
 import { getCategoryColor } from '@/utils/tewsCalculator';
 import { formatDistanceToNow } from 'date-fns';
 import { useMyShift, getZoneForCategory } from '@/hooks/useMyShift';
+import { ShiftStartBanner } from '@/components/ShiftStartBanner';
 
 export function Dashboard() {
   const { glassCard, glassInner, isDark, text } = useTheme();
@@ -124,6 +125,16 @@ export function Dashboard() {
   return (
     <div className="min-h-full">
       <div className="p-5 space-y-4">
+
+        {/* Shift-start briefing — top of dashboard so the doctor sees
+            their zone, patient count, and outstanding work the moment
+            they land on the page. Self-hides when off-shift, when
+            cross-zone admin (no shift assignment), or when the user
+            has dismissed it for this specific shift. */}
+        <ShiftStartBanner
+          assignment={myShiftAssignment}
+          patients={displayPatients}
+        />
 
         {/* ── Row 1: Header ── */}
         <div className="relative z-10 flex items-center justify-between animate-fade-in">
