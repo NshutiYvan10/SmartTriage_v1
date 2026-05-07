@@ -232,14 +232,43 @@ public class VisitService {
             UUID hospitalId,
             org.springframework.security.core.Authentication authentication,
             Pageable pageable) {
+        // 1. Cross-zone clinical actors — admins, shift-lead, Charge
+        //    Nurse designation. Hospital-wide list.
         if (clinicalAuthz.canSeeAllZonesAtHospital(authentication, hospitalId)) {
             return getActiveVisits(hospitalId, pageable);
         }
-        // Resolve the caller's zone via /shifts/me/current semantics.
+
         Object principal = authentication == null ? null : authentication.getPrincipal();
         if (!(principal instanceof com.smartTriage.smartTriage_server.module.user.entity.User user)) {
             return org.springframework.data.domain.Page.empty(pageable);
         }
+
+        // 2. Non-zone-bound operational roles — REGISTRAR (front
+        //    desk: needs the active queue to answer "where is patient
+        //    X / has the family arrived"), LAB_TECHNICIAN (needs to
+        //    look up the patient associated with a specimen),
+        //    PARAMEDIC (arrives with a patient and may hand off
+        //    repeatedly), READ_ONLY (governance audit). None of
+        //    these roles take a zone shift, so they were previously
+        //    falling through the zone-resolution branch and getting
+        //    an empty page — that was the "Registrar registered a
+        //    patient but couldn't see them in the list" bug.
+        //
+        //    They still must belong to this hospital — the controller
+        //    enforces that with @PreAuthorize canAccessHospital.
+        com.smartTriage.smartTriage_server.common.enums.Role role = user.getRole();
+        if (role == com.smartTriage.smartTriage_server.common.enums.Role.REGISTRAR
+                || role == com.smartTriage.smartTriage_server.common.enums.Role.LAB_TECHNICIAN
+                || role == com.smartTriage.smartTriage_server.common.enums.Role.PARAMEDIC
+                || role == com.smartTriage.smartTriage_server.common.enums.Role.READ_ONLY) {
+            return getActiveVisits(hospitalId, pageable);
+        }
+
+        // 3. Zone-bound clinical roles (DOCTOR, NURSE) — patients in
+        //    the caller's currently-assigned zone. Off-shift returns
+        //    empty by design: the frontend renders this as "you're
+        //    not on shift", which is the correct cue rather than
+        //    leaking other zones' data.
         return shiftAssignmentService
                 .getCurrentShiftForUser(user.getId())
                 .map(sa -> sa.getZone())
