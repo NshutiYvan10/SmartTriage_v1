@@ -62,6 +62,36 @@ interface Props {
   idPrefix?: string;
 }
 
+/**
+ * Module-level option cache.
+ *
+ * Some host forms (notably the wizard-style patient registration)
+ * unmount the picker as the user navigates between steps, then mount
+ * a fresh instance when they return. Without a cache, remount lands
+ * with empty option arrays — the IDs in `value` are still set in the
+ * parent's form state, but the dropdowns show their placeholder text
+ * until the network round-trips finish, which looks like the user's
+ * earlier picks were lost.
+ *
+ * This cache lives at module scope (not inside the component) so it
+ * survives unmount/remount within the same browser session. Each level
+ * keys on its parent id. The cache is purely additive: every successful
+ * fetch overwrites its entry. There is no eviction — the data is small
+ * (≤ 14k villages total, but only the cells the user has actually
+ * navigated into are loaded), and the underlying reference data is
+ * stable across a clinical session.
+ *
+ * On a fresh page load (full app reload) the cache is empty by design
+ * — that's when we want to re-fetch so any backend updates land.
+ */
+const optionCache = {
+  provinces: [] as LocationOption[],
+  districtsByProvince: new Map<string, LocationOption[]>(),
+  sectorsByDistrict: new Map<string, LocationOption[]>(),
+  cellsBySector: new Map<string, LocationOption[]>(),
+  villagesByCell: new Map<string, LocationOption[]>(),
+};
+
 export function RwandaLocationPicker({
   value, onChange,
   showVillage = true,
@@ -69,30 +99,54 @@ export function RwandaLocationPicker({
   showHeader = true,
   idPrefix = 'rw-loc',
 }: Props) {
-  const [provinces, setProvinces] = useState<LocationOption[]>([]);
-  const [districts, setDistricts] = useState<LocationOption[]>([]);
-  const [sectors, setSectors] = useState<LocationOption[]>([]);
-  const [cells, setCells] = useState<LocationOption[]>([]);
-  const [villages, setVillages] = useState<LocationOption[]>([]);
+  // Seed each list from the module-level cache so a remount with
+  // already-known IDs renders instantly with the right options
+  // selected, instead of flashing placeholders while the network
+  // round-trips run.
+  const [provinces, setProvinces] = useState<LocationOption[]>(
+    () => optionCache.provinces);
+  const [districts, setDistricts] = useState<LocationOption[]>(
+    () => value.provinceId ? optionCache.districtsByProvince.get(value.provinceId) ?? [] : []);
+  const [sectors, setSectors] = useState<LocationOption[]>(
+    () => value.districtId ? optionCache.sectorsByDistrict.get(value.districtId) ?? [] : []);
+  const [cells, setCells] = useState<LocationOption[]>(
+    () => value.sectorId ? optionCache.cellsBySector.get(value.sectorId) ?? [] : []);
+  const [villages, setVillages] = useState<LocationOption[]>(
+    () => value.cellId ? optionCache.villagesByCell.get(value.cellId) ?? [] : []);
 
+  // Loading flags: only "true" if the corresponding cache entry was
+  // empty (we'll need to fetch); cached levels skip the loading state.
   const [loading, setLoading] = useState({
-    provinces: true, districts: false, sectors: false, cells: false, villages: false,
+    provinces: optionCache.provinces.length === 0,
+    districts: !!value.provinceId && !optionCache.districtsByProvince.has(value.provinceId),
+    sectors: !!value.districtId && !optionCache.sectorsByDistrict.has(value.districtId),
+    cells: !!value.sectorId && !optionCache.cellsBySector.has(value.sectorId),
+    villages: !!value.cellId && !optionCache.villagesByCell.has(value.cellId),
   });
 
-  // Track the parent ids the dependent levels were last loaded for.
-  // Comparing against value.* on each render lets us avoid redundant
-  // fetches AND lets us clear stale child options when the parent
-  // changes externally (e.g. the parent form resets the value).
+  // Seed lastParents from the IDs the picker already has on mount —
+  // critical when remounting from cache: without this, the child
+  // useEffects would treat the cached parent IDs as "new" and fetch
+  // again, defeating the cache.
   const lastParents = useRef({
-    province: '', district: '', sector: '', cell: '',
+    province: value.provinceId ?? '',
+    district: value.districtId ?? '',
+    sector: value.sectorId ?? '',
+    cell: value.cellId ?? '',
   });
 
-  // ── Provinces — fetch once on mount. ──
+  // ── Provinces — fetch on mount only when the cache is cold. ──
   useEffect(() => {
+    if (optionCache.provinces.length > 0) return; // cache hot → skip
     let cancelled = false;
     setLoading((s) => ({ ...s, provinces: true }));
     locationApi.provinces()
-      .then((rows) => { if (!cancelled) setProvinces(rows ?? []); })
+      .then((rows) => {
+        if (cancelled) return;
+        const list = rows ?? [];
+        setProvinces(list);
+        optionCache.provinces = list;
+      })
       .catch(() => { if (!cancelled) setProvinces([]); })
       .finally(() => { if (!cancelled) setLoading((s) => ({ ...s, provinces: false })); });
     return () => { cancelled = true; };
@@ -105,12 +159,24 @@ export function RwandaLocationPicker({
       lastParents.current.province = '';
       return;
     }
-    if (lastParents.current.province === value.provinceId) return;
+    if (lastParents.current.province === value.provinceId
+        && optionCache.districtsByProvince.has(value.provinceId)) {
+      // Cache hot for this parent and the lastParents check passes —
+      // nothing to do; districts state was seeded from cache at mount.
+      return;
+    }
     lastParents.current.province = value.provinceId;
+    const cached = optionCache.districtsByProvince.get(value.provinceId);
+    if (cached) { setDistricts(cached); return; }
     let cancelled = false;
     setLoading((s) => ({ ...s, districts: true }));
     locationApi.districts(value.provinceId)
-      .then((rows) => { if (!cancelled) setDistricts(rows ?? []); })
+      .then((rows) => {
+        if (cancelled) return;
+        const list = rows ?? [];
+        setDistricts(list);
+        optionCache.districtsByProvince.set(value.provinceId!, list);
+      })
       .catch(() => { if (!cancelled) setDistricts([]); })
       .finally(() => { if (!cancelled) setLoading((s) => ({ ...s, districts: false })); });
     return () => { cancelled = true; };
@@ -123,12 +189,22 @@ export function RwandaLocationPicker({
       lastParents.current.district = '';
       return;
     }
-    if (lastParents.current.district === value.districtId) return;
+    if (lastParents.current.district === value.districtId
+        && optionCache.sectorsByDistrict.has(value.districtId)) {
+      return;
+    }
     lastParents.current.district = value.districtId;
+    const cached = optionCache.sectorsByDistrict.get(value.districtId);
+    if (cached) { setSectors(cached); return; }
     let cancelled = false;
     setLoading((s) => ({ ...s, sectors: true }));
     locationApi.sectors(value.districtId)
-      .then((rows) => { if (!cancelled) setSectors(rows ?? []); })
+      .then((rows) => {
+        if (cancelled) return;
+        const list = rows ?? [];
+        setSectors(list);
+        optionCache.sectorsByDistrict.set(value.districtId!, list);
+      })
       .catch(() => { if (!cancelled) setSectors([]); })
       .finally(() => { if (!cancelled) setLoading((s) => ({ ...s, sectors: false })); });
     return () => { cancelled = true; };
@@ -141,12 +217,22 @@ export function RwandaLocationPicker({
       lastParents.current.sector = '';
       return;
     }
-    if (lastParents.current.sector === value.sectorId) return;
+    if (lastParents.current.sector === value.sectorId
+        && optionCache.cellsBySector.has(value.sectorId)) {
+      return;
+    }
     lastParents.current.sector = value.sectorId;
+    const cached = optionCache.cellsBySector.get(value.sectorId);
+    if (cached) { setCells(cached); return; }
     let cancelled = false;
     setLoading((s) => ({ ...s, cells: true }));
     locationApi.cells(value.sectorId)
-      .then((rows) => { if (!cancelled) setCells(rows ?? []); })
+      .then((rows) => {
+        if (cancelled) return;
+        const list = rows ?? [];
+        setCells(list);
+        optionCache.cellsBySector.set(value.sectorId!, list);
+      })
       .catch(() => { if (!cancelled) setCells([]); })
       .finally(() => { if (!cancelled) setLoading((s) => ({ ...s, cells: false })); });
     return () => { cancelled = true; };
@@ -159,12 +245,22 @@ export function RwandaLocationPicker({
       lastParents.current.cell = '';
       return;
     }
-    if (lastParents.current.cell === value.cellId) return;
+    if (lastParents.current.cell === value.cellId
+        && optionCache.villagesByCell.has(value.cellId)) {
+      return;
+    }
     lastParents.current.cell = value.cellId;
+    const cached = optionCache.villagesByCell.get(value.cellId);
+    if (cached) { setVillages(cached); return; }
     let cancelled = false;
     setLoading((s) => ({ ...s, villages: true }));
     locationApi.villages(value.cellId)
-      .then((rows) => { if (!cancelled) setVillages(rows ?? []); })
+      .then((rows) => {
+        if (cancelled) return;
+        const list = rows ?? [];
+        setVillages(list);
+        optionCache.villagesByCell.set(value.cellId!, list);
+      })
       .catch(() => { if (!cancelled) setVillages([]); })
       .finally(() => { if (!cancelled) setLoading((s) => ({ ...s, villages: false })); });
     return () => { cancelled = true; };

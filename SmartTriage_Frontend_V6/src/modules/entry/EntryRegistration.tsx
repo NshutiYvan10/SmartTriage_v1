@@ -871,19 +871,15 @@ export function EntryRegistration() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* Building / Landmark — optional free-text for the
-                    local detail Rwandan addresses describe relationally
-                    ("near KK 15 Avenue church", "next to the primary
-                    school", "Block A, plot 27"). Street auto-population
-                    is not feasible: there is no comprehensive village→
-                    street register for Rwanda, and reverse-geocoding
-                    via GPS would only give Google-Maps-style
-                    approximations. The structured location below
-                    (Province → Village) handles the administrative
-                    granularity. */}
+                {/* Street Address — optional free-text for the local
+                    detail (building / landmark / plot). Rwandan addresses
+                    are mostly described relationally ("near KK 15 Avenue
+                    church", "Block A plot 27") so this stays free-text;
+                    the structured Province → Village hierarchy below
+                    captures the administrative granularity. */}
                 <div className="sm:col-span-2">
                   <label className={labelCls}>
-                    Building / Landmark
+                    Street Address
                     <span className="ml-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider">Optional</span>
                   </label>
                   <input
@@ -1435,7 +1431,7 @@ export function EntryRegistration() {
                   Address Information
                 </h4>
                 {[
-                  ['Building / Landmark', formData.streetAddress],
+                  ['Street Address', formData.streetAddress],
                   ['Province', formData.province],
                   ['District', formData.district],
                   ['Sector / Cell / Village', [formData.sector, formData.cell, formData.village].filter(Boolean).join(' / ')],
