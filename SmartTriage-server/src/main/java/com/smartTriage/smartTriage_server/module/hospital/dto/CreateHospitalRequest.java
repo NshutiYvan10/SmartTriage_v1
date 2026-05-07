@@ -39,4 +39,14 @@ public class CreateHospitalRequest {
     private Integer bedCapacity;
     private Integer edCapacity;
     private Integer icuCapacity;
+
+    // ── Structured location (Rwanda admin hierarchy) ──
+    // V46+ — optional. Frontend's RwandaLocationPicker submits IDs
+    // for whichever levels the user picked. Existing free-text
+    // {province} / {address} stay for legacy display.
+    private java.util.UUID provinceId;
+    private java.util.UUID districtId;
+    private java.util.UUID sectorId;
+    private java.util.UUID cellId;
+    private java.util.UUID villageId;
 }

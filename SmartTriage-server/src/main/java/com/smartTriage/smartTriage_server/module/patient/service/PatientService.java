@@ -46,6 +46,11 @@ public class PatientService {
     private final PatientRepository patientRepository;
     private final VisitRepository visitRepository;
     private final HospitalService hospitalService;
+    private final com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwProvinceRepository rwProvinceRepository;
+    private final com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwDistrictRepository rwDistrictRepository;
+    private final com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwSectorRepository rwSectorRepository;
+    private final com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwCellRepository rwCellRepository;
+    private final com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwVillageRepository rwVillageRepository;
 
     // Simple MRN counter — in production, this would use a database sequence
     private static final AtomicLong mrnCounter = new AtomicLong(100000);
@@ -72,6 +77,9 @@ public class PatientService {
         Patient patient = PatientMapper.toEntity(request);
         patient.setHospital(hospital);
         patient.setMedicalRecordNumber(generateMRN(hospital.getHospitalCode()));
+        applyStructuredLocation(patient,
+                request.getProvinceId(), request.getDistrictId(),
+                request.getSectorId(), request.getCellId(), request.getVillageId());
 
         patient = patientRepository.save(patient);
 
@@ -135,6 +143,9 @@ public class PatientService {
                 .build();
         patient.setHospital(hospital);
         patient.setMedicalRecordNumber(generateMRN(hospital.getHospitalCode()));
+        applyStructuredLocation(patient,
+                request.getProvinceId(), request.getDistrictId(),
+                request.getSectorId(), request.getCellId(), request.getVillageId());
         patient = patientRepository.save(patient);
 
         // 2. Create Visit (same transaction — atomic with the patient)
@@ -262,5 +273,46 @@ public class PatientService {
 
     private static String blankToNull(String s) {
         return (s == null || s.isBlank()) ? null : s.trim();
+    }
+
+    /**
+     * Resolve any provided Rwanda-location IDs into entity references and
+     * set them on the patient. All five levels are independent inputs;
+     * the caller may supply any subset (e.g. only provinceId+districtId
+     * when the user knows that much). An ID that doesn't resolve is
+     * silently dropped — the rest of the registration must succeed
+     * because location is supplemental, not blocking. The error is
+     * logged so an operator can diagnose stale IDs from a partially
+     * loaded CSV.
+     */
+    private void applyStructuredLocation(
+            Patient patient,
+            UUID provinceId, UUID districtId,
+            UUID sectorId, UUID cellId, UUID villageId) {
+        if (provinceId != null) {
+            rwProvinceRepository.findById(provinceId).ifPresentOrElse(
+                    patient::setProvince,
+                    () -> log.warn("[patient.location] unknown province id {}", provinceId));
+        }
+        if (districtId != null) {
+            rwDistrictRepository.findById(districtId).ifPresentOrElse(
+                    patient::setDistrict,
+                    () -> log.warn("[patient.location] unknown district id {}", districtId));
+        }
+        if (sectorId != null) {
+            rwSectorRepository.findById(sectorId).ifPresentOrElse(
+                    patient::setSector,
+                    () -> log.warn("[patient.location] unknown sector id {}", sectorId));
+        }
+        if (cellId != null) {
+            rwCellRepository.findById(cellId).ifPresentOrElse(
+                    patient::setCell,
+                    () -> log.warn("[patient.location] unknown cell id {}", cellId));
+        }
+        if (villageId != null) {
+            rwVillageRepository.findById(villageId).ifPresentOrElse(
+                    patient::setVillage,
+                    () -> log.warn("[patient.location] unknown village id {}", villageId));
+        }
     }
 }

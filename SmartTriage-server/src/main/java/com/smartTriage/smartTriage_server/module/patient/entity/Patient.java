@@ -79,6 +79,31 @@ public class Patient extends BaseEntity {
     @Column(name = "address")
     private String address;
 
+    // ── Structured location (Rwanda admin hierarchy) ──
+    // V46+ — registered patients now carry FKs to the Rwanda
+    // administrative hierarchy. All five levels are nullable: a
+    // clinician may credibly know only down to sector. The free-text
+    // {address} column above stays for street/building/landmark detail.
+    @jakarta.persistence.ManyToOne(fetch = jakarta.persistence.FetchType.LAZY)
+    @jakarta.persistence.JoinColumn(name = "province_id")
+    private com.smartTriage.smartTriage_server.module.location.entity.RwProvince province;
+
+    @jakarta.persistence.ManyToOne(fetch = jakarta.persistence.FetchType.LAZY)
+    @jakarta.persistence.JoinColumn(name = "district_id")
+    private com.smartTriage.smartTriage_server.module.location.entity.RwDistrict district;
+
+    @jakarta.persistence.ManyToOne(fetch = jakarta.persistence.FetchType.LAZY)
+    @jakarta.persistence.JoinColumn(name = "sector_id")
+    private com.smartTriage.smartTriage_server.module.location.entity.RwSector sector;
+
+    @jakarta.persistence.ManyToOne(fetch = jakarta.persistence.FetchType.LAZY)
+    @jakarta.persistence.JoinColumn(name = "cell_id")
+    private com.smartTriage.smartTriage_server.module.location.entity.RwCell cell;
+
+    @jakarta.persistence.ManyToOne(fetch = jakarta.persistence.FetchType.LAZY)
+    @jakarta.persistence.JoinColumn(name = "village_id")
+    private com.smartTriage.smartTriage_server.module.location.entity.RwVillage village;
+
     @Column(name = "emergency_contact_name", length = 200)
     private String emergencyContactName;
 

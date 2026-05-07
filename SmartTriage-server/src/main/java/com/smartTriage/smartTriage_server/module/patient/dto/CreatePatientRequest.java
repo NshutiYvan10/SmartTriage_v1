@@ -56,4 +56,14 @@ public class CreatePatientRequest {
 
     @NotNull(message = "Hospital ID is required")
     private UUID hospitalId;
+
+    // ── Structured location (Rwanda admin hierarchy) ──
+    // V46+ — optional. Pass any subset; the service stores the
+    // deepest level supplied. Existing free-text {address} above
+    // stays for street/building/landmark detail.
+    private UUID provinceId;
+    private UUID districtId;
+    private UUID sectorId;
+    private UUID cellId;
+    private UUID villageId;
 }

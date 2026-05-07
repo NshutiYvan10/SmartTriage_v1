@@ -56,6 +56,17 @@ public class RegisterPatientRequest {
     private String knownAllergies;
     private String chronicConditions;
 
+    // ── Structured location (Rwanda admin hierarchy) ──
+    // V46+ — optional. Frontend's RwandaLocationPicker submits the IDs
+    // for whichever levels the user picked; the service resolves and
+    // sets the FKs. The free-text {address} above stays for street-
+    // level detail (building number, nearby landmark).
+    private UUID provinceId;
+    private UUID districtId;
+    private UUID sectorId;
+    private UUID cellId;
+    private UUID villageId;
+
     // ── Guardian fields (pediatric) ──
     @Size(max = 30) private String guardianNationalId;
     @Size(max = 20) private String guardianPhone;

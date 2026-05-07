@@ -24,6 +24,16 @@ import java.util.UUID;
 public class HospitalService {
 
     private final HospitalRepository hospitalRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwProvinceRepository rwProvinceRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwDistrictRepository rwDistrictRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwSectorRepository rwSectorRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwCellRepository rwCellRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.smartTriage.smartTriage_server.module.location.repository.RwLocationRepositories.RwVillageRepository rwVillageRepository;
 
     /**
      * BedService is injected lazily to break a constructor-time cycle:
@@ -48,6 +58,27 @@ public class HospitalService {
         }
 
         Hospital hospital = HospitalMapper.toEntity(request);
+        // Resolve structured location IDs (any subset) into entity refs.
+        if (request.getProvinceId() != null) {
+            rwProvinceRepository.findById(request.getProvinceId())
+                    .ifPresent(hospital::setProvinceRef);
+        }
+        if (request.getDistrictId() != null) {
+            rwDistrictRepository.findById(request.getDistrictId())
+                    .ifPresent(hospital::setDistrictRef);
+        }
+        if (request.getSectorId() != null) {
+            rwSectorRepository.findById(request.getSectorId())
+                    .ifPresent(hospital::setSectorRef);
+        }
+        if (request.getCellId() != null) {
+            rwCellRepository.findById(request.getCellId())
+                    .ifPresent(hospital::setCellRef);
+        }
+        if (request.getVillageId() != null) {
+            rwVillageRepository.findById(request.getVillageId())
+                    .ifPresent(hospital::setVillageRef);
+        }
         hospital = hospitalRepository.save(hospital);
 
         log.info("Hospital created: {} ({})", hospital.getName(), hospital.getHospitalCode());
