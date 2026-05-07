@@ -74,6 +74,7 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
       label: 'Navigation',
       items: [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, pageId: 'dashboard' as AppPage },
+        { id: 'my-schedule', label: 'My Schedule', icon: CalendarClock, pageId: 'my-schedule' as AppPage },
         { id: 'entry', label: 'Registration', icon: UserPlus, pageId: 'entry' as AppPage },
         { id: 'patients', label: 'Patients', icon: ClipboardList, pageId: 'patients' as AppPage },
       ],
@@ -130,6 +131,10 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         { id: 'admin/users', label: 'Users', icon: Users, pageId: 'admin-users' as AppPage },
         { id: 'admin/beds', label: 'Bed Inventory', icon: BedDouble, pageId: 'admin-beds' as AppPage },
         { id: 'shift-planner', label: 'Shift Planner', icon: CalendarDays, pageId: 'shift-planner' as AppPage },
+        { id: 'shift-calendar', label: 'Shift Calendar', icon: CalendarDays, pageId: 'shift-calendar' as AppPage },
+        { id: 'swap-approvals', label: 'Swap Approvals', icon: ClipboardCheck, pageId: 'swap-approvals' as AppPage },
+        { id: 'leave-approvals', label: 'Leave Approvals', icon: ClipboardCheck, pageId: 'leave-approvals' as AppPage },
+        { id: 'delegations', label: 'Delegations', icon: ShieldCheck, pageId: 'delegations' as AppPage },
         { id: 'safety-incidents', label: 'Safety Incidents', icon: ShieldAlert, pageId: 'safety-incidents' as AppPage },
         { id: 'moh-reports', label: 'MoH Reports', icon: FileBarChart, pageId: 'moh-reports' as AppPage },
         { id: 'governance', label: 'Governance', icon: Scale, pageId: 'governance' as AppPage },
@@ -143,21 +148,31 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
     },
   ];
 
-  // Shift Zones: Hospital Admin / Super Admin by role, OR Charge Nurse by
-  // designation. Regular nurses and triage nurses must NOT see this item —
-  // they manage their own assignment via the Profile page. (NURSE_MANAGER
-  // designation was removed; Charge Nurse now covers unit management.)
-  const canSeeShiftZones =
-    canAccessPage(userRole, 'shift-assignment') ||
-    user?.designation === 'CHARGE_NURSE';
+  // Shift management surface: every charge-nurse-only sidebar item is
+  // gated by either ROLE_PAGES (no roles currently have these by default
+  // since HOSPITAL_ADMIN / SUPER_ADMIN were stripped) OR a designation
+  // override for Designation.CHARGE_NURSE. Regular NURSE users see the
+  // self-service surfaces (shift-assignment, shift-calendar, my-schedule)
+  // via their ROLE_PAGES grant; the approvals / delegations / planner
+  // are CN-only.
+  const isChargeNurse = user?.designation === 'CHARGE_NURSE';
+  const cnPages = new Set([
+    'shift-assignment', 'zone-transfers',  // ZT shares the shift-assignment pageId
+    'shift-planner', 'shift-calendar',
+    'swap-approvals', 'leave-approvals', 'delegations',
+  ]);
 
   // Filter sections based on role permissions
   const sections = allSections
     .map((section) => ({
       ...section,
       items: section.items.filter((item) => {
-        // Special case: Shift Zones restricted to Charge Nurse + Hospital Admin
-        if (item.id === 'shift-assignment') return canSeeShiftZones;
+        // Charge-nurse-managed pages — designation override extends the
+        // ROLE_PAGES check so a Charge Nurse sees them even though
+        // Role.NURSE alone does not grant the CN-only ones.
+        if (cnPages.has(item.id)) {
+          return canAccessPage(userRole, item.pageId) || isChargeNurse;
+        }
         // Doctor Workspace only for DOCTOR
         if (item.id === 'doctor-workspace') return userRole === 'DOCTOR';
         return canAccessPage(userRole, item.pageId);

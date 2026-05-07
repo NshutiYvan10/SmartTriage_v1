@@ -46,6 +46,11 @@ export type AppPage =
   | 'governance'
   | 'shift-planner'
   | 'shift-assignment'
+  | 'shift-calendar'
+  | 'swap-approvals'
+  | 'leave-approvals'
+  | 'delegations'
+  | 'my-schedule'
   | 'beds'
   | 'admin-beds';
 
@@ -150,22 +155,33 @@ export const ROLE_META: Record<UserRole, RoleMeta> = {
 export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
 
   // ── National-level administration only ──
+  // Shift management is owned by the Charge Nurse on the floor — see
+  // CHARGE_NURSE_PAGES below and the allowDesignations props on the
+  // /shift-* routes in App.tsx. SUPER_ADMIN is a national role and does
+  // not run individual hospital shifts; if explicit fallback authority
+  // is ever needed, an admin would impersonate a HOSPITAL_ADMIN, not
+  // see shift management as a default sidebar item.
   SUPER_ADMIN: [
     'dashboard', 'admin', 'admin-hospitals', 'admin-users', 'iot-devices',
     'settings', 'notifications', 'profile',
     'audit-trail', 'reports', 'quality', 'prediction',
     'moh-reports', 'governance', 'safety-incidents',
-    'shift-planner', 'shift-assignment',
   ],
 
   // ── Hospital-level administration only ──
-  // Manages hospital staff, settings, IoT monitors (devices), reports and audit.
-  // Does NOT have access to clinical workflow pages (triage, vitals, alerts, etc.).
+  // Manages hospital staff, settings, IoT monitors (devices), reports
+  // and audit. Does NOT have access to clinical workflow pages (triage,
+  // vitals, alerts, etc.) and does NOT manage daily shifts. Daily shift
+  // planning, zone assignment, leave/swap approvals and delegations are
+  // owned by the Charge Nurse on the floor (Designation.CHARGE_NURSE).
+  // The backend ShiftAssignmentAuthz still permits HOSPITAL_ADMIN as a
+  // fallback authority if an endpoint is invoked directly, but those
+  // pages are intentionally not surfaced in the admin sidebar.
   HOSPITAL_ADMIN: [
-    'dashboard', 'admin', 'admin-users', 'iot-devices', 'admin-beds', 'settings', 'notifications', 'profile',
+    'dashboard', 'admin', 'admin-users', 'iot-devices', 'admin-beds',
+    'settings', 'notifications', 'profile',
     'audit-trail', 'reports', 'quality',
     'safety-incidents', 'med-safety-overrides', 'moh-reports',
-    'shift-planner', 'shift-assignment',
   ],
 
   // ── Full clinical access ──
@@ -179,6 +195,8 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'documentation', 'handover', 'lab',
     // Reports (own)
     'reports',
+    // Self-service shift surface
+    'my-schedule',
   ],
 
   // ── Clinical care ──
@@ -192,6 +210,13 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'documentation', 'handover', 'lab',
     // Safety reporting
     'safety-incidents',
+    // Shift planning surfaces — Charge Nurses use these; access is
+    // page-level only and the actual mutation endpoints check
+    // designation server-side via @shiftAssignmentAuthz. Note that
+    // 'swap-approvals' is intentionally NOT in this list — it's a
+    // CN-only surface, granted via RoleGuard.allowDesignations on
+    // the route, so a regular nurse can't open it by accident.
+    'shift-assignment', 'shift-calendar', 'my-schedule',
   ],
 
   // ── Registration only ──
@@ -199,6 +224,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'dashboard', 'entry', 'patients',
     'notifications', 'profile',
     'referral',
+    'my-schedule',
   ],
 
   // ── Pre-hospital / transport ──
@@ -206,12 +232,14 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'dashboard', 'entry', 'patients',
     'notifications', 'profile',
     'handover', 'referral',
+    'my-schedule',
   ],
 
   // ── Lab-focused ──
   LAB_TECHNICIAN: [
     'dashboard', 'patients', 'lab',
     'notifications', 'profile',
+    'my-schedule',
   ],
 
   // ── View-only ──

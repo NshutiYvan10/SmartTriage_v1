@@ -27,6 +27,11 @@ import { HospitalManagement } from './modules/admin/HospitalManagement';
 import { UserManagement } from './modules/admin/UserManagement';
 import { ShiftAssignment } from './modules/shift/ShiftAssignment';
 import { ShiftPlannerPage } from './modules/shift/ShiftPlannerPage';
+import { ShiftCalendarPage } from './modules/shift/ShiftCalendarPage';
+import { MySchedulePage } from './modules/shift/MySchedulePage';
+import { SwapApprovalsPage } from './modules/shift/SwapApprovalsPage';
+import { LeaveApprovalsPage } from './modules/shift/LeaveApprovalsPage';
+import { DelegationsPage } from './modules/shift/DelegationsPage';
 import { PendingTransfersDashboard } from './modules/zone/PendingTransfersDashboard';
 import { DoctorWorkspace } from './modules/doctor/DoctorWorkspace';
 import { BedGridView } from './modules/beds/BedGridView';
@@ -161,7 +166,12 @@ function AppContent() {
             <Route path="/admin/beds" element={<RoleGuard page="admin-beds"><BedManagement /></RoleGuard>} />
             <Route path="/shift-assignment" element={<RoleGuard page="shift-assignment" allowDesignations={['CHARGE_NURSE']}><ShiftAssignment /></RoleGuard>} />
             <Route path="/zone-transfers" element={<PendingTransfersDashboard />} />
-            <Route path="/shift-planner" element={<RoleGuard page="shift-planner"><ShiftPlannerPage /></RoleGuard>} />
+            <Route path="/shift-planner" element={<RoleGuard page="shift-planner" allowDesignations={['CHARGE_NURSE']}><ShiftPlannerPage /></RoleGuard>} />
+            <Route path="/shift-calendar" element={<RoleGuard page="shift-calendar" allowDesignations={['CHARGE_NURSE']}><ShiftCalendarPage /></RoleGuard>} />
+            <Route path="/swap-approvals" element={<RoleGuard page="swap-approvals" allowDesignations={['CHARGE_NURSE']}><SwapApprovalsPage /></RoleGuard>} />
+            <Route path="/leave-approvals" element={<RoleGuard page="leave-approvals" allowDesignations={['CHARGE_NURSE']}><LeaveApprovalsPage /></RoleGuard>} />
+            <Route path="/delegations" element={<RoleGuard page="delegations" allowDesignations={['CHARGE_NURSE']}><DelegationsPage /></RoleGuard>} />
+            <Route path="/my-schedule" element={<RoleGuard page="my-schedule"><MySchedulePage /></RoleGuard>} />
             <Route path="/audit-trail" element={<RoleGuard page="audit-trail"><AuditTrail /></RoleGuard>} />
             <Route path="/reports" element={<RoleGuard page="reports"><ReportsView /></RoleGuard>} />
             <Route path="/notifications" element={<NotificationsPage />} />

@@ -38,12 +38,24 @@ public enum Designation {
     INTERN("Intern", Role.DOCTOR),
 
     // ── Nurse designations ──
-    // Charge Nurse covers unit-management responsibilities (see class
-    // doc for the permission lift). All nurses fall under Role.NURSE;
-    // a "triage nurse" is a NURSE assigned to triage for the shift
-    // (ShiftAssignment.shiftFunction = TRIAGE_NURSE), not a separate
-    // designation.
+    // All nurses fall under Role.NURSE. The designation captures the
+    // long-term function the nurse performs:
+    //   CHARGE_NURSE — unit management (see class doc for permission lift)
+    //   TRIAGE_NURSE — intake/assessment specialist. Re-introduced after
+    //                  V39 collapsed TRIAGE_NURSE the *Role* into NURSE.
+    //                  Many EDs dedicate specific staff to triage as a
+    //                  long-term assignment, distinct from the per-shift
+    //                  ShiftFunction.TRIAGE_NURSE which records who is
+    //                  AT the triage station today. Both can co-exist:
+    //                  a nurse with Designation.TRIAGE_NURSE is a triage
+    //                  specialist year-round, and the same nurse may or
+    //                  may not be the ShiftFunction.TRIAGE_NURSE on any
+    //                  given shift.
+    //   SENIOR / STAFF / STUDENT — bedside seniority ladder.
+    // A user picks one designation — a nurse cannot simultaneously hold
+    // Charge Nurse and Triage Nurse; those are different jobs.
     CHARGE_NURSE("Charge Nurse", Role.NURSE),
+    TRIAGE_NURSE("Triage Nurse", Role.NURSE),
     SENIOR_NURSE("Senior Nurse", Role.NURSE),
     STAFF_NURSE("Staff Nurse", Role.NURSE),
     STUDENT_NURSE("Student Nurse", Role.NURSE),
@@ -77,11 +89,12 @@ public enum Designation {
         return switch (role) {
             case DOCTOR ->
                 new Designation[] { ED_HEAD, CONSULTANT, SENIOR_MEDICAL_OFFICER, MEDICAL_OFFICER, RESIDENT, INTERN };
-            // Full nurse career ladder — includes Charge Nurse (unit
-            // management). Triage nurses are NURSE-role users assigned
-            // to triage via ShiftAssignment, not a separate role.
+            // Full nurse career ladder. CHARGE_NURSE = unit management,
+            // TRIAGE_NURSE = intake/assessment specialist (year-round
+            // assignment, separate from the per-shift ShiftFunction).
+            // The remaining three are the bedside seniority ladder.
             case NURSE ->
-                new Designation[] { CHARGE_NURSE, SENIOR_NURSE, STAFF_NURSE, STUDENT_NURSE };
+                new Designation[] { CHARGE_NURSE, TRIAGE_NURSE, SENIOR_NURSE, STAFF_NURSE, STUDENT_NURSE };
             case LAB_TECHNICIAN -> new Designation[] { HEAD_LAB_TECHNICIAN, Designation.LAB_TECHNICIAN };
             case REGISTRAR -> new Designation[] { SENIOR_REGISTRAR, Designation.REGISTRAR };
             case PARAMEDIC -> new Designation[] { SENIOR_PARAMEDIC, Designation.PARAMEDIC };
