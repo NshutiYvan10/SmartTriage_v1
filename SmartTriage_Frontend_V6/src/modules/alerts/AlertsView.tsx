@@ -12,6 +12,7 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { alertApi } from '@/api/alerts';
 import { subscribeToAlerts } from '@/api/websocket';
+import { categoryFor, styleFor } from '@/utils/alertCategory';
 import type { ClinicalAlertResponse } from '@/api/types';
 import { formatDistanceToNow } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
@@ -64,6 +65,7 @@ export function AlertsView() {
   const [alerts, setAlerts] = useState<ClinicalAlertResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterMode>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'CLINICAL' | 'OPERATIONAL' | 'SYSTEM'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // ── Comment dialog state ──
@@ -117,6 +119,10 @@ export function AlertsView() {
       if (filter === 'active') return !a.acknowledged;
       if (filter === 'acknowledged') return a.acknowledged;
       return true;
+    })
+    .filter((a) => {
+      if (categoryFilter === 'all') return true;
+      return categoryFor(a.alertType) === categoryFilter;
     })
     .filter((a) => {
       if (!searchQuery.trim()) return true;
@@ -274,7 +280,7 @@ export function AlertsView() {
                 style={glassInner}
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {(['all', 'active', 'acknowledged'] as FilterMode[]).map((f) => (
                 <button
                   key={f}
@@ -292,6 +298,32 @@ export function AlertsView() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Category filter — clinical alerts (life-threatening),
+              operational (workflow), system (devices). Lets a user
+              focus on the bucket that matches their job in the
+              moment without needing to scan every row. */}
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+              Category
+            </span>
+            {(['all', 'CLINICAL', 'OPERATIONAL', 'SYSTEM'] as const).map((c) => (
+              <button
+                key={c}
+                onClick={() => setCategoryFilter(c)}
+                className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide rounded-lg border transition-all ${
+                  categoryFilter === c
+                    ? c === 'CLINICAL'    ? 'bg-rose-600 text-white border-rose-700'
+                    : c === 'OPERATIONAL' ? 'bg-sky-600 text-white border-sky-700'
+                    : c === 'SYSTEM'      ? 'bg-slate-600 text-white border-slate-700'
+                    : 'bg-slate-800 text-white border-slate-900'
+                    : isDark ? 'text-slate-400 border-slate-700 hover:text-white' : 'text-slate-500 border-slate-200 hover:text-slate-800 hover:bg-white/60'
+                }`}
+              >
+                {c === 'all' ? 'All' : c.charAt(0) + c.slice(1).toLowerCase()}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -363,6 +395,18 @@ export function AlertsView() {
                         >
                           {alert.severity}
                         </span>
+                        {/* Category chip — clinical / operational / system.
+                            Lets a clinician scan past operational noise to
+                            the life-threatening stuff at a glance. */}
+                        {(() => {
+                          const cat = categoryFor(alert.alertType);
+                          const cs = styleFor(cat);
+                          return (
+                            <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-md border uppercase tracking-wide ${cs.chipClass}`}>
+                              {cs.label}
+                            </span>
+                          );
+                        })()}
                         <span className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>
                           {alert.alertType?.replace(/_/g, ' ')}
                         </span>
