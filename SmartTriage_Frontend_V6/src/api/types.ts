@@ -633,7 +633,31 @@ export interface TriageRecordResponse {
   doctorNotifiedAt: string | null;
   attendingDoctorName: string | null;
   doctorAttendedAt: string | null;
+
+  // ── Bed Suggestion (Phase G #2) ──
+  // Populated only on the response from POST /triage (performTriage), so
+  // the form can show the nurse a "Place in suggested bed?" confirm.
+  // Null on subsequent reads (history, getLatest) — those return the
+  // stored record without re-running the suggestion engine.
+  suggestedBedId?: string | null;
+  suggestedBedCode?: string | null;
+  suggestedBedZone?: EdZone | null;
+  suggestedBedHasMonitor?: boolean;
+
   createdAt: string;
+}
+
+// ── Bed Seed Defaults (Phase G #4) ──
+
+/**
+ * Result returned by POST /api/v1/beds/hospital/{hospitalId}/seed-defaults.
+ * Mirrors BedService.SeedResult on the server.
+ */
+export interface SeedResult {
+  bedsCreated: number;
+  zonesSeeded: EdZone[];
+  zonesSkipped: EdZone[];
+  tierUsed: string;
 }
 
 // ── Clinical Notes ──

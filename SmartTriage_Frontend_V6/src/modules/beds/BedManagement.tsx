@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BedDouble, Plus, RefreshCw, Loader2, Pencil, Trash2, X, Building2,
-  AlertTriangle, CheckCircle2, Monitor, Save, Link2, Link2Off,
+  AlertTriangle, CheckCircle2, Monitor, Save, Link2, Link2Off, Sparkles,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useBedStore } from '@/store/bedStore';
@@ -62,6 +62,7 @@ export function BedManagement() {
   const markOutOfService = useBedStore((s) => s.markOutOfService);
   const markAvailable = useBedStore((s) => s.markAvailable);
   const markCleaned = useBedStore((s) => s.markCleaned);
+  const seedDefaults = useBedStore((s) => s.seedDefaults);
   const loadingBeds = useBedStore((s) => s.loading);
 
   const beds = useMemo(() => {
@@ -89,6 +90,7 @@ export function BedManagement() {
   const [editBed, setEditBed] = useState<BedResponse | null>(null);
   const [assignBed, setAssignBed] = useState<BedResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [seeding, setSeeding] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
 
   const flash = (type: 'success' | 'error', message: string) => {
@@ -166,6 +168,37 @@ export function BedManagement() {
       flash('success', deviceId ? 'Monitor linked to bed.' : 'Monitor detached from bed.');
     } catch (e) {
       flash('error', e instanceof Error ? e.message : 'Failed to update device assignment');
+    }
+  };
+
+  const handleSeedDefaults = async () => {
+    if (!hospitalId) return;
+    if (!confirm(
+      'Seed the default bed inventory for this hospital?\n\n' +
+      'Beds will be created in zones that are currently empty, using the ' +
+      'Rwanda MoH bed standards for this hospital tier. Zones that already ' +
+      'have any beds (active or out-of-service) will be skipped.'
+    )) return;
+    setSeeding(true);
+    try {
+      const result = await seedDefaults(hospitalId);
+      if (result.bedsCreated === 0) {
+        flash('success', 'No new beds seeded — all zones already have beds.');
+      } else {
+        flash(
+          'success',
+          `Seeded ${result.bedsCreated} bed${result.bedsCreated === 1 ? '' : 's'} ` +
+          `across ${result.zonesSeeded.length} zone${result.zonesSeeded.length === 1 ? '' : 's'} ` +
+          `(${result.tierUsed}).` +
+          (result.zonesSkipped.length > 0
+            ? ` Skipped ${result.zonesSkipped.length} populated zone${result.zonesSkipped.length === 1 ? '' : 's'}.`
+            : '')
+        );
+      }
+    } catch (e) {
+      flash('error', e instanceof Error ? e.message : 'Failed to seed default beds');
+    } finally {
+      setSeeding(false);
     }
   };
 
@@ -305,12 +338,35 @@ export function BedManagement() {
             <p className={`text-xs ${text.muted}`}>Loading beds…</p>
           </div>
         ) : filteredBeds.length === 0 ? (
-          <div className="py-16 text-center">
+          <div className="py-16 text-center px-4">
             <BedDouble className={`w-10 h-10 mx-auto mb-3 ${text.muted}`} />
             <p className={`text-sm font-bold ${text.heading}`}>No beds configured</p>
             <p className={`text-xs mt-1 ${text.muted}`}>
-              Click <span className="font-bold">Add Bed</span> to create the first bed for this {zoneFilter === 'ALL' ? 'hospital' : `${zoneFilter} zone`}.
+              {beds.length === 0
+                ? 'This hospital has no bed inventory yet.'
+                : <>Click <span className="font-bold">Add Bed</span> to create the first bed in the {zoneFilter} zone.</>}
             </p>
+
+            {/* Seed defaults CTA — only when the hospital is fully empty.
+                Backfills the Rwanda MoH default inventory for the hospital's
+                tier. Idempotent per-zone, so it's safe to retry. */}
+            {beds.length === 0 && (
+              <div className="mt-5 flex flex-col items-center gap-2">
+                <button
+                  onClick={handleSeedDefaults}
+                  disabled={seeding}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  {seeding ? 'Seeding default beds…' : 'Seed default beds for this hospital'}
+                </button>
+                <p className={`text-[10px] max-w-md ${text.muted}`}>
+                  Creates the standard bed inventory for the hospital's tier
+                  (district / provincial-referral / national-teaching). Or use{' '}
+                  <span className="font-bold">Add Bed</span> above to configure beds manually.
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-slate-200/20">

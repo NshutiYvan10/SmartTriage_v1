@@ -18,6 +18,7 @@ import type {
   ZoneOccupancyResponse,
   AssignDeviceRequest,
   PlacePatientRequest,
+  SeedResult,
   TransferPatientRequest,
   CreateBedRequest,
   UpdateBedRequest,
@@ -47,6 +48,9 @@ interface BedState {
   updateBed: (bedId: string, req: UpdateBedRequest) => Promise<BedResponse>;
   deleteBed: (bedId: string) => Promise<void>;
   assignDevice: (bedId: string, req: AssignDeviceRequest) => Promise<BedResponse>;
+
+  // ── Seed defaults (Phase G #4) ──
+  seedDefaults: (hospitalId: string) => Promise<SeedResult>;
 
   // ── Selectors ──
   getBed: (bedId: string) => BedResponse | undefined;
@@ -173,6 +177,18 @@ export const useBedStore = create<BedState>((set, get) => ({
     const bed = await bedsApi.assignDevice(bedId, req);
     mergeBed(set, get, bed);
     return bed;
+  },
+
+  // ── Seed defaults (Phase G #4) ──
+  // After the server creates the seed beds it does NOT echo the bed list,
+  // only counts. Refresh the hospital so the bed-grid renders the new
+  // inventory immediately (also picks up any concurrent admin edits).
+  seedDefaults: async (hospitalId) => {
+    const result = await bedsApi.seedDefaults(hospitalId);
+    if (result.bedsCreated > 0) {
+      await get().loadHospital(hospitalId);
+    }
+    return result;
   },
 
   // ── Selectors ──

@@ -14,6 +14,7 @@ import type {
   CreateBedRequest,
   EdZone,
   PlacePatientRequest,
+  SeedResult,
   TransferPatientRequest,
   UpdateBedRequest,
   ZoneOccupancyResponse,
@@ -73,4 +74,12 @@ export const bedsApi = {
   // ── Device assignment ──
   assignDevice: (bedId: string, data: AssignDeviceRequest) =>
     post<BedResponse>(`/beds/${bedId}/assign-device`, data),
+
+  // ── Seed defaults (Phase G #4) ──
+  // Backfill the default bed inventory for a hospital. Idempotent per-zone:
+  // zones that already have any beds are skipped. Used by the BedManagement
+  // empty-state CTA when a hospital was created before the auto-seed hook
+  // shipped, or when the hospital tier was corrected after creation.
+  seedDefaults: (hospitalId: string) =>
+    post<SeedResult>(`/beds/hospital/${hospitalId}/seed-defaults`),
 };

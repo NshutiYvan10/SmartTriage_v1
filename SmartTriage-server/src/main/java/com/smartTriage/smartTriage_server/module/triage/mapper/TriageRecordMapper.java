@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.triage.mapper;
 
+import com.smartTriage.smartTriage_server.module.bed.entity.Bed;
 import com.smartTriage.smartTriage_server.module.clinicalsigns.entity.ClinicalSignEvent;
 import com.smartTriage.smartTriage_server.module.clinicalsigns.service.ClinicalSignDefinitions;
 import com.smartTriage.smartTriage_server.module.triage.dto.TriageRecordResponse;
@@ -16,7 +17,31 @@ public final class TriageRecordMapper {
     }
 
     public static TriageRecordResponse toResponse(TriageRecord r) {
-        return toResponse(r, null);
+        return toResponse(r, (ClinicalSignEvent) null);
+    }
+
+    /**
+     * Phase G #2 overload — also populate the bed-suggestion fields on
+     * the response. Pass {@code null} for {@code suggestedBed} when no
+     * suggestion is available (zone full, category doesn't route to a
+     * bed-bearing zone, or the engine wasn't invoked). Equivalent to
+     * {@link #toResponse(TriageRecord)} with the suggestion fields left
+     * at their default values.
+     *
+     * <p>Use this from the post-{@code performTriage} response path so
+     * the form can show the nurse a "Place in suggested bed?" confirm.
+     * History / getLatest paths do NOT re-run the suggestion engine —
+     * they call the unary {@link #toResponse(TriageRecord)} overload.
+     */
+    public static TriageRecordResponse toResponse(TriageRecord r, Bed suggestedBed) {
+        TriageRecordResponse response = toResponse(r, (ClinicalSignEvent) null);
+        if (suggestedBed != null) {
+            response.setSuggestedBedId(suggestedBed.getId());
+            response.setSuggestedBedCode(suggestedBed.getCode());
+            response.setSuggestedBedZone(suggestedBed.getZone());
+            response.setSuggestedBedHasMonitor(suggestedBed.isHasMonitor());
+        }
+        return response;
     }
 
     /**

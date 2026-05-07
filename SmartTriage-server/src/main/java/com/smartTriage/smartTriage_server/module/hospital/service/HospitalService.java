@@ -2,13 +2,15 @@ package com.smartTriage.smartTriage_server.module.hospital.service;
 
 import com.smartTriage.smartTriage_server.common.exception.DuplicateResourceException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
+import com.smartTriage.smartTriage_server.module.bed.service.BedService;
 import com.smartTriage.smartTriage_server.module.hospital.dto.CreateHospitalRequest;
 import com.smartTriage.smartTriage_server.module.hospital.dto.HospitalResponse;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import com.smartTriage.smartTriage_server.module.hospital.mapper.HospitalMapper;
 import com.smartTriage.smartTriage_server.module.hospital.repository.HospitalRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -18,11 +20,26 @@ import java.util.UUID;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class HospitalService {
 
     private final HospitalRepository hospitalRepository;
+
+    /**
+     * BedService is injected lazily to break a constructor-time cycle:
+     * BedService depends on HospitalService for {@link #findHospitalOrThrow(UUID)},
+     * and (since Phase G #4) HospitalService depends on BedService for the
+     * auto-seed-on-create hook. {@code @Lazy} resolves the proxy at first
+     * use, which is always inside a transactional method — well after both
+     * beans are fully constructed.
+     */
+    private final BedService bedService;
+
+    public HospitalService(HospitalRepository hospitalRepository,
+                           @Lazy @Autowired BedService bedService) {
+        this.hospitalRepository = hospitalRepository;
+        this.bedService = bedService;
+    }
 
     @Transactional
     public HospitalResponse createHospital(CreateHospitalRequest request) {
@@ -34,6 +51,24 @@ public class HospitalService {
         hospital = hospitalRepository.save(hospital);
 
         log.info("Hospital created: {} ({})", hospital.getName(), hospital.getHospitalCode());
+
+        // Phase G #4 — auto-seed the default bed inventory so the hospital
+        // can immediately accept triaged patients. Wrapped in try/catch so
+        // a seed failure doesn't roll back the hospital itself: the admin
+        // always has POST /api/v1/beds/hospital/{id}/seed-defaults as
+        // recovery, and the seed call is idempotent per zone.
+        try {
+            BedService.SeedResult result = bedService.seedDefaultBedsForHospital(hospital.getId());
+            log.info("Auto-seeded {} beds for new hospital {} (tier={}, zones={})",
+                    result.bedsCreated(), hospital.getHospitalCode(),
+                    result.tierUsed(), result.zonesSeeded().size());
+        } catch (Exception e) {
+            log.error("Auto-seed failed for hospital {} ({}): {} — admin can backfill via "
+                    + "POST /api/v1/beds/hospital/{}/seed-defaults",
+                    hospital.getHospitalCode(), hospital.getId(), e.getMessage(),
+                    hospital.getId(), e);
+        }
+
         return HospitalMapper.toResponse(hospital);
     }
 

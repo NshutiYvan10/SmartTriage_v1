@@ -7,6 +7,8 @@ import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
 import com.smartTriage.smartTriage_server.module.alert.mapper.ClinicalAlertMapper;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
 import com.smartTriage.smartTriage_server.module.alert.service.AlertEscalationService;
+import com.smartTriage.smartTriage_server.module.bed.entity.Bed;
+import com.smartTriage.smartTriage_server.module.bed.service.BedService;
 import com.smartTriage.smartTriage_server.module.clinicalsigns.entity.ClinicalSignEvent;
 import com.smartTriage.smartTriage_server.module.clinicalsigns.service.ClinicalSignDefinitions;
 import com.smartTriage.smartTriage_server.module.triage.dto.PerformTriageRequest;
@@ -82,6 +84,8 @@ public class TriageService {
     private final com.smartTriage.smartTriage_server.module.visit.service.ZoneRoutingService zoneRoutingService;
     /** Phase 2 — initiates pending zone transfers on auto-retriage. */
     private final com.smartTriage.smartTriage_server.module.zonetransfer.service.ZoneTransferService zoneTransferService;
+    /** Phase G #2 — surfaces bed suggestion on the post-triage response. */
+    private final BedService bedService;
 
     /**
      * Perform initial triage or manual re-triage on a visit.
@@ -378,7 +382,17 @@ public class TriageService {
         // not fail because of timeline bookkeeping.
         clinicalSignService.recordBaselineFromTriage(record);
 
-        return TriageRecordMapper.toResponse(record);
+        // Phase G #2 — bed suggestion. Compute against the freshly-saved
+        // visit so the response can offer the nurse a one-click placement.
+        // Failure or empty optional both result in null suggestion fields
+        // on the response, which the form treats as "no suggestion shown".
+        Bed suggestedBed = null;
+        try {
+            suggestedBed = bedService.suggestBedForVisit(visit.getId()).orElse(null);
+        } catch (Exception e) {
+            log.warn("Bed suggestion failed for visit {}: {}", visit.getVisitNumber(), e.getMessage());
+        }
+        return TriageRecordMapper.toResponse(record, suggestedBed);
     }
 
     /**
