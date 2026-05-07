@@ -16,8 +16,28 @@ export const visitApi = {
   getById: (id: string) =>
     get<VisitResponse>(`/visits/${id}`),
 
+  /**
+   * Hospital-wide active visit list. Backend gates this with
+   * `canSeeAllZonesAtHospital` — only HOSPITAL_ADMIN, SUPER_ADMIN, the
+   * active shift-lead, and Charge Nurse designation may call it. Regular
+   * clinicians get 403; use {@link getActiveForCallerByHospital} instead.
+   */
   getActiveByHospital: (hospitalId: string, page = 0, size = 50) =>
     get<Page<VisitResponse>>(`/visits/hospital/${hospitalId}/active?page=${page}&size=${size}`),
+
+  /**
+   * Caller-aware active visit list. The backend returns the full hospital
+   * roster for cross-zone actors (admins, shift-lead, Charge Nurse) and
+   * the caller's own zone for everyone else. Off-shift clinicians get an
+   * empty page — frontend can treat that as "you're not on shift" rather
+   * than as an error. This is the default surface every clinical list
+   * should call; the unscoped variant is reserved for code paths that
+   * already know the caller has cross-zone authority.
+   */
+  getActiveForCallerByHospital: (hospitalId: string, page = 0, size = 50) =>
+    get<Page<VisitResponse>>(
+      `/visits/hospital/${hospitalId}/active/mine?page=${page}&size=${size}`,
+    ),
 
   getByPatient: (patientId: string, page = 0, size = 20) =>
     get<Page<VisitResponse>>(`/visits/patient/${patientId}?page=${page}&size=${size}`),

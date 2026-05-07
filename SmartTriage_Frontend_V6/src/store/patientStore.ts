@@ -113,12 +113,21 @@ export const usePatientStore = create<PatientState>((set, get) => ({
   patients: [],
   isLoading: false,
 
-  /** Fetch active visits from API, match with patient data, populate store */
+  /** Fetch active visits from API, match with patient data, populate store.
+   *
+   *  Calls the caller-aware endpoint so the result is automatically
+   *  zone-scoped to the user's active shift assignment (cross-zone for
+   *  HOSPITAL_ADMIN / SUPER_ADMIN / shift-lead / Charge Nurse; their own
+   *  zone for everyone else; empty page for off-shift clinicians).
+   *  Without this, every page that reads from the store (Monitoring,
+   *  PatientsList, Dashboard, ...) was loading every patient hospital-
+   *  wide regardless of who was logged in. The backend now refuses the
+   *  unscoped call from non-leads with a 403 — switching the store
+   *  default keeps the UI working AND honoring the zone boundary. */
   fetchActiveVisits: async (hospitalId: string) => {
     set({ isLoading: true });
     try {
-      // Fetch active visits for the hospital
-      const visitsPage = await visitApi.getActiveByHospital(hospitalId, 0, 200);
+      const visitsPage = await visitApi.getActiveForCallerByHospital(hospitalId, 0, 200);
       const visits: VisitResponse[] = visitsPage.content;
 
       // For each visit, fetch the patient details and combine
