@@ -135,10 +135,14 @@ public final class BedDefaultsConfig {
             case PEDIATRIC   -> "Pediatric Bed";
             case ISOLATION   -> "Isolation Room";
             case OBSERVATION -> "Observation Bed";
-            // Defensive — none of these are seeded, but if the table ever
-            // grows, give them sensible labels rather than throwing.
+            // Defensive — none of these are seeded by Phase G, but if the
+            // table ever grows or the seed expands, give them sensible
+            // labels rather than throwing. AMBULATORY + NEONATAL are
+            // user-introduced zones (Phase 1 zone-routing / NEONATAL unit).
             case GENERAL     -> "General Bed";
             case TRIAGE      -> "Triage Bay";
+            case AMBULATORY  -> "Ambulatory Bay";
+            case NEONATAL    -> "Neonatal Cot";
         };
     }
 
@@ -155,6 +159,10 @@ public final class BedDefaultsConfig {
             case OBSERVATION -> "O";
             case GENERAL     -> "G";
             case TRIAGE      -> "T";
+            // User-introduced zones — Phase G doesn't seed beds in these
+            // by default but the switch must be exhaustive over the enum.
+            case AMBULATORY  -> "AM";
+            case NEONATAL    -> "NN";
         };
     }
 }
