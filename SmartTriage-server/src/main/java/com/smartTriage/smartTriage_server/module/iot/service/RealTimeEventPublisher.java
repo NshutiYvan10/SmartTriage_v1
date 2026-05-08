@@ -163,4 +163,20 @@ public class RealTimeEventPublisher {
         messagingTemplate.convertAndSend(topic, labOrderResponse);
         log.debug("Published lab-order event to {}", topic);
     }
+
+    // ====================================================================
+    // EMS / PARAMEDIC TOPICS
+    // ====================================================================
+
+    /**
+     * Push an EMS run event to the hospital's inbound topic. Fired
+     * on dispatch, pre-arrival, arrival, and handover so the charge
+     * nurse's inbound board stays live and the paramedic's history
+     * reflects the receiving nurse's ack without a refresh.
+     */
+    public void publishEmsRun(UUID hospitalId, Object emsRunResponse) {
+        String topic = "/topic/ems/" + hospitalId;
+        messagingTemplate.convertAndSend(topic, emsRunResponse);
+        log.debug("Published EMS run event to {}", topic);
+    }
 }

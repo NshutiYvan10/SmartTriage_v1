@@ -90,6 +90,14 @@ export function subscribeToAlerts(
   return subscribeToTopic(`/topic/alerts/${hospitalId}`, callback);
 }
 
+/** Subscribe to EMS / paramedic-run events for a hospital. Payload is EmsRun. */
+export function subscribeToEmsRuns(
+  hospitalId: string,
+  callback: (run: any) => void
+): () => void {
+  return subscribeToTopic(`/topic/ems/${hospitalId}`, callback);
+}
+
 /** Subscribe to lab-order events for a hospital. Payload is LabOrder. */
 export function subscribeToLabOrders(
   hospitalId: string,

@@ -38,6 +38,11 @@ public enum AlertType {
     REFERRAL_INITIATED,
     REFERRAL_STABILIZATION_INCOMPLETE,
 
+    // EMS / paramedic workflow
+    EMS_PRE_ARRIVAL,                       // Ambulance is en route — bay prep
+    EMS_HANDOVER_PENDING,                  // Patient at door, no ED ack yet
+    FIELD_TRIAGED_AWAITING_REVIEW,         // 15 min elapsed, ED nurse hasn't re-triaged
+
     // System offline/online alert types
     SYSTEM_OFFLINE,
     SYSTEM_ONLINE,

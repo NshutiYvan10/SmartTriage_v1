@@ -167,4 +167,35 @@ public class Visit extends BaseEntity {
      */
     @Column(name = "arrival_confirmed_at")
     private Instant arrivalConfirmedAt;
+
+    /**
+     * Phase 1 EMS — back-reference to the pre-hospital run that
+     * brought this patient. Null for walk-ins. Stored as a UUID
+     * (rather than @ManyToOne) to avoid a circular dependency
+     * between the visit and ems modules; the visit detail page
+     * fetches the run via the EmsRun repository when this is set.
+     */
+    @Column(name = "ems_run_id")
+    private java.util.UUID emsRunId;
+
+    /**
+     * The paramedic's field triage call (RED/ORANGE/YELLOW/GREEN/BLUE),
+     * denormalised from the EmsRun for display + sort order. The
+     * authoritative ED triage lives on TriageRecord; this is the
+     * pre-hospital prior. When set on a confirmed-arrival visit
+     * without a TriageRecord yet, the dashboard can colour-code
+     * the patient card while the ED triage is pending.
+     */
+    @Column(name = "field_triage_category", length = 20)
+    private String fieldTriageCategory;
+
+    /**
+     * Phase 1 EMS — when the ED nurse must have re-triaged this
+     * patient by. Set at confirm-arrival to (arrival + 15 min) for
+     * any field-triaged patient. The retriage monitor scheduler
+     * fires FIELD_TRIAGED_AWAITING_REVIEW alerts when this is in
+     * the past and no TriageRecord exists yet.
+     */
+    @Column(name = "ed_retriage_due_at")
+    private Instant edRetriageDueAt;
 }

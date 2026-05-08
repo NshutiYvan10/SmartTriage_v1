@@ -437,6 +437,13 @@ export interface VisitResponse {
   /** Door-clock anchor for ambulance pre-arrivals. Null until confirmed. */
   arrivalConfirmedAt: string | null;
 
+  /** Phase 1 EMS — link to pre-hospital run record. Null for walk-ins. */
+  emsRunId?: string | null;
+  /** Paramedic's field triage call. Authoritative ED triage is on TriageRecord. */
+  fieldTriageCategory?: string | null;
+  /** When the ED nurse must re-triage by. */
+  edRetriageDueAt?: string | null;
+
   createdAt: string;
   updatedAt: string;
 

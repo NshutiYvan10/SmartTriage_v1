@@ -35,6 +35,9 @@ public final class VisitMapper {
                 .pendingResusOverflow(visit.isPendingResusOverflow())
                 .ambulancePreArrival(visit.isAmbulancePreArrival())
                 .arrivalConfirmedAt(visit.getArrivalConfirmedAt())
+                .emsRunId(visit.getEmsRunId())
+                .fieldTriageCategory(visit.getFieldTriageCategory())
+                .edRetriageDueAt(visit.getEdRetriageDueAt())
                 .createdAt(visit.getCreatedAt())
                 .updatedAt(visit.getUpdatedAt());
         if (visit.getPrimaryClinician() != null) {

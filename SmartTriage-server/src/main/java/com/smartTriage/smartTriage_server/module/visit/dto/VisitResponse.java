@@ -65,6 +65,15 @@ public class VisitResponse {
      */
     private Instant arrivalConfirmedAt;
 
+    /** Phase 1 EMS — link to the pre-hospital run record. Null for walk-ins. */
+    private java.util.UUID emsRunId;
+
+    /** Paramedic's field triage call. Authoritative ED triage is on TriageRecord. */
+    private String fieldTriageCategory;
+
+    /** When the ED nurse must re-triage by. Powers the 15-min alert. */
+    private Instant edRetriageDueAt;
+
     private Instant createdAt;
     private Instant updatedAt;
 

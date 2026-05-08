@@ -35,6 +35,7 @@ export type AppPage =
   | 'med-safety'
   | 'med-safety-overrides'
   | 'lab'
+  | 'ems'
   | 'pathways'
   | 'icu'
   | 'referral'
@@ -192,7 +193,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'sepsis', 'fast-track', 'hypoglycemia', 'isolation',
     'pathways', 'med-safety', 'med-safety-overrides', 'icu', 'referral',
     // Documentation & handover
-    'documentation', 'handover', 'lab',
+    'documentation', 'handover', 'lab', 'ems',
     // Reports (own)
     'reports',
     // Self-service shift surface
@@ -207,7 +208,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'sepsis', 'fast-track', 'hypoglycemia', 'isolation',
     'pathways', 'referral',
     // Documentation & handover
-    'documentation', 'handover', 'lab',
+    'documentation', 'handover', 'lab', 'ems',
     // Safety reporting
     'safety-incidents',
     // Self-service shift surfaces only. A regular nurse sees their own
@@ -231,7 +232,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
 
   // ── Pre-hospital / transport ──
   PARAMEDIC: [
-    'dashboard', 'entry', 'patients',
+    'dashboard', 'ems', 'entry', 'patients',
     'notifications', 'profile',
     'handover', 'referral',
     'my-schedule',

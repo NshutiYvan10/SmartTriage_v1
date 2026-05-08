@@ -110,4 +110,17 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
                         @Param("hospitalId") UUID hospitalId,
                         @Param("zones") Collection<EdZone> zones,
                         Pageable pageable);
+
+        /**
+         * Phase 1 EMS — visits whose ED re-triage window has elapsed
+         * and that are still in active care. The retriage scheduler
+         * compares each row against its TriageRecord existence and
+         * fires an alert when a paramedic-brought patient hasn't been
+         * formally re-triaged within 15 min.
+         */
+        @Query("SELECT v FROM Visit v WHERE v.isActive = true " +
+                        "AND v.edRetriageDueAt IS NOT NULL " +
+                        "AND v.edRetriageDueAt < :now " +
+                        "AND v.status NOT IN ('DISCHARGED', 'ADMITTED', 'TRANSFERRED', 'ICU_ADMITTED', 'DECEASED', 'LEFT_WITHOUT_BEING_SEEN')")
+        java.util.List<Visit> findRetriageDueBefore(@Param("now") java.time.Instant now);
 }

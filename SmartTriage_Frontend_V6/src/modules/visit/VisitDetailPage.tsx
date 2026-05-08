@@ -11,9 +11,10 @@ import {
   FlaskConical, Pill, BellRing, Heart, Thermometer,
   Wind, Droplets, Brain, Clock, User, AlertTriangle, ChevronRight,
   Plus, Send, CheckCircle2, XCircle, Eye, Loader2, RefreshCw, LogOut,
-  TrendingUp, Sparkles,
+  TrendingUp, Sparkles, Siren,
 } from 'lucide-react';
 import { ClinicalSignsTab } from './ClinicalSignsTab';
+import { PrehospitalTab } from '@/modules/ems/PrehospitalTab';
 import { DiagnosisPanel } from './DiagnosisPanel';
 import { InvestigationPanel } from './InvestigationPanel';
 import { MedicationPanel } from './MedicationPanel';
@@ -82,6 +83,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string
 // ── Tab config ──
 const TABS = [
   { id: 'overview', label: 'Overview', icon: Eye },
+  { id: 'pre-hospital', label: 'Pre-hospital', icon: Siren },
   { id: 'vitals', label: 'Vitals', icon: Activity },
   { id: 'triage', label: 'Triage', icon: Stethoscope },
   // Clinical Signs sits adjacent to Triage because it tracks the
@@ -675,6 +677,7 @@ export function VisitDetailPage() {
         {/* ── Tab Content ── */}
         <div className="animate-fade-up" style={{ animationDelay: '0.05s' }}>
           {activeTab === 'overview' && <OverviewTab visit={visit} latestVitals={latestVitals} latestTriage={latestTriage} notes={notes} diagnoses={diagnoses} investigations={investigations} medications={medications} alerts={visitAlerts} pendingTransfer={pendingTransfer} reload={loadData} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
+          {activeTab === 'pre-hospital' && <PrehospitalTab visitId={visit.id} edTriageCategory={latestTriage?.triageCategory ?? null} />}
           {activeTab === 'vitals' && <VitalsTab vitals={vitals} latestVitals={latestVitals} glassCard={glassCard} isDark={isDark} text={text} />}
           {activeTab === 'triage' && <TriageTab visit={visit} triageHistory={triageHistory} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'clinical-signs' && <ClinicalSignsTab visitId={visit.id} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} onVisitMayHaveChanged={loadData} />}

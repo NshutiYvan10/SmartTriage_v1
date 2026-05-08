@@ -23,6 +23,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { useMyShift, getZoneForCategory } from '@/hooks/useMyShift';
 import { ShiftStartBanner } from '@/components/ShiftStartBanner';
 import { CriticalLabBanner } from '@/modules/lab/CriticalLabBanner';
+import { InboundEmsBoard } from '@/modules/ems/InboundEmsBoard';
 
 export function Dashboard() {
   const { glassCard, glassInner, isDark, text } = useTheme();
@@ -126,6 +127,12 @@ export function Dashboard() {
   return (
     <div className="min-h-full">
       <div className="p-5 space-y-4">
+
+        {/* Inbound ambulance board — self-hides when no inbound runs.
+            Shows pre-arrivals + arrived-not-yet-handed-off so the
+            charge nurse can prep bays and acknowledge MIST handovers
+            in real time. */}
+        <InboundEmsBoard />
 
         {/* Critical lab banner — Phase 1. Self-hides when zero
             unacknowledged criticals so it doesn't burn dashboard
