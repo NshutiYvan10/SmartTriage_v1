@@ -146,4 +146,21 @@ public class RealTimeEventPublisher {
         log.debug("Published clinical note to {} (id:{}, supersedes:{})",
                 topic, note.getId(), note.getSupersedesId());
     }
+
+    // ====================================================================
+    // LAB ORDER TOPICS
+    // ====================================================================
+
+    /**
+     * Push a lab-order event to the hospital's lab topic. Fired on
+     * order creation and on every workflow transition so the lab
+     * tech's inbox / in-progress columns stay live without polling.
+     * The payload is the LabOrderResponse — subscribers replace the
+     * row in their cached list by id.
+     */
+    public void publishLabOrder(UUID hospitalId, Object labOrderResponse) {
+        String topic = "/topic/lab/" + hospitalId;
+        messagingTemplate.convertAndSend(topic, labOrderResponse);
+        log.debug("Published lab-order event to {}", topic);
+    }
 }

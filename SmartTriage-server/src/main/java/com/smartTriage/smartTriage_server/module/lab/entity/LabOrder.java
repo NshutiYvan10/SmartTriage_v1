@@ -1,8 +1,11 @@
 package com.smartTriage.smartTriage_server.module.lab.entity;
 
 import com.smartTriage.smartTriage_server.common.entity.BaseEntity;
+import com.smartTriage.smartTriage_server.common.enums.CriticalContactMethod;
 import com.smartTriage.smartTriage_server.common.enums.CriticalValueType;
+import com.smartTriage.smartTriage_server.common.enums.LabOrderStatus;
 import com.smartTriage.smartTriage_server.common.enums.LabPriority;
+import com.smartTriage.smartTriage_server.common.enums.SpecimenRejectionReason;
 import com.smartTriage.smartTriage_server.module.clinical.entity.Investigation;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import jakarta.persistence.*;
@@ -61,11 +64,24 @@ public class LabOrder extends BaseEntity {
     @Column(name = "priority", nullable = false, length = 15)
     private LabPriority priority;
 
+    /**
+     * Authoritative workflow state. Backfilled from timestamps in V48
+     * for existing rows; new rows must set this explicitly.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 30)
+    @Builder.Default
+    private LabOrderStatus status = LabOrderStatus.ORDERED;
+
     @Column(name = "ordered_at", nullable = false)
     private Instant orderedAt;
 
     @Column(name = "ordered_by_name", length = 255)
     private String orderedByName;
+
+    /** Why the test was ordered (rule out sepsis, AKI workup, etc.). */
+    @Column(name = "clinical_indication", length = 500)
+    private String clinicalIndication;
 
     /** Specimen type — e.g., "blood", "urine", "CSF", "sputum" */
     @Column(name = "specimen_type", length = 50)
@@ -79,6 +95,10 @@ public class LabOrder extends BaseEntity {
 
     @Column(name = "received_by_lab_at")
     private Instant receivedByLabAt;
+
+    /** Lab-side accession (barcode written on the tube on receipt). */
+    @Column(name = "accession_number", length = 40)
+    private String accessionNumber;
 
     @Column(name = "processing_started_at")
     private Instant processingStartedAt;
@@ -141,4 +161,39 @@ public class LabOrder extends BaseEntity {
 
     @Column(name = "cancel_reason", length = 500)
     private String cancelReason;
+
+    // ── Specimen rejection (closes the haemolysed/clotted/mislabelled loop)
+
+    @Column(name = "rejected_at")
+    private Instant rejectedAt;
+
+    @Column(name = "rejected_by_name", length = 255)
+    private String rejectedByName;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rejection_reason", length = 50)
+    private SpecimenRejectionReason rejectionReason;
+
+    @Column(name = "rejection_notes", length = 1000)
+    private String rejectionNotes;
+
+    // ── Two-step verification (Phase 1 self-verify, columns kept for Phase 2)
+
+    @Column(name = "entered_by_name", length = 255)
+    private String enteredByName;
+
+    @Column(name = "verified_at")
+    private Instant verifiedAt;
+
+    @Column(name = "verified_by_name", length = 255)
+    private String verifiedByName;
+
+    // ── Critical-value read-back attestation (JCI NPSG.02.03.01)
+
+    @Column(name = "critical_readback_text", length = 1000)
+    private String criticalReadbackText;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "critical_contact_method", length = 20)
+    private CriticalContactMethod criticalContactMethod;
 }

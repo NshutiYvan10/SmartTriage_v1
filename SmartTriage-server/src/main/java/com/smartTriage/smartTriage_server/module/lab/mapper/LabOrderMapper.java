@@ -25,12 +25,17 @@ public final class LabOrderMapper {
                 .priority(order.getPriority())
                 .orderedAt(order.getOrderedAt())
                 .orderedByName(order.getOrderedByName())
+                .clinicalIndication(order.getClinicalIndication())
                 .specimenType(order.getSpecimenType())
                 .specimenCollectedAt(order.getSpecimenCollectedAt())
                 .specimenCollectedByName(order.getSpecimenCollectedByName())
                 .receivedByLabAt(order.getReceivedByLabAt())
+                .accessionNumber(order.getAccessionNumber())
                 .processingStartedAt(order.getProcessingStartedAt())
                 .resultedAt(order.getResultedAt())
+                .enteredByName(order.getEnteredByName())
+                .verifiedAt(order.getVerifiedAt())
+                .verifiedByName(order.getVerifiedByName())
                 .resultValue(order.getResultValue())
                 .resultUnit(order.getResultUnit())
                 .resultNumeric(order.getResultNumeric())
@@ -42,12 +47,18 @@ public final class LabOrderMapper {
                 .criticalValueNotifiedAt(order.getCriticalValueNotifiedAt())
                 .criticalValueNotifiedTo(order.getCriticalValueNotifiedTo())
                 .criticalValueAcknowledgedAt(order.getCriticalValueAcknowledgedAt())
+                .criticalReadbackText(order.getCriticalReadbackText())
+                .criticalContactMethod(order.getCriticalContactMethod())
                 .turnaroundMinutes(order.getTurnaroundMinutes())
                 .notes(order.getNotes())
                 .cancelledAt(order.getCancelledAt())
                 .cancelledByName(order.getCancelledByName())
                 .cancelReason(order.getCancelReason())
-                .status(deriveStatus(order))
+                .rejectedAt(order.getRejectedAt())
+                .rejectedByName(order.getRejectedByName())
+                .rejectionReason(order.getRejectionReason())
+                .rejectionNotes(order.getRejectionNotes())
+                .status(order.getStatus())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .build();
@@ -77,25 +88,4 @@ public final class LabOrderMapper {
                 .build();
     }
 
-    /**
-     * Derive human-readable status from lab order timestamps.
-     */
-    private static String deriveStatus(LabOrder order) {
-        if (order.getCancelledAt() != null) {
-            return "CANCELLED";
-        }
-        if (order.getResultedAt() != null) {
-            return "RESULTED";
-        }
-        if (order.getProcessingStartedAt() != null) {
-            return "PROCESSING";
-        }
-        if (order.getReceivedByLabAt() != null) {
-            return "RECEIVED_BY_LAB";
-        }
-        if (order.getSpecimenCollectedAt() != null) {
-            return "SPECIMEN_COLLECTED";
-        }
-        return "ORDERED";
-    }
 }

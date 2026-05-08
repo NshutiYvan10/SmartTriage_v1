@@ -58,6 +58,7 @@ import { MohReportView } from './modules/mohreport/MohReportView';
 import { GovernanceAdmin } from './modules/governance/GovernanceAdmin';
 import { QualityDashboard } from './modules/quality/QualityDashboard';
 import { SurgePredictionView } from './modules/prediction/SurgePredictionView';
+import { LabOrdersView } from './modules/lab/LabOrdersView';
 
 function AppContent() {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -161,6 +162,7 @@ function AppContent() {
             <Route path="/alerts" element={<RoleGuard page="alerts"><AlertsView /></RoleGuard>} />
             <Route path="/alert-dashboard" element={<RoleGuard page="alerts"><AlertDashboard /></RoleGuard>} />
             <Route path="/iot-devices" element={<RoleGuard page="iot-devices"><IoTDeviceManagement /></RoleGuard>} />
+            <Route path="/lab" element={<RoleGuard page="lab"><LabOrdersView /></RoleGuard>} />
             <Route path="/beds" element={<RoleGuard page="beds"><BedGridView /></RoleGuard>} />
             <Route path="/admin/hospitals" element={<RoleGuard page="admin-hospitals"><HospitalManagement /></RoleGuard>} />
             <Route path="/admin/users" element={<RoleGuard page="admin-users"><UserManagement /></RoleGuard>} />

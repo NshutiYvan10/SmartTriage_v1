@@ -35,5 +35,12 @@ public class OrderLabRequest {
     /** Specimen type — e.g., "blood", "urine", "CSF", "sputum" */
     private String specimenType;
 
+    /**
+     * Why the test was ordered (e.g. "rule out sepsis", "AKI workup").
+     * Foregrounded on the tech's worklist so they can sanity-check
+     * results and apply the right reflex rules.
+     */
+    private String clinicalIndication;
+
     private String notes;
 }

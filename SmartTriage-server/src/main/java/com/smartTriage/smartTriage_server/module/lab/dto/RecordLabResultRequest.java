@@ -27,5 +27,11 @@ public class RecordLabResultRequest {
     private Double referenceRangeMin;
     private Double referenceRangeMax;
 
+    /** Tech who entered (and self-verified) the result. */
+    private String enteredByName;
+
+    /** True if the tech flagged the specimen as quality-suspect at result time. */
+    private boolean specimenQualityConcern;
+
     private String notes;
 }

@@ -5,7 +5,9 @@ import com.smartTriage.smartTriage_server.common.enums.AlertType;
 import com.smartTriage.smartTriage_server.common.enums.LabPriority;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
+import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher;
 import com.smartTriage.smartTriage_server.module.lab.entity.LabOrder;
+import com.smartTriage.smartTriage_server.module.lab.mapper.LabOrderMapper;
 import com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +35,7 @@ public class LabTurnaroundMonitorService {
 
     private final LabOrderRepository labOrderRepository;
     private final ClinicalAlertRepository clinicalAlertRepository;
+    private final RealTimeEventPublisher realTimeEventPublisher;
 
     private static final int STAT_OVERDUE_MINUTES = 30;
     private static final int URGENT_OVERDUE_MINUTES = 120;
@@ -164,6 +167,18 @@ public class LabTurnaroundMonitorService {
                 clinicalAlertRepository.save(alert);
                 log.warn("CRITICAL VALUE UNACKNOWLEDGED escalation for order {} — {} min since result",
                         order.getOrderNumber(), minutesSinceResult);
+            }
+
+            // Re-broadcast on the lab topic regardless of whether the alert
+            // already exists — the doctor's dashboard re-flashes the
+            // critical-result banner each cycle the value remains unacked.
+            try {
+                realTimeEventPublisher.publishLabOrder(
+                        order.getVisit().getHospital().getId(),
+                        LabOrderMapper.toResponse(order));
+            } catch (Exception e) {
+                log.warn("Failed to re-broadcast unacked critical lab order {}: {}",
+                        order.getOrderNumber(), e.getMessage());
             }
         }
     }

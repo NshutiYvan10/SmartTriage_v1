@@ -20,16 +20,29 @@ import java.util.UUID;
 /**
  * Lab Order Controller — manages the full lab order lifecycle.
  *
- * POST   /api/v1/lab/order                              — Create lab order
- * PUT    /api/v1/lab/{orderId}/collect-specimen          — Mark specimen collected
- * PUT    /api/v1/lab/{orderId}/receive                   — Mark received in lab
- * PUT    /api/v1/lab/{orderId}/result                    — Record result
- * PUT    /api/v1/lab/{orderId}/acknowledge-critical      — Acknowledge critical value
- * PUT    /api/v1/lab/{orderId}/cancel                    — Cancel order
- * GET    /api/v1/lab/visit/{visitId}                     — Orders for visit
- * GET    /api/v1/lab/hospital/{hospitalId}/pending       — Pending orders
- * GET    /api/v1/lab/hospital/{hospitalId}/critical      — Unacknowledged critical results
- * GET    /api/v1/lab/hospital/{hospitalId}/stat          — Active STAT orders
+ * RBAC summary (Phase 1):
+ *  - DOCTOR / NURSE          : create order
+ *  - DOCTOR                  : cancel order, acknowledge critical values
+ *  - LAB_TECHNICIAN          : receive specimen, reject specimen,
+ *                              start processing, record result
+ *  - DOCTOR / NURSE          : collect specimen at bedside
+ *  - SUPER_ADMIN             : everything
+ *
+ * Routes:
+ *  POST   /api/v1/lab/order
+ *  PUT    /api/v1/lab/{orderId}/collect-specimen
+ *  PUT    /api/v1/lab/{orderId}/receive
+ *  POST   /api/v1/lab/{orderId}/reject
+ *  POST   /api/v1/lab/{orderId}/start-processing
+ *  PUT    /api/v1/lab/{orderId}/result
+ *  PUT    /api/v1/lab/{orderId}/acknowledge-critical
+ *  PUT    /api/v1/lab/{orderId}/cancel
+ *  GET    /api/v1/lab/visit/{visitId}
+ *  GET    /api/v1/lab/hospital/{hospitalId}/inbox
+ *  GET    /api/v1/lab/hospital/{hospitalId}/in-progress
+ *  GET    /api/v1/lab/hospital/{hospitalId}/pending     (legacy alias)
+ *  GET    /api/v1/lab/hospital/{hospitalId}/critical
+ *  GET    /api/v1/lab/hospital/{hospitalId}/stat
  */
 @Slf4j
 @RestController
@@ -40,7 +53,7 @@ public class LabOrderController {
     private final LabOrderService labOrderService;
 
     // ====================================================================
-    // CREATE ORDER
+    // CREATE ORDER (clinician-only)
     // ====================================================================
 
     @PostMapping("/order")
@@ -57,7 +70,7 @@ public class LabOrderController {
     // ====================================================================
 
     @PutMapping("/{orderId}/collect-specimen")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN')")
     public ResponseEntity<ApiResponse<LabOrderResponse>> collectSpecimen(
             @PathVariable UUID orderId,
             @RequestParam(required = false) String collectedByName) {
@@ -66,15 +79,34 @@ public class LabOrderController {
     }
 
     @PutMapping("/{orderId}/receive")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN')")
     public ResponseEntity<ApiResponse<LabOrderResponse>> receiveInLab(
-            @PathVariable UUID orderId) {
-        LabOrderResponse response = labOrderService.receiveInLab(orderId);
+            @PathVariable UUID orderId,
+            @RequestBody(required = false) ReceiveSpecimenRequest request) {
+        LabOrderResponse response = labOrderService.receiveInLab(orderId, request);
         return ResponseEntity.ok(ApiResponse.success("Order received by lab", response));
     }
 
+    @PostMapping("/{orderId}/reject")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN')")
+    public ResponseEntity<ApiResponse<LabOrderResponse>> rejectSpecimen(
+            @PathVariable UUID orderId,
+            @Valid @RequestBody RejectSpecimenRequest request) {
+        LabOrderResponse response = labOrderService.rejectSpecimen(orderId, request);
+        return ResponseEntity.ok(ApiResponse.success("Specimen rejected", response));
+    }
+
+    @PostMapping("/{orderId}/start-processing")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN')")
+    public ResponseEntity<ApiResponse<LabOrderResponse>> startProcessing(
+            @PathVariable UUID orderId,
+            @RequestParam(required = false) String startedByName) {
+        LabOrderResponse response = labOrderService.startProcessing(orderId, startedByName);
+        return ResponseEntity.ok(ApiResponse.success("Processing started", response));
+    }
+
     @PutMapping("/{orderId}/result")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN')")
     public ResponseEntity<ApiResponse<LabOrderResponse>> recordResult(
             @PathVariable UUID orderId,
             @Valid @RequestBody RecordLabResultRequest request) {
@@ -83,11 +115,11 @@ public class LabOrderController {
     }
 
     @PutMapping("/{orderId}/acknowledge-critical")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR')")
     public ResponseEntity<ApiResponse<LabOrderResponse>> acknowledgeCriticalValue(
             @PathVariable UUID orderId,
-            @RequestParam String acknowledgedBy) {
-        LabOrderResponse response = labOrderService.acknowledgeCriticalValue(orderId, acknowledgedBy);
+            @RequestBody(required = false) AcknowledgeCriticalRequest request) {
+        LabOrderResponse response = labOrderService.acknowledgeCriticalValue(orderId, request);
         return ResponseEntity.ok(ApiResponse.success("Critical value acknowledged", response));
     }
 
@@ -106,7 +138,7 @@ public class LabOrderController {
     // ====================================================================
 
     @GetMapping("/visit/{visitId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN') "
             + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<Page<LabOrderResponse>>> getOrdersForVisit(
             @PathVariable UUID visitId,
@@ -115,8 +147,26 @@ public class LabOrderController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    /** Lab-tech inbox: orders waiting for lab action, STAT first. */
+    @GetMapping("/hospital/{hospitalId}/inbox")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    public ResponseEntity<ApiResponse<List<LabOrderResponse>>> getInbox(
+            @PathVariable UUID hospitalId) {
+        return ResponseEntity.ok(ApiResponse.success(labOrderService.getInboxForLab(hospitalId)));
+    }
+
+    /** Orders the lab is actively processing. */
+    @GetMapping("/hospital/{hospitalId}/in-progress")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    public ResponseEntity<ApiResponse<List<LabOrderResponse>>> getInProgress(
+            @PathVariable UUID hospitalId) {
+        return ResponseEntity.ok(ApiResponse.success(labOrderService.getInProgressForLab(hospitalId)));
+    }
+
     @GetMapping("/hospital/{hospitalId}/pending")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN') "
             + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<LabOrderResponse>>> getPendingOrders(
             @PathVariable UUID hospitalId,
@@ -126,7 +176,7 @@ public class LabOrderController {
     }
 
     @GetMapping("/hospital/{hospitalId}/critical")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN') "
             + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<CriticalValueResponse>>> getCriticalResults(
             @PathVariable UUID hospitalId) {
@@ -135,7 +185,7 @@ public class LabOrderController {
     }
 
     @GetMapping("/hospital/{hospitalId}/stat")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN') "
             + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<LabOrderResponse>>> getStatOrders(
             @PathVariable UUID hospitalId) {

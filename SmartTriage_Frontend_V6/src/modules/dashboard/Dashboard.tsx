@@ -22,6 +22,7 @@ import { getCategoryColor } from '@/utils/tewsCalculator';
 import { formatDistanceToNow } from 'date-fns';
 import { useMyShift, getZoneForCategory } from '@/hooks/useMyShift';
 import { ShiftStartBanner } from '@/components/ShiftStartBanner';
+import { CriticalLabBanner } from '@/modules/lab/CriticalLabBanner';
 
 export function Dashboard() {
   const { glassCard, glassInner, isDark, text } = useTheme();
@@ -125,6 +126,11 @@ export function Dashboard() {
   return (
     <div className="min-h-full">
       <div className="p-5 space-y-4">
+
+        {/* Critical lab banner — Phase 1. Self-hides when zero
+            unacknowledged criticals so it doesn't burn dashboard
+            real estate when the lab is quiet. */}
+        <CriticalLabBanner />
 
         {/* Shift-start briefing — top of dashboard so the doctor sees
             their zone, patient count, and outstanding work the moment

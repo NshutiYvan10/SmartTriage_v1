@@ -12,6 +12,7 @@ import com.smartTriage.smartTriage_server.module.lab.engine.CriticalValueEngine;
 import com.smartTriage.smartTriage_server.module.lab.engine.CriticalValueResult;
 import com.smartTriage.smartTriage_server.module.lab.entity.LabOrder;
 import com.smartTriage.smartTriage_server.module.lab.mapper.LabOrderMapper;
+import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher;
 import com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.visit.service.VisitService;
@@ -48,6 +49,7 @@ public class LabOrderService {
     private final ClinicalAlertRepository clinicalAlertRepository;
     private final CriticalValueEngine criticalValueEngine;
     private final VisitService visitService;
+    private final RealTimeEventPublisher realTimeEventPublisher;
 
     // ====================================================================
     // ORDER LAB
@@ -84,9 +86,11 @@ public class LabOrderService {
                 .testName(request.getTestName())
                 .testCode(request.getTestCode())
                 .priority(request.getPriority())
+                .status(LabOrderStatus.ORDERED)
                 .orderedAt(Instant.now())
                 .orderedByName(request.getOrderedByName())
                 .specimenType(request.getSpecimenType())
+                .clinicalIndication(request.getClinicalIndication())
                 .notes(request.getNotes())
                 .build();
 
@@ -95,7 +99,9 @@ public class LabOrderService {
         log.info("Lab order created: {} — test: {} priority: {} visit: {}",
                 orderNumber, request.getTestName(), request.getPriority(), visit.getVisitNumber());
 
-        return LabOrderMapper.toResponse(labOrder);
+        LabOrderResponse response = LabOrderMapper.toResponse(labOrder);
+        broadcastLabOrder(labOrder, response);
+        return response;
     }
 
     // ====================================================================
@@ -105,16 +111,12 @@ public class LabOrderService {
     @Transactional
     public LabOrderResponse collectSpecimen(UUID orderId, String collectedByName) {
         LabOrder order = findOrderOrThrow(orderId);
-        validateNotCancelledOrResulted(order);
-
-        if (order.getSpecimenCollectedAt() != null) {
-            throw new ClinicalBusinessException("Specimen already collected for order " + order.getOrderNumber());
-        }
+        requireStatus(order, LabOrderStatus.ORDERED, "collect specimen");
 
         order.setSpecimenCollectedAt(Instant.now());
         order.setSpecimenCollectedByName(collectedByName);
+        order.setStatus(LabOrderStatus.SPECIMEN_COLLECTED);
 
-        // Update linked investigation
         if (order.getInvestigation() != null) {
             order.getInvestigation().setSpecimenCollectedAt(Instant.now());
             order.getInvestigation().setStatus(InvestigationStatus.SPECIMEN_COLLECTED);
@@ -122,28 +124,124 @@ public class LabOrderService {
         }
 
         order = labOrderRepository.save(order);
-        log.info("Specimen collected for order {}", order.getOrderNumber());
+        log.info("Specimen collected for order {} by {}", order.getOrderNumber(), collectedByName);
 
-        return LabOrderMapper.toResponse(order);
+        return broadcastAndMap(order);
     }
 
     @Transactional
     public LabOrderResponse receiveInLab(UUID orderId) {
+        return receiveInLab(orderId, new ReceiveSpecimenRequest());
+    }
+
+    /**
+     * Lab tech accessions the specimen on receipt — writes the lab's
+     * own barcode/sequence on the tube. Allowed from ORDERED (specimen
+     * brought directly to the lab without bedside-collected step) or
+     * SPECIMEN_COLLECTED.
+     */
+    @Transactional
+    public LabOrderResponse receiveInLab(UUID orderId, ReceiveSpecimenRequest request) {
         LabOrder order = findOrderOrThrow(orderId);
-        validateNotCancelledOrResulted(order);
+        requireStatusIn(order, "receive specimen",
+                LabOrderStatus.ORDERED, LabOrderStatus.SPECIMEN_COLLECTED);
 
-        order.setReceivedByLabAt(Instant.now());
+        Instant now = Instant.now();
+        if (order.getSpecimenCollectedAt() == null) {
+            // Specimen arrived in lab without a separate "collected at bedside"
+            // event — record both timestamps simultaneously.
+            order.setSpecimenCollectedAt(now);
+            if (request != null && request.getReceivedByName() != null) {
+                order.setSpecimenCollectedByName(request.getReceivedByName());
+            }
+        }
+        order.setReceivedByLabAt(now);
+        order.setStatus(LabOrderStatus.RECEIVED_BY_LAB);
 
-        // Update linked investigation status
+        String accession = request != null ? request.getAccessionNumber() : null;
+        if (accession == null || accession.isBlank()) {
+            accession = generateAccessionNumber(order);
+        }
+        order.setAccessionNumber(accession);
+
         if (order.getInvestigation() != null) {
             order.getInvestigation().setStatus(InvestigationStatus.IN_PROGRESS);
             investigationRepository.save(order.getInvestigation());
         }
 
         order = labOrderRepository.save(order);
-        log.info("Order {} received by lab", order.getOrderNumber());
+        log.info("Order {} received by lab — accession {}", order.getOrderNumber(), accession);
 
-        return LabOrderMapper.toResponse(order);
+        return broadcastAndMap(order);
+    }
+
+    /**
+     * Tech rejects the specimen on receipt (haemolysed, clotted,
+     * mislabelled, etc.). Closes the order with status REJECTED and
+     * fires an alert so the ordering doctor knows to redraw.
+     */
+    @Transactional
+    public LabOrderResponse rejectSpecimen(UUID orderId, RejectSpecimenRequest request) {
+        LabOrder order = findOrderOrThrow(orderId);
+        // Allow rejection any time before the result is filed.
+        if (order.getStatus() == LabOrderStatus.RESULTED
+                || order.getStatus() == LabOrderStatus.CANCELLED
+                || order.getStatus() == LabOrderStatus.REJECTED) {
+            throw new ClinicalBusinessException(
+                    "Cannot reject specimen for order " + order.getOrderNumber()
+                            + " — status is " + order.getStatus());
+        }
+
+        Instant now = Instant.now();
+        order.setStatus(LabOrderStatus.REJECTED);
+        order.setRejectedAt(now);
+        order.setRejectedByName(request.getRejectedByName());
+        order.setRejectionReason(request.getReason());
+        order.setRejectionNotes(request.getNotes());
+
+        if (order.getInvestigation() != null) {
+            order.getInvestigation().setStatus(InvestigationStatus.CANCELLED);
+            investigationRepository.save(order.getInvestigation());
+        }
+
+        // Fire an alert so the ordering doctor knows to redraw.
+        ClinicalAlert alert = ClinicalAlert.builder()
+                .visit(order.getVisit())
+                .alertType(AlertType.CRITICAL_LAB_RESULT) // re-use type; severity differentiates
+                .severity(AlertSeverity.HIGH)
+                .title("Lab specimen rejected: " + order.getTestName())
+                .message(String.format(
+                        "Specimen for order %s rejected — reason: %s%s. Please redraw.",
+                        order.getOrderNumber(),
+                        request.getReason().name(),
+                        request.getNotes() != null && !request.getNotes().isBlank()
+                                ? " (" + request.getNotes() + ")" : ""))
+                .autoGenerated(true)
+                .build();
+        clinicalAlertRepository.save(alert);
+
+        order = labOrderRepository.save(order);
+        log.warn("Order {} REJECTED by {} — reason: {}",
+                order.getOrderNumber(), request.getRejectedByName(), request.getReason());
+
+        return broadcastAndMap(order);
+    }
+
+    /**
+     * Tech starts processing the specimen on the analyser / bench.
+     */
+    @Transactional
+    public LabOrderResponse startProcessing(UUID orderId, String startedByName) {
+        LabOrder order = findOrderOrThrow(orderId);
+        requireStatus(order, LabOrderStatus.RECEIVED_BY_LAB, "start processing");
+
+        order.setProcessingStartedAt(Instant.now());
+        order.setStatus(LabOrderStatus.PROCESSING);
+
+        order = labOrderRepository.save(order);
+        log.info("Processing started for order {} by {}", order.getOrderNumber(), startedByName);
+
+        return broadcastAndMap(order);
     }
 
     // ====================================================================
@@ -153,10 +251,17 @@ public class LabOrderService {
     @Transactional
     public LabOrderResponse recordResult(UUID orderId, RecordLabResultRequest request) {
         LabOrder order = findOrderOrThrow(orderId);
-        validateNotCancelledOrResulted(order);
+        requireStatusIn(order, "record result",
+                LabOrderStatus.RECEIVED_BY_LAB, LabOrderStatus.PROCESSING);
 
         Instant now = Instant.now();
         order.setResultedAt(now);
+        order.setStatus(LabOrderStatus.RESULTED);
+        order.setEnteredByName(request.getEnteredByName());
+        // Phase 1: self-verify — same actor enters and verifies.
+        // Phase 2 will gate this behind a HEAD_LAB_TECHNICIAN role.
+        order.setVerifiedAt(now);
+        order.setVerifiedByName(request.getEnteredByName());
         order.setResultValue(request.getResultValue());
         order.setResultUnit(request.getResultUnit());
         order.setResultNumeric(request.getResultNumeric());
@@ -210,20 +315,31 @@ public class LabOrderService {
             investigationRepository.save(inv);
         }
 
+        if (request.isSpecimenQualityConcern()) {
+            String existing = order.getNotes() != null ? order.getNotes() + " | " : "";
+            order.setNotes(existing + "Specimen quality concern flagged at result entry");
+        }
+
         order = labOrderRepository.save(order);
 
         log.info("Result recorded for order {} — value: {} critical: {} turnaround: {} min",
                 order.getOrderNumber(), request.getResultValue(), order.isCritical(), turnaroundMinutes);
 
-        return LabOrderMapper.toResponse(order);
+        return broadcastAndMap(order);
     }
 
     // ====================================================================
     // ACKNOWLEDGE CRITICAL VALUE
     // ====================================================================
 
+    /**
+     * Doctor acknowledges a critical lab value with a read-back
+     * attestation (JCI NPSG.02.03.01). The read-back text and contact
+     * method are stored on the order row so an inspector can audit
+     * how the panic value was communicated.
+     */
     @Transactional
-    public LabOrderResponse acknowledgeCriticalValue(UUID orderId, String acknowledgedBy) {
+    public LabOrderResponse acknowledgeCriticalValue(UUID orderId, AcknowledgeCriticalRequest request) {
         LabOrder order = findOrderOrThrow(orderId);
 
         if (!order.isCritical()) {
@@ -235,13 +351,22 @@ public class LabOrderService {
         }
 
         order.setCriticalValueAcknowledgedAt(Instant.now());
-        order.setCriticalValueNotifiedTo(acknowledgedBy);
+        if (request != null) {
+            if (request.getAcknowledgedByName() != null) {
+                order.setCriticalValueNotifiedTo(request.getAcknowledgedByName());
+            }
+            order.setCriticalReadbackText(request.getReadbackText());
+            order.setCriticalContactMethod(request.getContactMethod());
+        }
 
         order = labOrderRepository.save(order);
 
-        log.info("Critical value acknowledged for order {} by {}", order.getOrderNumber(), acknowledgedBy);
+        log.info("Critical value acknowledged for order {} by {} (method: {})",
+                order.getOrderNumber(),
+                order.getCriticalValueNotifiedTo(),
+                order.getCriticalContactMethod());
 
-        return LabOrderMapper.toResponse(order);
+        return broadcastAndMap(order);
     }
 
     // ====================================================================
@@ -252,18 +377,20 @@ public class LabOrderService {
     public LabOrderResponse cancelOrder(UUID orderId, String reason, String cancelledByName) {
         LabOrder order = findOrderOrThrow(orderId);
 
-        if (order.getResultedAt() != null) {
+        if (order.getStatus() == LabOrderStatus.RESULTED) {
             throw new ClinicalBusinessException("Cannot cancel order " + order.getOrderNumber() + " — already resulted");
         }
-        if (order.getCancelledAt() != null) {
-            throw new ClinicalBusinessException("Order " + order.getOrderNumber() + " is already cancelled");
+        if (order.getStatus() == LabOrderStatus.CANCELLED
+                || order.getStatus() == LabOrderStatus.REJECTED) {
+            throw new ClinicalBusinessException(
+                    "Order " + order.getOrderNumber() + " is already " + order.getStatus());
         }
 
         order.setCancelledAt(Instant.now());
         order.setCancelledByName(cancelledByName);
         order.setCancelReason(reason);
+        order.setStatus(LabOrderStatus.CANCELLED);
 
-        // Update linked Investigation
         if (order.getInvestigation() != null) {
             order.getInvestigation().setStatus(InvestigationStatus.CANCELLED);
             investigationRepository.save(order.getInvestigation());
@@ -273,7 +400,7 @@ public class LabOrderService {
 
         log.info("Order {} cancelled by {} — reason: {}", order.getOrderNumber(), cancelledByName, reason);
 
-        return LabOrderMapper.toResponse(order);
+        return broadcastAndMap(order);
     }
 
     // ====================================================================
@@ -306,6 +433,22 @@ public class LabOrderService {
                 .collect(Collectors.toList());
     }
 
+    /** Lab-tech inbox — orders waiting on lab action. */
+    public List<LabOrderResponse> getInboxForLab(UUID hospitalId) {
+        return labOrderRepository.findInboxForLab(hospitalId)
+                .stream()
+                .map(LabOrderMapper::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    /** Orders the tech is actively processing. */
+    public List<LabOrderResponse> getInProgressForLab(UUID hospitalId) {
+        return labOrderRepository.findInProgressForLab(hospitalId)
+                .stream()
+                .map(LabOrderMapper::toResponse)
+                .collect(Collectors.toList());
+    }
+
     // ====================================================================
     // INTERNAL HELPERS
     // ====================================================================
@@ -315,19 +458,60 @@ public class LabOrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("LabOrder", "id", id));
     }
 
-    private void validateNotCancelledOrResulted(LabOrder order) {
-        if (order.getCancelledAt() != null) {
-            throw new ClinicalBusinessException("Order " + order.getOrderNumber() + " is cancelled");
+    /** State-machine guard — transition from a single expected status. */
+    private void requireStatus(LabOrder order, LabOrderStatus expected, String action) {
+        if (order.getStatus() != expected) {
+            throw new ClinicalBusinessException(
+                    "Cannot " + action + " for order " + order.getOrderNumber()
+                            + " — current status is " + order.getStatus()
+                            + ", expected " + expected);
         }
-        if (order.getResultedAt() != null) {
-            throw new ClinicalBusinessException("Order " + order.getOrderNumber() + " already has results");
+    }
+
+    /** State-machine guard — transition allowed from any of these statuses. */
+    private void requireStatusIn(LabOrder order, String action, LabOrderStatus... allowed) {
+        for (LabOrderStatus s : allowed) {
+            if (order.getStatus() == s) return;
         }
+        throw new ClinicalBusinessException(
+                "Cannot " + action + " for order " + order.getOrderNumber()
+                        + " — current status is " + order.getStatus());
     }
 
     private String generateOrderNumber() {
         String datePrefix = "LAB-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         long count = labOrderRepository.countByOrderNumberPrefix(datePrefix);
         return String.format("%s-%05d", datePrefix, count + 1);
+    }
+
+    /**
+     * Accession number written by the lab on the tube — order-number
+     * suffix is fine as a default until barcode integration arrives.
+     */
+    private String generateAccessionNumber(LabOrder order) {
+        return "ACC-" + order.getOrderNumber().substring("LAB-".length());
+    }
+
+    /**
+     * Broadcast the order to {@code /topic/lab/{hospitalId}} and
+     * return the response DTO. Called from every state transition so
+     * the lab-tech dashboard stays live without polling.
+     */
+    private LabOrderResponse broadcastAndMap(LabOrder order) {
+        LabOrderResponse response = LabOrderMapper.toResponse(order);
+        broadcastLabOrder(order, response);
+        return response;
+    }
+
+    private void broadcastLabOrder(LabOrder order, LabOrderResponse response) {
+        try {
+            UUID hospitalId = order.getVisit().getHospital().getId();
+            realTimeEventPublisher.publishLabOrder(hospitalId, response);
+        } catch (Exception e) {
+            // Never let a broadcast failure roll back the workflow transition.
+            log.warn("Failed to broadcast lab-order event for {}: {}",
+                    order.getOrderNumber(), e.getMessage());
+        }
     }
 
     private void createCriticalValueAlert(LabOrder order, CriticalValueResult criticalResult) {

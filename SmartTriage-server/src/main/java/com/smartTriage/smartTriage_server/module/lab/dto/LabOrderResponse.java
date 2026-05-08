@@ -1,7 +1,10 @@
 package com.smartTriage.smartTriage_server.module.lab.dto;
 
+import com.smartTriage.smartTriage_server.common.enums.CriticalContactMethod;
 import com.smartTriage.smartTriage_server.common.enums.CriticalValueType;
+import com.smartTriage.smartTriage_server.common.enums.LabOrderStatus;
 import com.smartTriage.smartTriage_server.common.enums.LabPriority;
+import com.smartTriage.smartTriage_server.common.enums.SpecimenRejectionReason;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -29,14 +32,19 @@ public class LabOrderResponse {
 
     private Instant orderedAt;
     private String orderedByName;
+    private String clinicalIndication;
 
     private String specimenType;
     private Instant specimenCollectedAt;
     private String specimenCollectedByName;
 
     private Instant receivedByLabAt;
+    private String accessionNumber;
     private Instant processingStartedAt;
     private Instant resultedAt;
+    private String enteredByName;
+    private Instant verifiedAt;
+    private String verifiedByName;
 
     private String resultValue;
     private String resultUnit;
@@ -50,6 +58,8 @@ public class LabOrderResponse {
     private Instant criticalValueNotifiedAt;
     private String criticalValueNotifiedTo;
     private Instant criticalValueAcknowledgedAt;
+    private String criticalReadbackText;
+    private CriticalContactMethod criticalContactMethod;
 
     private Integer turnaroundMinutes;
     private String notes;
@@ -58,8 +68,13 @@ public class LabOrderResponse {
     private String cancelledByName;
     private String cancelReason;
 
-    /** Current workflow status derived from timestamps */
-    private String status;
+    private Instant rejectedAt;
+    private String rejectedByName;
+    private SpecimenRejectionReason rejectionReason;
+    private String rejectionNotes;
+
+    /** Authoritative workflow status (post V48). */
+    private LabOrderStatus status;
 
     private Instant createdAt;
     private Instant updatedAt;

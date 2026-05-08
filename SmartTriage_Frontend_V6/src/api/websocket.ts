@@ -90,6 +90,14 @@ export function subscribeToAlerts(
   return subscribeToTopic(`/topic/alerts/${hospitalId}`, callback);
 }
 
+/** Subscribe to lab-order events for a hospital. Payload is LabOrder. */
+export function subscribeToLabOrders(
+  hospitalId: string,
+  callback: (labOrder: any) => void
+): () => void {
+  return subscribeToTopic(`/topic/lab/${hospitalId}`, callback);
+}
+
 /** Subscribe to alerts for a specific ED zone */
 export function subscribeToZoneAlerts(
   hospitalId: string,

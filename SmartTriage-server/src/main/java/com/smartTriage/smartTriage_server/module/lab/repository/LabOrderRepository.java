@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.lab.repository;
 
+import com.smartTriage.smartTriage_server.common.enums.LabOrderStatus;
 import com.smartTriage.smartTriage_server.common.enums.LabPriority;
 import com.smartTriage.smartTriage_server.module.lab.entity.LabOrder;
 import org.springframework.data.domain.Page;
@@ -77,4 +78,40 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
      */
     @Query("SELECT COUNT(o) FROM LabOrder o WHERE o.orderNumber LIKE :prefix%")
     long countByOrderNumberPrefix(@Param("prefix") String prefix);
+
+    // ── Lab-tech dashboard queries (Phase 1) ──
+
+    /**
+     * Lab-tech inbox: orders waiting for lab action — specimen is in
+     * the lab (or about to be) but not yet processing/resulted.
+     * Sorted STAT first, then by oldest first within priority.
+     */
+    @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+            "AND o.isActive = true " +
+            "AND o.status IN (com.smartTriage.smartTriage_server.common.enums.LabOrderStatus.ORDERED, " +
+            "                 com.smartTriage.smartTriage_server.common.enums.LabOrderStatus.SPECIMEN_COLLECTED, " +
+            "                 com.smartTriage.smartTriage_server.common.enums.LabOrderStatus.RECEIVED_BY_LAB) " +
+            "ORDER BY CASE o.priority WHEN 'STAT' THEN 0 WHEN 'URGENT' THEN 1 ELSE 2 END, o.orderedAt ASC")
+    List<LabOrder> findInboxForLab(@Param("hospitalId") UUID hospitalId);
+
+    /**
+     * Orders the tech has accessioned and is actively processing —
+     * waiting for a result.
+     */
+    @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+            "AND o.isActive = true " +
+            "AND o.status = com.smartTriage.smartTriage_server.common.enums.LabOrderStatus.PROCESSING " +
+            "ORDER BY CASE o.priority WHEN 'STAT' THEN 0 WHEN 'URGENT' THEN 1 ELSE 2 END, o.processingStartedAt ASC")
+    List<LabOrder> findInProgressForLab(@Param("hospitalId") UUID hospitalId);
+
+    /**
+     * Orders by status for a hospital — generic helper for Phase 2
+     * verification queues, etc.
+     */
+    @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+            "AND o.isActive = true AND o.status = :status " +
+            "ORDER BY o.orderedAt DESC")
+    List<LabOrder> findByHospitalAndStatus(
+            @Param("hospitalId") UUID hospitalId,
+            @Param("status") LabOrderStatus status);
 }
