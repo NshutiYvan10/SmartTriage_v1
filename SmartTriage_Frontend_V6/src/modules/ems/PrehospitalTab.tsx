@@ -123,15 +123,25 @@ export function PrehospitalTab({ visitId, edTriageCategory }: Props) {
           </div>
           <div className="space-y-1.5">
             {run.interventions.map((iv) => (
-              <div key={iv.id} className="rounded-xl px-3 py-2 text-xs flex items-center justify-between" style={glassInner}>
-                <div>
-                  <span className={`text-[10px] font-bold ${text.label}`}>{iv.type}</span>
-                  <span className={`ml-2 ${text.body}`}>{iv.detail}</span>
-                  {iv.outcome && <span className={`ml-2 italic ${text.muted}`}>— {iv.outcome}</span>}
+              <div key={iv.id} className="rounded-xl px-3 py-2 text-xs" style={glassInner}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className={`text-[10px] font-bold ${text.label}`}>{iv.type}</span>
+                    <span className={`ml-2 ${text.body}`}>{iv.detail}</span>
+                    {iv.dose  && <span className={`ml-1 ${text.muted}`}>• {iv.dose}</span>}
+                    {iv.route && <span className={`ml-1 ${text.muted}`}>• {iv.route}</span>}
+                  </div>
+                  <span className={`text-[10px] ${text.muted} shrink-0`}>
+                    {new Date(iv.givenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
                 </div>
-                <span className={`text-[10px] ${text.muted}`}>
-                  {new Date(iv.givenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
+                {(iv.givenByName || iv.outcome) && (
+                  <div className={`text-[10px] mt-0.5 ${text.muted}`}>
+                    {iv.givenByName && <>by {iv.givenByName}</>}
+                    {iv.givenByName && iv.outcome && ' • '}
+                    {iv.outcome && <>outcome: {iv.outcome}</>}
+                  </div>
+                )}
               </div>
             ))}
           </div>

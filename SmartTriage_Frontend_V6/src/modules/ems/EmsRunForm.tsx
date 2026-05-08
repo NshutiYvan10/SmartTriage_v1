@@ -32,28 +32,43 @@ const TRIAGE_OPTIONS: { v: FieldTriageCategory; label: string; color: string }[]
   { v: 'BLUE',   label: 'BLUE — non-urgent',          color: 'bg-blue-500' },
 ];
 
-const COMMON_INTERVENTIONS: { type: EmsInterventionType; detail: string }[] = [
-  { type: 'OXYGEN',          detail: 'O₂ 6L NRB mask' },
-  { type: 'OXYGEN',          detail: 'O₂ 2L nasal cannula' },
-  { type: 'IV_ACCESS',       detail: '18G IV L antecubital' },
-  { type: 'IV_ACCESS',       detail: '20G IV R hand' },
-  { type: 'FLUID',           detail: 'NaCl 0.9% 500ml IV' },
-  { type: 'FLUID',           detail: "Ringer's lactate 1L IV" },
-  { type: 'MEDICATION',      detail: 'Adrenaline 1mg IV' },
-  { type: 'MEDICATION',      detail: 'Atropine 0.5mg IV' },
-  { type: 'MEDICATION',      detail: 'Dextrose 50% 25ml IV' },
-  { type: 'MEDICATION',      detail: 'Naloxone 0.4mg IM' },
-  { type: 'MEDICATION',      detail: 'Salbutamol nebulizer' },
-  { type: 'MEDICATION',      detail: 'Tranexamic acid 1g IV' },
+/**
+ * Preset interventions. Structured `dose` / `route` fields are filled
+ * at preset-pick time so the paramedic can save directly without
+ * typing — but the "Refine details" form still appears with the
+ * preset values populated, so they can amend (e.g. choose a
+ * different IV gauge or change the dose).
+ */
+interface InterventionPreset {
+  type: EmsInterventionType;
+  detail: string;
+  dose?: string;
+  route?: string;
+}
+const COMMON_INTERVENTIONS: InterventionPreset[] = [
+  { type: 'OXYGEN',          detail: 'O₂ via NRB mask',           dose: '6 L/min',  route: 'NRB' },
+  { type: 'OXYGEN',          detail: 'O₂ via nasal cannula',      dose: '2 L/min',  route: 'NC' },
+  { type: 'IV_ACCESS',       detail: 'IV cannula L antecubital',                     route: '18G' },
+  { type: 'IV_ACCESS',       detail: 'IV cannula R hand',                            route: '20G' },
+  { type: 'FLUID',           detail: 'NaCl 0.9%',                 dose: '500 ml',   route: 'IV' },
+  { type: 'FLUID',           detail: "Ringer's lactate",          dose: '1 L',      route: 'IV' },
+  { type: 'MEDICATION',      detail: 'Adrenaline',                dose: '1 mg',     route: 'IV' },
+  { type: 'MEDICATION',      detail: 'Atropine',                  dose: '0.5 mg',   route: 'IV' },
+  { type: 'MEDICATION',      detail: 'Dextrose 50%',              dose: '25 ml',    route: 'IV' },
+  { type: 'MEDICATION',      detail: 'Naloxone',                  dose: '0.4 mg',   route: 'IM' },
+  { type: 'MEDICATION',      detail: 'Salbutamol',                dose: '5 mg',     route: 'NEB' },
+  { type: 'MEDICATION',      detail: 'Tranexamic acid',           dose: '1 g',      route: 'IV' },
   { type: 'IMMOBILISATION',  detail: 'C-spine collar' },
   { type: 'IMMOBILISATION',  detail: 'Pelvic binder' },
   { type: 'TOURNIQUET',      detail: 'Tourniquet — extremity' },
   { type: 'AIRWAY',          detail: 'OPA inserted' },
   { type: 'AIRWAY',          detail: 'BVM ventilation' },
-  { type: 'CPR',             detail: 'CPR started' },
-  { type: 'DEFIBRILLATION',  detail: 'AED 1 shock 200J' },
+  { type: 'CPR',             detail: 'CPR / chest compressions' },
+  { type: 'DEFIBRILLATION',  detail: 'AED shock',                 dose: '200 J' },
   { type: 'SPLINTING',       detail: 'Splint applied' },
 ];
+
+const ROUTE_OPTIONS = ['IV', 'IM', 'IO', 'PO', 'SC', 'NEB', 'NRB', 'NC', 'BVM', 'TOPICAL', 'OTHER'];
 
 interface Props {
   run: EmsRun | null;        // null = create new
@@ -393,93 +408,202 @@ function Step3Triage({ draft, setDraft, text, glassInner, isDark }: any) {
 // Step 4 — treatments
 // ─────────────────────────────────────────────────────────────────
 
+/**
+ * Step 4 — interventions. Each save records structured dose/route/
+ * given-by/outcome on the row, not just free-text detail. Tapping a
+ * preset pre-fills the staging panel with the preset's values; the
+ * paramedic confirms or amends before saving.
+ */
 function Step4Treatments({ run, text, glassInner, isDark, onChanged }: any) {
-  const [adding, setAdding] = useState(false);
+  const [staged, setStaged] = useState<InterventionPreset & { givenByName?: string; outcome?: string; notes?: string } | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inputClass = `w-full px-3 py-2 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
 
-  async function addOne(it: { type: EmsInterventionType; detail: string }) {
-    setAdding(true);
+  function pickPreset(p: InterventionPreset) {
     setError(null);
-    try {
-      await emsApi.addIntervention(run.id, { type: it.type, detail: it.detail });
-      onChanged();
-    } catch (e: any) {
-      setError(e?.message || 'Failed');
-    } finally {
-      setAdding(false);
-    }
+    setStaged({ ...p });
   }
 
-  return (
-    <div className="space-y-3">
-      <h4 className={`text-sm font-bold ${text.heading}`}>Treatments given</h4>
-      <p className={`text-xs ${text.muted}`}>Tap any of these to log. Add custom items below.</p>
+  function pickCustom() {
+    setError(null);
+    setStaged({ type: 'OTHER', detail: '' });
+  }
 
-      <div className="flex flex-wrap gap-1.5">
-        {COMMON_INTERVENTIONS.map((it, i) => (
-          <button
-            key={i}
-            onClick={() => addOne(it)}
-            disabled={adding}
-            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold ${isDark ? 'bg-white/5 hover:bg-white/10 text-white/80' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'} disabled:opacity-50`}
-          >
-            <Plus className="w-3 h-3" /> {it.detail}
-          </button>
-        ))}
-      </div>
-
-      {/* Logged interventions */}
-      {run.interventions && run.interventions.length > 0 && (
-        <div className="space-y-1.5">
-          <div className={`text-[10px] uppercase font-bold ${text.label}`}>Logged ({run.interventions.length})</div>
-          {run.interventions.map((iv: any) => (
-            <div key={iv.id} className="rounded-xl px-3 py-2 text-xs flex items-center justify-between" style={glassInner}>
-              <span className={text.body}>{iv.detail || iv.type}</span>
-              <span className={`text-[10px] ${text.muted}`}>{new Date(iv.givenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <CustomInterventionAdder runId={run.id} onAdded={onChanged} text={text} glassInner={glassInner} isDark={isDark} />
-
-      {error && <div className="rounded-xl px-3 py-2 text-xs font-semibold bg-rose-500/10 text-rose-500">{error}</div>}
-    </div>
-  );
-}
-
-function CustomInterventionAdder({ runId, onAdded, text, glassInner, isDark }: any) {
-  const [type, setType] = useState<EmsInterventionType>('OTHER');
-  const [detail, setDetail] = useState('');
-  const [busy, setBusy] = useState(false);
-  const inputClass = `w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
-
-  async function add() {
-    if (!detail.trim()) return;
+  async function save() {
+    if (!staged || !staged.detail.trim()) {
+      setError('Description is required');
+      return;
+    }
     setBusy(true);
+    setError(null);
     try {
-      await emsApi.addIntervention(runId, { type, detail });
-      setDetail('');
-      onAdded();
+      await emsApi.addIntervention(run.id, {
+        type: staged.type,
+        detail: staged.detail,
+        dose: staged.dose || undefined,
+        route: staged.route || undefined,
+        givenByName: staged.givenByName || undefined,
+        outcome: staged.outcome || undefined,
+        notes: staged.notes || undefined,
+      });
+      setStaged(null);
+      onChanged();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to save intervention');
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="rounded-xl p-3 space-y-2" style={glassInner}>
-      <div className={`text-[10px] uppercase font-bold ${text.label}`}>Add custom</div>
-      <div className="flex gap-2">
-        <select value={type} onChange={(e) => setType(e.target.value as EmsInterventionType)} className={inputClass} style={glassInner}>
-          {(['OXYGEN','IV_ACCESS','FLUID','MEDICATION','DEFIBRILLATION','AIRWAY','IMMOBILISATION','SPLINTING','TOURNIQUET','CPR','OTHER'] as EmsInterventionType[]).map(t => (
-            <option key={t} value={t}>{t}</option>
+    <div className="space-y-3">
+      <h4 className={`text-sm font-bold ${text.heading}`}>Treatments given</h4>
+      <p className={`text-xs ${text.muted}`}>
+        Tap a preset to start, then confirm dose / route / given-by before saving. Structured fields make pre-arrival drugs queryable by the doctor at the door.
+      </p>
+
+      {/* Preset chips */}
+      {!staged && (
+        <div className="flex flex-wrap gap-1.5">
+          {COMMON_INTERVENTIONS.map((it, i) => (
+            <button
+              key={i}
+              onClick={() => pickPreset(it)}
+              disabled={busy}
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold ${isDark ? 'bg-white/5 hover:bg-white/10 text-white/80' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'} disabled:opacity-50`}
+            >
+              <Plus className="w-3 h-3" /> {it.detail}
+              {it.dose && <span className="opacity-60">— {it.dose}</span>}
+            </button>
           ))}
-        </select>
-        <input value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Description (dose, route…)" className={inputClass} style={glassInner} />
-        <button onClick={add} disabled={busy || !detail.trim()} className="inline-flex items-center justify-center px-3 py-2 rounded-xl bg-rose-500 text-white text-xs font-bold disabled:opacity-50">
-          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-        </button>
-      </div>
+          <button
+            onClick={pickCustom}
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border-2 border-dashed ${isDark ? 'border-white/20 text-white/70 hover:bg-white/5' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Plus className="w-3 h-3" /> Custom
+          </button>
+        </div>
+      )}
+
+      {/* Staging panel — confirm structured fields */}
+      {staged && (
+        <div className="rounded-xl p-3 space-y-2 ring-1 ring-rose-500/20" style={glassInner}>
+          <div className="flex items-center justify-between">
+            <div className={`text-[10px] uppercase font-bold ${text.label}`}>Confirm details</div>
+            <button onClick={() => setStaged(null)} className={`text-[10px] ${text.muted} hover:underline`}>Cancel</button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label text={text}>Type</Label>
+              <select
+                value={staged.type}
+                onChange={(e) => setStaged({ ...staged, type: e.target.value as EmsInterventionType })}
+                className={inputClass} style={glassInner}
+              >
+                {(['OXYGEN','IV_ACCESS','FLUID','MEDICATION','DEFIBRILLATION','AIRWAY','IMMOBILISATION','SPLINTING','TOURNIQUET','CPR','OTHER'] as EmsInterventionType[]).map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label text={text}>Description <span className="text-rose-500">*</span></Label>
+              <input
+                value={staged.detail}
+                onChange={(e) => setStaged({ ...staged, detail: e.target.value })}
+                placeholder="Adrenaline / O₂ NRB / IV cannula"
+                className={inputClass} style={glassInner}
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label text={text}>Dose</Label>
+              <input
+                value={staged.dose ?? ''}
+                onChange={(e) => setStaged({ ...staged, dose: e.target.value })}
+                placeholder="1 mg / 500 ml / 6 L/min"
+                className={inputClass} style={glassInner}
+              />
+            </div>
+            <div>
+              <Label text={text}>Route</Label>
+              <select
+                value={staged.route ?? ''}
+                onChange={(e) => setStaged({ ...staged, route: e.target.value })}
+                className={inputClass} style={glassInner}
+              >
+                <option value=""></option>
+                {ROUTE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label text={text}>Given by</Label>
+              <input
+                value={staged.givenByName ?? ''}
+                onChange={(e) => setStaged({ ...staged, givenByName: e.target.value })}
+                placeholder="Crew member"
+                className={inputClass} style={glassInner}
+              />
+            </div>
+            <div>
+              <Label text={text}>Outcome</Label>
+              <input
+                value={staged.outcome ?? ''}
+                onChange={(e) => setStaged({ ...staged, outcome: e.target.value })}
+                placeholder="ROSC at 14:08 / tolerated"
+                className={inputClass} style={glassInner}
+              />
+            </div>
+            <div className="col-span-2">
+              <Label text={text}>Notes (optional)</Label>
+              <input
+                value={staged.notes ?? ''}
+                onChange={(e) => setStaged({ ...staged, notes: e.target.value })}
+                className={inputClass} style={glassInner}
+              />
+            </div>
+          </div>
+          <button
+            onClick={save}
+            disabled={busy || !staged.detail.trim()}
+            className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-rose-500 text-white text-xs font-bold hover:bg-rose-600 disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+            Save intervention
+          </button>
+        </div>
+      )}
+
+      {/* Logged interventions — surface structured fields */}
+      {run.interventions && run.interventions.length > 0 && (
+        <div className="space-y-1.5">
+          <div className={`text-[10px] uppercase font-bold ${text.label}`}>Logged ({run.interventions.length})</div>
+          {run.interventions.map((iv: any) => (
+            <div key={iv.id} className="rounded-xl px-3 py-2 text-xs" style={glassInner}>
+              <div className="flex items-center justify-between gap-2">
+                <span className={text.body}>
+                  <span className={`text-[10px] font-bold mr-1 ${text.label}`}>{iv.type}</span>
+                  {iv.detail || ''}
+                  {iv.dose && <span className={`ml-1 ${text.muted}`}>• {iv.dose}</span>}
+                  {iv.route && <span className={`ml-1 ${text.muted}`}>• {iv.route}</span>}
+                </span>
+                <span className={`text-[10px] ${text.muted} shrink-0`}>
+                  {new Date(iv.givenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+              {(iv.givenByName || iv.outcome) && (
+                <div className={`text-[10px] mt-0.5 ${text.muted}`}>
+                  {iv.givenByName && <>by {iv.givenByName}</>}
+                  {iv.givenByName && iv.outcome && ' • '}
+                  {iv.outcome && <>outcome: {iv.outcome}</>}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {error && <div className="rounded-xl px-3 py-2 text-xs font-semibold bg-rose-500/10 text-rose-500">{error}</div>}
     </div>
   );
 }

@@ -34,10 +34,6 @@ public enum AlertType {
     URGENT_LAB_OVERDUE,
     CRITICAL_VALUE_UNACKNOWLEDGED,
 
-    // Referral alert types
-    REFERRAL_INITIATED,
-    REFERRAL_STABILIZATION_INCOMPLETE,
-
     // EMS / paramedic workflow
     EMS_PRE_ARRIVAL,                       // Ambulance is en route — bay prep
     EMS_HANDOVER_PENDING,                  // Patient at door, no ED ack yet

@@ -28,7 +28,6 @@ export { medsafetyApi } from './medsafety';
 export { labApi } from './lab';
 export { pathwayApi } from './pathway';
 export { icuApi } from './icu';
-export { referralApi } from './referral';
 export { safetyApi } from './safety';
 export { handoverApi } from './handover';
 export { qualityApi } from './quality';

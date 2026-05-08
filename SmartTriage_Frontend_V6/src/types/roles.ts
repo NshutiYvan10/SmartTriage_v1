@@ -38,7 +38,6 @@ export type AppPage =
   | 'ems'
   | 'pathways'
   | 'icu'
-  | 'referral'
   | 'safety-incidents'
   | 'handover'
   | 'quality'
@@ -148,7 +147,7 @@ export const ROLE_META: Record<UserRole, RoleMeta> = {
  * NURSE        → Clinical care: patients, triage, vitals, monitoring, core clinical tools, documentation.
  *                Triage-station assignment is a per-shift function (ShiftAssignment.shiftFunction =
  *                TRIAGE_NURSE), NOT a separate role.
- * REGISTRAR    → Registration only: entry, patient list, referrals.
+ * REGISTRAR    → Registration only: entry, patient list.
  * PARAMEDIC    → Pre-hospital: registration, handover, basic patient view.
  * LAB_TECHNICIAN → Lab-focused: lab orders/results, patient data for context.
  * READ_ONLY    → View-only: reports, audit, quality metrics.
@@ -191,7 +190,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'notifications', 'profile',
     // Clinical tools
     'sepsis', 'fast-track', 'hypoglycemia', 'isolation',
-    'pathways', 'med-safety', 'med-safety-overrides', 'icu', 'referral',
+    'pathways', 'med-safety', 'med-safety-overrides', 'icu',
     // Documentation & handover
     'documentation', 'handover', 'lab', 'ems',
     // Reports (own)
@@ -206,7 +205,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'notifications', 'profile',
     // Core clinical tools
     'sepsis', 'fast-track', 'hypoglycemia', 'isolation',
-    'pathways', 'referral',
+    'pathways',
     // Documentation & handover
     'documentation', 'handover', 'lab', 'ems',
     // Safety reporting
@@ -226,7 +225,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   REGISTRAR: [
     'dashboard', 'entry', 'patients',
     'notifications', 'profile',
-    'referral',
+    
     'my-schedule',
   ],
 
@@ -234,7 +233,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   PARAMEDIC: [
     'dashboard', 'ems', 'entry', 'patients',
     'notifications', 'profile',
-    'handover', 'referral',
+    'handover',
     'my-schedule',
   ],
 

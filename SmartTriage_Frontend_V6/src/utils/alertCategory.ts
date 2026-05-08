@@ -19,7 +19,7 @@
  *                 not life-threatening on their own: medication
  *                 safety warnings, results back (non-critical), bed
  *                 availability, waiting-time-exceeded, lab overdue,
- *                 referrals, identity-unresolved, reassessment due.
+ *                 identity-unresolved, reassessment due.
  *
  *   SYSTEM      — system-state / device events. Non-clinical: IoT
  *                 device disconnected, low battery, signal degraded,
@@ -67,8 +67,8 @@ const SYSTEM_TYPES = new Set<AlertType>([
 
 // OPERATIONAL is the implicit default — anything not above (medication
 // safety warnings, investigation results, waiting-time-exceeded,
-// reassessment-due, bed-available, identity-unresolved, referrals, lab
-// overdue, safety-incident).
+// reassessment-due, bed-available, identity-unresolved, lab overdue,
+// safety-incident).
 
 export function categoryFor(alertType: AlertType | string | undefined | null): AlertCategory {
   if (!alertType) return 'OPERATIONAL';

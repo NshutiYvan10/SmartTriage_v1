@@ -50,7 +50,6 @@ import { ClinicalPathwaysView } from './modules/pathway/ClinicalPathwaysView';
 import { MedicationSafetyView } from './modules/medsafety/MedicationSafetyView';
 import { MedicationSafetyOverridesView } from './modules/medsafety/MedicationSafetyOverridesView';
 import { IcuEscalationView } from './modules/icu/IcuEscalationView';
-import { ReferralManagement } from './modules/referral/ReferralManagement';
 import { ClinicalDocumentation } from './modules/documentation/ClinicalDocumentation';
 import { HandoverView } from './modules/handover/HandoverView';
 import { SafetyIncidentView } from './modules/safety/SafetyIncidentView';
@@ -194,7 +193,6 @@ function AppContent() {
             <Route path="/med-safety" element={<RoleGuard page="med-safety"><MedicationSafetyView /></RoleGuard>} />
             <Route path="/med-safety/overrides" element={<RoleGuard page="med-safety-overrides" allowDesignations={['SUPERVISOR', 'SAFETY_OFFICER']}><MedicationSafetyOverridesView /></RoleGuard>} />
             <Route path="/icu" element={<RoleGuard page="icu"><IcuEscalationView /></RoleGuard>} />
-            <Route path="/referral" element={<RoleGuard page="referral"><ReferralManagement /></RoleGuard>} />
             {/* Documentation & Handover */}
             <Route path="/documentation" element={<RoleGuard page="documentation"><ClinicalDocumentation /></RoleGuard>} />
             <Route path="/handover" element={<RoleGuard page="handover"><HandoverView /></RoleGuard>} />

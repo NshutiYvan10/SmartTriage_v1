@@ -345,6 +345,17 @@ export function PediatricTriageForm() {
   const [nurseName, setNurseName] = useState('');
   const [triageFinished, setTriageFinished] = useState(false);
   const [triageFinishTime, setTriageFinishTime] = useState<Date | null>(null);
+
+  // Special-case clinical flags (mirrors Adult). Assault triggers
+  // forensic chain; suicide triggers safety sitter.
+  const [specialAssaultAbuse, setSpecialAssaultAbuse] = useState(false);
+  const [specialSuicideAttempt, setSpecialSuicideAttempt] = useState(false);
+
+  // Doctor-notification audit trail.
+  const [notifiedDoctorName, setNotifiedDoctorName] = useState('');
+  const [doctorNotifiedAt, setDoctorNotifiedAt] = useState<string>('');
+  const [attendingDoctorName, setAttendingDoctorName] = useState('');
+  const [doctorAttendedAt, setDoctorAttendedAt] = useState<string>('');
   const [alerts, setAlerts] = useState<string[]>([]);
   const [showDeteriorationWarning, setShowDeteriorationWarning] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -617,6 +628,16 @@ export function PediatricTriageForm() {
           presentingComplaints: chiefComplaint || undefined,
           clinicalNotes: discriminatorNotes || undefined,
           triageNurseName: nurseName || undefined,
+          specialAssaultAbuse,
+          specialSuicideAttempt,
+          notifiedDoctorName: notifiedDoctorName || undefined,
+          doctorNotifiedAt: doctorNotifiedAt
+            ? new Date(doctorNotifiedAt).toISOString()
+            : undefined,
+          attendingDoctorName: attendingDoctorName || undefined,
+          doctorAttendedAt: doctorAttendedAt
+            ? new Date(doctorAttendedAt).toISOString()
+            : undefined,
         });
       } catch (err) {
         // Backend submission failed — local store update has already
@@ -1207,6 +1228,41 @@ export function PediatricTriageForm() {
               <div className="grid grid-cols-2 gap-3">
                 <div><label className={labelCls}>Arrival Time</label><div className="px-2.5 py-1.5 bg-slate-100/80 border border-slate-200/60 rounded-lg text-xs text-slate-600">{arrivalTime.toLocaleString()}</div></div>
                 <div><label className={labelCls}>Triage Finish</label><div className="px-2.5 py-1.5 bg-slate-100/80 border border-slate-200/60 rounded-lg text-xs text-slate-600">{triageFinishTime ? triageFinishTime.toLocaleString() : 'Pending\u2026'}</div></div>
+              </div>
+
+              {/* Special-case clinical flags */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+                <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-rose-50/80 border border-rose-200/60 cursor-pointer hover:bg-rose-50">
+                  <input type="checkbox" checked={specialAssaultAbuse} onChange={(e) => setSpecialAssaultAbuse(e.target.checked)} className="w-3.5 h-3.5 accent-rose-600" />
+                  <span className="text-[11px] font-semibold text-rose-700">Assault / abuse case</span>
+                </label>
+                <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-amber-50/80 border border-amber-200/60 cursor-pointer hover:bg-amber-50">
+                  <input type="checkbox" checked={specialSuicideAttempt} onChange={(e) => setSpecialSuicideAttempt(e.target.checked)} className="w-3.5 h-3.5 accent-amber-600" />
+                  <span className="text-[11px] font-semibold text-amber-700">Self-harm / SI</span>
+                </label>
+              </div>
+
+              {/* Doctor notification audit trail */}
+              <div className="pt-2 mt-2 border-t border-slate-200/70">
+                <div className="flex items-center gap-1.5 mb-2"><Bell className="w-3 h-3 text-cyan-500" /><h4 className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Doctor Notification</h4></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>Notified Doctor</label>
+                    <input type="text" value={notifiedDoctorName} onChange={(e) => setNotifiedDoctorName(e.target.value)} placeholder="Dr. name (when called)" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Notified At</label>
+                    <input type="datetime-local" value={doctorNotifiedAt} onChange={(e) => setDoctorNotifiedAt(e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Attending Doctor</label>
+                    <input type="text" value={attendingDoctorName} onChange={(e) => setAttendingDoctorName(e.target.value)} placeholder="Dr. name (at bedside)" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Attended At</label>
+                    <input type="datetime-local" value={doctorAttendedAt} onChange={(e) => setDoctorAttendedAt(e.target.value)} className={inputCls} />
+                  </div>
+                </div>
               </div>
             </div>
             <div className="space-y-3">

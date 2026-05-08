@@ -114,7 +114,7 @@ public class VisitResponse {
      * True when the visit currently has an open ICU escalation in any
      * non-terminal state (REQUESTED, ICU_NOTIFIED, ICU_RESPONDED,
      * BED_ASSIGNED). Lets the doctor card render a red "ICU pending"
-     * badge so an outstanding referral cannot be lost across a shift
+     * badge so an outstanding escalation cannot be lost across a shift
      * boundary.
      */
     private Boolean hasOpenIcuEscalation;

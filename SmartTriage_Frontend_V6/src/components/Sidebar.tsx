@@ -131,7 +131,6 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         { id: 'pathways', label: 'Pathways', icon: Route, pageId: 'pathways' as AppPage },
         { id: 'med-safety', label: 'Med Safety', icon: Pill, pageId: 'med-safety' as AppPage },
         { id: 'icu', label: 'ICU Escalation', icon: BedDouble, pageId: 'icu' as AppPage },
-        { id: 'referral', label: 'Referrals', icon: ArrowRightLeft, pageId: 'referral' as AppPage },
       ],
     },
     {
