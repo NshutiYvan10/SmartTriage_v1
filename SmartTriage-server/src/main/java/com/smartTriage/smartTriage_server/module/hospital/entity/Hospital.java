@@ -113,4 +113,15 @@ public class Hospital extends BaseEntity {
     @Column(name = "has_neonatal_unit", nullable = false)
     @Builder.Default
     private boolean hasNeonatalUnit = false;
+
+    /**
+     * Phase 2 — gate critical lab results behind a HEAD_LAB_TECHNICIAN
+     * verification step. Off by default. Hospitals without senior-tech
+     * coverage on every shift should leave it off; the per-priority
+     * timeout auto-release prevents it from ever blocking patient care
+     * when enabled, but defaults err toward "no change in behaviour".
+     */
+    @Column(name = "two_step_verification_enabled", nullable = false)
+    @Builder.Default
+    private boolean twoStepVerificationEnabled = false;
 }

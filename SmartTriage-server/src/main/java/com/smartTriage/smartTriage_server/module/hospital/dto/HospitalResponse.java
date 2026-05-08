@@ -34,6 +34,9 @@ public class HospitalResponse {
     /** True when this hospital has a dedicated neonatal unit. */
     private boolean hasNeonatalUnit;
 
+    /** Phase 2 — two-step lab verification toggle. */
+    private boolean twoStepVerificationEnabled;
+
     /**
      * Active flag — false means the hospital has been deactivated. No
      * clinical operations should accept new visits or staff while in

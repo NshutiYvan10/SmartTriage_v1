@@ -50,6 +50,7 @@ public class UpdateHospitalRequest {
 
     private Boolean hasPediatricResus;
     private Boolean hasNeonatalUnit;
+    private Boolean twoStepVerificationEnabled;
 
     private UUID provinceId;
     private UUID districtId;

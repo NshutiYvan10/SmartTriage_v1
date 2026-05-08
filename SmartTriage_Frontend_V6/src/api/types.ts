@@ -121,6 +121,7 @@ export interface CreateHospitalRequest {
   icuCapacity?: number;
   hasPediatricResus?: boolean;
   hasNeonatalUnit?: boolean;
+  twoStepVerificationEnabled?: boolean;
   // Structured Rwanda location FKs (V46+)
   provinceId?: string;
   districtId?: string;
@@ -145,6 +146,7 @@ export interface HospitalResponse {
   icuCapacity: number;
   hasPediatricResus: boolean;
   hasNeonatalUnit: boolean;
+  twoStepVerificationEnabled: boolean;
   active: boolean;
   provinceId: string | null;
   districtId: string | null;

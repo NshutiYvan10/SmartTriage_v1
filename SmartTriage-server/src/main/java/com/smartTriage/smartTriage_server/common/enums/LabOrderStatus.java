@@ -20,6 +20,13 @@ public enum LabOrderStatus {
     SPECIMEN_COLLECTED,
     RECEIVED_BY_LAB,
     PROCESSING,
+    /**
+     * Phase 2 — result has been entered by a junior tech but is
+     * gated behind senior verification because the value is critical
+     * or the specimen quality was flagged. Doctors do NOT see orders
+     * in this state.
+     */
+    AWAITING_VERIFICATION,
     RESULTED,
     REJECTED,
     CANCELLED

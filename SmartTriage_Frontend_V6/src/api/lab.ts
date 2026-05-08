@@ -5,6 +5,7 @@ export type LabOrderStatus =
   | 'SPECIMEN_COLLECTED'
   | 'RECEIVED_BY_LAB'
   | 'PROCESSING'
+  | 'AWAITING_VERIFICATION'
   | 'RESULTED'
   | 'REJECTED'
   | 'CANCELLED';
@@ -60,7 +61,34 @@ export interface LabOrder {
   rejectedByName: string | null;
   rejectionReason: SpecimenRejectionReason | null;
   rejectionNotes: string | null;
+  // Phase 2 — verification fields
+  verificationRequired: boolean;
+  verificationTimeoutAt: string | null;
+  verificationAutoReleased: boolean;
+  verificationOverride: boolean;
+  verificationOverrideReason: string | null;
+  verificationOverrideByName: string | null;
+  verificationOverrideAt: string | null;
+  verificationRejectionCount: number;
+  verificationRejectionReason: string | null;
+  verificationRejectedByName: string | null;
+  verificationRejectedAt: string | null;
   createdAt: string;
+}
+
+export interface VerifyResultRequest {
+  verifiedByName?: string;
+  notes?: string;
+}
+
+export interface RejectVerificationRequest {
+  reason: string;
+  rejectedByName?: string;
+}
+
+export interface OverrideVerificationRequest {
+  reason: string;
+  overrideByName?: string;
 }
 
 export interface OrderLabRequest {
@@ -146,4 +174,18 @@ export const labApi = {
 
   getStat: (hospitalId: string) =>
     get<LabOrder[]>(`/lab/hospital/${hospitalId}/stat`),
+
+  // ── Phase 2: verification ──
+
+  getAwaitingVerification: (hospitalId: string) =>
+    get<LabOrder[]>(`/lab/hospital/${hospitalId}/awaiting-verification`),
+
+  verifyResult: (orderId: string, body?: VerifyResultRequest) =>
+    post<LabOrder>(`/lab/${orderId}/verify`, body ?? {}),
+
+  rejectVerification: (orderId: string, body: RejectVerificationRequest) =>
+    post<LabOrder>(`/lab/${orderId}/verify-reject`, body),
+
+  releaseWithoutVerification: (orderId: string, body: OverrideVerificationRequest) =>
+    post<LabOrder>(`/lab/${orderId}/release-without-verification`, body),
 };

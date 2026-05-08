@@ -134,6 +134,61 @@ public class LabOrderController {
     }
 
     // ====================================================================
+    // PHASE 2 — TWO-STEP VERIFICATION
+    // ====================================================================
+
+    /**
+     * Senior tech verifies and releases an AWAITING_VERIFICATION
+     * result. Locked to HEAD_LAB_TECHNICIAN designation; SUPER_ADMIN
+     * can override for support cases.
+     */
+    @PostMapping("/{orderId}/verify")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or "
+            + "(hasRole('LAB_TECHNICIAN') and @userAdminAuthz.hasDesignation(authentication, 'HEAD_LAB_TECHNICIAN'))")
+    public ResponseEntity<ApiResponse<LabOrderResponse>> verifyResult(
+            @PathVariable UUID orderId,
+            @RequestBody(required = false) VerifyResultRequest request) {
+        LabOrderResponse response = labOrderService.verifyResult(orderId, request);
+        return ResponseEntity.ok(ApiResponse.success("Result verified and released", response));
+    }
+
+    /**
+     * Senior tech rejects the result and bounces it back to the
+     * junior. Status returns to PROCESSING; the junior re-enters.
+     */
+    @PostMapping("/{orderId}/verify-reject")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or "
+            + "(hasRole('LAB_TECHNICIAN') and @userAdminAuthz.hasDesignation(authentication, 'HEAD_LAB_TECHNICIAN'))")
+    public ResponseEntity<ApiResponse<LabOrderResponse>> rejectVerification(
+            @PathVariable UUID orderId,
+            @Valid @RequestBody RejectVerificationRequest request) {
+        LabOrderResponse response = labOrderService.rejectVerification(orderId, request);
+        return ResponseEntity.ok(ApiResponse.success("Result returned to junior tech", response));
+    }
+
+    /**
+     * Junior tech emergency override — releases without senior
+     * sign-off. Required reason is logged.
+     */
+    @PostMapping("/{orderId}/release-without-verification")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN')")
+    public ResponseEntity<ApiResponse<LabOrderResponse>> releaseWithoutVerification(
+            @PathVariable UUID orderId,
+            @Valid @RequestBody OverrideVerificationRequest request) {
+        LabOrderResponse response = labOrderService.overrideVerification(orderId, request);
+        return ResponseEntity.ok(ApiResponse.success("Result released (verification bypassed)", response));
+    }
+
+    /** Senior-tech queue: results awaiting verification. */
+    @GetMapping("/hospital/{hospitalId}/awaiting-verification")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    public ResponseEntity<ApiResponse<List<LabOrderResponse>>> getAwaitingVerification(
+            @PathVariable UUID hospitalId) {
+        return ResponseEntity.ok(ApiResponse.success(labOrderService.getAwaitingVerification(hospitalId)));
+    }
+
+    // ====================================================================
     // QUERIES
     // ====================================================================
 

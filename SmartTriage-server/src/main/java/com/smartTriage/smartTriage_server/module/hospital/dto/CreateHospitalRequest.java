@@ -45,6 +45,13 @@ public class CreateHospitalRequest {
      */
     private Boolean hasNeonatalUnit;
 
+    /**
+     * Phase 2 — gate critical lab results behind senior-tech
+     * verification. Off by default; only enable when at least one
+     * HEAD_LAB_TECHNICIAN is on staff.
+     */
+    private Boolean twoStepVerificationEnabled;
+
     private String address;
     private String city;
     private String province;

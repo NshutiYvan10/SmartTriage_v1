@@ -28,6 +28,7 @@ public final class HospitalMapper {
                 .icuCapacity(request.getIcuCapacity())
                 .hasPediatricResus(Boolean.TRUE.equals(request.getHasPediatricResus()))
                 .hasNeonatalUnit(Boolean.TRUE.equals(request.getHasNeonatalUnit()))
+                .twoStepVerificationEnabled(Boolean.TRUE.equals(request.getTwoStepVerificationEnabled()))
                 .build();
     }
 
@@ -48,6 +49,7 @@ public final class HospitalMapper {
                 .icuCapacity(hospital.getIcuCapacity())
                 .hasPediatricResus(hospital.isHasPediatricResus())
                 .hasNeonatalUnit(hospital.isHasNeonatalUnit())
+                .twoStepVerificationEnabled(hospital.isTwoStepVerificationEnabled())
                 .active(hospital.isActive())
                 .provinceId(hospital.getProvinceRef() != null ? hospital.getProvinceRef().getId() : null)
                 .districtId(hospital.getDistrictRef() != null ? hospital.getDistrictRef().getId() : null)

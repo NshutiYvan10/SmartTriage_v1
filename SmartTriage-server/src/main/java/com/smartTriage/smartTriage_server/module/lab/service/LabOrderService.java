@@ -12,6 +12,7 @@ import com.smartTriage.smartTriage_server.module.lab.engine.CriticalValueEngine;
 import com.smartTriage.smartTriage_server.module.lab.engine.CriticalValueResult;
 import com.smartTriage.smartTriage_server.module.lab.entity.LabOrder;
 import com.smartTriage.smartTriage_server.module.lab.mapper.LabOrderMapper;
+import com.smartTriage.smartTriage_server.module.hospital.repository.HospitalRepository;
 import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher;
 import com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
@@ -50,6 +51,7 @@ public class LabOrderService {
     private final CriticalValueEngine criticalValueEngine;
     private final VisitService visitService;
     private final RealTimeEventPublisher realTimeEventPublisher;
+    private final HospitalRepository hospitalRepository;
 
     // ====================================================================
     // ORDER LAB
@@ -251,17 +253,16 @@ public class LabOrderService {
     @Transactional
     public LabOrderResponse recordResult(UUID orderId, RecordLabResultRequest request) {
         LabOrder order = findOrderOrThrow(orderId);
+        // Allow recording from PROCESSING (normal path), RECEIVED_BY_LAB
+        // (skip-processing shortcut), and AWAITING_VERIFICATION (re-entry
+        // after the senior bounced the result back).
         requireStatusIn(order, "record result",
-                LabOrderStatus.RECEIVED_BY_LAB, LabOrderStatus.PROCESSING);
+                LabOrderStatus.RECEIVED_BY_LAB,
+                LabOrderStatus.PROCESSING,
+                LabOrderStatus.AWAITING_VERIFICATION);
 
         Instant now = Instant.now();
-        order.setResultedAt(now);
-        order.setStatus(LabOrderStatus.RESULTED);
         order.setEnteredByName(request.getEnteredByName());
-        // Phase 1: self-verify — same actor enters and verifies.
-        // Phase 2 will gate this behind a HEAD_LAB_TECHNICIAN role.
-        order.setVerifiedAt(now);
-        order.setVerifiedByName(request.getEnteredByName());
         order.setResultValue(request.getResultValue());
         order.setResultUnit(request.getResultUnit());
         order.setResultNumeric(request.getResultNumeric());
@@ -273,11 +274,7 @@ public class LabOrderService {
             order.setNotes(existing + "Result: " + request.getNotes());
         }
 
-        // Calculate turnaround time
-        long turnaroundMinutes = Duration.between(order.getOrderedAt(), now).toMinutes();
-        order.setTurnaroundMinutes((int) turnaroundMinutes);
-
-        // Check for abnormal values against reference range
+        // Check abnormal vs reference range
         if (request.getResultNumeric() != null) {
             boolean abnormal = false;
             if (request.getReferenceRangeMin() != null && request.getResultNumeric() < request.getReferenceRangeMin()) {
@@ -289,30 +286,14 @@ public class LabOrderService {
             order.setAbnormal(abnormal);
         }
 
-        // Run critical value check
+        // Run critical-value check (sets isCritical + criticalValueType)
         CriticalValueResult criticalResult = criticalValueEngine.evaluateResult(order);
         if (criticalResult.isCritical()) {
             order.setCritical(true);
             order.setCriticalValueType(criticalResult.criticalValueType());
-            order.setCriticalValueNotifiedAt(now);
 
-            // Append critical value description to notes
             String existing = order.getNotes() != null ? order.getNotes() + " | " : "";
             order.setNotes(existing + "CRITICAL: " + criticalResult.description());
-
-            // Create clinical alert
-            createCriticalValueAlert(order, criticalResult);
-        }
-
-        // Update linked Investigation entity
-        if (order.getInvestigation() != null) {
-            Investigation inv = order.getInvestigation();
-            inv.setResultedAt(now);
-            inv.setResult(request.getResultValue());
-            inv.setIsAbnormal(order.isAbnormal());
-            inv.setIsCritical(order.isCritical());
-            inv.setStatus(InvestigationStatus.RESULTED);
-            investigationRepository.save(inv);
         }
 
         if (request.isSpecimenQualityConcern()) {
@@ -320,12 +301,195 @@ public class LabOrderService {
             order.setNotes(existing + "Specimen quality concern flagged at result entry");
         }
 
-        order = labOrderRepository.save(order);
+        // Decide release path:
+        //   - hospital toggle ON + active HEAD_LAB_TECHNICIAN on staff
+        //     AND result is high-risk (critical or quality-concern)
+        //         → AWAITING_VERIFICATION
+        //   - otherwise → RESULTED (self-verify, today's behaviour)
+        boolean highRisk = order.isCritical() || request.isSpecimenQualityConcern();
+        boolean verifyEnabled = isVerificationEnabledFor(order.getVisit().getHospital().getId());
+        boolean gateThroughVerification = highRisk && verifyEnabled;
 
-        log.info("Result recorded for order {} — value: {} critical: {} turnaround: {} min",
-                order.getOrderNumber(), request.getResultValue(), order.isCritical(), turnaroundMinutes);
+        if (gateThroughVerification) {
+            order.setStatus(LabOrderStatus.AWAITING_VERIFICATION);
+            order.setVerificationRequired(true);
+            order.setVerificationTimeoutAt(now.plus(verificationTimeoutFor(order.getPriority())));
+            // Keep result fields populated but DO NOT mark as resulted
+            // — the doctor must not see this until a senior signs off.
+            order = labOrderRepository.save(order);
+
+            log.info("Result entered for order {} — gated AWAITING_VERIFICATION (timeout {} min)",
+                    order.getOrderNumber(),
+                    verificationTimeoutFor(order.getPriority()).toMinutes());
+
+            return broadcastAndMap(order);
+        }
+
+        // Direct release (self-verify or low-risk).
+        return finaliseResultedOrder(order, now, request.getEnteredByName(), criticalResult, false);
+    }
+
+    /**
+     * Common path that flips an order to RESULTED, files alerts, and
+     * updates the linked Investigation. Called from the direct-release
+     * branch of recordResult and from the verification/override/timeout
+     * paths.
+     */
+    private LabOrderResponse finaliseResultedOrder(
+            LabOrder order, Instant now, String verifierName,
+            CriticalValueResult criticalResult, boolean alreadyHadCriticalAlert) {
+
+        order.setResultedAt(now);
+        order.setStatus(LabOrderStatus.RESULTED);
+        order.setVerifiedAt(now);
+        order.setVerifiedByName(verifierName);
+
+        long turnaroundMinutes = Duration.between(order.getOrderedAt(), now).toMinutes();
+        order.setTurnaroundMinutes((int) turnaroundMinutes);
+
+        // Critical alert — fired only when transitioning to RESULTED so
+        // the doctor isn't alerted while the result is still gated. If
+        // the caller already created the alert (paranoid double-call
+        // guard), skip.
+        if (order.isCritical() && !alreadyHadCriticalAlert) {
+            order.setCriticalValueNotifiedAt(now);
+            CriticalValueResult cr = criticalResult != null
+                    ? criticalResult
+                    : criticalValueEngine.evaluateResult(order);
+            createCriticalValueAlert(order, cr);
+        }
+
+        if (order.getInvestigation() != null) {
+            Investigation inv = order.getInvestigation();
+            inv.setResultedAt(now);
+            inv.setResult(order.getResultValue());
+            inv.setIsAbnormal(order.isAbnormal());
+            inv.setIsCritical(order.isCritical());
+            inv.setStatus(InvestigationStatus.RESULTED);
+            investigationRepository.save(inv);
+        }
+
+        order = labOrderRepository.save(order);
+        log.info("Result released for order {} — value: {} critical: {} turnaround: {} min",
+                order.getOrderNumber(), order.getResultValue(), order.isCritical(), turnaroundMinutes);
 
         return broadcastAndMap(order);
+    }
+
+    // ====================================================================
+    // VERIFICATION (Phase 2)
+    // ====================================================================
+
+    /**
+     * Senior tech verifies a pending result and releases it to the
+     * doctor. The order flips to RESULTED and any critical alert
+     * fires now (not at result-entry time).
+     */
+    @Transactional
+    public LabOrderResponse verifyResult(UUID orderId, VerifyResultRequest request) {
+        LabOrder order = findOrderOrThrow(orderId);
+        requireStatus(order, LabOrderStatus.AWAITING_VERIFICATION, "verify result");
+
+        String verifier = request != null ? request.getVerifiedByName() : null;
+        if (request != null && request.getNotes() != null && !request.getNotes().isBlank()) {
+            String existing = order.getNotes() != null ? order.getNotes() + " | " : "";
+            order.setNotes(existing + "Verifier note: " + request.getNotes());
+        }
+        return finaliseResultedOrder(order, Instant.now(), verifier, null, false);
+    }
+
+    /**
+     * Senior tech rejects the result and bounces it back to the
+     * junior. Status drops back to PROCESSING so the junior re-enters.
+     * Result fields stay populated as the junior's draft.
+     */
+    @Transactional
+    public LabOrderResponse rejectVerification(UUID orderId, RejectVerificationRequest request) {
+        LabOrder order = findOrderOrThrow(orderId);
+        requireStatus(order, LabOrderStatus.AWAITING_VERIFICATION, "reject verification");
+
+        Instant now = Instant.now();
+        order.setStatus(LabOrderStatus.PROCESSING);
+        order.setVerificationTimeoutAt(null);
+        order.setVerificationRejectionCount(order.getVerificationRejectionCount() + 1);
+        order.setVerificationRejectionReason(request.getReason());
+        order.setVerificationRejectedByName(request.getRejectedByName());
+        order.setVerificationRejectedAt(now);
+
+        order = labOrderRepository.save(order);
+        log.warn("Result for order {} REJECTED by senior {} — reason: {}",
+                order.getOrderNumber(), request.getRejectedByName(), request.getReason());
+
+        return broadcastAndMap(order);
+    }
+
+    /**
+     * Junior tech emergency override — releases an
+     * AWAITING_VERIFICATION result without senior sign-off. The
+     * required reason is logged for audit.
+     */
+    @Transactional
+    public LabOrderResponse overrideVerification(UUID orderId, OverrideVerificationRequest request) {
+        LabOrder order = findOrderOrThrow(orderId);
+        requireStatus(order, LabOrderStatus.AWAITING_VERIFICATION, "override verification");
+
+        Instant now = Instant.now();
+        order.setVerificationOverride(true);
+        order.setVerificationOverrideReason(request.getReason());
+        order.setVerificationOverrideByName(request.getOverrideByName());
+        order.setVerificationOverrideAt(now);
+
+        log.warn("Verification BYPASSED for order {} by {} — reason: {}",
+                order.getOrderNumber(),
+                request.getOverrideByName(),
+                request.getReason());
+
+        return finaliseResultedOrder(order, now, request.getOverrideByName(), null, false);
+    }
+
+    /**
+     * Background scheduler — release any AWAITING_VERIFICATION orders
+     * whose timeout has passed. Keeps patient care unblocked when no
+     * senior is online during a shift.
+     */
+    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 60_000)
+    @Transactional
+    public void autoReleaseTimedOutVerifications() {
+        Instant now = Instant.now();
+        List<LabOrder> timedOut = labOrderRepository.findVerificationTimeoutsBefore(now);
+        for (LabOrder order : timedOut) {
+            try {
+                order.setVerificationAutoReleased(true);
+                log.warn("Verification timeout — auto-releasing order {} (priority {}, waited {})",
+                        order.getOrderNumber(),
+                        order.getPriority(),
+                        order.getVerificationTimeoutAt());
+                finaliseResultedOrder(order, now, "(system: auto-release after timeout)", null, false);
+            } catch (Exception e) {
+                log.error("Failed to auto-release order {}: {}", order.getOrderNumber(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Verification is enforced only when the hospital has the toggle
+     * ON AND there is at least one active HEAD_LAB_TECHNICIAN on
+     * staff. This prevents the gate from accidentally blocking
+     * results at sites that don't yet have senior coverage.
+     */
+    private boolean isVerificationEnabledFor(UUID hospitalId) {
+        var hospital = hospitalRepository.findById(hospitalId).orElse(null);
+        if (hospital == null || !hospital.isTwoStepVerificationEnabled()) return false;
+        long headTechs = labOrderRepository.countActiveHeadLabTechs(hospitalId);
+        return headTechs > 0;
+    }
+
+    private static java.time.Duration verificationTimeoutFor(LabPriority priority) {
+        return switch (priority) {
+            case STAT     -> java.time.Duration.ofMinutes(5);
+            case URGENT   -> java.time.Duration.ofMinutes(15);
+            case ROUTINE  -> java.time.Duration.ofMinutes(60);
+        };
     }
 
     // ====================================================================
@@ -444,6 +608,14 @@ public class LabOrderService {
     /** Orders the tech is actively processing. */
     public List<LabOrderResponse> getInProgressForLab(UUID hospitalId) {
         return labOrderRepository.findInProgressForLab(hospitalId)
+                .stream()
+                .map(LabOrderMapper::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    /** Senior-tech verification queue (Phase 2). */
+    public List<LabOrderResponse> getAwaitingVerification(UUID hospitalId) {
+        return labOrderRepository.findAwaitingVerification(hospitalId)
                 .stream()
                 .map(LabOrderMapper::toResponse)
                 .collect(Collectors.toList());

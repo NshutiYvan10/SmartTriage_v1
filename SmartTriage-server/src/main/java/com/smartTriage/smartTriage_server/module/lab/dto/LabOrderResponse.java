@@ -45,6 +45,17 @@ public class LabOrderResponse {
     private String enteredByName;
     private Instant verifiedAt;
     private String verifiedByName;
+    private boolean verificationRequired;
+    private Instant verificationTimeoutAt;
+    private boolean verificationAutoReleased;
+    private boolean verificationOverride;
+    private String verificationOverrideReason;
+    private String verificationOverrideByName;
+    private Instant verificationOverrideAt;
+    private int verificationRejectionCount;
+    private String verificationRejectionReason;
+    private String verificationRejectedByName;
+    private Instant verificationRejectedAt;
 
     private String resultValue;
     private String resultUnit;

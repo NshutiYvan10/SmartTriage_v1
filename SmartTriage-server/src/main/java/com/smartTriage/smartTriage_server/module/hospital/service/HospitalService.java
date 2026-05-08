@@ -181,6 +181,7 @@ public class HospitalService {
         if (request.getIcuCapacity() != null)  hospital.setIcuCapacity(request.getIcuCapacity());
         if (request.getHasPediatricResus() != null) hospital.setHasPediatricResus(request.getHasPediatricResus());
         if (request.getHasNeonatalUnit() != null)   hospital.setHasNeonatalUnit(request.getHasNeonatalUnit());
+        if (request.getTwoStepVerificationEnabled() != null) hospital.setTwoStepVerificationEnabled(request.getTwoStepVerificationEnabled());
 
         // Structured location: null on the request means "no change",
         // explicit-empty UUID isn't valid so we don't model "clear".

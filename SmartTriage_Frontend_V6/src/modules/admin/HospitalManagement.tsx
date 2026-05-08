@@ -36,6 +36,7 @@ export function HospitalManagement() {
     icuCapacity: '' as string,
     hasPediatricResus: false,
     hasNeonatalUnit: false,
+    twoStepVerificationEnabled: false,
     // V46+ structured Rwanda location IDs.
     provinceId: undefined as string | undefined,
     districtId: undefined as string | undefined,
@@ -77,6 +78,7 @@ export function HospitalManagement() {
         icuCapacity: toNum(form.icuCapacity),
         hasPediatricResus: form.hasPediatricResus,
         hasNeonatalUnit: form.hasNeonatalUnit,
+        twoStepVerificationEnabled: form.twoStepVerificationEnabled,
         provinceId: form.provinceId,
         districtId: form.districtId,
         sectorId: form.sectorId,
@@ -144,6 +146,7 @@ export function HospitalManagement() {
       icuCapacity: h.icuCapacity != null ? String(h.icuCapacity) : '',
       hasPediatricResus: !!h.hasPediatricResus,
       hasNeonatalUnit: !!h.hasNeonatalUnit,
+      twoStepVerificationEnabled: !!h.twoStepVerificationEnabled,
       provinceId: h.provinceId ?? undefined,
       districtId: h.districtId ?? undefined,
       sectorId: h.sectorId ?? undefined,
@@ -260,6 +263,29 @@ export function HospitalManagement() {
               <label className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer" style={glassInner}>
                 <input type="checkbox" checked={form.hasNeonatalUnit} onChange={(e) => setForm({ ...form, hasNeonatalUnit: e.target.checked })} className="w-4 h-4 accent-cyan-500" />
                 <span className={`text-xs font-semibold ${text.body}`}>Has Neonatal Unit</span>
+              </label>
+            </div>
+
+            {/* Lab two-step verification — Phase 2. Only enable if the
+                hospital has at least one HEAD_LAB_TECHNICIAN on staff;
+                otherwise the gate is a no-op (the service-side
+                isVerificationEnabledFor() check requires a senior to
+                exist before it parks anything in AWAITING_VERIFICATION). */}
+            <div className="mt-3">
+              <label className="flex items-start gap-3 px-3 py-2.5 rounded-xl cursor-pointer" style={glassInner}>
+                <input
+                  type="checkbox"
+                  checked={form.twoStepVerificationEnabled}
+                  onChange={(e) => setForm({ ...form, twoStepVerificationEnabled: e.target.checked })}
+                  className="w-4 h-4 accent-cyan-500 mt-0.5"
+                />
+                <div>
+                  <div className={`text-xs font-semibold ${text.body}`}>Two-step lab verification</div>
+                  <div className={`text-[10px] ${text.muted}`}>
+                    Critical lab values are gated behind a HEAD_LAB_TECHNICIAN review before reaching the doctor.
+                    Per-priority auto-release timeouts (STAT 5 min / URGENT 15 min / ROUTINE 60 min) ensure care is never blocked.
+                  </div>
+                </div>
               </label>
             </div>
 

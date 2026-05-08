@@ -226,4 +226,16 @@ public class UserAdminAuthz {
         Object principal = authentication.getPrincipal();
         return (principal instanceof User user) ? user : null;
     }
+
+    /**
+     * SpEL helper used by lab verification endpoints — returns true
+     * when the caller's designation matches the supplied label.
+     * Example: {@code @userAdminAuthz.hasDesignation(authentication, 'HEAD_LAB_TECHNICIAN')}.
+     */
+    @Transactional(readOnly = true)
+    public boolean hasDesignation(Authentication authentication, String designation) {
+        User caller = currentUser(authentication);
+        if (caller == null || caller.getDesignation() == null || designation == null) return false;
+        return caller.getDesignation().name().equalsIgnoreCase(designation);
+    }
 }

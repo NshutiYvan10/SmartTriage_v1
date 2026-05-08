@@ -114,4 +114,34 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
     List<LabOrder> findByHospitalAndStatus(
             @Param("hospitalId") UUID hospitalId,
             @Param("status") LabOrderStatus status);
+
+    // ── Phase 2 — verification queue ──
+
+    /**
+     * Senior-tech verification queue: results entered but not yet
+     * released to the doctor. Sorted by timeout-soonest first so
+     * STAT items appear at the top.
+     */
+    @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+            "AND o.isActive = true " +
+            "AND o.status = com.smartTriage.smartTriage_server.common.enums.LabOrderStatus.AWAITING_VERIFICATION " +
+            "ORDER BY o.verificationTimeoutAt ASC NULLS LAST, o.orderedAt ASC")
+    List<LabOrder> findAwaitingVerification(@Param("hospitalId") UUID hospitalId);
+
+    /**
+     * Background scheduler — find AWAITING_VERIFICATION rows whose
+     * timeout has passed. They auto-release to keep patient care
+     * unblocked when no senior is online.
+     */
+    @Query("SELECT o FROM LabOrder o WHERE o.isActive = true " +
+            "AND o.status = com.smartTriage.smartTriage_server.common.enums.LabOrderStatus.AWAITING_VERIFICATION " +
+            "AND o.verificationTimeoutAt IS NOT NULL " +
+            "AND o.verificationTimeoutAt < :now")
+    List<LabOrder> findVerificationTimeoutsBefore(@Param("now") java.time.Instant now);
+
+    /** Count active HEAD_LAB_TECHNICIAN at the hospital — used to decide whether to enforce verification. */
+    @Query("SELECT COUNT(u) FROM User u WHERE u.hospital.id = :hospitalId " +
+            "AND u.isActive = true " +
+            "AND u.designation = com.smartTriage.smartTriage_server.common.enums.Designation.HEAD_LAB_TECHNICIAN")
+    long countActiveHeadLabTechs(@Param("hospitalId") UUID hospitalId);
 }

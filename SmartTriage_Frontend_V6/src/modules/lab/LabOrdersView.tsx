@@ -25,8 +25,9 @@ import { useTheme } from '@/hooks/useTheme';
 import { ResultEntryModal } from './ResultEntryModal';
 import { RejectSpecimenModal } from './RejectSpecimenModal';
 import { AcknowledgeCriticalModal } from './AcknowledgeCriticalModal';
+import { VerifyResultModal, RejectVerificationModal, OverrideVerificationModal } from './VerificationModals';
 
-type TechTab = 'inbox' | 'in-progress' | 'critical';
+type TechTab = 'inbox' | 'in-progress' | 'verification' | 'critical';
 
 const PRIORITY_TARGET_MIN: Record<LabPriority, number> = {
   STAT: 30,
@@ -47,13 +48,14 @@ function priorityColor(priority: LabPriority): { ring: string; chip: string; pul
 
 function statusChip(status: LabOrderStatus): { label: string; className: string } {
   switch (status) {
-    case 'ORDERED':            return { label: 'Ordered',           className: 'bg-slate-500/15 text-slate-500' };
-    case 'SPECIMEN_COLLECTED': return { label: 'Specimen collected', className: 'bg-blue-500/15 text-blue-500' };
-    case 'RECEIVED_BY_LAB':    return { label: 'Received',          className: 'bg-indigo-500/15 text-indigo-500' };
-    case 'PROCESSING':         return { label: 'Processing',        className: 'bg-violet-500/15 text-violet-500' };
-    case 'RESULTED':           return { label: 'Resulted',          className: 'bg-emerald-500/15 text-emerald-500' };
-    case 'REJECTED':           return { label: 'Rejected',          className: 'bg-rose-500/15 text-rose-500' };
-    case 'CANCELLED':          return { label: 'Cancelled',         className: 'bg-slate-500/15 text-slate-400' };
+    case 'ORDERED':               return { label: 'Ordered',              className: 'bg-slate-500/15 text-slate-500' };
+    case 'SPECIMEN_COLLECTED':    return { label: 'Specimen collected',   className: 'bg-blue-500/15 text-blue-500' };
+    case 'RECEIVED_BY_LAB':       return { label: 'Received',             className: 'bg-indigo-500/15 text-indigo-500' };
+    case 'PROCESSING':            return { label: 'Processing',           className: 'bg-violet-500/15 text-violet-500' };
+    case 'AWAITING_VERIFICATION': return { label: 'Awaiting verification', className: 'bg-amber-500/15 text-amber-500' };
+    case 'RESULTED':              return { label: 'Resulted',             className: 'bg-emerald-500/15 text-emerald-500' };
+    case 'REJECTED':              return { label: 'Rejected',             className: 'bg-rose-500/15 text-rose-500' };
+    case 'CANCELLED':             return { label: 'Cancelled',            className: 'bg-slate-500/15 text-slate-400' };
   }
 }
 
@@ -73,7 +75,11 @@ export function LabOrdersView() {
   const [activeTab, setActiveTab] = useState<TechTab>('inbox');
   const [inbox, setInbox] = useState<LabOrder[]>([]);
   const [inProgress, setInProgress] = useState<LabOrder[]>([]);
+  const [verification, setVerification] = useState<LabOrder[]>([]);
   const [critical, setCritical] = useState<LabOrder[]>([]);
+
+  // Senior tech privilege — drives the Verify / Reject buttons
+  const isHeadLabTech = user?.designation === 'HEAD_LAB_TECHNICIAN';
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toast, setToast] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
@@ -86,22 +92,26 @@ export function LabOrdersView() {
   const [resultTarget, setResultTarget] = useState<LabOrder | null>(null);
   const [rejectTarget, setRejectTarget] = useState<LabOrder | null>(null);
   const [ackTarget, setAckTarget] = useState<LabOrder | null>(null);
+  const [verifyTarget, setVerifyTarget] = useState<LabOrder | null>(null);
+  const [verifyRejectTarget, setVerifyRejectTarget] = useState<LabOrder | null>(null);
+  const [overrideTarget, setOverrideTarget] = useState<LabOrder | null>(null);
 
   // ── Load ─────────────────────────────────────────────────────────
   const load = useCallback(async () => {
     if (!hospitalId) return;
     setLoading(true);
     try {
-      const [inboxRes, ipRes, critRes] = await Promise.all([
+      const [inboxRes, ipRes, verifyRes, critRes] = await Promise.all([
         labApi.getInbox(hospitalId),
         labApi.getInProgress(hospitalId),
+        labApi.getAwaitingVerification(hospitalId),
         labApi.getCritical(hospitalId),
       ]);
       setInbox(inboxRes || []);
       setInProgress(ipRes || []);
-      // getCritical returns CriticalValueResponse; we re-fetch as LabOrder shape via getForVisit later if needed.
-      // For Phase 1 the tech tab cares about lab orders proper — to keep things consistent we fetch the
-      // unack criticals as LabOrder via the pending list and filter.
+      setVerification(verifyRes || []);
+      // getCritical returns CriticalValueResponse-shaped items; we treat them as LabOrder-shape
+      // for the small set of fields the card touches (testName, orderNumber, resultValue, etc.).
       setCritical((critRes as unknown as LabOrder[]) || []);
     } catch (err) {
       console.error('[LabOrdersView] load failed:', err);
@@ -172,12 +182,17 @@ export function LabOrdersView() {
 
   // ── Render ───────────────────────────────────────────────────────
   const tabs: { id: TechTab; label: string; icon: any; count: number }[] = [
-    { id: 'inbox',       label: 'Inbox',       icon: Inbox,    count: inbox.length },
-    { id: 'in-progress', label: 'In Progress', icon: Activity, count: inProgress.length },
-    { id: 'critical',    label: 'Critical',    icon: AlertOctagon, count: critical.length },
+    { id: 'inbox',        label: 'Inbox',        icon: Inbox,        count: inbox.length },
+    { id: 'in-progress',  label: 'In Progress',  icon: Activity,     count: inProgress.length },
+    { id: 'verification', label: 'Verification', icon: ClipboardCheck, count: verification.length },
+    { id: 'critical',     label: 'Critical',     icon: AlertOctagon, count: critical.length },
   ];
 
-  const list = activeTab === 'inbox' ? inbox : activeTab === 'in-progress' ? inProgress : critical;
+  const list =
+    activeTab === 'inbox'        ? inbox :
+    activeTab === 'in-progress'  ? inProgress :
+    activeTab === 'verification' ? verification :
+                                   critical;
 
   return (
     <div className="min-h-full">
@@ -258,9 +273,10 @@ export function LabOrdersView() {
           <div className="rounded-2xl p-8 text-center animate-fade-up" style={glassCard}>
             <Beaker className="w-10 h-10 mx-auto mb-3 text-slate-400" />
             <p className={`text-sm font-bold ${text.heading}`}>
-              {activeTab === 'inbox'       && 'No orders waiting'}
-              {activeTab === 'in-progress' && 'No orders being processed'}
-              {activeTab === 'critical'    && 'No unacknowledged critical results'}
+              {activeTab === 'inbox'        && 'No orders waiting'}
+              {activeTab === 'in-progress'  && 'No orders being processed'}
+              {activeTab === 'verification' && 'No results awaiting verification'}
+              {activeTab === 'critical'     && 'No unacknowledged critical results'}
             </p>
             <p className={text.muted}>You are up to date.</p>
           </div>
@@ -275,11 +291,15 @@ export function LabOrdersView() {
                 glassInner={glassInner}
                 text={text}
                 isLoading={actionLoading === order.id}
+                isHeadLabTech={isHeadLabTech}
                 onReceive={() => handleReceive(order)}
                 onReject={() => setRejectTarget(order)}
                 onStartProcessing={() => handleStartProcessing(order)}
                 onEnterResult={() => setResultTarget(order)}
                 onAcknowledge={() => setAckTarget(order)}
+                onVerify={() => setVerifyTarget(order)}
+                onVerifyReject={() => setVerifyRejectTarget(order)}
+                onOverride={() => setOverrideTarget(order)}
               />
             ))}
           </div>
@@ -311,6 +331,30 @@ export function LabOrdersView() {
           onSaved={() => { setAckTarget(null); load(); }}
         />
       )}
+      {verifyTarget && (
+        <VerifyResultModal
+          order={verifyTarget}
+          verifiedByName={techName}
+          onClose={() => setVerifyTarget(null)}
+          onSaved={() => { setVerifyTarget(null); load(); }}
+        />
+      )}
+      {verifyRejectTarget && (
+        <RejectVerificationModal
+          order={verifyRejectTarget}
+          rejectedByName={techName}
+          onClose={() => setVerifyRejectTarget(null)}
+          onSaved={() => { setVerifyRejectTarget(null); load(); }}
+        />
+      )}
+      {overrideTarget && (
+        <OverrideVerificationModal
+          order={overrideTarget}
+          overrideByName={techName}
+          onClose={() => setOverrideTarget(null)}
+          onSaved={() => { setOverrideTarget(null); load(); }}
+        />
+      )}
     </div>
   );
 }
@@ -326,16 +370,21 @@ interface CardProps {
   glassInner: any;
   text: any;
   isLoading: boolean;
+  isHeadLabTech: boolean;
   onReceive: () => void;
   onReject: () => void;
   onStartProcessing: () => void;
   onEnterResult: () => void;
   onAcknowledge: () => void;
+  onVerify: () => void;
+  onVerifyReject: () => void;
+  onOverride: () => void;
 }
 
 function LabOrderCard({
-  order, animationDelay, glassCard, glassInner, text, isLoading,
+  order, animationDelay, glassCard, glassInner, text, isLoading, isHeadLabTech,
   onReceive, onReject, onStartProcessing, onEnterResult, onAcknowledge,
+  onVerify, onVerifyReject, onOverride,
 }: CardProps) {
   const pri = priorityColor(order.priority);
   const sc = statusChip(order.status);
@@ -409,6 +458,27 @@ function LabOrderCard({
         </div>
       )}
 
+      {/* AWAITING_VERIFICATION preview — show value + timeout countdown */}
+      {order.status === 'AWAITING_VERIFICATION' && (
+        <div className="rounded-xl p-3 mb-3 bg-amber-500/10 ring-1 ring-amber-500/20">
+          <div className="text-[10px] uppercase font-bold mb-1 text-amber-500">Pending verification</div>
+          <div className={`text-sm font-bold ${order.isCritical ? 'text-rose-500' : text.heading}`}>
+            {order.resultValue} {order.resultUnit}
+          </div>
+          <div className={`text-[10px] mt-1 ${text.muted}`}>
+            Entered by {order.enteredByName ?? 'lab tech'}
+            {order.verificationTimeoutAt && (
+              <> • auto-release {formatDistanceToNow(new Date(order.verificationTimeoutAt), { addSuffix: true })}</>
+            )}
+          </div>
+          {order.verificationRejectionCount > 0 && (
+            <div className="text-[10px] mt-1 text-rose-500">
+              Bounced back {order.verificationRejectionCount}× — last reason: {order.verificationRejectionReason}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex flex-wrap gap-2">
         {(order.status === 'ORDERED' || order.status === 'SPECIMEN_COLLECTED') && (
@@ -458,7 +528,39 @@ function LabOrderCard({
             <Beaker className="w-3 h-3" /> Enter result
           </button>
         )}
-        {order.isCritical && !order.criticalValueAcknowledgedAt && (
+        {order.status === 'AWAITING_VERIFICATION' && (
+          <>
+            {isHeadLabTech && (
+              <>
+                <button
+                  onClick={onVerify}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-3 h-3" /> Verify & release
+                </button>
+                <button
+                  onClick={onVerifyReject}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-rose-500/15 text-rose-500 hover:bg-rose-500/25 disabled:opacity-50"
+                >
+                  <XCircle className="w-3 h-3" /> Reject (bounce back)
+                </button>
+              </>
+            )}
+            {!isHeadLabTech && (
+              <button
+                onClick={onOverride}
+                disabled={isLoading}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 disabled:opacity-50"
+                title="Emergency override — releases without senior verification"
+              >
+                <AlertOctagon className="w-3 h-3" /> Release without verification
+              </button>
+            )}
+          </>
+        )}
+        {order.isCritical && !order.criticalValueAcknowledgedAt && order.status === 'RESULTED' && (
           <button
             onClick={onAcknowledge}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-rose-500 text-white hover:bg-rose-600"

@@ -177,7 +177,7 @@ public class LabOrder extends BaseEntity {
     @Column(name = "rejection_notes", length = 1000)
     private String rejectionNotes;
 
-    // ── Two-step verification (Phase 1 self-verify, columns kept for Phase 2)
+    // ── Two-step verification (Phase 2: senior tech gates high-risk results)
 
     @Column(name = "entered_by_name", length = 255)
     private String enteredByName;
@@ -187,6 +187,48 @@ public class LabOrder extends BaseEntity {
 
     @Column(name = "verified_by_name", length = 255)
     private String verifiedByName;
+
+    /** True if this result went through the senior-verification gate. */
+    @Column(name = "verification_required", nullable = false)
+    @Builder.Default
+    private boolean verificationRequired = false;
+
+    /** When AWAITING_VERIFICATION auto-releases if no senior signs off. */
+    @Column(name = "verification_timeout_at")
+    private Instant verificationTimeoutAt;
+
+    /** Set true when the timeout fires before a senior verifies. */
+    @Column(name = "verification_auto_released", nullable = false)
+    @Builder.Default
+    private boolean verificationAutoReleased = false;
+
+    /** Junior tech emergency override (released without verification). */
+    @Column(name = "verification_override", nullable = false)
+    @Builder.Default
+    private boolean verificationOverride = false;
+
+    @Column(name = "verification_override_reason", length = 500)
+    private String verificationOverrideReason;
+
+    @Column(name = "verification_override_by_name", length = 255)
+    private String verificationOverrideByName;
+
+    @Column(name = "verification_override_at")
+    private Instant verificationOverrideAt;
+
+    /** Number of times a senior bounced this back to the junior. */
+    @Column(name = "verification_rejection_count", nullable = false)
+    @Builder.Default
+    private int verificationRejectionCount = 0;
+
+    @Column(name = "verification_rejection_reason", length = 500)
+    private String verificationRejectionReason;
+
+    @Column(name = "verification_rejected_by_name", length = 255)
+    private String verificationRejectedByName;
+
+    @Column(name = "verification_rejected_at")
+    private Instant verificationRejectedAt;
 
     // ── Critical-value read-back attestation (JCI NPSG.02.03.01)
 
