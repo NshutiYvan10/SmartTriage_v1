@@ -51,7 +51,7 @@ export function DirectResusModal({
   const [isPediatric, setIsPediatric] = useState(initialIsPediatric);
   const [ambulancePreArrival, setTruckPreArrival] = useState(false);
   const [arrivalMode, setArrivalMode] = useState<ArrivalMode | ''>('');
-  const [estimatedGender, setEstimatedGender] = useState<'MALE' | 'FEMALE' | 'OTHER' | ''>('');
+  const [estimatedGender, setEstimatedGender] = useState<'MALE' | 'FEMALE' | ''>('');
   const [preArrivalNotes, setPreArrivalNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -186,8 +186,8 @@ export function DirectResusModal({
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                 Apparent gender <span className="text-slate-400 font-normal">(optional, for med-dosing)</span>
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                {(['MALE', 'FEMALE', 'OTHER'] as const).map((g) => (
+              <div className="grid grid-cols-2 gap-2">
+                {(['MALE', 'FEMALE'] as const).map((g) => (
                   <button
                     key={g}
                     type="button"

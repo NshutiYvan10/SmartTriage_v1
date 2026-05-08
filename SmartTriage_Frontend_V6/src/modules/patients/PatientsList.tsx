@@ -368,7 +368,7 @@ export function PatientsList() {
                           )}
                         </div>
                         <p className="text-[11px] text-slate-400 font-medium mt-0.5">
-                          {patient.age < 1 ? `${Math.round(patient.age * 12)}mo` : `${patient.age}y`} · {patient.gender === 'MALE' ? 'Male' : patient.gender === 'FEMALE' ? 'Female' : 'Other'}
+                          {patient.age < 1 ? `${Math.round(patient.age * 12)}mo` : `${patient.age}y`} · {patient.gender === 'MALE' ? 'Male' : patient.gender === 'FEMALE' ? 'Female' : '—'}
                         </p>
                       </div>
 

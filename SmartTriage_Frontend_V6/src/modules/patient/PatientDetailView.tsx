@@ -155,7 +155,7 @@ export function PatientDetailView() {
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-500 text-sm mt-1">
                   <span className="flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5" />
-                    {patient.age} yrs &middot; {patient.gender === 'MALE' ? 'Male' : patient.gender === 'FEMALE' ? 'Female' : 'Other'}
+                    {patient.age} yrs &middot; {patient.gender === 'MALE' ? 'Male' : patient.gender === 'FEMALE' ? 'Female' : '—'}
                   </span>
                   {patient.nationalId && (
                     <span className="flex items-center gap-1">
@@ -197,7 +197,7 @@ export function PatientDetailView() {
             <InfoRow label="Full Name" value={patient.fullName} />
             <InfoRow label="Date of Birth" value={patient.dateOfBirth ? formatDate(patient.dateOfBirth) : undefined} />
             <InfoRow label="Age" value={`${patient.age} years`} />
-            <InfoRow label="Gender" value={patient.gender === 'MALE' ? 'Male' : patient.gender === 'FEMALE' ? 'Female' : 'Other'} />
+            <InfoRow label="Gender" value={patient.gender === 'MALE' ? 'Male' : patient.gender === 'FEMALE' ? 'Female' : '—'} />
             <InfoRow label="National ID" value={patient.nationalId} />
             <InfoRow label="Medical Record No." value={patient.medicalRecordNumber} />
             <InfoRow label="Patient Type" value={patient.isPediatric || (typeof patient.age === 'number' && patient.age < 18) ? 'Pediatric' : 'Adult'} />

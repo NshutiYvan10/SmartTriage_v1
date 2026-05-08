@@ -473,7 +473,7 @@ export function AdultTriageForm() {
       setTriageStatus(patient.id, 'TRIAGED');
     } else {
       const age = parseFloat(patientAge) || 30;
-      const np = addPatient({ fullName: patientNames || 'Unknown Patient', age, gender: (gender === 'MALE' || gender === 'FEMALE' || gender === 'OTHER') ? gender : 'MALE', chiefComplaint: chiefComplaint || 'Adult triage', arrivalMode: 'WALK_IN', weight: parseFloat(weightVal) || undefined });
+      const np = addPatient({ fullName: patientNames || 'Unknown Patient', age, gender: (gender === 'MALE' || gender === 'FEMALE') ? gender : 'MALE', chiefComplaint: chiefComplaint || 'Adult triage', arrivalMode: 'WALK_IN', weight: parseFloat(weightVal) || undefined });
       assignCategory(np.id, categoryResult.category, tewsScoring.totalScore);
       targetPatientId = np.id;
     }

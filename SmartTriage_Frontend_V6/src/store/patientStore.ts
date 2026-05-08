@@ -154,7 +154,7 @@ export const usePatientStore = create<PatientState>((set, get) => ({
               id: v.id,
               fullName: v.patientName || 'Unknown',
               age: 0,
-              gender: 'OTHER' as Patient['gender'],
+              gender: 'MALE' as Patient['gender'],   // placeholder for backend-projected visits without a patient row
               chiefComplaint: v.chiefComplaint || '',
               arrivalMode: (v.arrivalMode as Patient['arrivalMode']) || 'WALK_IN',
               arrivalTimestamp: new Date(v.arrivalTime),

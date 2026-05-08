@@ -1,7 +1,7 @@
 // Core Types
 export type TriageCategory = 'RED' | 'ORANGE' | 'YELLOW' | 'GREEN' | 'BLUE';
 export type AVPU = 'A' | 'V' | 'P' | 'U';
-export type Gender = 'MALE' | 'FEMALE' | 'OTHER';
+export type Gender = 'MALE' | 'FEMALE';
 export type ArrivalMode = 'WALK_IN' | 'AMBULANCE' | 'REFERRAL';
 export type Mobility = 'AMBULATORY' | 'WHEELCHAIR' | 'STRETCHER';
 

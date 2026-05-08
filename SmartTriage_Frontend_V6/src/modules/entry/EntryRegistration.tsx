@@ -827,7 +827,6 @@ export function EntryRegistration() {
                     <option value="">Select gender</option>
                     <option value="MALE">Male</option>
                     <option value="FEMALE">Female</option>
-                    <option value="OTHER">Other</option>
                   </select>
                   {errors.gender && <p className="text-red-500 text-xs mt-1.5 ml-1 font-medium">{errors.gender}</p>}
                 </div>

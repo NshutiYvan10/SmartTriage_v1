@@ -488,7 +488,7 @@ export function PediatricTriageForm() {
       setTriageStatus(patient.id, 'TRIAGED');
     } else {
       const age = parseFloat(patientAge) || 1;
-      const np = addPatient({ fullName: patientNames || 'Unknown Infant', age, gender: (gender === 'MALE' || gender === 'FEMALE' || gender === 'OTHER') ? gender : 'MALE', chiefComplaint: chiefComplaint || 'Pediatric triage', arrivalMode: 'WALK_IN', weight: parseFloat(weightVal) || undefined });
+      const np = addPatient({ fullName: patientNames || 'Unknown Infant', age, gender: (gender === 'MALE' || gender === 'FEMALE') ? gender : 'MALE', chiefComplaint: chiefComplaint || 'Pediatric triage', arrivalMode: 'WALK_IN', weight: parseFloat(weightVal) || undefined });
       assignCategory(np.id, categoryResult.category, tewsScoring.totalScore);
       targetPatientId = np.id;
     }

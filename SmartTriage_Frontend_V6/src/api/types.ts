@@ -24,7 +24,9 @@ export interface Page<T> {
 
 // ── Enums ──
 
-export type Gender = 'MALE' | 'FEMALE' | 'OTHER' | 'UNKNOWN';
+// UNKNOWN is reserved for placeholder / unidentified patients
+// (Direct Resus, EMS unknown arrivals) — never offered in registration UIs.
+export type Gender = 'MALE' | 'FEMALE' | 'UNKNOWN';
 
 /**
  * Phase 13b — structured pregnancy / lactation status. Mirrors the

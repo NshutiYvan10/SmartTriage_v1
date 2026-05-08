@@ -24,7 +24,7 @@
  *     Conversion: 1 mg/dL ≈ 88.4 µmol/L.
  *   - sex: 'female' applies the 0.85 multiplier; anything else
  *     uses 1.0. We accept the union to keep the call site flexible
- *     (the patient's `gender` is 'MALE'/'FEMALE'/'OTHER'/'UNKNOWN').
+ *     (the patient's `gender` is 'MALE'/'FEMALE'/'UNKNOWN').
  *
  * Why this isn't a hard stop:
  *   eGFR is a screening number. A 30 in a frail 90-year-old with
