@@ -80,18 +80,38 @@ public class IoTDeviceController {
         return ResponseEntity.ok(ApiResponse.success(deviceService.getAvailableDevices(hospitalId)));
     }
 
+    /**
+     * V53 — admin toggles a device's inventory status.
+     * Body: { "inService": true | false }
+     */
+    @org.springframework.web.bind.annotation.PatchMapping("/devices/{id}/service-status")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
+    public ResponseEntity<ApiResponse<DeviceResponse>> setServiceStatus(
+            @PathVariable UUID id,
+            @org.springframework.web.bind.annotation.RequestBody java.util.Map<String, Boolean> body) {
+        boolean inService = Boolean.TRUE.equals(body.get("inService"));
+        DeviceResponse response = deviceService.setInService(id, inService);
+        return ResponseEntity.ok(ApiResponse.success(
+                inService ? "Device returned to service" : "Device taken out of service",
+                response));
+    }
+
+    /** @deprecated retained as a thin alias for legacy clients; use /service-status. */
+    @Deprecated
     @PostMapping("/devices/{id}/power-on")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<DeviceResponse>> powerOnDevice(@PathVariable UUID id) {
-        DeviceResponse response = deviceService.powerOnDevice(id);
-        return ResponseEntity.ok(ApiResponse.success("Device powered on", response));
+        DeviceResponse response = deviceService.setInService(id, true);
+        return ResponseEntity.ok(ApiResponse.success("Device returned to service", response));
     }
 
+    /** @deprecated retained as a thin alias for legacy clients; use /service-status. */
+    @Deprecated
     @PostMapping("/devices/{id}/power-off")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<DeviceResponse>> powerOffDevice(@PathVariable UUID id) {
-        DeviceResponse response = deviceService.powerOffDevice(id);
-        return ResponseEntity.ok(ApiResponse.success("Device powered off", response));
+        DeviceResponse response = deviceService.setInService(id, false);
+        return ResponseEntity.ok(ApiResponse.success("Device taken out of service", response));
     }
 
     // ====================================================================

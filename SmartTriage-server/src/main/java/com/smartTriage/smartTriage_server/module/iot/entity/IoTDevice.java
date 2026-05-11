@@ -97,9 +97,26 @@ public class IoTDevice extends BaseEntity {
     @Column(name = "mac_address", length = 17)
     private String macAddress;
 
-    /** Location in the hospital (e.g., "ED Bay 3", "Resus Room 1") */
+    /**
+     * Free-text physical location (e.g., "ED Bay 3", "Resus Room 1").
+     * Retained for historical data; new registrations no longer ask
+     * for it — the device's assigned bed (and the bed's zone) provide
+     * the canonical location signal.
+     */
     @Column(name = "location", length = 100)
     private String location;
+
+    /**
+     * Admin-controlled inventory flag (V53). TRUE means the device is
+     * part of the active monitor pool and can be assigned to a visit.
+     * FALSE means the admin has taken it out of service (defective,
+     * repair, maintenance). Independent of the runtime DeviceStatus —
+     * an OFFLINE device may still be "in service" from inventory's
+     * point of view if the admin expects it to come back.
+     */
+    @Column(name = "in_service", nullable = false)
+    @Builder.Default
+    private boolean inService = true;
 
     /**
      * The bed this device is permanently assigned to (null = portable /

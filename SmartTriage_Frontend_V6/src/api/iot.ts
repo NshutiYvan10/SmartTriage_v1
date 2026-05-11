@@ -1,5 +1,5 @@
 /* ── IoT Devices API ── */
-import { get, post } from './client';
+import { get, post, patch } from './client';
 import type {
   RegisterDeviceRequest,
   DeviceResponse,
@@ -23,11 +23,13 @@ export const iotApi = {
   getAvailableDevices: (hospitalId: string) =>
     get<DeviceResponse[]>(`/iot/devices/available/${hospitalId}`),
 
-  powerOnDevice: (deviceId: string) =>
-    post<DeviceResponse>(`/iot/devices/${deviceId}/power-on`),
-
-  powerOffDevice: (deviceId: string) =>
-    post<DeviceResponse>(`/iot/devices/${deviceId}/power-off`),
+  /**
+   * V53 — admin toggles the device's inventory state.
+   * inService=true puts the device into the active monitor pool;
+   * inService=false takes it out (e.g. for repair / maintenance).
+   */
+  setServiceStatus: (deviceId: string, inService: boolean) =>
+    patch<DeviceResponse>(`/iot/devices/${deviceId}/service-status`, { inService }),
 
   // Monitoring sessions
   startMonitoring: (data: StartMonitoringRequest) =>

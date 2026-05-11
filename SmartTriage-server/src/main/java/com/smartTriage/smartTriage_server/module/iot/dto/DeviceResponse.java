@@ -33,6 +33,8 @@ public class DeviceResponse {
     private String ipAddress;
     private String macAddress;
     private String location;
+    /** V53 — admin inventory flag. true = active pool. */
+    private boolean inService;
     private int heartbeatTimeoutSeconds;
     private int dataIntervalSeconds;
     private String notes;

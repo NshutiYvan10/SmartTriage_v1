@@ -1037,6 +1037,8 @@ export interface DeviceResponse {
   deviceType: DeviceType;
   hospitalId: string;
   status: DeviceStatus;
+  /** V53 — admin inventory flag. true = active pool. */
+  inService: boolean;
   firmwareVersion: string;
   macAddress: string;
   location: string;

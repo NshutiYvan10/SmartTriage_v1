@@ -109,59 +109,74 @@ public class DeviceService {
     // ====================================================================
 
     /**
-     * Simulate powering on a device.
-     * Sets status → ONLINE, battery 100 %, good WiFi RSSI, and a fresh heartbeat.
+     * Admin toggles the device's service status (V53). The previous
+     * power-on / power-off endpoints conflated runtime connection
+     * state with admin inventory state — splitting them lets the
+     * device's heartbeats keep the runtime state honest while the
+     * admin owns the "is this part of our pool" decision.
+     *
+     * Returns the device to service:
+     *   - sets {@code inService = true}
+     *   - if currently DECOMMISSIONED, returns runtime status to REGISTERED
+     *
+     * Takes the device out of service:
+     *   - if currently MONITORING, ends the session with a reason
+     *   - sets {@code inService = false}
+     *   - runtime status becomes OFFLINE (it's no longer reachable
+     *     from the active pool's point of view)
      */
     @Transactional
-    public DeviceResponse powerOnDevice(UUID deviceId) {
+    public DeviceResponse setInService(UUID deviceId, boolean inService) {
         IoTDevice device = findDeviceOrThrow(deviceId);
 
-        if (device.getStatus() != DeviceStatus.REGISTERED
-                && device.getStatus() != DeviceStatus.OFFLINE) {
-            throw new IllegalStateException(
-                    "Device " + device.getSerialNumber() + " is already powered on. " +
-                            "Current status: " + device.getStatus());
+        if (inService == device.isInService()) {
+            // Idempotent — return the unchanged device rather than 4xx,
+            // so a double-click on the toggle doesn't surface as an
+            // error toast.
+            return IoTMapper.toResponse(device);
         }
 
-        device.setStatus(DeviceStatus.ONLINE);
-        device.setBatteryLevel(100);
-        device.setWifiRssi(-40); // strong signal
-        device.setLastHeartbeatAt(Instant.now());
-        device = deviceRepository.save(device);
+        if (inService) {
+            device.setInService(true);
+            if (device.getStatus() == DeviceStatus.DECOMMISSIONED) {
+                device.setStatus(DeviceStatus.REGISTERED);
+            }
+            log.info("Device {} returned to service by admin", device.getSerialNumber());
+        } else {
+            if (device.getStatus() == DeviceStatus.MONITORING) {
+                stopMonitoringForDevice(deviceId, "Device taken out of service");
+            }
+            device.setInService(false);
+            device.setStatus(DeviceStatus.OFFLINE);
+            device.setBatteryLevel(null);
+            device.setWifiRssi(null);
+            log.info("Device {} taken out of service by admin", device.getSerialNumber());
+        }
 
-        log.info("Device {} powered ON by admin", device.getSerialNumber());
+        device = deviceRepository.save(device);
         publishDeviceStatus(device);
         return IoTMapper.toResponse(device);
     }
 
     /**
-     * Simulate powering off a device. Ends any active session first.
+     * @deprecated Use {@link #setInService(UUID, boolean)} with
+     * {@code inService = true}. Kept as a thin alias so any in-flight
+     * client builds don't break during the cutover.
      */
+    @Deprecated
+    @Transactional
+    public DeviceResponse powerOnDevice(UUID deviceId) {
+        return setInService(deviceId, true);
+    }
+
+    /**
+     * @deprecated Use {@link #setInService(UUID, boolean)} with
+     * {@code inService = false}.
+     */
+    @Deprecated
     @Transactional
     public DeviceResponse powerOffDevice(UUID deviceId) {
-        IoTDevice device = findDeviceOrThrow(deviceId);
-
-        if (device.getStatus() == DeviceStatus.REGISTERED
-                || device.getStatus() == DeviceStatus.OFFLINE
-                || device.getStatus() == DeviceStatus.DECOMMISSIONED) {
-            throw new IllegalStateException(
-                    "Device " + device.getSerialNumber() + " is not currently powered on. " +
-                            "Current status: " + device.getStatus());
-        }
-
-        // If it's monitoring, end the active session first
-        if (device.getStatus() == DeviceStatus.MONITORING) {
-            stopMonitoringForDevice(deviceId, "Device powered off");
-        }
-
-        device.setStatus(DeviceStatus.OFFLINE);
-        device.setBatteryLevel(null);
-        device.setWifiRssi(null);
-        device = deviceRepository.save(device);
-
-        log.info("Device {} powered OFF by admin", device.getSerialNumber());
-        publishDeviceStatus(device);
-        return IoTMapper.toResponse(device);
+        return setInService(deviceId, false);
     }
 
     // ====================================================================
@@ -440,8 +455,12 @@ public class DeviceService {
     }
 
     public List<DeviceResponse> getAvailableDevices(UUID hospitalId) {
+        // V53 — out-of-service devices are not assignable. Filter
+        // here rather than in the repository query so the JPQL stays
+        // readable; this list is small (active monitors at a hospital).
         return deviceRepository.findAvailableDevices(hospitalId)
                 .stream()
+                .filter(IoTDevice::isInService)
                 .map(IoTMapper::toResponse)
                 .toList();
     }

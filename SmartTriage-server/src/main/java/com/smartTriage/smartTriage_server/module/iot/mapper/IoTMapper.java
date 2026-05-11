@@ -33,6 +33,7 @@ public final class IoTMapper {
                 .ipAddress(device.getIpAddress())
                 .macAddress(device.getMacAddress())
                 .location(device.getLocation())
+                .inService(device.isInService())
                 .heartbeatTimeoutSeconds(device.getHeartbeatTimeoutSeconds())
                 .dataIntervalSeconds(device.getDataIntervalSeconds())
                 .notes(device.getNotes())

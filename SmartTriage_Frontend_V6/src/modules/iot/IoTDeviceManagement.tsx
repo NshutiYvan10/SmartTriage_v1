@@ -63,11 +63,17 @@ export function IoTDeviceManagement() {
   const [showForm, setShowForm] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
-  const [form, setForm] = useState({ deviceName: '', deviceType: 'ESP32_MONITOR', serialNumber: '', firmwareVersion: '', location: '' });
+  // V53 — location removed from the form. The device's assigned bed
+  // (set on a separate flow) is the canonical location signal.
+  const [form, setForm] = useState({ deviceName: '', deviceType: 'ESP32_MONITOR', serialNumber: '', firmwareVersion: '' });
 
-  // Power operation feedback
-  const [poweringDeviceId, setPoweringDeviceId] = useState<string | null>(null);
-  const [powerError, setPowerError] = useState<{ deviceId: string; message: string } | null>(null);
+  // Service-status toggle feedback
+  const [serviceLoadingId, setServiceLoadingId] = useState<string | null>(null);
+  const [serviceError, setServiceError] = useState<{ deviceId: string; message: string } | null>(null);
+  // In-app confirm modal for "Take out of service" — replaces the
+  // browser-native window.confirm that previously appeared as
+  // "localhost says: ..." on dev environments.
+  const [outOfServiceTarget, setOutOfServiceTarget] = useState<DeviceResponse | null>(null);
 
   // API key display after registration (only shown once)
   const [registeredDevice, setRegisteredDevice] = useState<{ deviceName: string; serialNumber: string; apiKey: string } | null>(null);
@@ -139,7 +145,7 @@ export function IoTDeviceManagement() {
     try {
       const response = await iotApi.registerDevice({ hospitalId, ...form } as any);
       setShowForm(false);
-      setForm({ deviceName: '', deviceType: 'ESP32_MONITOR', serialNumber: '', firmwareVersion: '', location: '' });
+      setForm({ deviceName: '', deviceType: 'ESP32_MONITOR', serialNumber: '', firmwareVersion: '' });
       // Show the API key modal (only time it's returned)
       if (response?.apiKey) {
         setRegisteredDevice({ deviceName: response.deviceName, serialNumber: response.serialNumber, apiKey: response.apiKey });
@@ -179,31 +185,44 @@ export function IoTDeviceManagement() {
     setPatientSearch('');
   };
 
-  const handlePowerOn = async (device: DeviceResponse) => {
-    setPoweringDeviceId(device.id);
-    setPowerError(null);
+  /**
+   * V53 — return a device to service (admin toggles inService=true).
+   * No confirmation needed; this is a benign restore action.
+   */
+  const handleReturnToService = async (device: DeviceResponse) => {
+    setServiceLoadingId(device.id);
+    setServiceError(null);
     try {
-      await iotApi.powerOnDevice(device.id);
+      await iotApi.setServiceStatus(device.id, true);
       await loadDevices();
     } catch (err: any) {
-      console.error('Failed to power on device:', err);
-      setPowerError({ deviceId: device.id, message: err?.message || 'Failed to power on device. Make sure the server is running.' });
+      console.error('Failed to return device to service:', err);
+      setServiceError({ deviceId: device.id, message: err?.message || 'Failed to return device to service.' });
     } finally {
-      setPoweringDeviceId(null);
+      setServiceLoadingId(null);
     }
   };
 
-  const handlePowerOff = async (device: DeviceResponse) => {
-    setPoweringDeviceId(device.id);
-    setPowerError(null);
+  /**
+   * V53 — confirm "take out of service" via the in-app modal. The
+   * handler is fired from the modal's confirm button so we never
+   * reach window.confirm (which renders as a "localhost says:"
+   * popup on dev environments).
+   */
+  const handleConfirmTakeOutOfService = async () => {
+    if (!outOfServiceTarget) return;
+    const device = outOfServiceTarget;
+    setServiceLoadingId(device.id);
+    setServiceError(null);
     try {
-      await iotApi.powerOffDevice(device.id);
+      await iotApi.setServiceStatus(device.id, false);
+      setOutOfServiceTarget(null);
       await loadDevices();
     } catch (err: any) {
-      console.error('Failed to power off device:', err);
-      setPowerError({ deviceId: device.id, message: err?.message || 'Failed to power off device.' });
+      console.error('Failed to take device out of service:', err);
+      setServiceError({ deviceId: device.id, message: err?.message || 'Failed to take device out of service.' });
     } finally {
-      setPoweringDeviceId(null);
+      setServiceLoadingId(null);
     }
   };
 
@@ -379,10 +398,10 @@ export function IoTDeviceManagement() {
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Firmware Version</label>
                 <input value={form.firmwareVersion} onChange={(e) => setForm({ ...form, firmwareVersion: e.target.value })} placeholder="e.g., v2.1.0" className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
               </div>
-              <div>
-                <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Location</label>
-                <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="e.g., Ward A, Bed 3" className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
-              </div>
+              {/* V53 — Location field removed; the device's assigned
+                  bed (set on a separate flow) is the canonical location
+                  signal. A new device defaults to in-service, so it's
+                  immediately usable after registration. */}
             </div>
             <div className="flex items-center gap-3 mt-4">
               {formError && (
@@ -475,34 +494,47 @@ export function IoTDeviceManagement() {
                     </div>
                   )}
 
-                  {/* Power error for this device */}
-                  {powerError?.deviceId === device.id && (
+                  {/* Service status error for this device */}
+                  {serviceError?.deviceId === device.id && (
                     <div className="flex items-center gap-1.5 mt-2 px-2.5 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20">
                       <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
-                      <p className="text-[10px] font-medium text-red-400">{powerError.message}</p>
+                      <p className="text-[10px] font-medium text-red-400">{serviceError.message}</p>
                     </div>
                   )}
 
                   {/* Actions — role-based */}
                   <div className="flex flex-col gap-2 mt-3 pt-3" style={{ borderTop: isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.2)' }}>
-                    {/* Admin: Power On for REGISTERED / OFFLINE devices */}
-                    {isAdmin && (device.status === 'REGISTERED' || device.status === 'OFFLINE') && (
+                    {/* V53 — Admin service status pill (read-only context for the toggle below) */}
+                    {isAdmin && (
+                      <div className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg ${device.inService ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-slate-500/10 border border-slate-500/20'}`}>
+                        <div className="flex items-center gap-1.5">
+                          {device.inService
+                            ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                            : <PowerOff className="w-3.5 h-3.5 text-slate-400" />}
+                          <span className={`text-[10px] font-bold ${device.inService ? 'text-emerald-600' : isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                            {device.inService ? 'In Service' : 'Out of Service'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {/* V53 — Admin: Return to Service (immediate) for out-of-service devices */}
+                    {isAdmin && !device.inService && (
                       <button
-                        onClick={() => handlePowerOn(device)}
-                        disabled={poweringDeviceId === device.id}
-                        className="flex-1 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                        onClick={() => handleReturnToService(device)}
+                        disabled={serviceLoadingId === device.id}
+                        className="flex-1 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
                       >
-                        {poweringDeviceId === device.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />} Power On
+                        {serviceLoadingId === device.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />} Return to Service
                       </button>
                     )}
-                    {/* Admin: Power Off for ONLINE devices */}
-                    {isAdmin && device.status === 'ONLINE' && (
+                    {/* V53 — Admin: Take Out of Service (opens in-app confirmation modal) for in-service devices */}
+                    {isAdmin && device.inService && (
                       <button
-                        onClick={() => handlePowerOff(device)}
-                        disabled={poweringDeviceId === device.id}
+                        onClick={() => { setServiceError(null); setOutOfServiceTarget(device); }}
+                        disabled={serviceLoadingId === device.id}
                         className="flex-1 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
                       >
-                        {poweringDeviceId === device.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <PowerOff className="w-3 h-3" />} Power Off
+                        {serviceLoadingId === device.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <PowerOff className="w-3 h-3" />} Take Out of Service
                       </button>
                     )}
                     {/* Clinical staff (Nurse): Assign to Patient for ONLINE devices */}
@@ -575,10 +607,14 @@ export function IoTDeviceManagement() {
                               <PowerOff className="w-3 h-3" /> Stop Monitoring
                             </button>
                           )}
-                          {/* Admin can power off (which also ends the session) */}
-                          {isAdmin && (
-                            <button onClick={() => handlePowerOff(device)} className="w-full px-3 py-1.5 text-[10px] font-bold rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1">
-                              <PowerOff className="w-3 h-3" /> Power Off
+                          {/* Admin can take out of service (which also ends the session) */}
+                          {isAdmin && device.inService && (
+                            <button
+                              onClick={() => { setServiceError(null); setOutOfServiceTarget(device); }}
+                              disabled={serviceLoadingId === device.id}
+                              className="w-full px-3 py-1.5 text-[10px] font-bold rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                            >
+                              {serviceLoadingId === device.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <PowerOff className="w-3 h-3" />} Take Out of Service
                             </button>
                           )}
                         </div>
@@ -984,6 +1020,98 @@ export function IoTDeviceManagement() {
               >
                 {apiKeyCopied ? 'Done — Key Copied ✓' : 'I\'ve Saved the Key — Close'}
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* V53 — In-app "Take Out of Service" confirmation modal (replaces window.confirm) */}
+        {outOfServiceTarget && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in"
+            onClick={() => { if (serviceLoadingId !== outOfServiceTarget.id) setOutOfServiceTarget(null); }}
+          >
+            <div
+              className="w-full max-w-md rounded-3xl shadow-2xl overflow-hidden mx-4 animate-fade-up"
+              style={glassCard}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="bg-gradient-to-r from-red-600 to-red-500 px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+                      <AlertTriangle className="w-4.5 h-4.5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Take Device Out of Service?</h3>
+                      <p className="text-[10px] text-white/80 mt-0.5">
+                        {outOfServiceTarget.deviceName} · <span className="font-mono">{outOfServiceTarget.serialNumber}</span>
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { if (serviceLoadingId !== outOfServiceTarget.id) setOutOfServiceTarget(null); }}
+                    disabled={serviceLoadingId === outOfServiceTarget.id}
+                    className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center hover:bg-white/25 transition-colors disabled:opacity-50"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="px-6 py-5 space-y-3">
+                <p className={`text-xs leading-relaxed ${text.heading}`}>
+                  This will remove the device from the active monitor pool. While it's out of service:
+                </p>
+                <ul className={`text-[11px] space-y-1.5 pl-1 ${text.muted}`}>
+                  <li className="flex items-start gap-2">
+                    <span className="text-red-500 mt-0.5">•</span>
+                    <span>Nurses will <strong className={text.heading}>not be able to assign</strong> it to a patient.</span>
+                  </li>
+                  {outOfServiceTarget.status === 'MONITORING' && (
+                    <li className="flex items-start gap-2">
+                      <span className="text-red-500 mt-0.5">•</span>
+                      <span>Its <strong className={text.heading}>active monitoring session will end immediately</strong>.</span>
+                    </li>
+                  )}
+                  <li className="flex items-start gap-2">
+                    <span className="text-red-500 mt-0.5">•</span>
+                    <span>It stays registered — you can return it to service at any time.</span>
+                  </li>
+                </ul>
+
+                {serviceError?.deviceId === outOfServiceTarget.id && (
+                  <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                    <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                    <p className="text-[11px] font-medium text-red-400">{serviceError.message}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer actions */}
+              <div className={`px-6 py-4 flex items-center justify-end gap-2 ${isDark ? 'bg-white/5' : 'bg-slate-50'}`}>
+                <button
+                  onClick={() => setOutOfServiceTarget(null)}
+                  disabled={serviceLoadingId === outOfServiceTarget.id}
+                  className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors disabled:opacity-50 ${
+                    isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmTakeOutOfService}
+                  disabled={serviceLoadingId === outOfServiceTarget.id}
+                  className="px-4 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2 disabled:opacity-50 disabled:hover:translate-y-0"
+                >
+                  {serviceLoadingId === outOfServiceTarget.id ? (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Taking out of service…</>
+                  ) : (
+                    <><PowerOff className="w-3.5 h-3.5" /> Take Out of Service</>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
