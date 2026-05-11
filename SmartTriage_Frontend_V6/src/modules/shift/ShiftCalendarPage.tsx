@@ -30,7 +30,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ChevronLeft, ChevronRight, Calendar, AlertTriangle, UserMinus, Users, Sun, Moon,
-  Plus, Trash2, Copy, FileText, X, Loader2,
+  Plus, Trash2, Copy, FileText, X, Loader2, Pencil,
 } from 'lucide-react';
 import { shiftApi, leaveApi, userApi, shiftTemplateApi } from '@/api';
 import type {
@@ -452,6 +452,7 @@ function DayDetailPanel({
   const [roster, setRoster] = useState<ShiftAssignmentResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [drawerPeriod, setDrawerPeriod] = useState<ShiftPeriod | null>(null);
+  const [editTarget, setEditTarget] = useState<ShiftAssignmentResponse | null>(null);
 
   // Past dates are read-only — backend rejects writes; mirror that
   // server rule in the UI so we don't dangle non-functional buttons.
@@ -522,6 +523,7 @@ function DayDetailPanel({
         editable={editableHere}
         onAdd={() => setDrawerPeriod('DAY')}
         onRemove={handleRemove}
+        onEdit={setEditTarget}
       />
       <ShiftSection
         title="Night shift" icon={<Moon className="w-3.5 h-3.5" />}
@@ -529,6 +531,7 @@ function DayDetailPanel({
         editable={editableHere}
         onAdd={() => setDrawerPeriod('NIGHT')}
         onRemove={handleRemove}
+        onEdit={setEditTarget}
       />
 
       <ZoneCoverageSummary roster={roster.filter(r => r.active)} />
@@ -552,6 +555,20 @@ function DayDetailPanel({
         />
       )}
 
+      {editTarget && (
+        <EditAssignmentDrawer
+          assignment={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => {
+            setEditTarget(null);
+            onToast('Assignment updated.');
+            reload();
+            onChange();
+          }}
+          onError={(msg) => onToast(msg)}
+        />
+      )}
+
       {loading && <div className="text-xs text-gray-400">Loading…</div>}
     </aside>
   );
@@ -564,9 +581,10 @@ interface ShiftSectionProps {
   editable: boolean;
   onAdd: () => void;
   onRemove: (assignmentId: string, label: string) => void;
+  onEdit: (row: ShiftAssignmentResponse) => void;
 }
 
-function ShiftSection({ title, icon, rows, editable, onAdd, onRemove }: ShiftSectionProps) {
+function ShiftSection({ title, icon, rows, editable, onAdd, onRemove, onEdit }: ShiftSectionProps) {
   if (rows.length === 0) {
     return (
       <div>
@@ -606,14 +624,24 @@ function ShiftSection({ title, icon, rows, editable, onAdd, onRemove }: ShiftSec
                     </span>
                   )}
                   {editable && (
-                    <button
-                      onClick={() => onRemove(r.id, r.userName)}
-                      className="ml-auto text-gray-300 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition"
-                      aria-label={`Remove ${r.userName}`}
-                      title="Remove from shift"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                      <button
+                        onClick={() => onEdit(r)}
+                        className="text-gray-300 hover:text-cyan-600"
+                        aria-label={`Edit ${r.userName}`}
+                        title="Edit zone / function / shift-lead"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => onRemove(r.id, r.userName)}
+                        className="text-gray-300 hover:text-rose-600"
+                        aria-label={`Remove ${r.userName}`}
+                        title="Remove from shift"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   )}
                 </li>
               ))}
@@ -738,6 +766,22 @@ interface QuickAssignDrawerProps {
   onError: (msg: string) => void;
 }
 
+/**
+ * Smart zone default: if the shift function clearly maps to a Tier-1
+ * zone (TRIAGE_NURSE → TRIAGE), seed the zone dropdown accordingly so
+ * the CN doesn't have to switch it manually. Prevents the
+ * "I assigned a triage nurse but the TRIAGE zone is still empty" bug
+ * caused by the form's GENERAL default.
+ *
+ * Only TRIAGE_NURSE has an unambiguous zone today — RESUS / ACUTE
+ * roles are role-by-zone (a primary doctor can be assigned to RESUS
+ * or ACUTE; the function alone doesn't decide).
+ */
+function zoneForFunction(fn: ShiftFunction): EdZone | null {
+  if (fn === 'TRIAGE_NURSE') return 'TRIAGE';
+  return null;
+}
+
 function QuickAssignDrawer({
   hospitalId, dateIso, period, existing, onClose, onAdded, onError,
 }: QuickAssignDrawerProps) {
@@ -745,9 +789,19 @@ function QuickAssignDrawer({
   const [userId, setUserId] = useState('');
   const [zone, setZone] = useState<EdZone>('GENERAL');
   const [shiftFunction, setShiftFunction] = useState<ShiftFunction>('ZONE_NURSE');
+  // Track whether the user has manually picked a zone — if so, the
+  // smart-default sync stops overriding their choice.
+  const [zoneTouched, setZoneTouched] = useState(false);
   const [isShiftLead, setIsShiftLead] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(true);
+
+  // Smart zone default — re-evaluate when shiftFunction changes.
+  useEffect(() => {
+    if (zoneTouched) return;
+    const suggested = zoneForFunction(shiftFunction);
+    if (suggested) setZone(suggested);
+  }, [shiftFunction, zoneTouched]);
 
   useEffect(() => {
     let cancelled = false;
@@ -831,7 +885,7 @@ function QuickAssignDrawer({
             <Field label="Zone">
               <select
                 value={zone}
-                onChange={(e) => setZone(e.target.value as EdZone)}
+                onChange={(e) => { setZone(e.target.value as EdZone); setZoneTouched(true); }}
                 className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
               >
                 {ALL_ZONES.map((z) => <option key={z} value={z}>{z}</option>)}
@@ -877,6 +931,131 @@ function QuickAssignDrawer({
           >
             {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             Assign
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Edit Assignment Drawer
+   Inline edit for an existing shift-assignment row. Changes zone /
+   function / shift-lead flag in place via PUT /shifts/{id}, so the CN
+   no longer has to remove + re-add a staff member to change their
+   zone (which used to fail because the user-picker filters out
+   already-assigned staff).
+   ════════════════════════════════════════════════════════════════════ */
+
+interface EditAssignmentDrawerProps {
+  assignment: ShiftAssignmentResponse;
+  onClose: () => void;
+  onSaved: () => void;
+  onError: (msg: string) => void;
+}
+
+function EditAssignmentDrawer({
+  assignment, onClose, onSaved, onError,
+}: EditAssignmentDrawerProps) {
+  const [zone, setZone] = useState<EdZone>(assignment.zone as EdZone);
+  const [shiftFunction, setShiftFunction] = useState<ShiftFunction>(assignment.shiftFunction as ShiftFunction);
+  const [zoneTouched, setZoneTouched] = useState(false);
+  const [isShiftLead, setIsShiftLead] = useState(!!assignment.isShiftLead);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Same smart default as the assign drawer — if the CN changes
+  // function to e.g. TRIAGE_NURSE and hasn't manually picked a zone,
+  // snap the zone to match.
+  useEffect(() => {
+    if (zoneTouched) return;
+    const suggested = zoneForFunction(shiftFunction);
+    if (suggested) setZone(suggested);
+  }, [shiftFunction, zoneTouched]);
+
+  const submit = async () => {
+    setSubmitting(true);
+    try {
+      const body: CreateShiftAssignmentRequest = {
+        userId: assignment.userId,
+        zone, shiftFunction, isShiftLead,
+        shiftDate: assignment.shiftDate,
+        shiftPeriod: assignment.shiftPeriod,
+      };
+      await shiftApi.update(assignment.id, body);
+      onSaved();
+    } catch (e: any) {
+      onError(e?.message ?? 'Failed to update.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
+      <div className="bg-white w-full sm:max-w-md rounded-2xl shadow-xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-bold uppercase text-gray-400">Edit assignment</div>
+            <div className="text-sm font-bold text-gray-900">
+              {assignment.userName} · {assignment.shiftDate} · {assignment.shiftPeriod} shift
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="space-y-3 text-sm">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Zone">
+              <select
+                value={zone}
+                onChange={(e) => { setZone(e.target.value as EdZone); setZoneTouched(true); }}
+                className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+              >
+                {ALL_ZONES.map((z) => <option key={z} value={z}>{z}</option>)}
+              </select>
+            </Field>
+            <Field label="Function">
+              <select
+                value={shiftFunction}
+                onChange={(e) => setShiftFunction(e.target.value as ShiftFunction)}
+                className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+              >
+                {ALL_FUNCTIONS.map((f) => (
+                  <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={isShiftLead}
+              onChange={(e) => setIsShiftLead(e.target.checked)}
+            />
+            <span className="text-gray-700">Shift-lead for this shift</span>
+            <span className="text-[10px] text-gray-400">
+              (clears any other badge holder)
+            </span>
+          </label>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={submitting}
+            className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 inline-flex items-center gap-1.5"
+          >
+            {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            Save changes
           </button>
         </div>
       </div>

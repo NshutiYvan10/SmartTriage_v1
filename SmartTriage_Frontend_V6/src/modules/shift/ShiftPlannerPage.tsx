@@ -88,6 +88,18 @@ function defaultFunctionFor(role: string): ShiftFunction {
   return isDoctorRole(role) ? 'PRIMARY_DOCTOR' : 'ZONE_NURSE';
 }
 
+/**
+ * Smart zone default — when the shift function clearly maps to a
+ * Tier-1 zone, the new draft row should start in that zone instead
+ * of GENERAL. Prevents the "I added a triage nurse but the TRIAGE
+ * zone is still empty" coverage GAP caused by the GENERAL default.
+ *
+ * Only TRIAGE_NURSE has an unambiguous zone mapping today.
+ */
+function defaultZoneFor(fn: ShiftFunction): EdZone {
+  return fn === 'TRIAGE_NURSE' ? 'TRIAGE' : 'GENERAL';
+}
+
 /* ═══════════════════════════════════════════════════════════════ */
 
 interface DraftTemplate {
@@ -212,12 +224,13 @@ export function ShiftPlannerPage() {
       showToast(`${u.firstName} ${u.lastName} is already in this template`, 'error');
       return;
     }
+    const fn = defaultFunctionFor(u.role);
     const newAssignment: ShiftTemplateAssignmentDto = {
       userId: u.id,
       userName: `${u.firstName} ${u.lastName}`,
       userEmail: u.email,
-      zone: 'GENERAL',
-      shiftFunction: defaultFunctionFor(u.role),
+      zone: defaultZoneFor(fn),
+      shiftFunction: fn,
       isShiftLead: false,
     };
     setDraft((prev) => ({ ...prev, assignments: [...prev.assignments, newAssignment] }));
@@ -671,12 +684,23 @@ export function ShiftPlannerPage() {
                               ))}
                             </select>
 
-                            {/* Function */}
+                            {/* Function — also snaps the zone to match
+                                when the new function clearly maps to a
+                                Tier-1 zone AND the current zone is the
+                                generic GENERAL default. If the CN has
+                                already picked a non-default zone, we
+                                respect that choice. */}
                             <select
                               value={a.shiftFunction}
-                              onChange={(e) =>
-                                updateAssignment(a.userId, { shiftFunction: e.target.value as ShiftFunction })
-                              }
+                              onChange={(e) => {
+                                const newFn = e.target.value as ShiftFunction;
+                                const suggestedZone = defaultZoneFor(newFn);
+                                const patch: Partial<ShiftTemplateAssignmentDto> = { shiftFunction: newFn };
+                                if (a.zone === 'GENERAL' && suggestedZone !== 'GENERAL') {
+                                  patch.zone = suggestedZone;
+                                }
+                                updateAssignment(a.userId, patch);
+                              }}
                               className={selectClass}
                             >
                               {SHIFT_FUNCTIONS
