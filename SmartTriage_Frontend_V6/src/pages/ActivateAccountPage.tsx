@@ -184,23 +184,41 @@ export function ActivateAccountPage() {
             </div>
           )}
 
+          {/*
+            Anti-autofill defence: Chrome (and most password managers)
+            IGNORE autocomplete="off" on text fields when they have
+            remembered credentials for the current origin — which is
+            why the previous workaround leaked the admin's email into
+            the invitee's Last Name field. The reliable mitigation is:
+
+              - autoComplete="new-password" — Chrome explicitly excludes
+                this value from its autofill heuristic, and unlike "off"
+                it cannot be silently overridden.
+              - data-1p-ignore + data-lpignore — instruct 1Password and
+                LastPass to skip these inputs.
+              - No `name` attribute at all — without a name there is no
+                pattern for Chrome to match to a "family-name" /
+                "given-name" field. The form is submitted from React
+                state, not from form-data, so the name is purely
+                decorative.
+
+            Visual + invisible honeypot input below the two fields
+            absorbs any autofill that does sneak through; whatever lands
+            there is discarded.
+          */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-white/40 mb-1.5">First Name *</label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
                 <input
+                  type="text"
                   value={form.firstName}
                   onChange={(e) => setForm({ ...form, firstName: e.target.value })}
                   placeholder="John"
-                  // autoComplete="off" + a non-standard name= keeps the
-                  // browser from auto-filling the invitee's name fields
-                  // with the currently-logged-in admin's profile data
-                  // (the bug that surfaced as "Last Name pre-filled with
-                  // admin's email"). Browsers ignore custom names for
-                  // their autofill heuristics.
-                  name="invitee-given-name"
-                  autoComplete="off"
+                  autoComplete="new-password"
+                  data-1p-ignore
+                  data-lpignore="true"
                   className="w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:border-cyan-500/50 transition-colors"
                 />
               </div>
@@ -210,16 +228,30 @@ export function ActivateAccountPage() {
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
                 <input
+                  type="text"
                   value={form.lastName}
                   onChange={(e) => setForm({ ...form, lastName: e.target.value })}
                   placeholder="Doe"
-                  name="invitee-family-name"
-                  autoComplete="off"
+                  autoComplete="new-password"
+                  data-1p-ignore
+                  data-lpignore="true"
                   className="w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:border-cyan-500/50 transition-colors"
                 />
               </div>
             </div>
           </div>
+
+          {/* Honeypot — invisible decoy that absorbs Chrome's email-fill
+              heuristic when it ignores autoComplete="new-password" on
+              the real fields. Position off-screen so users never see
+              or interact with it. The form does not read its value. */}
+          <input
+            type="text"
+            tabIndex={-1}
+            aria-hidden="true"
+            autoComplete="username"
+            style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', opacity: 0 }}
+          />
 
           <div>
             <label className="block text-[10px] font-bold uppercase tracking-wider text-white/40 mb-1.5">Password *</label>

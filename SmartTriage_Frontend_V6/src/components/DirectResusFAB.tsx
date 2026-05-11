@@ -41,8 +41,11 @@ import type { UserRole } from '@/types/roles';
  * paramedic, not a nurse or doctor. Blocking them would defeat the
  * whole point of this pathway.
  */
+// SUPER_ADMIN deliberately excluded — the system administrator is a
+// cross-tenant national role with no operational floor duties; they
+// should never be opening a resus admission. Direct Resus is a
+// floor-level emergency surface for clinical / front-desk staff.
 const CLINICAL_ROLES: UserRole[] = [
-  'SUPER_ADMIN',
   'HOSPITAL_ADMIN',
   'DOCTOR',
   'NURSE',

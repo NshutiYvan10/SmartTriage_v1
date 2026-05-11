@@ -80,6 +80,26 @@ const DEPARTMENTS = [
   'IT / Informatics',
 ];
 
+/**
+ * Role-aware department picker rules:
+ *
+ *   LAB_TECHNICIAN → can only be in "Laboratory". The role IS the
+ *                    department; offering anything else is a misconfig
+ *                    that breaks downstream Lab-tech dashboards.
+ *   PARAMEDIC      → no department; they work cross-department in
+ *                    the ambulance + ED bay. Field is shown but
+ *                    disabled so admins know the slot is intentional,
+ *                    not forgotten.
+ *   otherwise      → full list.
+ */
+function departmentsForRole(role: string): string[] {
+  if (role === 'LAB_TECHNICIAN') return ['Laboratory'];
+  return DEPARTMENTS;
+}
+function departmentDisabledForRole(role: string): boolean {
+  return role === 'PARAMEDIC';
+}
+
 export function UserManagement() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const authUser = useAuthStore((s) => s.user);
@@ -360,7 +380,22 @@ export function UserManagement() {
               </div>
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Role *</label>
-                <select value={inviteForm.role} onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value, designation: '' })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
+                <select
+                  value={inviteForm.role}
+                  onChange={(e) => {
+                    const newRole = e.target.value;
+                    // Role-aware department auto-fill:
+                    //   LAB_TECHNICIAN → snap to Laboratory (the only valid option)
+                    //   PARAMEDIC      → clear (field will be disabled)
+                    //   anything else  → keep current value
+                    const newDept = newRole === 'LAB_TECHNICIAN' ? 'Laboratory'
+                      : newRole === 'PARAMEDIC' ? ''
+                      : inviteForm.department;
+                    setInviteForm({ ...inviteForm, role: newRole, designation: '', department: newDept });
+                  }}
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`}
+                  style={glassInner}
+                >
                   {rolesAvailableTo(authUser?.role).map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
                 </select>
               </div>
@@ -373,9 +408,17 @@ export function UserManagement() {
               </div>
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Department</label>
-                <select value={inviteForm.department} onChange={(e) => setInviteForm({ ...inviteForm, department: e.target.value })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
-                  <option value="">Select department...</option>
-                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                <select
+                  value={inviteForm.department}
+                  onChange={(e) => setInviteForm({ ...inviteForm, department: e.target.value })}
+                  disabled={departmentDisabledForRole(inviteForm.role)}
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  style={glassInner}
+                >
+                  <option value="">
+                    {departmentDisabledForRole(inviteForm.role) ? 'N/A — paramedics are cross-department' : 'Select department...'}
+                  </option>
+                  {departmentsForRole(inviteForm.role).map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
             </div>
@@ -444,7 +487,18 @@ export function UserManagement() {
               </div>
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Role</label>
-                <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value, designation: '' })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
+                <select
+                  value={editForm.role}
+                  onChange={(e) => {
+                    const newRole = e.target.value;
+                    const newDept = newRole === 'LAB_TECHNICIAN' ? 'Laboratory'
+                      : newRole === 'PARAMEDIC' ? ''
+                      : editForm.department;
+                    setEditForm({ ...editForm, role: newRole, designation: '', department: newDept });
+                  }}
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`}
+                  style={glassInner}
+                >
                   {rolesAvailableTo(authUser?.role).map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
                 </select>
               </div>
@@ -457,9 +511,17 @@ export function UserManagement() {
               </div>
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Department</label>
-                <select value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
-                  <option value="">Select department...</option>
-                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                <select
+                  value={editForm.department}
+                  onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
+                  disabled={departmentDisabledForRole(editForm.role)}
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  style={glassInner}
+                >
+                  <option value="">
+                    {departmentDisabledForRole(editForm.role) ? 'N/A — paramedics are cross-department' : 'Select department...'}
+                  </option>
+                  {departmentsForRole(editForm.role).map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
             </div>
