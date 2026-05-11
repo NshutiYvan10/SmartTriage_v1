@@ -37,6 +37,9 @@ import { useAuthStore } from '@/store/authStore';
 export function LeaveApprovalsPage() {
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
+  // HOSPITAL_ADMIN sees the queue read-only; only CHARGE_NURSE may decide.
+  const isReadOnly = user?.role === 'HOSPITAL_ADMIN'
+    && user?.designation !== 'CHARGE_NURSE';
 
   const [queue, setQueue] = useState<StaffLeaveResponse[]>([]);
   const [loading, setLoading] = useState(false);
@@ -115,7 +118,7 @@ export function LeaveApprovalsPage() {
 
       <ul className="space-y-3">
         {queue.map((l) => (
-          <LeaveApprovalRow key={l.id} leave={l} onChange={refresh} />
+          <LeaveApprovalRow key={l.id} leave={l} onChange={refresh} readOnly={isReadOnly} />
         ))}
       </ul>
     </div>
@@ -125,10 +128,11 @@ export function LeaveApprovalsPage() {
 /* ─── Single approval row ─── */
 
 function LeaveApprovalRow({
-  leave, onChange,
+  leave, onChange, readOnly,
 }: {
   leave: StaffLeaveResponse;
   onChange: () => Promise<void>;
+  readOnly: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -203,22 +207,30 @@ function LeaveApprovalRow({
       )}
 
       <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
-        <button
-          onClick={reject}
-          disabled={busy}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 disabled:opacity-50"
-        >
-          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
-          Reject
-        </button>
-        <button
-          onClick={approve}
-          disabled={busy}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
-        >
-          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-          Approve leave
-        </button>
+        {readOnly ? (
+          <span className="text-[11px] italic text-gray-500">
+            Decisions are made by the Charge Nurse.
+          </span>
+        ) : (
+          <>
+            <button
+              onClick={reject}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
+              Reject
+            </button>
+            <button
+              onClick={approve}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+              Approve leave
+            </button>
+          </>
+        )}
       </div>
     </li>
   );

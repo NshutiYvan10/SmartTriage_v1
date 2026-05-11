@@ -99,9 +99,9 @@ public class StaffLeaveController {
                 "Leave cancelled", leaveService.cancel(leaveId, actor, approvalAuthority)));
     }
 
-    /** Pending-approval queue for a hospital. */
+    /** Pending-approval queue for a hospital. Read for HA + CN; only CN can decide. */
     @GetMapping("/hospital/{hospitalId}/pending")
-    @PreAuthorize("@shiftAssignmentAuthz.canAssign(authentication, #hospitalId)")
+    @PreAuthorize("@shiftAssignmentAuthz.canViewShift(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<StaffLeaveDtos.Response>>> listPending(
             @PathVariable UUID hospitalId) {
         return ResponseEntity.ok(ApiResponse.success(leaveService.listPending(hospitalId)));

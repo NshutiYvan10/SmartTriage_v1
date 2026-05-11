@@ -182,6 +182,12 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'settings', 'notifications', 'profile',
     'audit-trail', 'reports', 'quality',
     'safety-incidents', 'med-safety-overrides', 'moh-reports',
+    // Shift management — READ-ONLY governance view. The editor UI
+    // suppresses mutate controls when role === 'HOSPITAL_ADMIN'; the
+    // backend ShiftAssignmentAuthz.canAssign denies mutation attempts
+    // for defence-in-depth (see canViewShift vs canAssign).
+    'shift-planner', 'shift-calendar', 'shift-assignment',
+    'swap-approvals', 'leave-approvals', 'delegations',
   ],
 
   // ── Full clinical access ──

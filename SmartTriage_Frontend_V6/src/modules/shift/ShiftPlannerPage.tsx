@@ -123,6 +123,13 @@ export function ShiftPlannerPage() {
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
 
+  // Read-only mode: HOSPITAL_ADMIN sees the page for governance but
+  // cannot mutate. Mutations are owned by the on-floor Charge Nurse
+  // (and by extension the shift-lead / delegated users — the backend
+  // ShiftAssignmentAuthz.canAssign is the authoritative gate).
+  const isReadOnly = user?.role === 'HOSPITAL_ADMIN'
+    && user?.designation !== 'CHARGE_NURSE';
+
   const [templates, setTemplates] = useState<Record<ShiftPeriod, ShiftTemplateResponse | null>>({
     DAY: null,
     NIGHT: null,
@@ -146,33 +153,41 @@ export function ShiftPlannerPage() {
   const loadData = useCallback(async () => {
     if (!hospitalId) return;
     setLoading(true);
-    try {
-      const [templateList, userPage] = await Promise.all([
-        shiftTemplateApi.listForHospital(hospitalId),
-        userApi.getByHospital(hospitalId, 0, 200),
-      ]);
 
-      const byPeriod: Record<ShiftPeriod, ShiftTemplateResponse | null> = { DAY: null, NIGHT: null };
-      templateList.forEach((t) => {
+    // Defensive: load templates + users independently. Previously these
+    // shared a Promise.all, so a single 403 on templates wiped the
+    // entire page (including the staff pool). Each fetch now reports
+    // its own failure without taking the other down.
+    const [tplResult, userResult] = await Promise.allSettled([
+      shiftTemplateApi.listForHospital(hospitalId),
+      userApi.getByHospital(hospitalId, 0, 200),
+    ]);
+
+    const byPeriod: Record<ShiftPeriod, ShiftTemplateResponse | null> = { DAY: null, NIGHT: null };
+    if (tplResult.status === 'fulfilled') {
+      tplResult.value.forEach((t) => {
         if (t.active) byPeriod[t.shiftPeriod] = t;
       });
       setTemplates(byPeriod);
+      const existing = byPeriod[activePeriod];
+      setDraft(existing ? toDraft(existing) : emptyDraft(activePeriod));
+    } else {
+      console.error('[ShiftPlanner] Templates load failed:', tplResult.reason);
+      showToast('Failed to load shift templates', 'error');
+    }
 
+    if (userResult.status === 'fulfilled') {
       setUsers(
-        userPage.content.filter((u: UserResponse) =>
+        userResult.value.content.filter((u: UserResponse) =>
           ['DOCTOR', 'NURSE'].includes(u.role),
         ),
       );
-
-      // Populate draft from loaded template (or empty) for the active period
-      const existing = byPeriod[activePeriod];
-      setDraft(existing ? toDraft(existing) : emptyDraft(activePeriod));
-    } catch (err) {
-      console.error('[ShiftPlanner] Failed to load:', err);
-      showToast('Failed to load shift planner data', 'error');
-    } finally {
-      setLoading(false);
+    } else {
+      console.error('[ShiftPlanner] Staff pool load failed:', userResult.reason);
+      showToast('Failed to load staff pool', 'error');
     }
+
+    setLoading(false);
   }, [hospitalId]); // intentionally excluding activePeriod — switch handler re-syncs
 
   useEffect(() => {
@@ -192,6 +207,7 @@ export function ShiftPlannerPage() {
   /* ── Assignment mutations ── */
 
   const addUserToDraft = (u: UserResponse) => {
+    if (isReadOnly) return;
     if (draft.assignments.some((a) => a.userId === u.id)) {
       showToast(`${u.firstName} ${u.lastName} is already in this template`, 'error');
       return;
@@ -208,6 +224,7 @@ export function ShiftPlannerPage() {
   };
 
   const removeFromDraft = (userId: string) => {
+    if (isReadOnly) return;
     setDraft((prev) => ({
       ...prev,
       assignments: prev.assignments.filter((a) => a.userId !== userId),
@@ -215,6 +232,7 @@ export function ShiftPlannerPage() {
   };
 
   const updateAssignment = (userId: string, patch: Partial<ShiftTemplateAssignmentDto>) => {
+    if (isReadOnly) return;
     setDraft((prev) => ({
       ...prev,
       assignments: prev.assignments.map((a) =>
@@ -225,6 +243,7 @@ export function ShiftPlannerPage() {
 
   /** Radio-style lead toggle: only one row can be the lead at a time. */
   const setLead = (userId: string) => {
+    if (isReadOnly) return;
     setDraft((prev) => ({
       ...prev,
       assignments: prev.assignments.map((a) => ({
@@ -360,6 +379,16 @@ export function ShiftPlannerPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Read-only banner (Hospital Admin governance view) */}
+      {isReadOnly && (
+        <div className="rounded-2xl px-5 py-3 bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-sm font-semibold flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <span>
+            <strong>Read-only view.</strong> Shift planning is owned by the Charge Nurse — you can review the roster here but cannot edit it.
+          </span>
+        </div>
+      )}
+
       {/* ── Toast ── */}
       {toast && (
         <div
@@ -718,7 +747,11 @@ export function ShiftPlannerPage() {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {draft.id && (
+                {/* Mutate buttons hidden in read-only mode (HOSPITAL_ADMIN
+                    viewing for governance). The backend
+                    ShiftAssignmentAuthz.canAssign also rejects writes
+                    from non-CN users as a defence-in-depth measure. */}
+                {!isReadOnly && draft.id && (
                   <button
                     onClick={handleDelete}
                     disabled={deleting || saving}
@@ -734,18 +767,25 @@ export function ShiftPlannerPage() {
                     </span>
                   </button>
                 )}
-                <button
-                  onClick={handleSave}
-                  disabled={saving || deleting}
-                  className={`${cardClass} px-4 py-2 text-sm font-bold transition-all
-                    bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500
-                    text-white shadow-lg shadow-cyan-500/20 disabled:opacity-40 disabled:shadow-none`}
-                >
-                  <span className="flex items-center gap-2">
-                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    {draft.id ? 'Save changes' : 'Create template'}
+                {!isReadOnly && (
+                  <button
+                    onClick={handleSave}
+                    disabled={saving || deleting}
+                    className={`${cardClass} px-4 py-2 text-sm font-bold transition-all
+                      bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500
+                      text-white shadow-lg shadow-cyan-500/20 disabled:opacity-40 disabled:shadow-none`}
+                  >
+                    <span className="flex items-center gap-2">
+                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      {draft.id ? 'Save changes' : 'Create template'}
+                    </span>
+                  </button>
+                )}
+                {isReadOnly && (
+                  <span className={`text-xs italic ${text.muted}`}>
+                    Viewing only — shift changes are made by the Charge Nurse.
                   </span>
-                </button>
+                )}
               </div>
             </div>
           </div>

@@ -183,58 +183,39 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
   ];
 
   // ─── Per-role access matrix for the Shift Management section ───
-  // The sidebar surfaces three classes of shift items:
   //
-  //   1. Self-service (every staff member who works shifts):
-  //      my-schedule (your own roster) and shift-calendar (read the
-  //      team week, no edits). Visibility from ROLE_PAGES on the
-  //      user's role.
+  //   • Self-service (every staff member who works shifts):
+  //     my-schedule, shift-calendar — visibility from ROLE_PAGES.
   //
-  //   2. Charge-Nurse-only (the unit-management surfaces):
-  //      shift-assignment (Shift Zones — also exposes zone reassignment
-  //      and shift-lead badge transfer, abuse risk if regular nurses
-  //      could change others' zones), shift-planner (rota templates),
-  //      swap-approvals, leave-approvals, delegations. Granted via
-  //      Designation.CHARGE_NURSE only — never via Role. Hospital
-  //      admins retain backend fallback authority for emergencies via
-  //      ShiftAssignmentAuthz, but the sidebar does not surface these
-  //      by default.
+  //   • Charge Nurse (CHARGE_NURSE designation): full mutate authority
+  //     on every shift surface — calendar, templates, swap/leave
+  //     approvals, delegations.
   //
-  //   3. Charge-Nurse + Hospital-Admin: zone-transfers — Hospital
-  //      Admin needs cross-zone transfer visibility for governance.
-  //      SUPER_ADMIN is intentionally excluded: super-admin is a
-  //      system-level role (multi-hospital configuration, governance,
-  //      MoH reporting), not an operational floor role; pending
-  //      zone transfers are floor-level concerns the on-site
-  //      Hospital Admin owns.
+  //   • Hospital Admin: read-only governance view. The pages render
+  //     with mutate controls suppressed; ShiftAssignmentAuthz on the
+  //     backend rejects any write attempt for defence-in-depth.
+  //
+  //   • SUPER_ADMIN: NOT granted any shift-management visibility.
+  //     Cross-tenant national role, no floor duties.
   const isChargeNurse = user?.designation === 'CHARGE_NURSE';
   const isHospitalAdmin = userRole === 'HOSPITAL_ADMIN';
 
-  // CN-only sidebar items — NEVER fall through to the user's
-  // ROLE_PAGES grant. Required: CHARGE_NURSE designation.
-  const chargeNurseOnly = new Set([
-    'shift-calendar',     // Interactive calendar — single planning surface for the CN
-    'shift-planner',      // Rota templates (renamed from "Shift Planner" → "Shift Templates")
-    'swap-approvals',     // Approve / decline swap requests
-    'leave-approvals',    // Approve / decline leave requests
-    'delegations',        // Configure CN authority delegations
+  // Shift surfaces visible to CN (full access) and HOSPITAL_ADMIN (read-only).
+  const chargeNurseOrHospitalAdmin = new Set([
+    'shift-calendar',
+    'shift-planner',
+    'swap-approvals',
+    'leave-approvals',
+    'delegations',
+    'zone-transfers',
   ]);
-
-  // CN-or-Hospital-Admin sidebar items.
-  // SUPER_ADMIN is NOT included — super admin is the system role, not
-  // an operational floor role. Pending zone transfers are floor-level.
-  const chargeNurseOrHospitalAdmin = new Set(['zone-transfers']);
 
   // Filter sections based on role permissions
   const sections = allSections
     .map((section) => ({
       ...section,
       items: section.items.filter((item) => {
-        // Charge-nurse-only — admins do NOT see these by default.
-        if (chargeNurseOnly.has(item.id)) {
-          return isChargeNurse;
-        }
-        // Charge Nurse + Hospital Admin — Zone Transfers governance.
+        // CN + HOSPITAL_ADMIN shift surfaces.
         if (chargeNurseOrHospitalAdmin.has(item.id)) {
           return isChargeNurse || isHospitalAdmin;
         }

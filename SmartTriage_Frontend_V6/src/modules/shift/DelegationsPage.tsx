@@ -47,6 +47,10 @@ import { useAuthStore } from '@/store/authStore';
 export function DelegationsPage() {
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
+  // HOSPITAL_ADMIN sees delegations read-only; only CHARGE_NURSE may
+  // create or revoke them.
+  const isReadOnly = user?.role === 'HOSPITAL_ADMIN'
+    && user?.designation !== 'CHARGE_NURSE';
 
   const [active, setActive] = useState<ChargeNurseDelegationResponse[]>([]);
   const [myIssued, setMyIssued] = useState<ChargeNurseDelegationResponse[]>([]);
@@ -114,13 +118,15 @@ export function DelegationsPage() {
             {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
             Refresh
           </button>
-          <button
-            onClick={() => setShowIssueForm(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Issue delegation
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={() => setShowIssueForm(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Issue delegation
+            </button>
+          )}
         </div>
       </header>
 
@@ -149,7 +155,7 @@ export function DelegationsPage() {
         )}
         <ul className="space-y-3">
           {active.map((d) => (
-            <DelegationRow key={d.id} delegation={d} active onChange={refresh} />
+            <DelegationRow key={d.id} delegation={d} active onChange={refresh} readOnly={isReadOnly} />
           ))}
         </ul>
       </section>
@@ -172,7 +178,7 @@ export function DelegationsPage() {
         )}
         <ul className="space-y-3">
           {myIssued.map((d) => (
-            <DelegationRow key={d.id} delegation={d} active={false} onChange={refresh} />
+            <DelegationRow key={d.id} delegation={d} active={false} onChange={refresh} readOnly={isReadOnly} />
           ))}
         </ul>
       </section>
@@ -206,11 +212,12 @@ function EmptyState({ label, sub }: { label: string; sub?: string }) {
 /* ─── Delegation row ─── */
 
 function DelegationRow({
-  delegation, active, onChange,
+  delegation, active, onChange, readOnly = false,
 }: {
   delegation: ChargeNurseDelegationResponse;
   active: boolean;
   onChange: () => Promise<void>;
+  readOnly?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -279,7 +286,7 @@ function DelegationRow({
           ].join(' ')}>
             {status.label}
           </span>
-          {active && delegation.currentlyActive && !delegation.revokedAt && (
+          {!readOnly && active && delegation.currentlyActive && !delegation.revokedAt && (
             <button
               onClick={revoke}
               disabled={busy}

@@ -31,7 +31,7 @@ public class ShiftTemplateController {
 
     /** List all active templates for a hospital (typically DAY + NIGHT). */
     @GetMapping("/hospital/{hospitalId}")
-    @PreAuthorize("@shiftAssignmentAuthz.canManageTemplates(authentication, #hospitalId)")
+    @PreAuthorize("@shiftAssignmentAuthz.canViewShift(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<ShiftTemplateResponse>>> listForHospital(
             @PathVariable UUID hospitalId) {
         return ResponseEntity.ok(ApiResponse.success(shiftTemplateService.listForHospital(hospitalId)));

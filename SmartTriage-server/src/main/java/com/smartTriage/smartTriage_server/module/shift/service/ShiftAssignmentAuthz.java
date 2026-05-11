@@ -47,10 +47,18 @@ import java.util.UUID;
  *   <li>An <b>acting Charge Nurse</b> with a currently-valid
  *       {@link com.smartTriage.smartTriage_server.module.shift.entity.ChargeNurseDelegation}
  *       row pointing at them — used when the on-duty CN has formally
- *       delegated authority for a defined window (off-site meeting,
- *       short absence) without leaving the unit without a single point
- *       of authority.</li>
+ *       delegated authority for a defined window.</li>
  * </ol>
+ *
+ * <p><b>SUPER_ADMIN and HOSPITAL_ADMIN intentionally have no mutate authority
+ * here.</b> By organisational policy:
+ *
+ * <ul>
+ *   <li>HOSPITAL_ADMIN can <em>view</em> shift surfaces for governance via
+ *       {@link #canViewShift(Authentication, UUID)} — but cannot edit.</li>
+ *   <li>SUPER_ADMIN cannot see or mutate shift-management surfaces at all;
+ *       it is a national / cross-tenant role with no operational floor duties.</li>
+ * </ul>
  *
  * <h2>Exception-safety</h2>
  * This class is invoked by Spring Security's SpEL evaluator, which runs
@@ -95,19 +103,13 @@ public class ShiftAssignmentAuthz {
                 return false;
             }
 
-            // Super admin can always act.
-            if (user.getRole() == Role.SUPER_ADMIN) {
-                return true;
-            }
+            // Policy: SUPER_ADMIN and HOSPITAL_ADMIN do NOT have shift-mutate
+            // authority. SA cannot see these surfaces; HA gets read-only via
+            // canViewShift. Mutations live with the on-floor Charge Nurse and
+            // the temporary CN-equivalents (shift-lead badge, grace window,
+            // formal delegation).
 
             boolean sameHospital = belongsToHospital(user, hospitalId);
-
-            // Hospital admin for the target hospital — fallback authority.
-            // Admins remain accountable even on leave (governance reach is
-            // their job); only clinicians are gated by the leave check below.
-            if (user.getRole() == Role.HOSPITAL_ADMIN && sameHospital) {
-                return true;
-            }
 
             // V44+ off-duty guard: a clinician (DOCTOR / NURSE / etc.) on
             // approved leave covering today is not on the floor. Their
@@ -238,25 +240,46 @@ public class ShiftAssignmentAuthz {
     }
 
     /**
-     * Authority to create / edit / delete templates. Templates describe the
-     * hospital's default roster, so they are an admin-plane concern — only
-     * SUPER_ADMIN and the HOSPITAL_ADMIN for that hospital may mutate them.
-     * The shift-lead can always apply them (via canAssign) but cannot
-     * rewrite them.
+     * Authority to create / edit / delete shift templates. Templates are the
+     * hospital's working roster, so the on-floor Charge Nurse owns them —
+     * same set of allowed actors as {@link #canAssign}. HOSPITAL_ADMIN can
+     * view templates via {@link #canViewShift} but cannot mutate them.
      */
     @Transactional(readOnly = true)
     public boolean canManageTemplates(Authentication authentication, UUID hospitalId) {
+        return canAssign(authentication, hospitalId);
+    }
+
+    /**
+     * Read-only access to shift-management surfaces (templates, calendar,
+     * swap / leave queues). Granted to:
+     *
+     * <ul>
+     *   <li>Everyone who can {@link #canAssign} (CN, shift-lead, etc.).</li>
+     *   <li>HOSPITAL_ADMIN at the same hospital — for governance oversight.
+     *       HA does NOT inherit mutate authority; the editor UI must check
+     *       {@code canAssign} for buttons.</li>
+     * </ul>
+     *
+     * <p>SUPER_ADMIN is intentionally excluded: shift management is a
+     * floor-level concern, not a cross-tenant national one.
+     */
+    @Transactional(readOnly = true)
+    public boolean canViewShift(Authentication authentication, UUID hospitalId) {
         try {
             User user = currentUser(authentication);
             if (user == null || hospitalId == null) {
                 return false;
             }
-            if (user.getRole() == Role.SUPER_ADMIN) {
+            // HOSPITAL_ADMIN read-only.
+            if (user.getRole() == Role.HOSPITAL_ADMIN
+                    && belongsToHospital(user, hospitalId)) {
                 return true;
             }
-            return user.getRole() == Role.HOSPITAL_ADMIN && belongsToHospital(user, hospitalId);
+            // Anything that grants mutate authority also grants view.
+            return canAssign(authentication, hospitalId);
         } catch (Exception e) {
-            log.error("canManageTemplates evaluation error for hospital {}: {}",
+            log.error("canViewShift evaluation error for hospital {}: {}",
                     hospitalId, e.getMessage(), e);
             return false;
         }

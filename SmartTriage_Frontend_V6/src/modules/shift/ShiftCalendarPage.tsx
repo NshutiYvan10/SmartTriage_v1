@@ -109,8 +109,9 @@ export function ShiftCalendarPage() {
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const isChargeNurse = user?.designation === 'CHARGE_NURSE';
-  const isHospitalAdmin = user?.role === 'HOSPITAL_ADMIN';
-  const canEdit = isChargeNurse || isHospitalAdmin || user?.role === 'SUPER_ADMIN';
+  // Only the on-floor Charge Nurse may mutate. HOSPITAL_ADMIN can
+  // view (read-only); SUPER_ADMIN has no access to shift surfaces.
+  const canEdit = isChargeNurse;
 
   const [cursor, setCursor] = useState<Date>(() => startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState<string>(() => fmtIso(new Date()));

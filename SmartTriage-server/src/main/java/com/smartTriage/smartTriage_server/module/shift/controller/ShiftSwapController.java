@@ -97,9 +97,9 @@ public class ShiftSwapController {
                 swapService.listHistoryForUser(currentUser().getId())));
     }
 
-    /** CN approval queue at this hospital. */
+    /** CN approval queue at this hospital. Read for HA + CN; only CN can decide. */
     @GetMapping("/hospital/{hospitalId}/charge-queue")
-    @PreAuthorize("@shiftAssignmentAuthz.canAssign(authentication, #hospitalId)")
+    @PreAuthorize("@shiftAssignmentAuthz.canViewShift(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<ShiftSwapDtos.Response>>> chargeQueue(
             @PathVariable UUID hospitalId) {
         return ResponseEntity.ok(ApiResponse.success(
