@@ -35,6 +35,8 @@ public class DeviceResponse {
     private String location;
     /** V53 — admin inventory flag. true = active pool. */
     private boolean inService;
+    /** V54 — admin triage-zone flag. true = surfaces in triage form's monitor picker. */
+    private boolean triageMonitor;
     private int heartbeatTimeoutSeconds;
     private int dataIntervalSeconds;
     private String notes;

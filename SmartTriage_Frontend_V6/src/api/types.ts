@@ -1039,6 +1039,8 @@ export interface DeviceResponse {
   status: DeviceStatus;
   /** V53 — admin inventory flag. true = active pool. */
   inService: boolean;
+  /** V54 — admin triage-zone flag. true = surfaces in triage form's monitor picker. */
+  triageMonitor: boolean;
   firmwareVersion: string;
   macAddress: string;
   location: string;

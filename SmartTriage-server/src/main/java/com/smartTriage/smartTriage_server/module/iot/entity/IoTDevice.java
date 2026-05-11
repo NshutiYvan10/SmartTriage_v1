@@ -119,6 +119,17 @@ public class IoTDevice extends BaseEntity {
     private boolean inService = true;
 
     /**
+     * Admin-controlled triage-zone flag (V54). TRUE means this physical
+     * device sits in the triage station and is allowed to feed the
+     * "Pull from Monitor" flow inside the triage form. The flag is
+     * orthogonal to assignedBed — a triage-zone monitor is shared across
+     * incoming patients, not pinned to a single bed.
+     */
+    @Column(name = "triage_monitor", nullable = false)
+    @Builder.Default
+    private boolean triageMonitor = false;
+
+    /**
      * The bed this device is permanently assigned to (null = portable /
      * unassigned). When a patient is placed in this bed, BedService
      * auto-creates a DeviceSession so vitals flow without a manual nurse

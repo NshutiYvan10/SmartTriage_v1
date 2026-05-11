@@ -34,6 +34,7 @@ public final class IoTMapper {
                 .macAddress(device.getMacAddress())
                 .location(device.getLocation())
                 .inService(device.isInService())
+                .triageMonitor(device.isTriageMonitor())
                 .heartbeatTimeoutSeconds(device.getHeartbeatTimeoutSeconds())
                 .dataIntervalSeconds(device.getDataIntervalSeconds())
                 .notes(device.getNotes())

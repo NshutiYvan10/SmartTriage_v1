@@ -13,6 +13,11 @@ import { useTheme } from '@/hooks/useTheme';
 import { alertApi } from '@/api/alerts';
 import { vitalApi } from '@/api/vitals';
 import { triageApi } from '@/api/triage';
+import { iotApi } from '@/api/iot';
+import { useAuthStore } from '@/store/authStore';
+import StabilizeAndPullModal, { type PulledVitals } from './StabilizeAndPullModal';
+import type { VitalKey } from '@/lib/vitalStability';
+import type { DeviceResponse } from '@/api/types';
 import {
   validateTEWSInputs,
   getAbnormalValidations,
@@ -305,6 +310,50 @@ export function PediatricTriageForm() {
   const [bloodGlucose, setBloodGlucose] = useState('');
   const [weightVal, setWeightVal] = useState(patient?.weight?.toString() || '');
   const [heightVal, setHeightVal] = useState('');
+
+  // V54 — "Pull from Monitor" integration (pediatric uses same modal as adult).
+  const authUser = useAuthStore(s => s.user);
+  const [triageMonitors, setTriageMonitors] = useState<DeviceResponse[]>([]);
+  const [pickedMonitorId, setPickedMonitorId] = useState<string | null>(null);
+  const [pullModalOpen, setPullModalOpen] = useState(false);
+  const [lastPullAt, setLastPullAt] = useState<Date | null>(null);
+  const [lastPullDeviceName, setLastPullDeviceName] = useState<string | null>(null);
+  const [vitalsFromMonitor, setVitalsFromMonitor] = useState<Set<VitalKey>>(new Set());
+
+  useEffect(() => {
+    const hospitalId = authUser?.hospitalId;
+    if (!hospitalId) return;
+    let cancelled = false;
+    iotApi.getTriageMonitors(hospitalId).then((monitors) => {
+      if (cancelled) return;
+      setTriageMonitors(monitors);
+      if (monitors.length === 1) setPickedMonitorId(monitors[0].id);
+    }).catch(() => { /* silent — falls back to manual entry */ });
+    return () => { cancelled = true; };
+  }, [authUser?.hospitalId]);
+
+  const pickedMonitor = useMemo(
+    () => triageMonitors.find(d => d.id === pickedMonitorId) ?? null,
+    [triageMonitors, pickedMonitorId],
+  );
+
+  const handlePulledVitals = (pulled: PulledVitals) => {
+    const filled = new Set<VitalKey>();
+    setTewsInput((prev) => {
+      const next = { ...prev };
+      if (pulled.heartRate != null)       { next.heartRate = pulled.heartRate; filled.add('heartRate'); }
+      if (pulled.respiratoryRate != null) { next.respiratoryRate = pulled.respiratoryRate; filled.add('respiratoryRate'); }
+      if (pulled.temperature != null)     { next.temperature = pulled.temperature; filled.add('temperature'); }
+      return next;
+    });
+    if (pulled.systolicBp != null)  { setSystolicBP(String(pulled.systolicBp));   filled.add('systolicBp'); }
+    if (pulled.diastolicBp != null) { setDiastolicBP(String(pulled.diastolicBp)); filled.add('diastolicBp'); }
+    if (pulled.spo2 != null)        { setSpo2(String(pulled.spo2));               filled.add('spo2'); }
+    setLastPullAt(pulled.capturedAt);
+    setLastPullDeviceName(pulled.deviceName);
+    setVitalsFromMonitor(prev => new Set([...prev, ...filled]));
+    setPullModalOpen(false);
+  };
 
   // Round 4a — resolve trigger-sign label + pre-fill vitals from
   // latest reading when the form was opened from a RETRIAGE_REQUIRED
@@ -941,6 +990,42 @@ export function PediatricTriageForm() {
             </div>
           </div>
 
+          {/* V54 — Triage-zone monitor picker + Pull button (pediatric) */}
+          {triageMonitors.length > 0 && patient?.id && (
+            <div className="px-4 py-2.5 border-b border-white/30 flex items-center gap-2.5 flex-wrap" style={{ background: isDark ? 'rgba(12,74,110,0.35)' : 'rgba(236,254,255,0.6)' }}>
+              <Activity className="w-3.5 h-3.5 text-cyan-600" />
+              <span className="text-[10px] font-bold text-cyan-700 uppercase tracking-wider">Triage monitor</span>
+              {triageMonitors.length === 1 ? (
+                <span className="text-[11px] font-bold text-slate-700">{triageMonitors[0].deviceName}</span>
+              ) : (
+                <select
+                  value={pickedMonitorId ?? ''}
+                  onChange={(e) => setPickedMonitorId(e.target.value || null)}
+                  className="text-[11px] font-bold px-2 py-1 rounded-lg border border-cyan-200 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
+                >
+                  <option value="">— pick monitor —</option>
+                  {triageMonitors.map(d => (
+                    <option key={d.id} value={d.id}>{d.deviceName}</option>
+                  ))}
+                </select>
+              )}
+              <button
+                type="button"
+                onClick={() => setPullModalOpen(true)}
+                disabled={!pickedMonitor || pickedMonitor.status === 'OFFLINE'}
+                className="ml-auto px-3 py-1.5 text-[11px] font-bold rounded-lg bg-gradient-to-r from-cyan-600 to-cyan-500 text-white shadow-sm hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:hover:translate-y-0 flex items-center gap-1.5"
+                title={!pickedMonitor ? 'Pick a monitor first' : pickedMonitor.status === 'OFFLINE' ? 'Monitor is not reporting' : 'Open the Stabilize & Pull modal'}
+              >
+                <Activity className="w-3.5 h-3.5" /> Pull from Monitor
+              </button>
+              {lastPullAt && lastPullDeviceName && (
+                <span className="text-[10px] text-slate-500 w-full">
+                  Last pull from {lastPullDeviceName} at {lastPullAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </div>
+          )}
+
           <div className="px-4 py-3 border-b border-white/30" style={{ background: isDark ? 'rgba(12,74,110,0.25)' : 'rgba(248,250,252,0.5)' }}>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
               <div><label className={labelCls}>Mobility</label><select value={tewsInput.mobility} onChange={(e) => setTewsInput({ ...tewsInput, mobility: e.target.value as PedMobility })} className={selectCls}><option value="NORMAL">Normal for age</option><option value="UNABLE">{ageBand === 'INFANT' ? 'Unable to move normally' : 'Unable to walk as normal'}</option></select></div>
@@ -1334,6 +1419,28 @@ export function PediatricTriageForm() {
         </div>
 
       </div>
+
+      {/* V54 — Stabilize & Pull modal (pediatric). Same component, same
+          stability tolerances (Decision 5 — ship adult-tuned, refine later
+          if pediatric RR proves too tight in real use). */}
+      {pullModalOpen && pickedMonitor && patient?.id && (
+        <StabilizeAndPullModal
+          visitId={patient.id}
+          device={pickedMonitor}
+          onClose={() => setPullModalOpen(false)}
+          onUse={handlePulledVitals}
+          skipVitals={(() => {
+            const skip = new Set<VitalKey>();
+            if (tewsInput.heartRate != null && !vitalsFromMonitor.has('heartRate')) skip.add('heartRate');
+            if (tewsInput.respiratoryRate != null && !vitalsFromMonitor.has('respiratoryRate')) skip.add('respiratoryRate');
+            if (systolicBP && !vitalsFromMonitor.has('systolicBp')) skip.add('systolicBp');
+            if (diastolicBP && !vitalsFromMonitor.has('diastolicBp')) skip.add('diastolicBp');
+            if (spo2 && !vitalsFromMonitor.has('spo2')) skip.add('spo2');
+            if (tewsInput.temperature != null && !vitalsFromMonitor.has('temperature')) skip.add('temperature');
+            return skip;
+          })()}
+        />
+      )}
     </div>
   );
 }

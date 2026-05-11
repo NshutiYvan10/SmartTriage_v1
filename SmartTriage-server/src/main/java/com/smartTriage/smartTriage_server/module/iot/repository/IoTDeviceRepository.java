@@ -70,6 +70,16 @@ public interface IoTDeviceRepository extends JpaRepository<IoTDevice, UUID> {
          */
         Optional<IoTDevice> findByAssignedBedIdAndIsActiveTrue(UUID bedId);
 
+        /**
+         * V54 — Triage-zone monitors for a hospital. Only returns devices that
+         * are flagged as triage monitors AND currently in service (admin
+         * inventory state). Status (ONLINE/OFFLINE) is included so the
+         * frontend can disable the picker when the monitor isn't reporting.
+         */
+        @Query("SELECT d FROM IoTDevice d WHERE d.isActive = true AND d.hospital.id = :hospitalId " +
+                        "AND d.triageMonitor = true AND d.inService = true ORDER BY d.deviceName ASC")
+        List<IoTDevice> findTriageMonitors(@Param("hospitalId") UUID hospitalId);
+
         /** All devices assigned to beds in a hospital — admin view. */
         @Query("SELECT d FROM IoTDevice d WHERE d.isActive = true AND d.hospital.id = :hospitalId " +
                         "AND d.assignedBed IS NOT NULL ORDER BY d.assignedBed.zone ASC, d.assignedBed.code ASC")

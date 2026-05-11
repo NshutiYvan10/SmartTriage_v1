@@ -77,6 +77,8 @@ public class TriageService {
     private final RwandaTriageDecisionEngine decisionEngine;
     private final RwandaPediatricTriageDecisionEngine pediatricDecisionEngine;
     private final RealTimeEventPublisher eventPublisher;
+    /** V54 — stops triage-monitor sessions on triage submit so they don't leak. */
+    private final com.smartTriage.smartTriage_server.module.iot.service.DeviceService deviceService;
     private final AlertEscalationService alertEscalationService;
     /** Bootstraps the clinical-signs timeline from each new triage record. */
     private final com.smartTriage.smartTriage_server.module.clinicalsigns.service.ClinicalSignService clinicalSignService;
@@ -392,6 +394,18 @@ public class TriageService {
         } catch (Exception e) {
             log.warn("Bed suggestion failed for visit {}: {}", visit.getVisitNumber(), e.getMessage());
         }
+
+        // V54 — close out any triage-zone monitor session started by the
+        // "Pull from Monitor" flow. Bedside-monitor sessions are left alone.
+        try {
+            deviceService.stopTriageMonitorSessionForVisit(
+                    visit.getId(),
+                    currentUser != null ? currentUser.getFullName() : "System");
+        } catch (Exception e) {
+            log.warn("V54 — non-fatal: triage-monitor session cleanup failed for visit {}: {}",
+                    visit.getVisitNumber(), e.getMessage());
+        }
+
         return TriageRecordMapper.toResponse(record, suggestedBed);
     }
 

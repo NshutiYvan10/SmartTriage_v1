@@ -70,6 +70,8 @@ export function IoTDeviceManagement() {
   // Service-status toggle feedback
   const [serviceLoadingId, setServiceLoadingId] = useState<string | null>(null);
   const [serviceError, setServiceError] = useState<{ deviceId: string; message: string } | null>(null);
+  /** V54 — separate loading state so triage-monitor toggle doesn't conflict with in-service toggle. */
+  const [triageLoadingId, setTriageLoadingId] = useState<string | null>(null);
   // In-app confirm modal for "Take out of service" — replaces the
   // browser-native window.confirm that previously appeared as
   // "localhost says: ..." on dev environments.
@@ -209,6 +211,24 @@ export function IoTDeviceManagement() {
    * reach window.confirm (which renders as a "localhost says:"
    * popup on dev environments).
    */
+  /**
+   * V54 — admin flips the triage-zone monitor flag. Lightweight, no
+   * confirmation needed (it's an inventory tag, not a destructive op).
+   */
+  const handleToggleTriageMonitor = async (device: DeviceResponse) => {
+    setTriageLoadingId(device.id);
+    setServiceError(null);
+    try {
+      await iotApi.setTriageMonitor(device.id, !device.triageMonitor);
+      await loadDevices();
+    } catch (err: any) {
+      console.error('Failed to toggle triage-monitor flag:', err);
+      setServiceError({ deviceId: device.id, message: err?.message || 'Failed to update triage-monitor flag.' });
+    } finally {
+      setTriageLoadingId(null);
+    }
+  };
+
   const handleConfirmTakeOutOfService = async () => {
     if (!outOfServiceTarget) return;
     const device = outOfServiceTarget;
@@ -535,6 +555,28 @@ export function IoTDeviceManagement() {
                         className="flex-1 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
                       >
                         {serviceLoadingId === device.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <PowerOff className="w-3 h-3" />} Take Out of Service
+                      </button>
+                    )}
+                    {/* V54 — Admin: triage-zone monitor toggle (only for in-service devices) */}
+                    {isAdmin && device.inService && (
+                      <button
+                        onClick={() => handleToggleTriageMonitor(device)}
+                        disabled={triageLoadingId === device.id}
+                        title={device.triageMonitor
+                          ? 'This monitor sits at the triage station — nurses can pull vitals from it during triage.'
+                          : 'Mark this monitor as the triage-station device so nurses can pull vitals during triage.'}
+                        className={`flex-1 px-3 py-1.5 text-[10px] font-bold rounded-lg transition-colors flex items-center justify-center gap-1 disabled:opacity-50 ${
+                          device.triageMonitor
+                            ? 'bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border border-purple-500/30'
+                            : isDark
+                              ? 'bg-white/5 text-slate-300 hover:bg-white/10 border border-white/10'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+                        }`}
+                      >
+                        {triageLoadingId === device.id
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <Heart className="w-3 h-3" />}
+                        {device.triageMonitor ? 'Triage Monitor ✓' : 'Mark as Triage Monitor'}
                       </button>
                     )}
                     {/* Clinical staff (Nurse): Assign to Patient for ONLINE devices */}

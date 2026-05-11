@@ -180,6 +180,39 @@ public class DeviceService {
     }
 
     // ====================================================================
+    // V54 — TRIAGE-ZONE MONITOR FLAG
+    // ====================================================================
+
+    /**
+     * Mark / unmark a device as the triage-zone monitor. Only triage-flagged
+     * devices appear in the triage form's "Pull from Monitor" picker.
+     */
+    @Transactional
+    public DeviceResponse setTriageMonitor(UUID deviceId, boolean triageMonitor) {
+        IoTDevice device = findDeviceOrThrow(deviceId);
+        if (triageMonitor == device.isTriageMonitor()) {
+            return IoTMapper.toResponse(device);
+        }
+        device.setTriageMonitor(triageMonitor);
+        device = deviceRepository.save(device);
+        log.info("Device {} (serial {}) triageMonitor set to {}",
+                device.getDeviceName(), device.getSerialNumber(), triageMonitor);
+        publishDeviceStatus(device);
+        return IoTMapper.toResponse(device);
+    }
+
+    /**
+     * List the hospital's triage-zone monitors (triageMonitor=true AND inService=true).
+     * The triage form calls this once to populate the monitor-picker pill.
+     */
+    @Transactional(readOnly = true)
+    public List<DeviceResponse> getTriageMonitors(UUID hospitalId) {
+        return deviceRepository.findTriageMonitors(hospitalId).stream()
+                .map(IoTMapper::toResponse)
+                .toList();
+    }
+
+    // ====================================================================
     // DEVICE AUTHENTICATION
     // ====================================================================
 
@@ -407,6 +440,37 @@ public class DeviceService {
         publishDeviceStatus(freshDevice);
 
         return IoTMapper.toResponse(session);
+    }
+
+    /**
+     * V54 — Stop any active monitoring session for this visit that's bound
+     * to a triage-zone monitor. Called by TriageService after a successful
+     * triage submission so we don't leak sessions started by the "Pull from
+     * Monitor" flow.
+     *
+     * Bedside-monitor sessions (devices flagged as triage_monitor = false,
+     * e.g. those auto-paired via assignedBed) are intentionally left running
+     * — those continue through the patient's stay.
+     */
+    @Transactional
+    public void stopTriageMonitorSessionForVisit(UUID visitId, String endedByName) {
+        sessionRepository.findByVisitIdAndSessionActiveTrueAndIsActiveTrue(visitId)
+                .ifPresent(session -> {
+                    IoTDevice device = session.getDevice();
+                    if (device != null && device.isTriageMonitor()) {
+                        try {
+                            stopMonitoring(session.getId(),
+                                    endedByName != null ? endedByName : "System",
+                                    "Triage complete");
+                            log.info("V54 — triage-monitor session {} stopped for visit {} after triage submit",
+                                    session.getId(), visitId);
+                        } catch (Exception e) {
+                            // Don't let a session-stop failure roll back the triage record.
+                            log.warn("V54 — failed to stop triage-monitor session {} for visit {}: {}",
+                                    session.getId(), visitId, e.getMessage());
+                        }
+                    }
+                });
     }
 
     /**

@@ -31,6 +31,20 @@ export const iotApi = {
   setServiceStatus: (deviceId: string, inService: boolean) =>
     patch<DeviceResponse>(`/iot/devices/${deviceId}/service-status`, { inService }),
 
+  /**
+   * V54 — admin toggles the triage-zone monitor flag.
+   * Only flagged + in-service devices appear in the triage form's monitor picker.
+   */
+  setTriageMonitor: (deviceId: string, triageMonitor: boolean) =>
+    patch<DeviceResponse>(`/iot/devices/${deviceId}/triage-monitor`, { triageMonitor }),
+
+  /**
+   * V54 — list the hospital's triage-zone monitors (flag + in-service).
+   * Called by the triage form once at mount to populate the picker.
+   */
+  getTriageMonitors: (hospitalId: string) =>
+    get<DeviceResponse[]>(`/iot/devices/triage-monitors/${hospitalId}`),
+
   // Monitoring sessions
   startMonitoring: (data: StartMonitoringRequest) =>
     post<DeviceSessionResponse>('/iot/monitoring/start', data),

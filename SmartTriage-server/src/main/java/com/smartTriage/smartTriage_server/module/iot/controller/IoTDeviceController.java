@@ -96,6 +96,32 @@ public class IoTDeviceController {
                 response));
     }
 
+    /**
+     * V54 — admin toggles a device's triage-zone flag.
+     * Body: { "triageMonitor": true | false }
+     */
+    @org.springframework.web.bind.annotation.PatchMapping("/devices/{id}/triage-monitor")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
+    public ResponseEntity<ApiResponse<DeviceResponse>> setTriageMonitor(
+            @PathVariable UUID id,
+            @org.springframework.web.bind.annotation.RequestBody java.util.Map<String, Boolean> body) {
+        boolean triageMonitor = Boolean.TRUE.equals(body.get("triageMonitor"));
+        DeviceResponse response = deviceService.setTriageMonitor(id, triageMonitor);
+        return ResponseEntity.ok(ApiResponse.success(
+                triageMonitor ? "Device marked as triage-zone monitor" : "Device unmarked as triage-zone monitor",
+                response));
+    }
+
+    /**
+     * V54 — list the hospital's triage-zone monitors (in service + flagged).
+     * Called by the triage form to populate the "Pull from Monitor" picker.
+     */
+    @GetMapping("/devices/triage-monitors/{hospitalId}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<List<DeviceResponse>>> getTriageMonitors(@PathVariable UUID hospitalId) {
+        return ResponseEntity.ok(ApiResponse.success(deviceService.getTriageMonitors(hospitalId)));
+    }
+
     /** @deprecated retained as a thin alias for legacy clients; use /service-status. */
     @Deprecated
     @PostMapping("/devices/{id}/power-on")
