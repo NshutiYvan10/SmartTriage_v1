@@ -75,9 +75,10 @@ export function Dashboard() {
     ? { background: 'rgba(8,47,73,0.95)' }
     : { background: 'rgba(248,250,252,1)' };
 
-  // Fetch active visits on mount
-  const fetchActiveVisits = usePatientStore((s) => s.fetchActiveVisits);
-  useEffect(() => { fetchActiveVisits(user?.hospitalId || ''); }, [fetchActiveVisits, user?.hospitalId]);
+  // Hydration is owned by useDataInit + the pre-fetch in
+  // authStore.login(). Dashboard intentionally does NOT trigger its
+  // own fetch — that path used to double-fetch with useDataInit and
+  // contributed to the post-login render flicker.
 
   // Zone-aware filter: DOCTOR/NURSE see only their zone's patients;
   // SUPER_ADMIN/HOSPITAL_ADMIN see all patients.

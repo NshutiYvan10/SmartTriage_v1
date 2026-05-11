@@ -3,6 +3,9 @@ import type { UserRole } from '@/types/roles';
 import { authApi } from '@/api/auth';
 import { shiftApi } from '@/api/shifts';
 import { setTokens, clearTokens, restoreTokens } from '@/api/client';
+import { usePatientStore } from '@/store/patientStore';
+import { useAlertStore } from '@/store/alertStore';
+import { useDeviceStore } from '@/store/deviceStore';
 import type { AuthResponse, EdZone, Role } from '@/api/types';
 
 export interface AuthUser {
@@ -199,12 +202,30 @@ export const useAuthStore = create<AuthState>((set, get) => {
         const user = authResponseToUser(auth);
         localStorage.setItem('st-auth-user', JSON.stringify(user));
         localStorage.setItem('st-active-role', user.role);
-        set({ user, isLoading: false, error: null });
-        // Phase 1 — pull the user's current shift assignment so the
-        // patient list can render in zone-scoped mode immediately.
-        // Best-effort: a failed shift fetch logs but doesn't block
-        // login (off-shift users still need to use the app).
-        get().refreshCurrentShift().catch(() => {});
+        // Set the user first so any subscribed component can render.
+        set({ user, error: null });
+
+        // Pre-fetch dashboard data + shift assignment IN PARALLEL,
+        // and wait for them before resolving login(). The LoginPage
+        // is showing its spinner via `isLoading`; we keep it spinning
+        // until the data is ready, so when LoginPage calls
+        // navigate('/dashboard') the Dashboard renders populated on
+        // its FIRST mount instead of empty-then-flashing-in. Failures
+        // are tolerated — off-shift users and bad networks must still
+        // be able to enter the app, just with whatever data did load.
+        const hospitalId = user.hospitalId ?? '';
+        if (hospitalId) {
+          await Promise.allSettled([
+            usePatientStore.getState().fetchActiveVisits(hospitalId),
+            useAlertStore.getState().fetchAlerts(hospitalId),
+            useDeviceStore.getState().fetchDevicesFromApi(hospitalId),
+            get().refreshCurrentShift(),
+          ]);
+        } else {
+          await get().refreshCurrentShift().catch(() => {});
+        }
+
+        set({ isLoading: false });
         return true;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Login failed';
