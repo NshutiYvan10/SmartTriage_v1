@@ -145,8 +145,24 @@ public class ShiftTemplateService {
         template.setDescription(request.getDescription());
         template.setShiftPeriod(request.getShiftPeriod());
 
-        // Replace assignment rows (orphanRemoval kicks in on clear).
+        // Replace assignment rows. The intuitive `clear() + addAll()`
+        // pattern has a Hibernate flush-ordering trap: Hibernate's
+        // default action order is inserts → updates → deletes, so the
+        // orphan DELETE of an old row queues *after* the INSERT of its
+        // replacement. That trips the unique constraint
+        // uk_shift_template_user (template_id, user_id) whenever a row
+        // is edited (same user, different zone / function), which the
+        // global exception handler then surfaces as the unhelpful
+        // "request conflicts with existing data" message — the exact
+        // symptom a CN hits when changing a staff member's zone in
+        // the template editor.
+        //
+        // The fix is to flush between the clear and the addAll so
+        // Postgres has actually deleted the old rows before the new
+        // ones are inserted.
         template.getAssignments().clear();
+        shiftTemplateRepository.saveAndFlush(template);
+
         List<ShiftTemplateAssignment> rows = buildAssignmentRows(template, request.getAssignments());
         template.getAssignments().addAll(rows);
 

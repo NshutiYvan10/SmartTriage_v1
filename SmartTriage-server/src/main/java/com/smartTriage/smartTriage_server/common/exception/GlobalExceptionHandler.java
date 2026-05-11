@@ -161,6 +161,16 @@ public class GlobalExceptionHandler {
             return "That staff member already has an active assignment for this shift. "
                     + "End the current assignment before starting a new one.";
         }
+        if (lower.contains("uk_shift_template_user")) {
+            // Belt-and-braces: ShiftTemplateService.update now flushes
+            // between clear() and addAll() to avoid this, but if it
+            // ever trips again the operator gets a real hint.
+            return "That staff member is listed twice in this template. "
+                    + "Refresh the page and edit the existing row instead of adding a new one.";
+        }
+        if (lower.contains("uk_shift_template_lead")) {
+            return "Only one shift-lead is allowed per template. Clear the existing lead first.";
+        }
         if (lower.contains("uk_bed_one_active_visit")) {
             return "That bed is already occupied. Move or discharge the current patient first.";
         }
