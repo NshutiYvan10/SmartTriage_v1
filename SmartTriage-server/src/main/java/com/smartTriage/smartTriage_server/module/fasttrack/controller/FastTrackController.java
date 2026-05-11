@@ -49,11 +49,18 @@ public class FastTrackController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    /**
+     * Active stroke / STEMI fast-track activations. Optionally
+     * filtered by ED zone for on-shift clinicians; full hospital view
+     * still requires cross-zone authority (admin / CN / shift-lead).
+     */
     @GetMapping("/hospital/{hospitalId}/active")
-    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId) and "
+            + "(#zone != null or @clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId))")
     public ResponseEntity<ApiResponse<List<FastTrackResponse>>> getActiveFastTracks(
-            @PathVariable UUID hospitalId) {
-        List<FastTrackResponse> responses = fastTrackService.getActiveFastTracks(hospitalId)
+            @PathVariable UUID hospitalId,
+            @RequestParam(required = false) com.smartTriage.smartTriage_server.common.enums.EdZone zone) {
+        List<FastTrackResponse> responses = fastTrackService.getActiveFastTracks(hospitalId, zone)
                 .stream()
                 .map(FastTrackMapper::toResponse)
                 .collect(Collectors.toList());

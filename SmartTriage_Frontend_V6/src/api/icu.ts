@@ -37,7 +37,10 @@ export const icuApi = {
   assignBed: (id: string, bedNumber: string) => put<IcuEscalation>(`/icu/${id}/assign-bed`, { bedNumber }),
   transfer: (id: string) => put<IcuEscalation>(`/icu/${id}/transfer`),
   cancel: (id: string, reason: string) => put<IcuEscalation>(`/icu/${id}/cancel?reason=${encodeURIComponent(reason)}`),
-  getActive: (hospitalId: string, page = 0) => get<{ content: IcuEscalation[]; totalElements: number }>(`/icu/hospital/${hospitalId}/active?page=${page}&size=20`),
+  getActive: (hospitalId: string, page = 0, zone?: string) =>
+    get<{ content: IcuEscalation[]; totalElements: number }>(
+      `/icu/hospital/${hospitalId}/active?page=${page}&size=20${zone ? `&zone=${zone}` : ''}`,
+    ),
   getForVisit: (visitId: string) => get<IcuEscalation>(`/icu/visit/${visitId}`),
   getCapacity: (hospitalId: string) => get<IcuCapacity>(`/icu/hospital/${hospitalId}/capacity`),
 };

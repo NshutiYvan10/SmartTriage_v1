@@ -94,13 +94,20 @@ public class SepsisController {
     }
 
     /**
-     * Get all active sepsis cases at a hospital.
+     * Get active sepsis cases at a hospital. Optionally filtered by
+     * ED zone — passing {@code ?zone=ACUTE} restricts the list to that
+     * zone, which is how an on-shift clinician sees only their zone's
+     * cases. With no zone parameter the caller must have cross-zone
+     * read authority (admin / CN / shift-lead), enforced by the
+     * service layer via clinicalAuthz.
      */
     @GetMapping("/hospital/{hospitalId}/active")
-    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId) and "
+            + "(#zone != null or @clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId))")
     public ResponseEntity<ApiResponse<List<SepsisScreeningResponse>>> getActiveSepsisCases(
-            @PathVariable UUID hospitalId) {
-        List<SepsisScreeningResponse> response = sepsisService.getActiveSepsisCases(hospitalId)
+            @PathVariable UUID hospitalId,
+            @RequestParam(required = false) com.smartTriage.smartTriage_server.common.enums.EdZone zone) {
+        List<SepsisScreeningResponse> response = sepsisService.getActiveSepsisCases(hospitalId, zone)
                 .stream()
                 .map(SepsisMapper::toResponse)
                 .collect(Collectors.toList());

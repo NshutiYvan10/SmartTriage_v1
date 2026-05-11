@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -257,10 +258,25 @@ public class IcuEscalationService {
     }
 
     /**
-     * Get paginated active (non-terminal) escalations for a hospital.
+     * Paginated active (non-terminal) escalations for a hospital,
+     * optionally filtered by ED zone. The zone filter is applied
+     * post-fetch (small list) so the existing repository query
+     * doesn't need a JPA-level rework.
      */
+    public Page<IcuEscalation> getActiveEscalations(UUID hospitalId,
+                                                     com.smartTriage.smartTriage_server.common.enums.EdZone zone,
+                                                     Pageable pageable) {
+        Page<IcuEscalation> page = icuEscalationRepository.findActiveEscalationsByHospital(hospitalId, pageable);
+        if (zone == null) return page;
+        List<IcuEscalation> filtered = page.getContent().stream()
+                .filter(e -> e.getVisit() != null && e.getVisit().getCurrentEdZone() == zone)
+                .toList();
+        return new org.springframework.data.domain.PageImpl<>(filtered, pageable, filtered.size());
+    }
+
+    /** Back-compat overload — full hospital-wide list. */
     public Page<IcuEscalation> getActiveEscalations(UUID hospitalId, Pageable pageable) {
-        return icuEscalationRepository.findActiveEscalationsByHospital(hospitalId, pageable);
+        return getActiveEscalations(hospitalId, null, pageable);
     }
 
     /**

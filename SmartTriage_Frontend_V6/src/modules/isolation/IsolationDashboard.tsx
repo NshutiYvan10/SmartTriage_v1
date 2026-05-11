@@ -10,7 +10,7 @@ import {
   Shield, Eye, Hand, Shirt,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
-import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
+import { useScopedView } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
 import { isolationApi } from '@/api/isolation';
 import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
@@ -38,7 +38,7 @@ export function IsolationDashboard() {
   const { glassCard, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
-  const access = useCanSeeAllZones();
+  const scope = useScopedView();
 
   const [isolations, setIsolations] = useState<InfectionScreening[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,10 +50,13 @@ export function IsolationDashboard() {
 
   /* ── Data loading ──────────────────────────────────────── */
   const loadIsolations = useCallback(async () => {
-    if (!hospitalId || !access.canSeeAllZones) return;
+    if (!hospitalId || scope.mode === 'RESTRICTED') return;
     setLoading(true);
     try {
-      const data = await isolationApi.getActiveIsolations(hospitalId);
+      const data = await isolationApi.getActiveIsolations(
+        hospitalId,
+        scope.mode === 'ZONE_SCOPED' ? scope.zone ?? undefined : undefined,
+      );
       setIsolations(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load active isolations:', err);
@@ -61,7 +64,7 @@ export function IsolationDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, access.canSeeAllZones]);
+  }, [hospitalId, scope.mode, scope.zone]);
 
   useEffect(() => { loadIsolations(); }, [loadIsolations]);
 
@@ -124,12 +127,12 @@ export function IsolationDashboard() {
     );
   };
 
-  if (!access.canSeeAllZones) {
+  if (scope.mode === 'RESTRICTED') {
     return (
       <CrossZoneRestrictedPanel
         pageTitle="Infection / Isolation"
-        zone={access.zone ?? null}
-        reason={access.reason === 'OFF_SHIFT' ? 'OFF_SHIFT' : 'ZONE_SCOPED'}
+        zone={null}
+        reason="OFF_SHIFT"
       />
     );
   }

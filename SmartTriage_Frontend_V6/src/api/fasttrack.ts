@@ -43,5 +43,8 @@ export const fasttrackApi = {
   recordCt: (id: string, data: { ctCompletedAt: string; ctResult: string; isHemorrhagic: boolean }) => put<FastTrackActivation>(`/fast-track/${id}/ct`, data),
   complete: (id: string, data: { outcome: string }) => put<FastTrackActivation>(`/fast-track/${id}/complete`, data),
   getForVisit: (visitId: string) => get<FastTrackActivation[]>(`/fast-track/visit/${visitId}`),
-  getActive: (hospitalId: string) => get<FastTrackActivation[]>(`/fast-track/hospital/${hospitalId}/active`),
+  getActive: (hospitalId: string, zone?: string) =>
+    get<FastTrackActivation[]>(
+      `/fast-track/hospital/${hospitalId}/active${zone ? `?zone=${zone}` : ''}`,
+    ),
 };

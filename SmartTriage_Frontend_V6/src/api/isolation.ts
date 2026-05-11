@@ -52,5 +52,8 @@ export const isolationApi = {
   endIsolation: (id: string) => put<InfectionScreening>(`/isolation/${id}/end`),
   notifyPublicHealth: (id: string) => put<InfectionScreening>(`/isolation/${id}/notify`),
   getForVisit: (visitId: string) => get<InfectionScreening[]>(`/isolation/visit/${visitId}`),
-  getActiveIsolations: (hospitalId: string) => get<InfectionScreening[]>(`/isolation/hospital/${hospitalId}/active`),
+  getActiveIsolations: (hospitalId: string, zone?: string) =>
+    get<InfectionScreening[]>(
+      `/isolation/hospital/${hospitalId}/active${zone ? `?zone=${zone}` : ''}`,
+    ),
 };

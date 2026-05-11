@@ -10,7 +10,7 @@ import {
   XCircle, Zap, User, Activity, ShieldCheck,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
-import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
+import { useScopedView } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
 import { icuApi } from '@/api/icu';
 import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
@@ -62,7 +62,7 @@ export function IcuEscalationView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
-  const access = useCanSeeAllZones();
+  const scope = useScopedView();
 
   const [escalations, setEscalations] = useState<IcuEscalation[]>([]);
   const [totalElements, setTotalElements] = useState(0);
@@ -87,10 +87,14 @@ export function IcuEscalationView() {
 
   /* ── Load escalations ── */
   const loadEscalations = useCallback(async () => {
-    if (!hospitalId || !access.canSeeAllZones) return;
+    if (!hospitalId || scope.mode === 'RESTRICTED') return;
     setLoading(true);
     try {
-      const data = await icuApi.getActive(hospitalId, page);
+      const data = await icuApi.getActive(
+        hospitalId,
+        page,
+        scope.mode === 'ZONE_SCOPED' ? scope.zone ?? undefined : undefined,
+      );
       setEscalations(data.content || []);
       setTotalElements(data.totalElements || 0);
     } catch (err) {
@@ -99,18 +103,20 @@ export function IcuEscalationView() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, page, access.canSeeAllZones]);
+  }, [hospitalId, page, scope.mode, scope.zone]);
 
   /* ── Load capacity ── */
+  // Capacity remains hospital-scoped — it's a single hospital-level
+  // number (total ICU beds, free, etc.), not a per-zone metric.
   const loadCapacity = useCallback(async () => {
-    if (!hospitalId || !access.canSeeAllZones) return;
+    if (!hospitalId || scope.mode === 'RESTRICTED') return;
     try {
       const data = await icuApi.getCapacity(hospitalId);
       setCapacity(data);
     } catch (err) {
       console.error('Failed to load ICU capacity:', err);
     }
-  }, [hospitalId, access.canSeeAllZones]);
+  }, [hospitalId, scope.mode]);
 
   useEffect(() => { loadEscalations(); }, [loadEscalations]);
   useEffect(() => { loadCapacity(); }, [loadCapacity]);
@@ -204,12 +210,12 @@ export function IcuEscalationView() {
 
   const occ = capacity ? occupancyColor(capacity.occupancyPercent) : null;
 
-  if (!access.canSeeAllZones) {
+  if (scope.mode === 'RESTRICTED') {
     return (
       <CrossZoneRestrictedPanel
         pageTitle="ICU Escalation"
-        zone={access.zone ?? null}
-        reason={access.reason === 'OFF_SHIFT' ? 'OFF_SHIFT' : 'ZONE_SCOPED'}
+        zone={null}
+        reason="OFF_SHIFT"
       />
     );
   }

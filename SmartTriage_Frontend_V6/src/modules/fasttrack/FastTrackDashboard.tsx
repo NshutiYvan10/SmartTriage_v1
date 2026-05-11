@@ -10,7 +10,7 @@ import {
   CircleDot, FileCheck,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
-import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
+import { useScopedView } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
 import { fasttrackApi } from '@/api/fasttrack';
 import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
@@ -52,7 +52,7 @@ export function FastTrackDashboard() {
   const { glassCard, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
-  const access = useCanSeeAllZones();
+  const scope = useScopedView();
 
   const [activations, setActivations] = useState<FastTrackActivation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,10 +73,13 @@ export function FastTrackDashboard() {
 
   /* ── Load active activations ── */
   const loadActivations = useCallback(async () => {
-    if (!hospitalId || !access.canSeeAllZones) return;
+    if (!hospitalId || scope.mode === 'RESTRICTED') return;
     setLoading(true);
     try {
-      const data = await fasttrackApi.getActive(hospitalId);
+      const data = await fasttrackApi.getActive(
+        hospitalId,
+        scope.mode === 'ZONE_SCOPED' ? scope.zone ?? undefined : undefined,
+      );
       setActivations(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load fast-track activations:', err);
@@ -84,7 +87,7 @@ export function FastTrackDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, access.canSeeAllZones]);
+  }, [hospitalId, scope.mode, scope.zone]);
 
   useEffect(() => { loadActivations(); }, [loadActivations]);
 
@@ -154,12 +157,12 @@ export function FastTrackDashboard() {
     }
   };
 
-  if (!access.canSeeAllZones) {
+  if (scope.mode === 'RESTRICTED') {
     return (
       <CrossZoneRestrictedPanel
         pageTitle="Fast-Track Activations"
-        zone={access.zone ?? null}
-        reason={access.reason === 'OFF_SHIFT' ? 'OFF_SHIFT' : 'ZONE_SCOPED'}
+        zone={null}
+        reason="OFF_SHIFT"
       />
     );
   }

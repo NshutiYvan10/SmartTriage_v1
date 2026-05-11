@@ -51,11 +51,19 @@ public class InfectionIsolationController {
         return ResponseEntity.ok(ApiResponse.success(responses));
     }
 
+    /**
+     * Active isolation screenings at a hospital, optionally filtered
+     * by ED zone. On-shift clinicians pass their zone to see only
+     * their zone's cases; full hospital view still requires cross-zone
+     * authority (admin / CN / shift-lead).
+     */
     @GetMapping("/hospital/{hospitalId}/active")
-    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId) and "
+            + "(#zone != null or @clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId))")
     public ResponseEntity<ApiResponse<List<InfectionScreeningResponse>>> getActiveIsolations(
-            @PathVariable UUID hospitalId) {
-        List<InfectionScreeningResponse> responses = isolationService.getActiveIsolations(hospitalId)
+            @PathVariable UUID hospitalId,
+            @RequestParam(required = false) com.smartTriage.smartTriage_server.common.enums.EdZone zone) {
+        List<InfectionScreeningResponse> responses = isolationService.getActiveIsolations(hospitalId, zone)
                 .stream()
                 .map(InfectionScreeningMapper::toResponse)
                 .collect(Collectors.toList());

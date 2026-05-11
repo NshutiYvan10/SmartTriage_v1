@@ -174,10 +174,20 @@ public class InfectionIsolationService {
     }
 
     /**
-     * Get all active isolations for a hospital.
+     * Active isolations for a hospital, optionally filtered by ED zone.
      */
+    public List<InfectionScreening> getActiveIsolations(UUID hospitalId,
+                                                        com.smartTriage.smartTriage_server.common.enums.EdZone zone) {
+        List<InfectionScreening> all = screeningRepository.findActiveIsolationsByHospital(hospitalId);
+        if (zone == null) return all;
+        return all.stream()
+                .filter(s -> s.getVisit() != null && s.getVisit().getCurrentEdZone() == zone)
+                .toList();
+    }
+
+    /** Back-compat overload — full hospital-wide list. */
     public List<InfectionScreening> getActiveIsolations(UUID hospitalId) {
-        return screeningRepository.findActiveIsolationsByHospital(hospitalId);
+        return getActiveIsolations(hospitalId, null);
     }
 
     /**

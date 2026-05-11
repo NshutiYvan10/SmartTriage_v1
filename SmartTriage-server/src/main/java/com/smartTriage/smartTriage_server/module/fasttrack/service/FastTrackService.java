@@ -195,10 +195,21 @@ public class FastTrackService {
     }
 
     /**
-     * Get all active (non-completed, non-cancelled) fast-tracks for a hospital.
+     * Get active fast-tracks for a hospital, optionally filtered to a
+     * single ED zone.
      */
+    public List<FastTrackActivation> getActiveFastTracks(UUID hospitalId,
+                                                          com.smartTriage.smartTriage_server.common.enums.EdZone zone) {
+        List<FastTrackActivation> all = fastTrackActivationRepository.findActiveFastTracksByHospital(hospitalId);
+        if (zone == null) return all;
+        return all.stream()
+                .filter(a -> a.getVisit() != null && a.getVisit().getCurrentEdZone() == zone)
+                .toList();
+    }
+
+    /** Back-compat overload — full hospital-wide list. */
     public List<FastTrackActivation> getActiveFastTracks(UUID hospitalId) {
-        return fastTrackActivationRepository.findActiveFastTracksByHospital(hospitalId);
+        return getActiveFastTracks(hospitalId, null);
     }
 
     /**

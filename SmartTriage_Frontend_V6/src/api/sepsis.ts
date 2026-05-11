@@ -34,5 +34,8 @@ export const sepsisApi = {
   startBundle: (screeningId: string) => put<SepsisScreening>(`/sepsis/${screeningId}/start-bundle`),
   updateBundle: (screeningId: string, data: Partial<SepsisScreening>) => put<SepsisScreening>(`/sepsis/${screeningId}/bundle`, data),
   getForVisit: (visitId: string) => get<SepsisScreening[]>(`/sepsis/visit/${visitId}`),
-  getActive: (hospitalId: string) => get<SepsisScreening[]>(`/sepsis/hospital/${hospitalId}/active`),
+  getActive: (hospitalId: string, zone?: string) =>
+    get<SepsisScreening[]>(
+      `/sepsis/hospital/${hospitalId}/active${zone ? `?zone=${zone}` : ''}`,
+    ),
 };

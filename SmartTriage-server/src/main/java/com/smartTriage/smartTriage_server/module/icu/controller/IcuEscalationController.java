@@ -112,15 +112,20 @@ public class IcuEscalationController {
     }
 
     /**
-     * Get paginated active (non-terminal) escalations for a hospital.
+     * Paginated active (non-terminal) escalations for a hospital,
+     * optionally filtered by ED zone. On-shift clinicians can pass
+     * their zone to see only their own zone's escalations; full
+     * hospital view still requires cross-zone authority.
      */
     @GetMapping("/hospital/{hospitalId}/active")
-    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId) and "
+            + "(#zone != null or @clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId))")
     public ResponseEntity<ApiResponse<Page<IcuEscalationResponse>>> getActiveEscalations(
             @PathVariable UUID hospitalId,
+            @RequestParam(required = false) com.smartTriage.smartTriage_server.common.enums.EdZone zone,
             @PageableDefault(size = 20) Pageable pageable) {
         Page<IcuEscalationResponse> response = icuEscalationService
-                .getActiveEscalations(hospitalId, pageable)
+                .getActiveEscalations(hospitalId, zone, pageable)
                 .map(IcuEscalationMapper::toResponse);
         return ResponseEntity.ok(ApiResponse.success(response));
     }

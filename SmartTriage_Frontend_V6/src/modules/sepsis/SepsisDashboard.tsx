@@ -10,7 +10,7 @@ import {
   Droplets, Syringe, Pill, FlaskConical, RotateCcw,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
-import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
+import { useScopedView } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
 import { sepsisApi } from '@/api/sepsis';
 import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
@@ -62,7 +62,7 @@ export function SepsisDashboard() {
   const { glassCard, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
-  const access = useCanSeeAllZones();
+  const scope = useScopedView();
 
   const [screenings, setScreenings] = useState<SepsisScreening[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,10 +73,15 @@ export function SepsisDashboard() {
 
   /* ── Load active screenings ── */
   const loadScreenings = useCallback(async () => {
-    if (!hospitalId || !access.canSeeAllZones) return;
+    if (!hospitalId || scope.mode === 'RESTRICTED') return;
     setLoading(true);
     try {
-      const data = await sepsisApi.getActive(hospitalId);
+      // ZONE_SCOPED → pass zone, backend returns only this zone's cases.
+      // HOSPITAL_WIDE → omit zone, backend returns every case.
+      const data = await sepsisApi.getActive(
+        hospitalId,
+        scope.mode === 'ZONE_SCOPED' ? scope.zone ?? undefined : undefined,
+      );
       setScreenings(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load sepsis screenings:', err);
@@ -84,7 +89,7 @@ export function SepsisDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, access.canSeeAllZones]);
+  }, [hospitalId, scope.mode, scope.zone]);
 
   useEffect(() => { loadScreenings(); }, [loadScreenings]);
 
@@ -149,15 +154,16 @@ export function SepsisDashboard() {
     return 'text-emerald-500';
   };
 
-  // Hospital-wide sepsis screening list is gated server-side by
-  // canSeeAllZonesAtHospital. Render the explanation panel for users
-  // without that authority instead of letting the request 403.
-  if (!access.canSeeAllZones) {
+  // Off-shift clinicians have no zone to scope by → show the
+  // restriction card with a clear "pick up a shift" hint. On-shift
+  // clinicians fall through and see their zone's cases; admins / CN /
+  // shift-lead see the full hospital view.
+  if (scope.mode === 'RESTRICTED') {
     return (
       <CrossZoneRestrictedPanel
         pageTitle="Sepsis Screening"
-        zone={access.zone ?? null}
-        reason={access.reason === 'OFF_SHIFT' ? 'OFF_SHIFT' : 'ZONE_SCOPED'}
+        zone={null}
+        reason="OFF_SHIFT"
       />
     );
   }

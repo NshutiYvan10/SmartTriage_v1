@@ -246,10 +246,23 @@ public class SepsisService {
     }
 
     /**
-     * Get all active sepsis cases at a hospital.
+     * Get all active sepsis cases at a hospital, optionally filtered to
+     * a single ED zone. Hospital-wide access is gated by the controller;
+     * the zone filter lets an on-shift clinician see only their own
+     * zone's cases without needing cross-zone read authority.
      */
+    public List<SepsisScreening> getActiveSepsisCases(UUID hospitalId,
+                                                       com.smartTriage.smartTriage_server.common.enums.EdZone zone) {
+        List<SepsisScreening> all = sepsisScreeningRepository.findActiveSepsisCasesByHospital(hospitalId);
+        if (zone == null) return all;
+        return all.stream()
+                .filter(s -> s.getVisit() != null && s.getVisit().getCurrentEdZone() == zone)
+                .toList();
+    }
+
+    /** Back-compat overload — full hospital-wide list, no zone filter. */
     public List<SepsisScreening> getActiveSepsisCases(UUID hospitalId) {
-        return sepsisScreeningRepository.findActiveSepsisCasesByHospital(hospitalId);
+        return getActiveSepsisCases(hospitalId, null);
     }
 
     // ====================================================================
