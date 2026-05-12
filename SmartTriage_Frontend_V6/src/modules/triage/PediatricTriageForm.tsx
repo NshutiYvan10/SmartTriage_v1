@@ -390,8 +390,15 @@ export function PediatricTriageForm() {
     return () => { cancelled = true; };
   }, [sourceVisitId]);
 
-  // Footer
-  const [nurseName, setNurseName] = useState('');
+  // Footer — triage nurse is the logged-in user, captured automatically.
+  // useEffect below keeps the field in sync if authUser hydrates late.
+  const [nurseName, setNurseName] = useState(authUser?.fullName || '');
+  useEffect(() => {
+    if (authUser?.fullName && authUser.fullName !== nurseName) {
+      setNurseName(authUser.fullName);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser?.fullName]);
   const [triageFinished, setTriageFinished] = useState(false);
   const [triageFinishTime, setTriageFinishTime] = useState<Date | null>(null);
 
@@ -1306,9 +1313,14 @@ export function PediatricTriageForm() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="space-y-3">
               <div className="flex items-center gap-1.5 mb-1"><User className="w-3.5 h-3.5 text-slate-400" /><h3 className="text-xs font-bold text-slate-800">Triage Details</h3></div>
+              {/* Triage Nurse is the logged-in user, captured automatically.
+                  Read-only display removes a redundant typing step and an
+                  audit-tampering surface. */}
               <div>
-                <label className={labelCls}>Nurse Name / ID <span className="text-red-500">*</span></label>
-                <input type="text" value={nurseName} onChange={(e) => setNurseName(e.target.value)} placeholder="Enter nurse name or ID" className={`${inputCls} ${!nurseName.trim() ? 'border-red-300 bg-red-50/50' : ''}`} />
+                <label className={labelCls}>Triage Nurse <span className="text-green-600 text-[8px]">✓ captured from login</span></label>
+                <div className="px-2.5 py-1.5 bg-slate-100/80 border border-slate-200/60 rounded-lg text-xs text-slate-700 font-medium">
+                  {nurseName || 'Loading…'}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className={labelCls}>Arrival Time</label><div className="px-2.5 py-1.5 bg-slate-100/80 border border-slate-200/60 rounded-lg text-xs text-slate-600">{arrivalTime.toLocaleString()}</div></div>
@@ -1337,7 +1349,17 @@ export function PediatricTriageForm() {
                   </div>
                   <div>
                     <label className={labelCls}>Notified At</label>
-                    <input type="datetime-local" value={doctorNotifiedAt} onChange={(e) => setDoctorNotifiedAt(e.target.value)} className={inputCls} />
+                    <div className="flex items-center gap-1">
+                      <input type="datetime-local" value={doctorNotifiedAt} onChange={(e) => setDoctorNotifiedAt(e.target.value)} className={`${inputCls} flex-1`} />
+                      <button
+                        type="button"
+                        onClick={() => setDoctorNotifiedAt(new Date().toISOString().slice(0, 16))}
+                        className="px-2 py-1.5 text-[10px] font-bold rounded-lg bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 transition-colors whitespace-nowrap"
+                        title="Set to right now"
+                      >
+                        Now
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label className={labelCls}>Attending Doctor</label>
@@ -1345,7 +1367,17 @@ export function PediatricTriageForm() {
                   </div>
                   <div>
                     <label className={labelCls}>Attended At</label>
-                    <input type="datetime-local" value={doctorAttendedAt} onChange={(e) => setDoctorAttendedAt(e.target.value)} className={inputCls} />
+                    <div className="flex items-center gap-1">
+                      <input type="datetime-local" value={doctorAttendedAt} onChange={(e) => setDoctorAttendedAt(e.target.value)} className={`${inputCls} flex-1`} />
+                      <button
+                        type="button"
+                        onClick={() => setDoctorAttendedAt(new Date().toISOString().slice(0, 16))}
+                        className="px-2 py-1.5 text-[10px] font-bold rounded-lg bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 transition-colors whitespace-nowrap"
+                        title="Set to right now"
+                      >
+                        Now
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
