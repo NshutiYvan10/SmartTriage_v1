@@ -355,21 +355,23 @@ public class DeviceService {
         // continuity, which is a clinical-safety concern.
         boolean isTriageMonitorTakeover = device.isTriageMonitor();
         if (isTriageMonitorTakeover) {
-            // Capture immutable references for the lambdas below — the
-            // `device` local is reassigned to `fresh` further down, so
-            // it isn't effectively final.
             final IoTDevice takeoverDevice = device;
             final Visit takeoverVisit = visit;
+            final String startedBy = request.getStartedByName() != null
+                    ? request.getStartedByName() : "System";
+
+            // Evict the previous session on this device. The simulator
+            // is actively writing to it (incrementing totalReadings every
+            // 5s), so a naive save can race on @Version. evictSession
+            // re-fetches + retries on OptimisticLockingFailureException.
             sessionRepository.findByDeviceIdAndSessionActiveTrueAndIsActiveTrue(takeoverDevice.getId())
                     .ifPresent(prev -> {
                         log.info("V54 — triage-monitor takeover: evicting session {} on device {} "
                                         + "(was visit {}) so visit {} can take it",
                                 prev.getId(), takeoverDevice.getSerialNumber(),
                                 prev.getVisit().getVisitNumber(), takeoverVisit.getVisitNumber());
-                        prev.endSession(
-                                request.getStartedByName() != null ? request.getStartedByName() : "System",
+                        evictSessionWithRetry(prev.getId(), startedBy,
                                 "Triage takeover — previous session evicted");
-                        sessionRepository.save(prev);
                     });
             // Also evict any orphaned session on the new visit (rare —
             // would mean this visit had a partial session from a different
@@ -380,18 +382,15 @@ public class DeviceService {
                                         + "(was device {}) so device {} can take it",
                                 prev.getId(), takeoverVisit.getVisitNumber(),
                                 prev.getDevice().getSerialNumber(), takeoverDevice.getSerialNumber());
-                        prev.endSession(
-                                request.getStartedByName() != null ? request.getStartedByName() : "System",
+                        evictSessionWithRetry(prev.getId(), startedBy,
                                 "Triage takeover — previous session evicted");
-                        sessionRepository.save(prev);
                     });
-            // NB: we intentionally do NOT write the device row here — the
+            // We intentionally do NOT write the device row here — the
             // single canonical write happens further down where we set
-            // status = MONITORING. Two saves in this method would race
-            // with the simulator's heartbeat tick and trigger
-            // ObjectOptimisticLockingFailureException ("record was
-            // modified concurrently"). Sessions are evicted above; the
-            // gate below is skipped via `isTriageMonitorTakeover`.
+            // status = MONITORING. Two device saves in this method would
+            // also race with the simulator's heartbeat tick. Sessions are
+            // evicted above; the device-status gate is skipped via
+            // `isTriageMonitorTakeover`.
         }
 
         // Validate: device must be ONLINE (not already MONITORING or OFFLINE).
@@ -695,6 +694,41 @@ public class DeviceService {
      * device streaming?" check that drives the Monitoring page's
      * live/Demo indicator.
      */
+    /**
+     * Evict (soft-end) a session by id, retrying on @Version conflict.
+     *
+     * Used by the triage-monitor takeover path. The simulator increments
+     * session.totalReadings every 5s on every active session, bumping the
+     * @Version field. A naive load-modify-save in our transaction can
+     * race with that increment and throw OptimisticLockingFailureException.
+     * We re-fetch and retry up to 3 times; on persistent failure we log
+     * but don't throw — the session matters less than letting the new
+     * triage proceed, and the next heartbeat / scheduled cleanup will
+     * catch the stale row.
+     */
+    private void evictSessionWithRetry(java.util.UUID sessionId, String endedByName, String reason) {
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                DeviceSession prev = sessionRepository.findByIdAndIsActiveTrue(sessionId).orElse(null);
+                if (prev == null || !prev.isSessionActive()) {
+                    return; // already gone or already ended
+                }
+                prev.endSession(endedByName, reason);
+                sessionRepository.saveAndFlush(prev);
+                return;
+            } catch (org.springframework.dao.OptimisticLockingFailureException e) {
+                if (attempt == 3) {
+                    log.warn("V54 — failed to evict session {} after 3 attempts; "
+                                    + "leaving as-is. Next heartbeat / cleanup will reconcile.",
+                            sessionId);
+                    return;
+                }
+                log.debug("V54 — session-eviction race on attempt {}/3 for session {}; retrying",
+                        attempt, sessionId);
+            }
+        }
+    }
+
     private void publishDeviceStatus(IoTDevice device) {
         // Snapshot every field we need inside the TX while the entity is
         // attached. The actual publish reads from this map only.
