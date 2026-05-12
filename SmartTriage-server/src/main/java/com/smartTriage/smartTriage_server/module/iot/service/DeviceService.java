@@ -20,6 +20,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.security.SecureRandom;
 import java.time.Instant;
@@ -588,19 +590,50 @@ public class DeviceService {
 
     /**
      * Publish device status change to the WebSocket topic for the hospital.
+     *
+     * <p><b>Critical timing fix:</b> Defer the publish to <em>after</em>
+     * the surrounding transaction commits. Firing synchronously from
+     * inside the TX let frontend clients re-fetch device state via HTTP
+     * before the TX's writes were visible, so they'd see stale data —
+     * a device that the just-completed call had set to {@code MONITORING}
+     * would still be reported as {@code ONLINE}, breaking the "is this
+     * device streaming?" check that drives the Monitoring page's
+     * live/Demo indicator.
      */
     private void publishDeviceStatus(IoTDevice device) {
+        // Snapshot every field we need inside the TX while the entity is
+        // attached. The actual publish reads from this map only.
+        final java.util.UUID hospitalId;
+        final java.util.Map<String, String> payload;
         try {
-            eventPublisher.publishDeviceStatusChange(
-                    device.getHospital().getId(),
-                    java.util.Map.of(
-                            "deviceId", device.getId().toString(),
-                            "serialNumber", device.getSerialNumber(),
-                            "deviceName", device.getDeviceName(),
-                            "status", device.getStatus().name(),
-                            "timestamp", Instant.now().toString()));
+            hospitalId = device.getHospital().getId();
+            payload = java.util.Map.of(
+                    "deviceId", device.getId().toString(),
+                    "serialNumber", device.getSerialNumber(),
+                    "deviceName", device.getDeviceName(),
+                    "status", device.getStatus().name(),
+                    "timestamp", Instant.now().toString());
         } catch (Exception e) {
-            log.warn("Failed to publish device status change: {}", e.getMessage());
+            log.warn("Failed to build device status payload: {}", e.getMessage());
+            return;
+        }
+
+        Runnable fire = () -> {
+            try {
+                eventPublisher.publishDeviceStatusChange(hospitalId, payload);
+            } catch (Exception e) {
+                log.warn("Failed to publish device status change: {}", e.getMessage());
+            }
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() { fire.run(); }
+                    });
+        } else {
+            fire.run();
         }
     }
 

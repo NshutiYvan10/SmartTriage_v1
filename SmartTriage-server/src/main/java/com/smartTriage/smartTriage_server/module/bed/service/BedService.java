@@ -31,6 +31,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -507,6 +509,7 @@ public class BedService {
                                     IoTDevice fresh = deviceRepository.findById(current.getId()).orElse(current);
                                     fresh.setStatus(DeviceStatus.ONLINE);
                                     deviceRepository.save(fresh);
+                                    publishDeviceStatusChangeAfterCommit(fresh);
                                 });
                     }
                     current.setAssignedBed(null);
@@ -613,6 +616,14 @@ public class BedService {
 
         log.info("Auto-paired device {} → visit {} via bed {}",
                 fresh.getSerialNumber(), visit.getVisitNumber(), bed.getCode());
+
+        // Critical timing fix — push the device-status change to any
+        // already-mounted Monitoring page so it switches from
+        // "Device Connected" to "Live Monitoring Active" without
+        // requiring a manual re-fetch. Deferred to afterCommit by the
+        // helper below so subscribers reading device state via HTTP see
+        // post-commit data.
+        publishDeviceStatusChangeAfterCommit(fresh);
     }
 
     /** Close the active monitoring session for a visit, if one exists. */
@@ -625,12 +636,62 @@ public class BedService {
 
                     IoTDevice device = session.getDevice();
                     IoTDevice fresh = deviceRepository.findById(device.getId()).orElse(device);
+                    boolean statusChanged = false;
                     if (fresh.getStatus() == DeviceStatus.MONITORING) {
                         fresh.setStatus(DeviceStatus.ONLINE);
                         deviceRepository.save(fresh);
+                        statusChanged = true;
                     }
                     log.info("Closed session for visit {} — {}", visit.getVisitNumber(), reason);
+
+                    // Critical timing fix — push the device-status change
+                    // so the Monitoring page knows streaming has stopped.
+                    if (statusChanged) {
+                        publishDeviceStatusChangeAfterCommit(fresh);
+                    }
                 });
+    }
+
+    /**
+     * Bed-service-local version of DeviceService.publishDeviceStatus.
+     *
+     * <p>Identical semantics: snapshot the entity inside the TX, defer the
+     * actual publish to afterCommit so frontend re-fetches triggered by
+     * the WebSocket event see post-commit DB state. Lives here (instead
+     * of being delegated to DeviceService) so the bed flows aren't
+     * forced into a cross-service circular dependency.
+     */
+    private void publishDeviceStatusChangeAfterCommit(IoTDevice device) {
+        final UUID hospitalId;
+        final Map<String, String> payload;
+        try {
+            hospitalId = device.getHospital().getId();
+            payload = Map.of(
+                    "deviceId", device.getId().toString(),
+                    "serialNumber", device.getSerialNumber(),
+                    "deviceName", device.getDeviceName(),
+                    "status", device.getStatus().name(),
+                    "timestamp", Instant.now().toString());
+        } catch (Exception e) {
+            log.warn("Failed to build device status payload from bed flow: {}", e.getMessage());
+            return;
+        }
+        Runnable fire = () -> {
+            try {
+                eventPublisher.publishDeviceStatusChange(hospitalId, payload);
+            } catch (Exception e) {
+                log.warn("Failed to publish device status change from bed flow: {}", e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() { fire.run(); }
+                    });
+        } else {
+            fire.run();
+        }
     }
 
     /** Build a BedResponse with device + session info filled in. */
@@ -692,10 +753,30 @@ public class BedService {
         };
     }
 
-    /** Fire a WebSocket event so every dashboard can re-fetch the affected zone. */
+    /**
+     * Fire a WebSocket event so every dashboard can re-fetch the affected zone.
+     *
+     * <p><b>Critical timing fix:</b> Defer the publish to <em>after</em> the
+     * surrounding transaction commits. The previous version fired the event
+     * synchronously from inside the TX, which meant the frontend received
+     * "PLACED" and re-fetched device state via HTTP <em>before</em> the
+     * device-session writes (made in {@code autoStartSessionForBed}) had
+     * committed — so the re-fetch saw stale data: no active session,
+     * device still {@code ONLINE} instead of {@code MONITORING}. This is
+     * the root cause of the "Demo (not live)" bug: vitals don't stream
+     * because the frontend's device cache is populated from a pre-commit
+     * snapshot.
+     *
+     * <p>If no transaction is active (defensive path), publish immediately.
+     */
     private void publishBedChange(Bed bed, String eventType) {
+        // Capture all the data we need INSIDE the TX, while the entities
+        // are still attached. The actual publish reads no entity state —
+        // it reads only this snapshot map.
+        final Map<String, Object> payload;
+        final UUID hospitalId;
         try {
-            Map<String, Object> payload = new HashMap<>();
+            payload = new HashMap<>();
             payload.put("bedId", bed.getId().toString());
             payload.put("code", bed.getCode());
             payload.put("zone", bed.getZone().name());
@@ -703,9 +784,31 @@ public class BedService {
             payload.put("event", eventType);
             payload.put("hasOccupant", bed.getCurrentVisit() != null);
             payload.put("timestamp", Instant.now().toString());
-            eventPublisher.publishBedChange(bed.getHospital().getId(), payload);
+            hospitalId = bed.getHospital().getId();
         } catch (Exception e) {
-            log.warn("Failed to publish bed change for {}: {}", bed.getCode(), e.getMessage());
+            log.warn("Failed to build bed change payload for {}: {}",
+                    bed.getCode(), e.getMessage());
+            return;
+        }
+
+        Runnable fire = () -> {
+            try {
+                eventPublisher.publishBedChange(hospitalId, payload);
+            } catch (Exception e) {
+                log.warn("Failed to publish bed change for {}: {}",
+                        payload.get("code"), e.getMessage());
+            }
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() { fire.run(); }
+                    });
+        } else {
+            // No active TX (e.g. test harness, async caller) — publish now.
+            fire.run();
         }
     }
 
