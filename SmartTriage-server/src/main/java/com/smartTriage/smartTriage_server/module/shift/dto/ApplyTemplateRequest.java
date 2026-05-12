@@ -49,4 +49,23 @@ public class ApplyTemplateRequest {
      */
     @NotEmpty(message = "at least one period must be selected")
     private List<ShiftPeriod> periods;
+
+    /**
+     * V55 — How to handle a (date, period) slot that already has active
+     * assignments. Optional; defaults to FILL_EMPTY for backwards-compat
+     * with callers (e.g. the daily scheduler) that don't set it.
+     *
+     * <ul>
+     *   <li>{@code FILL_EMPTY} — leave non-empty slots alone (the legacy behaviour).
+     *       Right for the auto-materialiser that runs at midnight.</li>
+     *   <li>{@code OVERWRITE}  — soft-delete existing rows in the slot, then
+     *       materialise from the template. Right for the manual "Apply
+     *       Template" button — the CN explicitly wants the template to
+     *       become the new truth for these dates.</li>
+     * </ul>
+     */
+    @lombok.Builder.Default
+    private ApplyMode mode = ApplyMode.FILL_EMPTY;
+
+    public enum ApplyMode { FILL_EMPTY, OVERWRITE }
 }

@@ -11,6 +11,7 @@ import com.smartTriage.smartTriage_server.module.shift.dto.UpsertShiftTemplateRe
 import com.smartTriage.smartTriage_server.module.shift.entity.ShiftTemplate;
 import com.smartTriage.smartTriage_server.module.shift.entity.ShiftTemplateAssignment;
 import com.smartTriage.smartTriage_server.module.shift.mapper.ShiftTemplateMapper;
+import com.smartTriage.smartTriage_server.module.shift.repository.ShiftAssignmentRepository;
 import com.smartTriage.smartTriage_server.module.shift.repository.ShiftTemplateAssignmentRepository;
 import com.smartTriage.smartTriage_server.module.shift.repository.ShiftTemplateRepository;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
@@ -54,8 +55,11 @@ public class ShiftTemplateService {
 
     private final ShiftTemplateRepository shiftTemplateRepository;
     private final ShiftTemplateAssignmentRepository shiftTemplateAssignmentRepository;
+    private final ShiftAssignmentRepository shiftAssignmentRepository;
     private final HospitalRepository hospitalRepository;
     private final UserRepository userRepository;
+    /** V55 — used to re-apply the updated template to future calendar slots. */
+    private final ShiftMaterializerService shiftMaterializerService;
 
     /* ═════════════════════════════ READ ═════════════════════════════ */
 
@@ -169,7 +173,52 @@ public class ShiftTemplateService {
         template = shiftTemplateRepository.save(template);
         log.info("Shift template updated: {} ({} — {} rows)",
                 template.getId(), request.getShiftPeriod(), rows.size());
+
+        // V55 — auto-propagation. Every future calendar slot that was
+        // materialised from this template gets re-applied so the calendar
+        // immediately reflects the edit. Past dates (< today) are
+        // untouched — historical rosters are immutable. Manual rows (no
+        // template back-link) are also untouched.
+        propagateUpdateToFutureSlots(template);
+
         return ShiftTemplateMapper.toResponse(template);
+    }
+
+    /**
+     * V55 — Walk the future (date, period) slots that were applied from
+     * this template and re-materialise each with OVERWRITE mode so the
+     * calendar reflects the new template content. Failures on individual
+     * slots are logged but don't roll back the template update itself —
+     * a partial propagation is better than reverting the edit.
+     */
+    private void propagateUpdateToFutureSlots(ShiftTemplate template) {
+        java.time.LocalDate today = java.time.LocalDate.now(
+                java.time.ZoneId.of("Africa/Kigali"));
+        List<Object[]> slots = shiftAssignmentRepository
+                .findFutureSlotsForTemplate(template.getId(), today);
+        if (slots.isEmpty()) {
+            return;
+        }
+        int filled = 0, replaced = 0, skipped = 0, failed = 0;
+        for (Object[] row : slots) {
+            java.time.LocalDate date = (java.time.LocalDate) row[0];
+            ShiftPeriod period = (ShiftPeriod) row[1];
+            try {
+                ShiftMaterializerService.ApplyOutcome out =
+                        shiftMaterializerService.materializeFromTemplateExplicit(
+                                template, template.getHospital(), date, period,
+                                ShiftMaterializerService.ApplyMode.OVERWRITE);
+                if (out.replaced() > 0) replaced++;
+                else if (out.created() > 0) filled++;
+                else skipped++;
+            } catch (Exception e) {
+                failed++;
+                log.warn("V55 — propagation failed for template {} slot {} {} : {}",
+                        template.getId(), date, period, e.getMessage());
+            }
+        }
+        log.info("V55 — propagated template {} to {} future slots ({} replaced, {} filled, {} skipped, {} failed)",
+                template.getId(), slots.size(), replaced, filled, skipped, failed);
     }
 
     /**
@@ -203,6 +252,10 @@ public class ShiftTemplateService {
             if (row.isShiftLead()) {
                 leadCount++;
             }
+            // V55 — clinical rule: TRIAGE_NURSE must = TRIAGE zone, doctors and
+            // ZONE_NURSE must != TRIAGE. Mirrors the DB CHECK constraint so we
+            // throw a clear, user-facing error before the constraint fires.
+            ShiftRoleZonePolicy.validate(row.getShiftFunction(), row.getZone());
         }
         if (leadCount > 1) {
             throw new ClinicalBusinessException(

@@ -129,30 +129,88 @@ public class ShiftMaterializerService {
     }
 
     /**
+     * V55 — How the explicit apply-template call handles a (date, period)
+     * slot that already has assignments.
+     */
+    public enum ApplyMode {
+        /** Skip the slot (do nothing) if any active assignments already exist.
+         *  Used by the daily auto-materialiser at shift boundary to avoid
+         *  clobbering manual adjustments the CN made during the day. */
+        FILL_EMPTY,
+        /** Soft-delete existing rows in the slot, then materialise from
+         *  the template. Used by the manual "Apply Template" UI button —
+         *  the CN explicitly wants the template to be the new truth. */
+        OVERWRITE
+    }
+
+    /**
+     * Outcome of one slot's explicit apply. Lets the bulk caller produce
+     * a meaningful response (X filled, Y replaced, Z skipped).
+     */
+    public record ApplyOutcome(int created, int replaced, boolean skipped) {
+        public static ApplyOutcome ofFilled(int n)   { return new ApplyOutcome(n, 0, false); }
+        public static ApplyOutcome ofReplaced(int n) { return new ApplyOutcome(0, n, false); }
+        public static ApplyOutcome ofSkipped()       { return new ApplyOutcome(0, 0, true); }
+    }
+
+    /**
      * Materialise a specific named template into one (date, period) slot.
      * Used by the planning bulk-ops path (apply-template) where the CN
      * picks the exact template — distinct from {@link #materializeShift}
      * which always uses the active template for the period.
      *
-     * <p>Idempotency: if the slot already has any active assignments, this
-     * method is a no-op and returns 0. Same leave-aware + auto-promote
-     * guarantees as the daily scheduler.
-     *
-     * @return rows created (0 if slot was already populated).
+     * <p>V55 — accepts an {@link ApplyMode} to control behaviour when the
+     * slot is non-empty. The legacy two-arg overload below preserves the
+     * pre-V55 FILL_EMPTY semantics for callers that haven't been
+     * migrated yet.
+     */
+    @Transactional
+    public ApplyOutcome materializeFromTemplateExplicit(
+            ShiftTemplate template, Hospital hospital,
+            LocalDate shiftDate, ShiftPeriod shiftPeriod, ApplyMode mode) {
+        List<ShiftAssignment> existing = shiftAssignmentRepository
+                .findByHospitalIdAndShiftDateAndShiftPeriodAndIsActiveTrue(
+                        hospital.getId(), shiftDate, shiftPeriod);
+
+        if (!existing.isEmpty()) {
+            if (mode == ApplyMode.FILL_EMPTY) {
+                return ApplyOutcome.ofSkipped();
+            }
+            // OVERWRITE — soft-delete existing rows then materialise fresh.
+            // Soft-delete preserves audit trail (rows remain with isActive=false).
+            int replacedCount = 0;
+            for (ShiftAssignment sa : existing) {
+                sa.setActive(false);
+                sa.setEndedAt(Instant.now());
+                shiftAssignmentRepository.save(sa);
+                replacedCount++;
+            }
+            int created = materializeFromTemplate(template, hospital, shiftDate, shiftPeriod);
+            ensureActingShiftLead(hospital, shiftDate, shiftPeriod);
+            // Report whichever count is more meaningful — `created` is the
+            // post-replacement roster size, `replacedCount` is the number
+            // soft-deleted. Caller can sum them for the user-facing
+            // "X replaced" message.
+            return new ApplyOutcome(0, Math.max(created, replacedCount), false);
+        }
+
+        int created = materializeFromTemplate(template, hospital, shiftDate, shiftPeriod);
+        ensureActingShiftLead(hospital, shiftDate, shiftPeriod);
+        return ApplyOutcome.ofFilled(created);
+    }
+
+    /**
+     * Legacy two-arg overload — preserves pre-V55 FILL_EMPTY behaviour for
+     * callers that haven't been migrated yet (e.g. the daily scheduler).
+     * Returns just the created count for backwards compatibility.
      */
     @Transactional
     public int materializeFromTemplateExplicit(
             ShiftTemplate template, Hospital hospital,
             LocalDate shiftDate, ShiftPeriod shiftPeriod) {
-        List<ShiftAssignment> existing = shiftAssignmentRepository
-                .findByHospitalIdAndShiftDateAndShiftPeriodAndIsActiveTrue(
-                        hospital.getId(), shiftDate, shiftPeriod);
-        if (!existing.isEmpty()) {
-            return 0;
-        }
-        int created = materializeFromTemplate(template, hospital, shiftDate, shiftPeriod);
-        ensureActingShiftLead(hospital, shiftDate, shiftPeriod);
-        return created;
+        ApplyOutcome out = materializeFromTemplateExplicit(
+                template, hospital, shiftDate, shiftPeriod, ApplyMode.FILL_EMPTY);
+        return out.created();
     }
 
     /**
@@ -219,6 +277,11 @@ public class ShiftMaterializerService {
                     .shiftFunction(row.getShiftFunction())
                     .isShiftLead(row.isShiftLead())
                     .startedAt(now)
+                    // V55 — back-link to the template that produced this
+                    // assignment. Lets ShiftTemplateService.update find every
+                    // future calendar slot derived from this template and
+                    // propagate edits automatically.
+                    .template(template)
                     .build();
             shiftAssignmentRepository.save(sa);
             created++;

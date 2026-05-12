@@ -122,6 +122,10 @@ public class ShiftAssignmentService {
      */
     @Transactional
     public ShiftAssignmentResponse assignToZone(UUID hospitalId, CreateShiftAssignmentRequest request) {
+        // V55 — enforce clinical role/zone rules up front, with a clean
+        // user-facing error message, before any other validation runs.
+        ShiftRoleZonePolicy.validate(request.getShiftFunction(), request.getZone());
+
         Hospital hospital = hospitalRepository.findById(hospitalId)
                 .orElseThrow(() -> new ResourceNotFoundException("Hospital", "id", hospitalId));
 
@@ -403,6 +407,14 @@ public class ShiftAssignmentService {
     public ShiftAssignmentResponse updateAssignment(UUID assignmentId, CreateShiftAssignmentRequest request) {
         ShiftAssignment assignment = shiftAssignmentRepository.findByIdAndIsActiveTrue(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("ShiftAssignment", "id", assignmentId));
+
+        // V55 — compute the prospective new (function, zone) — falling back to
+        // the existing values when the request didn't include them — and run
+        // the clinical rule validator BEFORE mutating. Rejects e.g. an edit
+        // that changes function to TRIAGE_NURSE while leaving zone=ACUTE.
+        ShiftRoleZonePolicy.validate(
+                request.getShiftFunction() != null ? request.getShiftFunction() : assignment.getShiftFunction(),
+                request.getZone() != null ? request.getZone() : assignment.getZone());
 
         if (request.getZone() != null) {
             assignment.setZone(request.getZone());

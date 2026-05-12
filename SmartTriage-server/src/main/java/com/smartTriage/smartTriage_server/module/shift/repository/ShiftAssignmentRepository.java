@@ -156,4 +156,18 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
             "ORDER BY sa.shiftDate DESC, sa.endedAt DESC NULLS FIRST, sa.startedAt DESC")
     List<ShiftAssignment> findRecentShiftLeadRowsAtHospital(
             @Param("hospitalId") UUID hospitalId);
+
+    /**
+     * V55 — distinct future (shiftDate, shiftPeriod) slots that were
+     * materialised from a specific template. Used by
+     * {@code ShiftTemplateService.update} to find which calendar slots
+     * need to be re-applied after a template edit. Past dates are
+     * intentionally excluded — historical rosters are immutable.
+     */
+    @Query("SELECT DISTINCT sa.shiftDate, sa.shiftPeriod FROM ShiftAssignment sa " +
+            "WHERE sa.template.id = :templateId AND sa.isActive = true AND sa.shiftDate >= :fromDate " +
+            "ORDER BY sa.shiftDate ASC, sa.shiftPeriod ASC")
+    List<Object[]> findFutureSlotsForTemplate(
+            @Param("templateId") UUID templateId,
+            @Param("fromDate") java.time.LocalDate fromDate);
 }

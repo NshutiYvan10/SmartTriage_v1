@@ -80,4 +80,19 @@ public class ShiftAssignment extends BaseEntity {
     @Column(name = "is_shift_lead", nullable = false)
     @Builder.Default
     private boolean isShiftLead = false;
+
+    /**
+     * V55 — back-link to the {@link ShiftTemplate} this assignment was
+     * applied from. NULL means the row was created manually (direct
+     * assignToZone call). When a Charge Nurse edits the template, the
+     * propagation logic uses this column to find every future calendar
+     * slot that originated from that template. Manual rows are
+     * deliberately untouched by template updates.
+     *
+     * ON DELETE SET NULL — deleting a template doesn't cascade-delete
+     * the materialized assignments, just severs the back-link.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "template_id")
+    private ShiftTemplate template;
 }

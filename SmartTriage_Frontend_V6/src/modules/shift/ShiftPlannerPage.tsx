@@ -100,6 +100,25 @@ function defaultZoneFor(fn: ShiftFunction): EdZone {
   return fn === 'TRIAGE_NURSE' ? 'TRIAGE' : 'GENERAL';
 }
 
+/**
+ * V55 — Client-side mirror of the backend ShiftRoleZonePolicy.
+ *
+ * Returns true when the (shiftFunction, zone) pair is clinically allowed:
+ *   - TRIAGE_NURSE         → only TRIAGE
+ *   - ZONE_NURSE / doctors → any zone except TRIAGE
+ *   - CHARGE_NURSE         → any zone (operational role)
+ *
+ * Mirroring the rule client-side lets us disable invalid zone options in
+ * the dropdown so the CN can't even pick a bad combination. The backend
+ * still validates (defence in depth + a DB CHECK constraint).
+ */
+function isZoneAllowedForFunction(fn: ShiftFunction, zone: EdZone): boolean {
+  if (fn === 'TRIAGE_NURSE') return zone === 'TRIAGE';
+  if (fn === 'CHARGE_NURSE') return true;
+  // ZONE_NURSE, PRIMARY_DOCTOR, SUPERVISING_DOCTOR, RESIDENT
+  return zone !== 'TRIAGE';
+}
+
 /* ═══════════════════════════════════════════════════════════════ */
 
 interface DraftTemplate {
@@ -669,7 +688,10 @@ export function ShiftPlannerPage() {
                           </div>
 
                           <div className="flex items-center gap-2 flex-shrink-0">
-                            {/* Zone */}
+                            {/* Zone — V55: filtered to only zones clinically
+                                allowed for the row's shift function. A
+                                TRIAGE_NURSE row shows only TRIAGE; other
+                                functions hide TRIAGE. */}
                             <select
                               value={a.zone}
                               onChange={(e) =>
@@ -677,27 +699,30 @@ export function ShiftPlannerPage() {
                               }
                               className={selectClass}
                             >
-                              {ZONES.map((z) => (
-                                <option key={z.zone} value={z.zone}>
-                                  {z.icon} {z.label}
-                                </option>
-                              ))}
+                              {ZONES
+                                .filter((z) => isZoneAllowedForFunction(a.shiftFunction, z.zone))
+                                .map((z) => (
+                                  <option key={z.zone} value={z.zone}>
+                                    {z.icon} {z.label}
+                                  </option>
+                                ))}
                             </select>
 
-                            {/* Function — also snaps the zone to match
-                                when the new function clearly maps to a
-                                Tier-1 zone AND the current zone is the
-                                generic GENERAL default. If the CN has
-                                already picked a non-default zone, we
-                                respect that choice. */}
+                            {/* Function — V55: when function changes, if the
+                                current zone is no longer clinically allowed
+                                (e.g. TRIAGE_NURSE → ZONE_NURSE while zone is
+                                TRIAGE), reset to the safe default for the new
+                                function. Previously this only re-snapped from
+                                GENERAL, which let invalid pairs slip through. */}
                             <select
                               value={a.shiftFunction}
                               onChange={(e) => {
                                 const newFn = e.target.value as ShiftFunction;
-                                const suggestedZone = defaultZoneFor(newFn);
                                 const patch: Partial<ShiftTemplateAssignmentDto> = { shiftFunction: newFn };
-                                if (a.zone === 'GENERAL' && suggestedZone !== 'GENERAL') {
-                                  patch.zone = suggestedZone;
+                                if (!isZoneAllowedForFunction(newFn, a.zone)) {
+                                  patch.zone = defaultZoneFor(newFn);
+                                } else if (a.zone === 'GENERAL' && defaultZoneFor(newFn) !== 'GENERAL') {
+                                  patch.zone = defaultZoneFor(newFn);
                                 }
                                 updateAssignment(a.userId, patch);
                               }}

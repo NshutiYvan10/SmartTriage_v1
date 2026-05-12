@@ -1177,12 +1177,18 @@ export interface ApplyTemplateRequest {
   toDate: string;
   /** Periods to apply the template to. Server rejects period mismatches. */
   periods: ShiftPeriod[];
+  /**
+   * V55 — how to handle a slot that already has a roster.
+   * FILL_EMPTY (default) skips occupied slots; OVERWRITE replaces them.
+   * The manual "Apply Template" UI button sends OVERWRITE.
+   */
+  mode?: 'FILL_EMPTY' | 'OVERWRITE';
 }
 
 export interface BulkPlanResultSlot {
   date: string;
   period: 'DAY' | 'NIGHT';
-  /** "FILLED" | "SKIPPED_EXISTING" | "SKIPPED_NO_SOURCE" | "SKIPPED_PAST" */
+  /** "FILLED" | "REPLACED" | "SKIPPED_EXISTING" | "SKIPPED_NO_SOURCE" | "SKIPPED_PAST" */
   status: string;
   rowsCreated: number;
   note: string | null;
@@ -1190,6 +1196,8 @@ export interface BulkPlanResultSlot {
 
 export interface BulkPlanResult {
   slotsFilled: number;
+  /** V55 — slots where the existing roster was soft-deleted and replaced. */
+  slotsReplaced: number;
   slotsSkipped: number;
   rowsCreated: number;
   slots: BulkPlanResultSlot[];

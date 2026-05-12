@@ -359,10 +359,24 @@ export function ShiftCalendarPage() {
           onClose={() => setShowApplyTemplate(false)}
           onDone={(result) => {
             setShowApplyTemplate(false);
-            onPlanningChange();
-            showToast(
-              `Apply-template: ${result.slotsFilled} slot(s) filled, ${result.slotsSkipped} skipped, ${result.rowsCreated} rows created.`,
-            );
+            // V55 — `replaced` reports slots whose existing roster was
+            // soft-deleted and re-materialised from the template (OVERWRITE
+            // mode). Include it in the toast so the CN sees exactly what
+            // happened, especially when re-applying onto already-filled
+            // dates.
+            const replaced = (result as any).slotsReplaced ?? 0;
+            const parts = [
+              result.slotsFilled > 0 ? `${result.slotsFilled} filled` : null,
+              replaced > 0 ? `${replaced} replaced` : null,
+              result.slotsSkipped > 0 ? `${result.slotsSkipped} skipped` : null,
+              result.rowsCreated > 0 ? `${result.rowsCreated} row(s)` : null,
+            ].filter(Boolean).join(', ');
+            showToast(`Apply template: ${parts || 'no changes'}.`);
+            // Trigger calendar reload AFTER the toast so the re-fetch fires
+            // post-commit (small but real defence against any read-after-
+            // write timing). The async ordering is what makes the calendar
+            // visibly reflect the change immediately.
+            queueMicrotask(onPlanningChange);
           }}
         />
       )}
@@ -1192,6 +1206,11 @@ function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: Ap
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingTpls, setLoadingTpls] = useState(true);
+  // V55 — Apply mode. Default OVERWRITE so the manual Apply button
+  // behaves the way the CN expects: "make this template the truth for
+  // these dates." If they want to preserve existing rosters, they can
+  // tick the "Skip existing" checkbox to switch to FILL_EMPTY.
+  const [skipExisting, setSkipExisting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1221,6 +1240,10 @@ function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: Ap
         // Server rejects period mismatches; we lock to the template's own
         // period rather than letting the CN tick incompatible boxes.
         periods: [selected.shiftPeriod],
+        // V55 — manual Apply defaults to OVERWRITE because that's what
+        // the CN expects when they click the button. The checkbox lets
+        // them opt back into the legacy "fill empty slots only" mode.
+        mode: skipExisting ? 'FILL_EMPTY' : 'OVERWRITE',
       };
       const result = await shiftApi.applyTemplate(hospitalId, req);
       onDone(result);
@@ -1279,6 +1302,25 @@ function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: Ap
             this twice with the matching template for each.
           </div>
         )}
+        {/* V55 — overwrite-by-default with explicit opt-out for fill-empty.
+            Without this checkbox, clicking Apply on already-filled dates was
+            silently a no-op (the user's reported bug). */}
+        <label className="flex items-start gap-2 text-[11px] text-gray-600 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={skipExisting}
+            onChange={(e) => setSkipExisting(e.target.checked)}
+            className="mt-0.5 accent-cyan-600"
+          />
+          <span>
+            <span className="font-semibold text-gray-700">Skip dates that already have a roster</span>
+            <span className="block text-gray-500">
+              {skipExisting
+                ? 'Existing rosters will be left untouched. Only empty slots are filled.'
+                : 'Existing rosters on these dates will be replaced with this template (default).'}
+            </span>
+          </span>
+        </label>
         {error && <div className="text-[12px] text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1">{error}</div>}
       </div>
       <ModalActions

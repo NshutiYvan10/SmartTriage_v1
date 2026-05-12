@@ -257,6 +257,13 @@ public class ShiftPlanningService {
             }
         }
 
+        // V55 — translate the request's ApplyMode into the materialiser's.
+        // Default (FILL_EMPTY) preserves the daily-scheduler's safe behaviour;
+        // OVERWRITE is what the manual "Apply Template" UI button sends.
+        ShiftMaterializerService.ApplyMode matMode = req.getMode() == ApplyTemplateRequest.ApplyMode.OVERWRITE
+                ? ShiftMaterializerService.ApplyMode.OVERWRITE
+                : ShiftMaterializerService.ApplyMode.FILL_EMPTY;
+
         BulkPlanResult result = BulkPlanResult.builder().build();
         for (LocalDate d = req.getFromDate(); !d.isAfter(req.getToDate()); d = d.plusDays(1)) {
             for (ShiftPeriod period : req.getPeriods()) {
@@ -264,35 +271,39 @@ public class ShiftPlanningService {
                         .date(d).period(period.name())
                         .build();
 
-                int created = shiftMaterializerService
-                        .materializeFromTemplateExplicit(template, hospital, d, period);
-                if (created == 0) {
-                    // Either slot already had rows, or the template rows
-                    // were all on leave / already-assigned. Distinguish:
-                    List<ShiftAssignment> existing = shiftAssignmentRepository
-                            .findByHospitalIdAndShiftDateAndShiftPeriodAndIsActiveTrue(
-                                    hospitalId, d, period);
-                    if (!existing.isEmpty()) {
-                        outcome.setStatus("SKIPPED_EXISTING");
-                        outcome.setNote("Slot already had " + existing.size() + " row(s).");
-                    } else {
-                        outcome.setStatus("SKIPPED_NO_SOURCE");
-                        outcome.setNote("Template materialised 0 rows (all on leave or empty).");
-                    }
+                ShiftMaterializerService.ApplyOutcome ao = shiftMaterializerService
+                        .materializeFromTemplateExplicit(template, hospital, d, period, matMode);
+
+                if (ao.skipped()) {
+                    outcome.setStatus("SKIPPED_EXISTING");
+                    outcome.setNote("Slot already had a roster; FILL_EMPTY mode left it alone.");
                     result.setSlotsSkipped(result.getSlotsSkipped() + 1);
-                } else {
+                } else if (ao.replaced() > 0) {
+                    outcome.setStatus("REPLACED");
+                    outcome.setRowsCreated(ao.replaced());
+                    outcome.setNote("Existing roster soft-deleted and replaced from template.");
+                    result.setSlotsReplaced(result.getSlotsReplaced() + 1);
+                    result.setRowsCreated(result.getRowsCreated() + ao.replaced());
+                } else if (ao.created() > 0) {
                     outcome.setStatus("FILLED");
-                    outcome.setRowsCreated(created);
+                    outcome.setRowsCreated(ao.created());
                     result.setSlotsFilled(result.getSlotsFilled() + 1);
-                    result.setRowsCreated(result.getRowsCreated() + created);
+                    result.setRowsCreated(result.getRowsCreated() + ao.created());
+                } else {
+                    // 0 created, 0 replaced, not marked skipped — template
+                    // materialised nothing (e.g. every named user is on leave).
+                    outcome.setStatus("SKIPPED_NO_SOURCE");
+                    outcome.setNote("Template materialised 0 rows (all on leave or empty).");
+                    result.setSlotsSkipped(result.getSlotsSkipped() + 1);
                 }
                 result.getSlots().add(outcome);
             }
         }
 
-        log.info("[apply-template] template={} range {}..{} periods={} : {} filled / {} skipped / {} rows",
-                template.getName(), req.getFromDate(), req.getToDate(), req.getPeriods(),
-                result.getSlotsFilled(), result.getSlotsSkipped(), result.getRowsCreated());
+        log.info("[apply-template] template={} range {}..{} periods={} mode={} : {} filled / {} replaced / {} skipped / {} rows",
+                template.getName(), req.getFromDate(), req.getToDate(), req.getPeriods(), matMode,
+                result.getSlotsFilled(), result.getSlotsReplaced(),
+                result.getSlotsSkipped(), result.getRowsCreated());
         return result;
     }
 

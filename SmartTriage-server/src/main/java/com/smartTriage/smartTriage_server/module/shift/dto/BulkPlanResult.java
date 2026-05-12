@@ -23,8 +23,14 @@ import java.util.List;
 @Builder
 public class BulkPlanResult {
 
-    /** Number of (date, period) slots where rows were materialised. */
+    /** Number of (date, period) slots where rows were materialised into an empty slot. */
     private int slotsFilled;
+
+    /**
+     * V55 — Number of (date, period) slots where the existing roster was
+     * soft-deleted and replaced from the template (apply-template OVERWRITE mode).
+     */
+    private int slotsReplaced;
 
     /** Number of (date, period) slots skipped because they already had rows. */
     private int slotsSkipped;
@@ -46,7 +52,7 @@ public class BulkPlanResult {
     public static class SlotOutcome {
         private LocalDate date;
         private String period; // "DAY" / "NIGHT"
-        /** "FILLED", "SKIPPED_EXISTING", "SKIPPED_NO_SOURCE", "SKIPPED_PAST" */
+        /** "FILLED", "REPLACED", "SKIPPED_EXISTING", "SKIPPED_NO_SOURCE", "SKIPPED_PAST" */
         private String status;
         private int rowsCreated;
         private String note;
