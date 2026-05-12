@@ -385,19 +385,21 @@ public class DeviceService {
                                 "Triage takeover — previous session evicted");
                         sessionRepository.save(prev);
                     });
-            // Flip the device back to ONLINE so the gate below passes.
-            // We re-fetch to capture any concurrent updates from the
-            // simulator's heartbeat path.
-            IoTDevice fresh = deviceRepository.findById(device.getId()).orElse(device);
-            if (fresh.getStatus() == DeviceStatus.MONITORING) {
-                fresh.setStatus(DeviceStatus.ONLINE);
-                deviceRepository.save(fresh);
-                device = fresh;
-            }
+            // NB: we intentionally do NOT write the device row here — the
+            // single canonical write happens further down where we set
+            // status = MONITORING. Two saves in this method would race
+            // with the simulator's heartbeat tick and trigger
+            // ObjectOptimisticLockingFailureException ("record was
+            // modified concurrently"). Sessions are evicted above; the
+            // gate below is skipped via `isTriageMonitorTakeover`.
         }
 
-        // Validate: device must be ONLINE (not already MONITORING or OFFLINE)
-        if (device.getStatus() != DeviceStatus.ONLINE
+        // Validate: device must be ONLINE (not already MONITORING or OFFLINE).
+        // Triage-monitor takeover above has already cleared the previous
+        // session, so a device that's still in MONITORING status here is
+        // intentional — the final write below will flip it. Skip the gate.
+        if (!isTriageMonitorTakeover
+                && device.getStatus() != DeviceStatus.ONLINE
                 && device.getStatus() != DeviceStatus.REGISTERED) {
             throw new IllegalStateException(
                     "Device " + device.getSerialNumber() + " is not available for monitoring. " +
@@ -457,12 +459,41 @@ public class DeviceService {
 
         session = sessionRepository.save(session);
 
-        // Re-fetch device to get latest version (avoids conflict with concurrent
-        // heartbeats)
-        IoTDevice freshDevice = deviceRepository.findByIdAndIsActiveTrue(device.getId())
-                .orElse(device);
-        freshDevice.setStatus(DeviceStatus.MONITORING);
-        deviceRepository.save(freshDevice);
+        // Re-fetch device to get latest version, then flip to MONITORING.
+        //
+        // Retry-on-conflict: the simulator's heartbeat tick writes to the
+        // same row every 5s. Without a retry the user-facing call would
+        // surface a raw "record was modified concurrently" error any time
+        // a heartbeat happened to slot between our findByIdAndIsActiveTrue
+        // and our save. We re-fetch and try again on conflict (up to 3
+        // attempts) — our intent (set status = MONITORING) is unambiguous,
+        // so retry is the correct behaviour, not a workaround.
+        IoTDevice freshDevice = null;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                freshDevice = deviceRepository.findByIdAndIsActiveTrue(device.getId())
+                        .orElse(device);
+                freshDevice.setStatus(DeviceStatus.MONITORING);
+                freshDevice = deviceRepository.saveAndFlush(freshDevice);
+                break;
+            } catch (org.springframework.dao.OptimisticLockingFailureException e) {
+                // Catches both the dao-level and the orm-level subclass
+                // (ObjectOptimisticLockingFailureException is a subclass).
+                if (attempt == 3) {
+                    log.warn("Device {} status flip to MONITORING lost the race 3 times; "
+                                    + "session {} is still committed, status will catch up on next heartbeat",
+                            device.getSerialNumber(), session.getId());
+                    // Don't fail the call — the session is what matters.
+                    // The simulator's next heartbeat sees the active session
+                    // via autoPairIfMissingSession and flips status itself.
+                    freshDevice = deviceRepository.findByIdAndIsActiveTrue(device.getId())
+                            .orElse(device);
+                    break;
+                }
+                log.debug("Concurrent device update on attempt {}/3 for {} — retrying",
+                        attempt, device.getSerialNumber());
+            }
+        }
 
         log.info("Monitoring started: Device {} -> Visit {} (Session: {})",
                 freshDevice.getSerialNumber(), visit.getVisitNumber(), session.getId());
