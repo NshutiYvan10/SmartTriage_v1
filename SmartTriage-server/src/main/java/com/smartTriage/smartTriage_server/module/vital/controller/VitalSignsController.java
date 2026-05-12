@@ -27,8 +27,18 @@ public class VitalSignsController {
 
     private final VitalSignsService vitalSignsService;
 
+    /**
+     * RBAC fix — vitals write is zone-scoped. The caller's current shift
+     * zone must match the visit's currentEdZone, OR the caller must have
+     * cross-zone authority (Charge Nurse / shift-lead), OR be today's
+     * Triage Nurse writing to a pre-triage visit. PARAMEDIC retains
+     * write access via callerCanWriteToVisit's operational-role branch.
+     * SUPER_ADMIN / HOSPITAL_ADMIN no longer have vitals write — admins
+     * are not clinical actors.
+     */
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'PARAMEDIC')")
+    @PreAuthorize("hasAnyRole('DOCTOR', 'NURSE', 'PARAMEDIC') "
+            + "and @clinicalAuthz.callerCanWriteToVisit(authentication, #request.visitId)")
     public ResponseEntity<ApiResponse<VitalSignsResponse>> recordVitals(
             @Valid @RequestBody RecordVitalsRequest request) {
         VitalSignsResponse response = vitalSignsService.recordVitals(request);

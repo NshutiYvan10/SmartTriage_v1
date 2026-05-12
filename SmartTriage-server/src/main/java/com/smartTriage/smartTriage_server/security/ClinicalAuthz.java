@@ -1,7 +1,13 @@
 package com.smartTriage.smartTriage_server.security;
 
 import com.smartTriage.smartTriage_server.common.enums.Designation;
+import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.Role;
+import com.smartTriage.smartTriage_server.common.enums.ShiftFunction;
+import com.smartTriage.smartTriage_server.module.clinical.repository.ClinicalNoteRepository;
+import com.smartTriage.smartTriage_server.module.clinical.repository.DiagnosisRepository;
+import com.smartTriage.smartTriage_server.module.clinical.repository.InvestigationRepository;
+import com.smartTriage.smartTriage_server.module.handover.repository.HandoverReportRepository;
 import com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
@@ -84,6 +90,10 @@ public class ClinicalAuthz {
     private final VisitRepository visitRepository;
     private final PatientRepository patientRepository;
     private final ShiftAssignmentService shiftAssignmentService;
+    private final ClinicalNoteRepository clinicalNoteRepository;
+    private final DiagnosisRepository diagnosisRepository;
+    private final InvestigationRepository investigationRepository;
+    private final HandoverReportRepository handoverReportRepository;
 
     /**
      * @return true if the authenticated user is attached to {@code hospitalId}.
@@ -221,6 +231,185 @@ public class ClinicalAuthz {
         } catch (Exception e) {
             log.error("canSeeAllZonesAtHospital error for hospital {}: {}",
                     hospitalId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * RBAC fix (Critical) — does the caller hold today's TRIAGE_NURSE shift
+     * function? Returns true only for a clinician who:
+     * <ul>
+     *   <li>has an active shift assignment for the current shift date + period</li>
+     *   <li>whose {@code shiftFunction == TRIAGE_NURSE}</li>
+     * </ul>
+     * SUPER_ADMIN and HOSPITAL_ADMIN are <strong>not</strong> auto-true —
+     * admins do not perform clinical work and must not appear in triage flows.
+     */
+    @Transactional(readOnly = true)
+    public boolean callerIsTodaysTriageNurse(Authentication authentication) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null) return false;
+            // Admins are NOT triage nurses.
+            if (user.getRole() == Role.SUPER_ADMIN || user.getRole() == Role.HOSPITAL_ADMIN) {
+                return false;
+            }
+            return shiftAssignmentService.getCurrentShiftForUser(user.getId())
+                    .map(sa -> sa.getShiftFunction() == ShiftFunction.TRIAGE_NURSE)
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("callerIsTodaysTriageNurse error: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * RBAC fix — combined check for "may this caller perform a triage write?"
+     * The Triage Nurse always can. A Charge Nurse (designation OR shift-lead
+     * holder OR shift function == CHARGE_NURSE) can override / pick up triage
+     * if the Triage Nurse is overwhelmed. Doctors do not triage in this system.
+     * Admins are denied.
+     */
+    @Transactional(readOnly = true)
+    public boolean callerCanPerformTriage(Authentication authentication) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null) return false;
+            if (user.getRole() == Role.SUPER_ADMIN || user.getRole() == Role.HOSPITAL_ADMIN) {
+                return false;
+            }
+            if (callerIsTodaysTriageNurse(authentication)) {
+                return true;
+            }
+            // Charge Nurse — designation OR current shift function OR active shift-lead.
+            if (user.getRole() == Role.NURSE && user.getDesignation() == Designation.CHARGE_NURSE) {
+                return true;
+            }
+            Optional<UUID> hospitalIdOpt = userRepository.findHospitalIdByUserId(user.getId());
+            if (hospitalIdOpt.isPresent()
+                    && shiftAssignmentService.isUserCurrentShiftLead(user.getId(), hospitalIdOpt.get())) {
+                return true;
+            }
+            return shiftAssignmentService.getCurrentShiftForUser(user.getId())
+                    .map(sa -> sa.getShiftFunction() == ShiftFunction.CHARGE_NURSE)
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("callerCanPerformTriage error: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * RBAC fix — true when the caller's currently-assigned ED zone matches
+     * the visit's {@code currentEdZone}. Used to gate clinical writes
+     * (vital signs, clinical signs, status changes) so a NURSE assigned to
+     * GENERAL can't mutate a RESUS patient's record.
+     *
+     * <p>Returns true for cross-zone authorities (canSeeAllZonesAtHospital).
+     * Returns true for the TRIAGE_NURSE when the visit is pre-triage
+     * (currentEdZone IS NULL) — they need to write vitals during triage.
+     */
+    @Transactional(readOnly = true)
+    public boolean callerCanWriteToVisit(Authentication authentication, UUID visitId) {
+        try {
+            if (visitId == null) return false;
+            User user = currentUser(authentication);
+            if (user == null) return false;
+
+            // Cross-hospital boundary first.
+            Optional<UUID> visitHospitalId = visitRepository.findHospitalIdByVisitId(visitId);
+            if (visitHospitalId.isEmpty()) return false;
+            UUID hospitalId = visitHospitalId.get();
+            if (!canAccessHospital(authentication, hospitalId)) return false;
+
+            // Cross-zone authorities (admins/CN/shift-lead) bypass zone check.
+            if (canSeeAllZonesAtHospital(authentication, hospitalId)) return true;
+
+            // Operational non-zone roles can write where their role admits
+            // (e.g. PARAMEDIC handoff vitals). Read paths already permit them.
+            Role role = user.getRole();
+            if (role == Role.REGISTRAR || role == Role.LAB_TECHNICIAN
+                    || role == Role.PARAMEDIC || role == Role.READ_ONLY) {
+                // READ_ONLY may NOT write; others depend on the specific endpoint's role gate.
+                return role != Role.READ_ONLY;
+            }
+
+            // Resolve the visit's current ED zone.
+            EdZone visitZone = visitRepository.findCurrentEdZoneByVisitId(visitId).orElse(null);
+
+            // Today's TRIAGE_NURSE can write to pre-triage visits.
+            if (visitZone == null && callerIsTodaysTriageNurse(authentication)) {
+                return true;
+            }
+
+            // Zone-bound clinicians: their current shift zone must equal visit zone.
+            return shiftAssignmentService.getCurrentShiftForUser(user.getId())
+                    .map(sa -> sa.getZone() != null && sa.getZone() == visitZone)
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("callerCanWriteToVisit error for visit {}: {}", visitId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * RBAC fix — gate the GET-by-id endpoint on a clinical note. The note
+     * id resolves to a visit id via projection; access is then delegated
+     * to {@link #canAccessVisit}. Returns false (deny) for unknown ids
+     * rather than leaking which ids exist.
+     */
+    @Transactional(readOnly = true)
+    public boolean canAccessClinicalNote(Authentication authentication, UUID noteId) {
+        try {
+            if (noteId == null) return false;
+            return clinicalNoteRepository.findVisitIdByNoteId(noteId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessClinicalNote error for note {}: {}", noteId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** RBAC fix — same pattern as canAccessClinicalNote, for diagnoses. */
+    @Transactional(readOnly = true)
+    public boolean canAccessDiagnosis(Authentication authentication, UUID diagnosisId) {
+        try {
+            if (diagnosisId == null) return false;
+            return diagnosisRepository.findVisitIdByDiagnosisId(diagnosisId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessDiagnosis error for diagnosis {}: {}", diagnosisId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** RBAC fix — same pattern as canAccessClinicalNote, for handover reports. */
+    @Transactional(readOnly = true)
+    public boolean canAccessHandoverReport(Authentication authentication, UUID reportId) {
+        try {
+            if (reportId == null) return false;
+            return handoverReportRepository.findHospitalIdByReportId(reportId)
+                    .map(hospitalId -> canAccessHospital(authentication, hospitalId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessHandoverReport error for report {}: {}", reportId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** RBAC fix — same pattern as canAccessClinicalNote, for investigations. */
+    @Transactional(readOnly = true)
+    public boolean canAccessInvestigation(Authentication authentication, UUID investigationId) {
+        try {
+            if (investigationId == null) return false;
+            return investigationRepository.findVisitIdByInvestigationId(investigationId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessInvestigation error for investigation {}: {}",
+                    investigationId, e.getMessage(), e);
             return false;
         }
     }

@@ -5,6 +5,8 @@ import com.smartTriage.smartTriage_server.module.clinical.entity.Diagnosis;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -25,4 +27,8 @@ public interface DiagnosisRepository extends JpaRepository<Diagnosis, UUID> {
     Optional<Diagnosis> findByIdAndIsActiveTrue(UUID id);
 
     Optional<Diagnosis> findByVisitIdAndIsPrimaryTrueAndIsActiveTrue(UUID visitId);
+
+    /** RBAC fix — projection used by ClinicalAuthz.canAccessDiagnosis. */
+    @Query("SELECT d.visit.id FROM Diagnosis d WHERE d.id = :id")
+    Optional<UUID> findVisitIdByDiagnosisId(@Param("id") UUID id);
 }

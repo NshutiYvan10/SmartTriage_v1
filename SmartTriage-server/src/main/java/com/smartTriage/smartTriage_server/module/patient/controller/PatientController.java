@@ -82,7 +82,7 @@ public class PatientController {
      * scan correctly.
      */
     @PatchMapping("/{id}/pregnancy-status")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR') "
+    @PreAuthorize("hasAnyRole('NURSE', 'DOCTOR') "
             + "and @clinicalAuthz.canAccessPatient(authentication, #id)")
     public ResponseEntity<ApiResponse<PatientResponse>> updatePregnancyStatus(
             @PathVariable UUID id,
@@ -102,7 +102,7 @@ public class PatientController {
      * (e.g. when a previously-recorded allergy turns out to be wrong).
      */
     @PatchMapping("/{id}/allergies")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR') "
+    @PreAuthorize("hasAnyRole('NURSE', 'DOCTOR') "
             + "and @clinicalAuthz.canAccessPatient(authentication, #id)")
     public ResponseEntity<ApiResponse<PatientResponse>> updateAllergies(
             @PathVariable UUID id,
@@ -114,7 +114,7 @@ public class PatientController {
     /** Update the patient's free-text chronic conditions. Same semantics
      *  as updateAllergies — full replacement, null clears. */
     @PatchMapping("/{id}/chronic-conditions")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR') "
+    @PreAuthorize("hasAnyRole('NURSE', 'DOCTOR') "
             + "and @clinicalAuthz.canAccessPatient(authentication, #id)")
     public ResponseEntity<ApiResponse<PatientResponse>> updateChronicConditions(
             @PathVariable UUID id,

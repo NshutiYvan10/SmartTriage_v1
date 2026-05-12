@@ -210,6 +210,18 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
     'zone-transfers',
   ]);
 
+  // RBAC fix — Triage Queue is shift-function-gated, not role-gated.
+  // Visible only to users with an active TRIAGE_NURSE shift function OR
+  // any Charge Nurse authority (designation, shift-lead badge, CN shift
+  // function). Hidden from admins, Zone Nurses, Doctors, etc.
+  const isShiftLead = user?.isShiftLead === true;
+  const currentShiftFunction = user?.currentShiftFunction ?? null;
+  const isTriageAuthority =
+    currentShiftFunction === 'TRIAGE_NURSE'
+    || currentShiftFunction === 'CHARGE_NURSE'
+    || isChargeNurse
+    || isShiftLead;
+
   // Filter sections based on role permissions
   const sections = allSections
     .map((section) => ({
@@ -221,6 +233,8 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         }
         // Doctor Workspace only for DOCTOR
         if (item.id === 'doctor-workspace') return userRole === 'DOCTOR';
+        // RBAC fix — Triage Queue requires triage authority on today's shift.
+        if (item.id === 'triage') return isTriageAuthority && canAccessPage(userRole, item.pageId);
         return canAccessPage(userRole, item.pageId);
       }),
     }))

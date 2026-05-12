@@ -58,8 +58,14 @@ public class ClinicalSignController {
         return ResponseEntity.ok(ApiResponse.success(service.getSignHistory(visitId, signCode)));
     }
 
+    /**
+     * RBAC fix — clinical-sign write is zone-scoped. SUPER_ADMIN removed
+     * (admins are not clinical actors); the new gate is "DOCTOR or NURSE
+     * with write authority on this specific visit's zone".
+     */
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.callerCanWriteToVisit(authentication, #request.visitId)")
     public ResponseEntity<ApiResponse<List<ClinicalSignEventResponse>>> recordBatch(
             @Valid @RequestBody RecordClinicalSignsBatchRequest request) {
         List<ClinicalSignEventResponse> created = service.recordBatch(request);

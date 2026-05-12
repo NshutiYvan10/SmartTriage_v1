@@ -14,6 +14,7 @@ import com.smartTriage.smartTriage_server.module.visit.repository.VisitRepositor
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
@@ -41,6 +42,7 @@ public class DynamicRetriageController {
      * Get all patients overdue for reassessment at a specific hospital.
      */
     @GetMapping("/overdue/{hospitalId}")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<OverduePatientResponse>>> getOverduePatients(
             @PathVariable UUID hospitalId) {
         List<OverduePatientResponse> overduePatients = reassessmentSchedulerService
@@ -54,6 +56,7 @@ public class DynamicRetriageController {
      * Get all patients who have exceeded their SATS wait time target.
      */
     @GetMapping("/waiting-exceeded/{hospitalId}")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<OverduePatientResponse>>> getWaitTimeExceededPatients(
             @PathVariable UUID hospitalId) {
         List<OverduePatientResponse> exceededPatients = waitingTimeMonitorService
@@ -68,6 +71,7 @@ public class DynamicRetriageController {
      * next reassessment due, and wait time status.
      */
     @GetMapping("/status/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<RetriageStatusResponse>> getRetriageStatus(
             @PathVariable UUID visitId) {
         Visit visit = visitRepository.findByIdAndIsActiveTrue(visitId)

@@ -62,7 +62,7 @@ public class DiagnosisController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("@clinicalAuthz.canAccessDiagnosis(authentication, #id)")
     public ResponseEntity<ApiResponse<DiagnosisResponse>> getDiagnosis(@PathVariable UUID id) {
         DiagnosisResponse response = diagnosisService.getDiagnosis(id);
         return ResponseEntity.ok(ApiResponse.success(response));

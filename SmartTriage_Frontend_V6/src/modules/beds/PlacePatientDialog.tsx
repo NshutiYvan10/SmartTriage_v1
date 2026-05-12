@@ -78,9 +78,11 @@ export function PlacePatientDialog({ open, onClose, onPlaced, mode }: PlacePatie
     if (!hospitalId) return;
     setLoading(true);
     try {
-      // Pull the first few pages of active visits, then filter to placeable
-      // statuses. For a small ED this covers everyone in the queue.
-      const page = await visitApi.getActiveByHospital(hospitalId, 0, 200);
+      // RBAC fix — caller-aware endpoint. A non-CN clinician opening this
+      // dialog only sees patients in their zone (which is the correct
+      // scope: you can't place a patient outside your zone in a bed
+      // anyway). Cross-zone authorities still see everyone.
+      const page = await visitApi.getActiveForCallerByHospital(hospitalId, 0, 200);
       setPatients(
         page.content.filter((v) => PLACEABLE_STATUSES.includes(v.status))
       );

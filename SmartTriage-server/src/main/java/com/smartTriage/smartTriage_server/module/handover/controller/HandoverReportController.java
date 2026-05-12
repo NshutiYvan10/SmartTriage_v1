@@ -119,7 +119,7 @@ public class HandoverReportController {
      * Get a single handover report by ID.
      */
     @GetMapping("/{id}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("@clinicalAuthz.canAccessHandoverReport(authentication, #id)")
     public ResponseEntity<ApiResponse<HandoverReportResponse>> getReport(@PathVariable UUID id) {
         HandoverReport report = handoverReportService.getReport(id);
         return ResponseEntity.ok(ApiResponse.success(HandoverReportMapper.toResponse(report)));

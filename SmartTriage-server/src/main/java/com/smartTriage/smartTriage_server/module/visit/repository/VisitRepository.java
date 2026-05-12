@@ -32,6 +32,16 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
         @Query("SELECT v.hospital.id FROM Visit v WHERE v.id = :visitId")
         Optional<UUID> findHospitalIdByVisitId(@Param("visitId") UUID visitId);
 
+        /**
+         * Lightweight projection used by ClinicalAuthz.callerCanWriteToVisit
+         * to enforce zone-scoped clinical writes. Returns empty Optional
+         * for a pre-triage visit (currentEdZone IS NULL) OR for an unknown
+         * visit id; the caller distinguishes via the existence check above.
+         */
+        @Query("SELECT v.currentEdZone FROM Visit v WHERE v.id = :visitId")
+        Optional<com.smartTriage.smartTriage_server.common.enums.EdZone>
+                findCurrentEdZoneByVisitId(@Param("visitId") UUID visitId);
+
         Page<Visit> findByHospitalIdAndIsActiveTrue(UUID hospitalId, Pageable pageable);
 
         Page<Visit> findByPatientIdAndIsActiveTrue(UUID patientId, Pageable pageable);
@@ -103,6 +113,21 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
          * zone often shares staff coverage with GENERAL on smaller
          * shifts, so a doctor may legitimately need both at once.
          */
+        /**
+         * RBAC fix — active pre-triage visits for the TRIAGE_NURSE's queue.
+         * A visit is "pre-triage" when {@code currentEdZone IS NULL} (no
+         * triage decision yet) OR explicitly placed in the TRIAGE holding
+         * zone. The Triage Nurse owns this list end-to-end; once triaged,
+         * the patient leaves their queue and lands in a destination-zone
+         * nurse's queue via {@link #findActiveVisitsInZones}.
+         */
+        @Query("SELECT v FROM Visit v WHERE v.hospital.id = :hospitalId AND v.isActive = true " +
+                        "AND (v.currentEdZone IS NULL OR v.currentEdZone = 'TRIAGE') " +
+                        "AND v.status NOT IN ('DISCHARGED', 'ADMITTED', 'TRANSFERRED', 'ICU_ADMITTED', 'DECEASED', 'LEFT_WITHOUT_BEING_SEEN')")
+        Page<Visit> findPreTriageActiveVisits(
+                        @Param("hospitalId") UUID hospitalId,
+                        Pageable pageable);
+
         @Query("SELECT v FROM Visit v WHERE v.hospital.id = :hospitalId AND v.isActive = true " +
                         "AND v.currentEdZone IN :zones " +
                         "AND v.status NOT IN ('DISCHARGED', 'ADMITTED', 'TRANSFERRED', 'ICU_ADMITTED', 'DECEASED', 'LEFT_WITHOUT_BEING_SEEN')")

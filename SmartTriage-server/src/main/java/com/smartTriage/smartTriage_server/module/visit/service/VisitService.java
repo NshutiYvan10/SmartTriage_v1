@@ -232,18 +232,38 @@ public class VisitService {
             UUID hospitalId,
             org.springframework.security.core.Authentication authentication,
             Pageable pageable) {
-        // 1. Cross-zone clinical actors — admins, shift-lead, Charge
-        //    Nurse designation. Hospital-wide list.
-        if (clinicalAuthz.canSeeAllZonesAtHospital(authentication, hospitalId)) {
-            return getActiveVisits(hospitalId, pageable);
-        }
-
         Object principal = authentication == null ? null : authentication.getPrincipal();
         if (!(principal instanceof com.smartTriage.smartTriage_server.module.user.entity.User user)) {
             return org.springframework.data.domain.Page.empty(pageable);
         }
+        com.smartTriage.smartTriage_server.common.enums.Role role = user.getRole();
 
-        // 2. Non-zone-bound operational roles — REGISTRAR (front
+        // RBAC fix — admins do not appear in clinical queues. They have
+        // their own admin views; this endpoint is for clinical staff.
+        if (role == com.smartTriage.smartTriage_server.common.enums.Role.SUPER_ADMIN
+                || role == com.smartTriage.smartTriage_server.common.enums.Role.HOSPITAL_ADMIN) {
+            return org.springframework.data.domain.Page.empty(pageable);
+        }
+
+        // 1. Cross-zone clinical authorities — Charge Nurse designation
+        //    or current shift-lead badge. Full hospital active list.
+        //    (Admins are already excluded above.)
+        if (clinicalAuthz.canSeeAllZonesAtHospital(authentication, hospitalId)) {
+            return getActiveVisits(hospitalId, pageable);
+        }
+
+        // 2. RBAC fix — today's TRIAGE_NURSE gets the pre-triage queue.
+        //    Previously they got an empty page because the zone filter
+        //    asks for currentEdZone IN [TRIAGE] but pre-triage rows have
+        //    currentEdZone IS NULL. They now see exactly what they
+        //    should: patients awaiting triage assignment.
+        if (clinicalAuthz.callerIsTodaysTriageNurse(authentication)) {
+            return visitRepository
+                    .findPreTriageActiveVisits(hospitalId, pageable)
+                    .map(VisitMapper::toResponse);
+        }
+
+        // 3. Non-zone-bound operational roles — REGISTRAR (front
         //    desk: needs the active queue to answer "where is patient
         //    X / has the family arrived"), LAB_TECHNICIAN (needs to
         //    look up the patient associated with a specimen),
@@ -256,7 +276,6 @@ public class VisitService {
         //
         //    They still must belong to this hospital — the controller
         //    enforces that with @PreAuthorize canAccessHospital.
-        com.smartTriage.smartTriage_server.common.enums.Role role = user.getRole();
         if (role == com.smartTriage.smartTriage_server.common.enums.Role.REGISTRAR
                 || role == com.smartTriage.smartTriage_server.common.enums.Role.LAB_TECHNICIAN
                 || role == com.smartTriage.smartTriage_server.common.enums.Role.PARAMEDIC
@@ -264,7 +283,7 @@ public class VisitService {
             return getActiveVisits(hospitalId, pageable);
         }
 
-        // 3. Zone-bound clinical roles (DOCTOR, NURSE) — patients in
+        // 4. Zone-bound clinical roles (DOCTOR, NURSE) — patients in
         //    the caller's currently-assigned zone. Off-shift returns
         //    empty by design: the frontend renders this as "you're
         //    not on shift", which is the correct cue rather than

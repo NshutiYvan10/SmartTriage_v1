@@ -60,4 +60,10 @@ public interface InvestigationRepository extends JpaRepository<Investigation, UU
             "GROUP BY i.visit.id")
     List<Object[]> countCriticalResultedByVisitIds(
             @org.springframework.data.repository.query.Param("visitIds") java.util.Collection<UUID> visitIds);
+
+    /** RBAC fix — projection used by ClinicalAuthz.canAccessInvestigation. */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT i.visit.id FROM Investigation i WHERE i.id = :id")
+    Optional<UUID> findVisitIdByInvestigationId(
+            @org.springframework.data.repository.query.Param("id") UUID id);
 }

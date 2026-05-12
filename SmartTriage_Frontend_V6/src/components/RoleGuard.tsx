@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore, type ShiftFunction } from '@/store/authStore';
 import { canAccessPage, hasFeature } from '@/types/roles';
 import type { AppPage, AppFeature } from '@/types/roles';
 import { ShieldX } from 'lucide-react';
@@ -16,6 +16,15 @@ interface RoleGuardProps {
    * a Charge Nurse) should reach a page that the parent role (NURSE) lacks.
    */
   allowDesignations?: string[];
+  /**
+   * RBAC fix — gate by today's active shift function. When set, the user
+   * must hold one of these ShiftFunction values on their current shift
+   * assignment. Cross-zone authorities (Charge Nurse designation,
+   * shift-lead badge) bypass this check, matching backend ClinicalAuthz.
+   * Admins (SUPER_ADMIN / HOSPITAL_ADMIN) are denied — admins are not
+   * clinical actors and must not reach shift-function-gated pages.
+   */
+  requiresShiftFunction?: ShiftFunction[];
   /** Where to redirect if the user lacks access (defaults to /dashboard) */
   redirectTo?: string;
   /** If true, shows a "no access" message instead of redirecting */
@@ -27,7 +36,7 @@ interface RoleGuardProps {
  * Wraps a route or section and only renders children if the
  * current user's role has the required page or feature access.
  */
-export function RoleGuard({ page, feature, allowDesignations, redirectTo = '/dashboard', inline = false, children }: RoleGuardProps) {
+export function RoleGuard({ page, feature, allowDesignations, requiresShiftFunction, redirectTo = '/dashboard', inline = false, children }: RoleGuardProps) {
   const user = useAuthStore((s) => s.user);
 
   if (!user) {
@@ -41,7 +50,28 @@ export function RoleGuard({ page, feature, allowDesignations, redirectTo = '/das
   const designationGrants =
     !!allowDesignations && !!user.designation && allowDesignations.includes(user.designation);
 
-  const hasAccess = roleHasAccess || designationGrants;
+  // RBAC fix — when a shift-function gate is declared, the user must
+  // either hold one of the required functions on today's shift OR be
+  // a cross-zone authority (CN designation / shift-lead badge) OR
+  // (for the triage gate specifically) have a CHARGE_NURSE shift
+  // function which is the documented override path.
+  let shiftGatePasses = true;
+  if (requiresShiftFunction && requiresShiftFunction.length > 0) {
+    // Admins explicitly never pass shift-function gates.
+    if (user.role === 'SUPER_ADMIN' || user.role === 'HOSPITAL_ADMIN') {
+      shiftGatePasses = false;
+    } else {
+      const fn = user.currentShiftFunction;
+      const isChargeNurseAuthority =
+        user.designation === 'CHARGE_NURSE'
+        || user.isShiftLead === true
+        || fn === 'CHARGE_NURSE';
+      shiftGatePasses = isChargeNurseAuthority
+        || (!!fn && requiresShiftFunction.includes(fn));
+    }
+  }
+
+  const hasAccess = (roleHasAccess || designationGrants) && shiftGatePasses;
 
   if (!hasAccess) {
     if (inline) {

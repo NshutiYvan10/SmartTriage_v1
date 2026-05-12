@@ -102,7 +102,7 @@ public class VisitController {
     }
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("@clinicalAuthz.callerCanWriteToVisit(authentication, #id)")
     public ResponseEntity<ApiResponse<VisitResponse>> updateVisitStatus(
             @PathVariable UUID id,
             @RequestParam VisitStatus status) {

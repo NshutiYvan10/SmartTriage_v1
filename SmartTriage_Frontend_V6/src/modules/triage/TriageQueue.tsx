@@ -330,12 +330,20 @@ export function TriageQueue() {
   const storePatients = usePatientStore((s) => s.patients);
   const fetchActiveVisits = usePatientStore((s) => s.fetchActiveVisits);
   const user = useAuthStore((s) => s.user);
+  const refreshCurrentShift = useAuthStore((s) => s.refreshCurrentShift);
 
   const [activeTab, setActiveTab] = useState<Tab>('all');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [now, setNow] = useState(Date.now());
   const [placeVisit, setPlaceVisit] = useState<VisitResponse | null>(null);
+
+  // RBAC fix — refresh the current shift assignment whenever the Triage
+  // Queue mounts so a Charge Nurse reassignment mid-session is reflected
+  // immediately (instead of waiting until the next login).
+  useEffect(() => {
+    refreshCurrentShift().catch(() => { /* silent — stale cache is the fallback */ });
+  }, [refreshCurrentShift]);
 
   // Fetch patients from backend
   useEffect(() => {
@@ -571,8 +579,28 @@ export function TriageQueue() {
           {triageQueue.length === 0 ? (
             <div className="px-6 py-16 text-center">
               <Stethoscope className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-slate-400">No patients in queue</p>
-              <p className="text-xs text-slate-400 mt-1">Register a patient to start triage</p>
+              {/* RBAC fix — explain WHY the queue is empty instead of
+                  showing a silent "no patients" with no next action. */}
+              {user?.isOnShift === false ? (
+                <>
+                  <p className="text-sm font-semibold text-slate-400">You're not on shift</p>
+                  <p className="text-xs text-slate-400 mt-1">Ask the Charge Nurse to add you to today's triage shift.</p>
+                </>
+              ) : user?.currentShiftFunction && user.currentShiftFunction !== 'TRIAGE_NURSE'
+                  && user.currentShiftFunction !== 'CHARGE_NURSE' && !user.isShiftLead ? (
+                <>
+                  <p className="text-sm font-semibold text-slate-400">Not the Triage Nurse today</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Your shift function is <span className="font-mono">{user.currentShiftFunction}</span>.
+                    Only the Triage Nurse (or Charge Nurse override) sees this queue.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-semibold text-slate-400">No patients waiting</p>
+                  <p className="text-xs text-slate-400 mt-1">Newly registered patients will appear here for triage.</p>
+                </>
+              )}
             </div>
           ) : (
             <div className="p-4 space-y-2.5">

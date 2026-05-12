@@ -84,7 +84,7 @@ public class ClinicalNoteController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("@clinicalAuthz.canAccessClinicalNote(authentication, #id)")
     public ResponseEntity<ApiResponse<ClinicalNoteResponse>> getNote(@PathVariable UUID id) {
         ClinicalNoteResponse response = clinicalNoteService.getNote(id);
         return ResponseEntity.ok(ApiResponse.success(response));

@@ -149,11 +149,15 @@ function AppContent() {
             <Route path="/entry" element={<RoleGuard page="entry"><EntryRegistration /></RoleGuard>} />
             <Route path="/patients" element={<RoleGuard page="patients"><PatientsList /></RoleGuard>} />
             <Route path="/patients/:patientId" element={<RoleGuard page="patients"><PatientDetailView /></RoleGuard>} />
-            <Route path="/triage" element={<RoleGuard page="triage"><TriageQueue /></RoleGuard>} />
-            <Route path="/pediatric-triage/new" element={<RoleGuard page="triage"><PediatricTriageForm /></RoleGuard>} />
-            <Route path="/pediatric-triage/:patientId" element={<RoleGuard page="triage"><PediatricTriageForm /></RoleGuard>} />
-            <Route path="/adult-triage/new" element={<RoleGuard page="triage"><AdultTriageForm /></RoleGuard>} />
-            <Route path="/adult-triage/:patientId" element={<RoleGuard page="triage"><AdultTriageForm /></RoleGuard>} />
+            {/* RBAC fix — triage routes require an active TRIAGE_NURSE shift
+                function. Charge Nurse authority (designation or shift-lead
+                badge) bypasses this gate as the documented override path.
+                Doctors / Zone Nurses / admins are denied. */}
+            <Route path="/triage" element={<RoleGuard page="triage" requiresShiftFunction={['TRIAGE_NURSE']}><TriageQueue /></RoleGuard>} />
+            <Route path="/pediatric-triage/new" element={<RoleGuard page="triage" requiresShiftFunction={['TRIAGE_NURSE']}><PediatricTriageForm /></RoleGuard>} />
+            <Route path="/pediatric-triage/:patientId" element={<RoleGuard page="triage" requiresShiftFunction={['TRIAGE_NURSE']}><PediatricTriageForm /></RoleGuard>} />
+            <Route path="/adult-triage/new" element={<RoleGuard page="triage" requiresShiftFunction={['TRIAGE_NURSE']}><AdultTriageForm /></RoleGuard>} />
+            <Route path="/adult-triage/:patientId" element={<RoleGuard page="triage" requiresShiftFunction={['TRIAGE_NURSE']}><AdultTriageForm /></RoleGuard>} />
             <Route path="/visit/:visitId" element={<RoleGuard page="triage"><VisitDetailPage /></RoleGuard>} />
             <Route path="/doctor-workspace" element={<RoleGuard page="triage"><DoctorWorkspace /></RoleGuard>} />
             <Route path="/vitals/:patientId" element={<RoleGuard page="monitoring"><VitalMonitoring /></RoleGuard>} />

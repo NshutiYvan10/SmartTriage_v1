@@ -36,4 +36,8 @@ public interface HandoverReportRepository extends JpaRepository<HandoverReport, 
             @Param("hospitalId") UUID hospitalId,
             @Param("reportType") HandoverReportType reportType,
             Pageable pageable);
+
+    /** RBAC fix — projection used by ClinicalAuthz.canAccessHandoverReport. */
+    @Query("SELECT h.hospital.id FROM HandoverReport h WHERE h.id = :id")
+    Optional<UUID> findHospitalIdByReportId(@Param("id") UUID id);
 }

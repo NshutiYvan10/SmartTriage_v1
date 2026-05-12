@@ -30,7 +30,23 @@ export interface AuthUser {
   isShiftLead?: boolean;
   /** True when the user has an active shift assignment of any kind. */
   isOnShift?: boolean;
+  /**
+   * RBAC fix — the user's ShiftFunction for the current shift (TRIAGE_NURSE,
+   * ZONE_NURSE, CHARGE_NURSE, PRIMARY_DOCTOR, SUPERVISING_DOCTOR, RESIDENT).
+   * Null when off-shift. Drives RoleGuard's shift-function gate so a NURSE
+   * with ZONE_NURSE shift function can't access the /triage route.
+   */
+  currentShiftFunction?: ShiftFunction | null;
 }
+
+/** RBAC fix — frontend mirror of the backend ShiftFunction enum. */
+export type ShiftFunction =
+  | 'CHARGE_NURSE'
+  | 'TRIAGE_NURSE'
+  | 'ZONE_NURSE'
+  | 'PRIMARY_DOCTOR'
+  | 'SUPERVISING_DOCTOR'
+  | 'RESIDENT';
 
 interface AuthState {
   /** Currently authenticated user (null = not logged in) */
@@ -290,6 +306,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
             currentZone: null,
             isShiftLead: false,
             isOnShift: false,
+            currentShiftFunction: null,
           };
           localStorage.setItem('st-auth-user', JSON.stringify(updated));
           set({ user: updated });
@@ -300,6 +317,9 @@ export const useAuthStore = create<AuthState>((set, get) => {
           currentZone: (assignment.zone as EdZone) ?? null,
           isShiftLead: !!assignment.isShiftLead,
           isOnShift: true,
+          // RBAC fix — surface the shift function so RoleGuard can gate
+          // on TRIAGE_NURSE vs ZONE_NURSE vs CHARGE_NURSE etc.
+          currentShiftFunction: (assignment.shiftFunction as ShiftFunction) ?? null,
         };
         localStorage.setItem('st-auth-user', JSON.stringify(updated));
         set({ user: updated });

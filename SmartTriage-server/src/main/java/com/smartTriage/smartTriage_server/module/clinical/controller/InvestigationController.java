@@ -85,7 +85,7 @@ public class InvestigationController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("@clinicalAuthz.canAccessInvestigation(authentication, #id)")
     public ResponseEntity<ApiResponse<InvestigationResponse>> getInvestigation(
             @PathVariable UUID id) {
         InvestigationResponse response = investigationService.getInvestigation(id);

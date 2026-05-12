@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -27,6 +28,7 @@ public class OfflineSyncController {
     private final OfflineSyncService offlineSyncService;
 
     @PostMapping("/sync")
+    @PreAuthorize("isAuthenticated() and !hasRole('READ_ONLY')")
     public ResponseEntity<ApiResponse<SyncBatchResponse>> syncBatch(
             @Valid @RequestBody List<OfflineSyncRequest> records) {
         SyncBatchResponse response = offlineSyncService.syncBatch(records);
@@ -35,6 +37,7 @@ public class OfflineSyncController {
     }
 
     @PutMapping("/conflict/{id}/resolve")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<OfflineSyncRecordResponse>> resolveConflict(
             @PathVariable UUID id,
             @Valid @RequestBody ConflictResolutionRequest request) {
@@ -44,6 +47,7 @@ public class OfflineSyncController {
     }
 
     @GetMapping("/pending/{clientDeviceId}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<List<OfflineSyncRecordResponse>>> getPendingRecords(
             @PathVariable String clientDeviceId) {
         List<OfflineSyncRecordResponse> responses = offlineSyncService.getPendingRecords(clientDeviceId)
@@ -54,6 +58,7 @@ public class OfflineSyncController {
     }
 
     @GetMapping("/conflicts/{hospitalId}")
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<OfflineSyncRecordResponse>>> getConflicts(
             @PathVariable UUID hospitalId) {
         List<OfflineSyncRecordResponse> responses = offlineSyncService.getConflicts(hospitalId)
@@ -64,6 +69,7 @@ public class OfflineSyncController {
     }
 
     @GetMapping("/status/{hospitalId}")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<SyncStatusResponse>> getSyncStatus(
             @PathVariable UUID hospitalId) {
         SyncStatusResponse response = offlineSyncService.getSyncStatus(hospitalId);

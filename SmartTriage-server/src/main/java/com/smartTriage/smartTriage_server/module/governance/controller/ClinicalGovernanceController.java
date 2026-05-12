@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,11 +23,16 @@ import java.util.stream.Collectors;
 /**
  * REST controller for clinical governance policy management.
  * Supports full lifecycle: create, update, approve, activate, suspend, archive.
+ *
+ * RBAC fix — entire controller is admin / governance-only. Charge Nurses
+ * may participate in policy review (per the canSeeAllZonesAtHospital
+ * authority list) but only admins can write.
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/governance/policies")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'READ_ONLY', 'NURSE', 'DOCTOR')")
 public class ClinicalGovernanceController {
 
     private final ClinicalGovernanceService governanceService;
@@ -35,6 +41,7 @@ public class ClinicalGovernanceController {
      * Create a new draft policy.
      */
     @PostMapping
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> createPolicy(
             @Valid @RequestBody CreatePolicyRequest request) {
         log.info("Creating policy: {}", request.getPolicyName());
@@ -47,6 +54,7 @@ public class ClinicalGovernanceController {
      * Update a draft policy.
      */
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> updatePolicy(
             @PathVariable UUID id,
             @Valid @RequestBody UpdatePolicyRequest request) {
@@ -60,6 +68,7 @@ public class ClinicalGovernanceController {
      * Submit a draft policy for approval.
      */
     @PutMapping("/{id}/submit")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> submitForApproval(
             @PathVariable UUID id) {
         log.info("Submitting policy {} for approval", id);
@@ -72,6 +81,7 @@ public class ClinicalGovernanceController {
      * Approve a pending policy.
      */
     @PutMapping("/{id}/approve")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> approvePolicy(
             @PathVariable UUID id,
             @Valid @RequestBody ApprovePolicyRequest request) {
@@ -86,6 +96,7 @@ public class ClinicalGovernanceController {
      * Activate an approved policy.
      */
     @PutMapping("/{id}/activate")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> activatePolicy(
             @PathVariable UUID id) {
         log.info("Activating policy {}", id);
@@ -98,6 +109,7 @@ public class ClinicalGovernanceController {
      * Suspend an active policy.
      */
     @PutMapping("/{id}/suspend")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> suspendPolicy(
             @PathVariable UUID id,
             @Valid @RequestBody SuspendPolicyRequest request) {
@@ -111,6 +123,7 @@ public class ClinicalGovernanceController {
      * Archive a policy.
      */
     @PutMapping("/{id}/archive")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> archivePolicy(
             @PathVariable UUID id) {
         log.info("Archiving policy {}", id);
@@ -123,6 +136,7 @@ public class ClinicalGovernanceController {
      * Get active policies for a hospital by type.
      */
     @GetMapping("/hospital/{hospitalId}/active")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<ClinicalPolicyResponse>>> getActivePolicies(
             @PathVariable UUID hospitalId,
             @RequestParam(required = false) PolicyType type) {
@@ -148,6 +162,7 @@ public class ClinicalGovernanceController {
      * Get all policies for a hospital with pagination.
      */
     @GetMapping("/hospital/{hospitalId}")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<ClinicalPolicyResponse>>> getAllPolicies(
             @PathVariable UUID hospitalId, Pageable pageable) {
         Page<ClinicalPolicyResponse> policies = governanceService

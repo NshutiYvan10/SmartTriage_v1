@@ -27,8 +27,28 @@ public class TriageController {
 
     private final TriageService triageService;
 
+    /**
+     * RBAC fix — Triage write authority is intentionally narrow.
+     *
+     * Permitted:
+     * <ul>
+     *   <li>Today's TRIAGE_NURSE (canonical authority)</li>
+     *   <li>Anyone with charge-nurse authority — Designation.CHARGE_NURSE,
+     *       current shift-lead badge, OR active CHARGE_NURSE shift function
+     *       — so the floor lead can pick up triage when the Triage Nurse
+     *       is overwhelmed.</li>
+     * </ul>
+     *
+     * Denied (previously incorrectly permitted):
+     * <ul>
+     *   <li>SUPER_ADMIN, HOSPITAL_ADMIN — administrative roles, never clinical</li>
+     *   <li>DOCTORs — they read triage records but do not author them</li>
+     *   <li>ZONE_NURSE — assigned to a destination zone, not the triage station</li>
+     * </ul>
+     */
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("@clinicalAuthz.callerCanPerformTriage(authentication) "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #request.visitId)")
     public ResponseEntity<ApiResponse<TriageRecordResponse>> performTriage(
             @Valid @RequestBody PerformTriageRequest request) {
         TriageRecordResponse response = triageService.performTriage(request);

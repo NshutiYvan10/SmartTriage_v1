@@ -103,7 +103,11 @@ export function DoctorWorkspace() {
       if (myZone && !isShiftLead) {
         visitData = await visitApi.getByZone(hospitalId, myZone);
       } else {
-        const page = await visitApi.getActiveByHospital(hospitalId, 0, 100);
+        // RBAC fix — use the caller-aware endpoint instead of the unscoped
+        // admin endpoint. The backend returns the right scope based on
+        // auth (shift-lead/CN → all zones; off-shift clinician → empty).
+        // We no longer rely on a frontend boolean to decide which API to hit.
+        const page = await visitApi.getActiveForCallerByHospital(hospitalId, 0, 100);
         visitData = page.content || [];
       }
       setVisits(visitData);

@@ -13,17 +13,22 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
 /**
  * REST controller for Rwanda MoH report generation, submission, and review.
+ *
+ * RBAC fix — entire controller is now admin / governance-only. Class-level
+ * gate denies all clinical staff; ministry reporting is administrative work.
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/moh-reports")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'READ_ONLY')")
 public class MohReportController {
 
     private final MohReportService mohReportService;
@@ -32,6 +37,7 @@ public class MohReportController {
      * Generate a new MoH report.
      */
     @PostMapping("/generate")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<MohReportResponse>> generateReport(
             @Valid @RequestBody GenerateReportRequest request) {
         log.info("Generating {} report for hospital {}", request.getReportType(), request.getHospitalId());
@@ -50,6 +56,7 @@ public class MohReportController {
      * Submit a report for MoH review.
      */
     @PutMapping("/{id}/submit")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<MohReportResponse>> submitReport(@PathVariable UUID id) {
         log.info("Submitting report {}", id);
         MohReport report = mohReportService.submitReport(id);
@@ -61,6 +68,7 @@ public class MohReportController {
      * Accept a submitted report.
      */
     @PutMapping("/{id}/accept")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<ApiResponse<MohReportResponse>> acceptReport(@PathVariable UUID id) {
         log.info("Accepting report {}", id);
         MohReport report = mohReportService.acceptReport(id);
@@ -72,6 +80,7 @@ public class MohReportController {
      * Reject a submitted report with a reason.
      */
     @PutMapping("/{id}/reject")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<ApiResponse<MohReportResponse>> rejectReport(
             @PathVariable UUID id,
             @Valid @RequestBody RejectReportRequest request) {
@@ -85,6 +94,7 @@ public class MohReportController {
      * List all reports for a hospital with pagination.
      */
     @GetMapping("/hospital/{hospitalId}")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<MohReportResponse>>> getReportsForHospital(
             @PathVariable UUID hospitalId, Pageable pageable) {
         Page<MohReportResponse> reports = mohReportService
