@@ -514,7 +514,13 @@ public class BedService {
                     }
                     current.setAssignedBed(null);
                     deviceRepository.save(current);
-                    log.info("Detached device {} from bed {}", current.getSerialNumber(), bed.getCode());
+                    // Clear the bed.hasMonitor flag — keep it in sync
+                    // with reality so autoStartSessionForBed and the UI
+                    // don't claim the bed has a monitor when it doesn't.
+                    bed.setHasMonitor(false);
+                    bedRepository.save(bed);
+                    log.info("Detached device {} from bed {} (hasMonitor cleared)",
+                            current.getSerialNumber(), bed.getCode());
                 });
 
         if (request.getDeviceId() != null) {
@@ -566,10 +572,31 @@ public class BedService {
      * Mirrors the core of DeviceService.startMonitoring, inlined here so
      * placement is a single-transaction atomic unit.
      */
-    private void autoStartSessionForBed(Bed bed, Visit visit, String startedByName) {
+    /**
+     * Opens a DeviceSession on the bed's paired monitor (if any).
+     *
+     * @return true when a session was actually opened; false when the bed
+     *         has no paired monitor, the monitor is offline, or any
+     *         expected-no-op branch fired. Caller uses this to build an
+     *         accurate auto-placement note (so we never tell the nurse
+     *         "monitor streaming" when nothing actually started).
+     */
+    private boolean autoStartSessionForBed(Bed bed, Visit visit, String startedByName) {
         IoTDevice device = deviceRepository.findByAssignedBedIdAndIsActiveTrue(bed.getId()).orElse(null);
         if (device == null) {
-            return; // Bed has no assigned monitor — nothing to auto-start
+            // Bed.hasMonitor can be a stale flag (assignDevice sets it
+            // true, detach never clears it). Reflect reality back to the
+            // bed row here so the UI's "this bed has a monitor" indicator
+            // doesn't keep lying after a detach.
+            if (bed.isHasMonitor()) {
+                bed.setHasMonitor(false);
+                bedRepository.save(bed);
+                log.warn("Bed {} had hasMonitor=true but no device is paired — "
+                        + "cleared the stale flag.", bed.getCode());
+            } else {
+                log.info("Bed {} has no monitor paired — auto-pair skipped.", bed.getCode());
+            }
+            return false;
         }
 
         // Device must be reachable (ONLINE or previously REGISTERED). If it's OFFLINE
@@ -577,9 +604,10 @@ public class BedService {
         // heartbeats, and the nurse can manually pair in the meantime.
         if (device.getStatus() == DeviceStatus.OFFLINE
                 || device.getStatus() == DeviceStatus.DECOMMISSIONED) {
-            log.warn("Bed {} has assigned device {} but it is {} — skipping auto-pair",
+            log.warn("Bed {} has assigned device {} but it is {} — skipping auto-pair. "
+                    + "Will pair on next heartbeat.",
                     bed.getCode(), device.getSerialNumber(), device.getStatus());
-            return;
+            return false;
         }
 
         // Close any stale session on the device
@@ -624,6 +652,7 @@ public class BedService {
         // helper below so subscribers reading device state via HTTP see
         // post-commit data.
         publishDeviceStatusChangeAfterCommit(fresh);
+        return true;
     }
 
     /** Close the active monitoring session for a visit, if one exists. */
@@ -1014,6 +1043,20 @@ public class BedService {
      * no separate alert here, but the audit trace shows what the system
      * showed the nurse).
      */
+    /**
+     * Definitive truth — is a bedside monitor currently streaming for
+     * this visit? Used by TriageService to build an accurate
+     * auto-placement note ("monitor streaming" vs "no monitor"). We
+     * check session existence rather than bed.hasMonitor because that
+     * cosmetic flag can be stale; an active DeviceSession means the
+     * simulator (or real device) is actually pushing vitals.
+     */
+    public boolean hasActiveSessionForVisit(UUID visitId) {
+        return sessionRepository
+                .findByVisitIdAndSessionActiveTrueAndIsActiveTrue(visitId)
+                .isPresent();
+    }
+
     public Optional<Bed> suggestBedForVisit(UUID visitId) {
         Visit visit = visitRepository.findByIdAndIsActiveTrue(visitId).orElse(null);
         if (visit == null) return Optional.empty();

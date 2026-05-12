@@ -422,13 +422,29 @@ public class TriageService {
                         : "Triage (auto)";
                 bedService.placePatient(suggestedBed.getId(), placeReq, actorName);
                 autoPlaced = true;
-                autoPlacementNote = suggestedBed.isHasMonitor()
-                        ? "Placed in Bed " + suggestedBed.getCode()
-                                + " (" + suggestedBed.getZone() + ") — monitor streaming."
-                        : "Placed in Bed " + suggestedBed.getCode()
-                                + " (" + suggestedBed.getZone() + ") — no monitor.";
-                log.info("Auto-placed visit {} in bed {} after triage",
-                        visit.getVisitNumber(), suggestedBed.getCode());
+                // Build the note from DEFINITIVE truth — does a monitor
+                // session actually exist for this visit now? — not from
+                // the suggestedBed.hasMonitor cosmetic flag, which can
+                // be stale (set to true on assignDevice but never reset
+                // on detach in older code paths). This is what the user
+                // sees in the success banner.
+                boolean monitorStreaming = bedService.hasActiveSessionForVisit(visit.getId());
+                String prefix = "Placed in Bed " + suggestedBed.getCode()
+                        + " (" + suggestedBed.getZone() + ")";
+                if (monitorStreaming) {
+                    autoPlacementNote = prefix + " — monitor streaming.";
+                } else if (suggestedBed.isHasMonitor()) {
+                    // Bed is flagged as having a monitor but no session
+                    // started — most likely the device is OFFLINE. The
+                    // simulator's next heartbeat will auto-pair via
+                    // DeviceService.autoPairIfMissingSession.
+                    autoPlacementNote = prefix + " — monitor offline, will pair on next heartbeat.";
+                } else {
+                    autoPlacementNote = prefix + " — no monitor paired to this bed.";
+                }
+                log.info("Auto-placed visit {} in bed {} after triage ({}).",
+                        visit.getVisitNumber(), suggestedBed.getCode(),
+                        monitorStreaming ? "monitor streaming" : "no live session");
             } catch (Exception e) {
                 // Non-fatal — fall through to "suggest, manual confirm"
                 // so the triage record is preserved. The frontend modal
