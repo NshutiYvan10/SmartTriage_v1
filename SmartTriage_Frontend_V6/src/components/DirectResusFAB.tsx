@@ -56,7 +56,18 @@ const CLINICAL_ROLES: UserRole[] = [
 // — triage nurses are NURSE-role users with Designation.TRIAGE_NURSE, so
 // they're already covered by the NURSE entry above.
 
-/** Routes where the FAB is hidden to avoid duplicating the registration banner. */
+/**
+ * Routes where the FAB is hidden.
+ * - /entry already has its own Stable/Unstable banner — a second
+ *   floating button is visual noise.
+ * - /login, /accept-invite, /onboarding, /forgot-password,
+ *   /reset-password — unauthenticated surfaces.
+ * - /adult-triage, /pediatric-triage, /triage — the nurse is already
+ *   triaging; the floating button overlapped the triage form's
+ *   bottom action area. The category-based pathway is in the form
+ *   itself (RED → auto-routed to RESUS), so the explicit Direct Resus
+ *   shortcut is redundant here.
+ */
 const HIDDEN_ROUTE_PREFIXES = [
   '/entry',
   '/login',
@@ -64,6 +75,9 @@ const HIDDEN_ROUTE_PREFIXES = [
   '/onboarding',
   '/forgot-password',
   '/reset-password',
+  '/adult-triage',
+  '/pediatric-triage',
+  '/triage',
 ];
 
 export function DirectResusFAB() {

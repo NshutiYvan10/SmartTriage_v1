@@ -19,6 +19,7 @@ import { useBedStore } from '@/store/bedStore';
 import { useTheme } from '@/hooks/useTheme';
 import { hospitalApi } from '@/api/hospitals';
 import { iotApi } from '@/api/iot';
+import { subscribeToBedChanges, subscribeToDevices } from '@/api/websocket';
 import type {
   BedResponse,
   BedStatus,
@@ -105,6 +106,31 @@ export function BedManagement() {
   }, [hospitalId, loadHospital]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Real-time updates — re-fetch the bed list whenever the backend
+  // publishes a bed change (placePatient, discharge, status flip, device
+  // assignment, etc.) or a device status change (e.g. a monitor flips to
+  // MONITORING when a patient is auto-placed in its bed). Without this,
+  // the page only showed stale data until the next manual refresh.
+  //
+  // Lightweight debounce — a burst of events (e.g. placePatient fires
+  // bedChange + deviceStatusChange back-to-back) collapses into a single
+  // refresh.
+  useEffect(() => {
+    if (!hospitalId) return;
+    let debounceHandle: number | null = null;
+    const scheduleRefresh = () => {
+      if (debounceHandle != null) window.clearTimeout(debounceHandle);
+      debounceHandle = window.setTimeout(() => { refresh(); }, 200);
+    };
+    const unsubBeds = subscribeToBedChanges(hospitalId, scheduleRefresh);
+    const unsubDevices = subscribeToDevices(hospitalId, scheduleRefresh);
+    return () => {
+      if (debounceHandle != null) window.clearTimeout(debounceHandle);
+      unsubBeds();
+      unsubDevices();
+    };
+  }, [hospitalId, refresh]);
 
   useEffect(() => {
     if (isSuperAdmin) {
