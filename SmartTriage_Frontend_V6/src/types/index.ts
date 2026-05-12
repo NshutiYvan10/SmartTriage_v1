@@ -75,6 +75,12 @@ export interface TEWSInput {
 // Patient
 export interface Patient {
   id: string;
+  /**
+   * Backing patient-row id (distinct from `id`, which is the visit id
+   * the list view uses as a key). Populated by fetchActiveVisits so
+   * PatientDetailView can lazy-hydrate the full patient record.
+   */
+  patientId?: string;
   fullName: string;
   age: number;
   ageMonths?: number; // month-level precision for pediatric

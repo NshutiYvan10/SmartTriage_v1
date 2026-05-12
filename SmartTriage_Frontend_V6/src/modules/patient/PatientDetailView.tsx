@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, User, Calendar, MapPin, Phone, CreditCard,
@@ -6,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { usePatientStore } from '@/store/patientStore';
+import { patientApi } from '@/api/patients';
 import type { Patient } from '@/types';
 
 /* ─── Reusable info row ─── */
@@ -55,6 +57,51 @@ export function PatientDetailView() {
 
   const patient: (Patient & Record<string, any>) | undefined =
     usePatientStore((s) => s.getPatient(patientId || ''));
+  const updatePatient = usePatientStore((s) => s.updatePatient);
+
+  // Lazy hydrate the full patient record. The bulk list-view fetch
+  // (fetchActiveVisits) skips per-patient detail to avoid the N+1
+  // dashboard slowdown — it only carries visit-projection fields like
+  // name, complaint, category. When the user opens THIS page, fetch
+  // the full patient row and merge into the store. Best-effort:
+  // failure leaves the placeholder fields in place.
+  useEffect(() => {
+    if (!patient) return;
+    // The `patient.id` is the visit id (used as the list key); the
+    // real patient row is at `patient.patientId` when the visit
+    // projection carried it. The list mapper doesn't currently put
+    // patientId into the Patient shape, so fall back to fetching by
+    // a separate lookup if needed. For now we lazily fetch by visitId
+    // → patient via a derived endpoint, or skip if details already
+    // populated (presence of nationalId/phone/dateOfBirth suggests a
+    // prior detail fetch).
+    const alreadyHydrated = patient.nationalId || patient.phoneNumber || patient.dateOfBirth;
+    if (alreadyHydrated) return;
+    const targetPatientId = (patient as any).patientId;
+    if (!targetPatientId) return;
+    let cancelled = false;
+    patientApi.getById(targetPatientId)
+      .then((p) => {
+        if (cancelled) return;
+        updatePatient(patient.id, {
+          age: p.ageInYears ?? patient.age,
+          gender: p.gender as Patient['gender'],
+          nationalId: p.nationalId || undefined,
+          phone: p.phoneNumber || undefined,
+          phoneNumber: p.phoneNumber || undefined,
+          address: p.address || undefined,
+          emergencyContactName: p.emergencyContactName || undefined,
+          emergencyContactPhone: p.emergencyContactPhone || undefined,
+          bloodType: p.bloodType || undefined,
+          knownAllergies: p.knownAllergies || undefined,
+          chronicConditions: p.chronicConditions || undefined,
+          medicalRecordNumber: p.medicalRecordNumber || undefined,
+          dateOfBirth: p.dateOfBirth || undefined,
+        } as Partial<Patient>);
+      })
+      .catch(() => { /* best-effort; placeholder fields persist */ });
+    return () => { cancelled = true; };
+  }, [patient, updatePatient]);
 
   if (!patient || !patientId) {
     return (

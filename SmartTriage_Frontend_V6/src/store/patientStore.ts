@@ -41,6 +41,7 @@ function mapToPatient(p: PatientResponse, v?: VisitResponse): Patient & Record<s
 
   return {
     id: v?.id || p.id, // Use visit ID as the key for triage workflows
+    patientId: p.id,
     fullName: `${p.firstName} ${p.lastName}`,
     age: ageYears,
     gender: p.gender as Patient['gender'],
@@ -139,36 +140,40 @@ export const usePatientStore = create<PatientState>((set, get) => ({
   fetchActiveVisits: async (hospitalId: string) => {
     set({ isLoading: true });
     try {
+      // Single bulk fetch — drops the N+1 patient-detail call per
+      // visit that previously made the dashboard wait 2–5s with even
+      // a modest patient load. The visit projection carries everything
+      // the list view needs (name, complaint, category, score, peds
+      // flag, status, arrival time); detailed patient fields (gender,
+      // age, allergies, etc.) are lazy-loaded by PatientDetailView
+      // when the nurse clicks into a specific patient.
       const visitsPage = await visitApi.getActiveForCallerByHospital(hospitalId, 0, 200);
       const visits: VisitResponse[] = visitsPage.content;
 
-      // For each visit, fetch the patient details and combine
-      const mapped: Patient[] = await Promise.all(
-        visits.map(async (v) => {
-          try {
-            const p = await patientApi.getById(v.patientId);
-            return mapToPatient(p, v);
-          } catch {
-            // If patient fetch fails, build partial record from visit
-            return {
-              id: v.id,
-              fullName: v.patientName || 'Unknown',
-              age: 0,
-              gender: 'MALE' as Patient['gender'],   // placeholder for backend-projected visits without a patient row
-              chiefComplaint: v.chiefComplaint || '',
-              arrivalMode: (v.arrivalMode as Patient['arrivalMode']) || 'WALK_IN',
-              arrivalTimestamp: new Date(v.arrivalTime),
-              isPediatric: v.isPediatric ?? false,
-              triageStatus: mapVisitStatus(v.status),
-              category: v.currentTriageCategory as TriageCategory | undefined,
-              tewsScore: v.currentTewsScore ?? undefined,
-              aiAlerts: [],
-              overrideHistory: [],
-              registrationCompletedAt: new Date(v.arrivalTime),
-            } as Patient;
-          }
-        })
-      );
+      const mapped: Patient[] = visits.map((v) => ({
+        id: v.id,
+        // Real backing patient row id so PatientDetailView can lazy-
+        // hydrate the full record without a second list lookup.
+        patientId: v.patientId,
+        fullName: v.patientName || 'Unknown',
+        age: 0, // populated on demand by PatientDetailView
+        gender: 'MALE' as Patient['gender'], // placeholder until detail fetch
+        chiefComplaint: v.chiefComplaint || '',
+        arrivalMode: (v.arrivalMode as Patient['arrivalMode']) || 'WALK_IN',
+        arrivalTimestamp: new Date(v.arrivalTime),
+        isPediatric: v.isPediatric ?? false,
+        triageStatus: mapVisitStatus(v.status),
+        category: v.currentTriageCategory as TriageCategory | undefined,
+        tewsScore: v.currentTewsScore ?? undefined,
+        aiAlerts: [],
+        overrideHistory: [],
+        registrationCompletedAt: new Date(v.arrivalTime),
+        // Shift-handoff aggregate signals already on the visit response.
+        pendingInvestigationsCount: v.pendingInvestigationsCount ?? undefined,
+        unacknowledgedCriticalResultsCount: v.unacknowledgedCriticalResultsCount ?? undefined,
+        pendingMedicationsCount: v.pendingMedicationsCount ?? undefined,
+        hasOpenIcuEscalation: v.hasOpenIcuEscalation ?? undefined,
+      } as Patient));
 
       set({ patients: mapped, isLoading: false });
     } catch (err) {

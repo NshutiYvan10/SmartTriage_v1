@@ -221,25 +221,29 @@ export const useAuthStore = create<AuthState>((set, get) => {
         // Set the user first so any subscribed component can render.
         set({ user, error: null });
 
-        // Pre-fetch dashboard data + shift assignment IN PARALLEL,
-        // and wait for them before resolving login(). The LoginPage
-        // is showing its spinner via `isLoading`; we keep it spinning
-        // until the data is ready, so when LoginPage calls
-        // navigate('/dashboard') the Dashboard renders populated on
-        // its FIRST mount instead of empty-then-flashing-in. Failures
-        // are tolerated — off-shift users and bad networks must still
-        // be able to enter the app, just with whatever data did load.
+        // Pre-fetch dashboard data + shift assignment IN PARALLEL so
+        // the dashboard renders populated on its first mount instead
+        // of empty-then-flashing-in. BUT — cap the wait at 3 seconds.
+        // If the API is slow / one call hangs, we proceed to the
+        // dashboard anyway with whatever loaded; remaining requests
+        // resolve in the background and populate the stores when they
+        // arrive. Without this cap, a single slow API call could keep
+        // the LoginPage spinner spinning indefinitely (the
+        // "blank screen / need to reload" bug).
         const hospitalId = user.hospitalId ?? '';
-        if (hospitalId) {
-          await Promise.allSettled([
-            usePatientStore.getState().fetchActiveVisits(hospitalId),
-            useAlertStore.getState().fetchAlerts(hospitalId),
-            useDeviceStore.getState().fetchDevicesFromApi(hospitalId),
-            get().refreshCurrentShift(),
-          ]);
-        } else {
-          await get().refreshCurrentShift().catch(() => {});
-        }
+        const PREFETCH_CAP_MS = 3000;
+        const prefetch = hospitalId
+          ? Promise.allSettled([
+              usePatientStore.getState().fetchActiveVisits(hospitalId),
+              useAlertStore.getState().fetchAlerts(hospitalId),
+              useDeviceStore.getState().fetchDevicesFromApi(hospitalId),
+              get().refreshCurrentShift(),
+            ])
+          : get().refreshCurrentShift().catch(() => {});
+        await Promise.race([
+          prefetch,
+          new Promise((resolve) => setTimeout(resolve, PREFETCH_CAP_MS)),
+        ]);
 
         set({ isLoading: false });
         return true;
