@@ -16,8 +16,9 @@ import { triageApi } from '@/api/triage';
 import { iotApi } from '@/api/iot';
 import { useAuthStore } from '@/store/authStore';
 import StabilizeAndPullModal, { type PulledVitals } from './StabilizeAndPullModal';
+import DoctorOnDutyPicker from './DoctorOnDutyPicker';
 import type { VitalKey } from '@/lib/vitalStability';
-import type { DeviceResponse } from '@/api/types';
+import type { DeviceResponse, EdZone } from '@/api/types';
 import {
   validateTEWSInputs,
   getAbnormalValidations,
@@ -409,8 +410,10 @@ export function PediatricTriageForm() {
 
   // Doctor-notification audit trail.
   const [notifiedDoctorName, setNotifiedDoctorName] = useState('');
+  const [notifiedDoctorUserId, setNotifiedDoctorUserId] = useState<string | null>(null);
   const [doctorNotifiedAt, setDoctorNotifiedAt] = useState<string>('');
   const [attendingDoctorName, setAttendingDoctorName] = useState('');
+  const [attendingDoctorUserId, setAttendingDoctorUserId] = useState<string | null>(null);
   const [doctorAttendedAt, setDoctorAttendedAt] = useState<string>('');
   const [alerts, setAlerts] = useState<string[]>([]);
   const [showDeteriorationWarning, setShowDeteriorationWarning] = useState(false);
@@ -687,10 +690,12 @@ export function PediatricTriageForm() {
           specialAssaultAbuse,
           specialSuicideAttempt,
           notifiedDoctorName: notifiedDoctorName || undefined,
+          notifiedDoctorUserId: notifiedDoctorUserId || undefined,
           doctorNotifiedAt: doctorNotifiedAt
             ? new Date(doctorNotifiedAt).toISOString()
             : undefined,
           attendingDoctorName: attendingDoctorName || undefined,
+          attendingDoctorUserId: attendingDoctorUserId || undefined,
           doctorAttendedAt: doctorAttendedAt
             ? new Date(doctorAttendedAt).toISOString()
             : undefined,
@@ -1342,10 +1347,22 @@ export function PediatricTriageForm() {
               {/* Doctor notification audit trail */}
               <div className="pt-2 mt-2 border-t border-slate-200/70">
                 <div className="flex items-center gap-1.5 mb-2"><Bell className="w-3 h-3 text-cyan-500" /><h4 className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Doctor Notification</h4></div>
+                {/* V56 — Pediatric patients always route to PEDIATRIC zone
+                    regardless of triage category. The picker filters to
+                    doctors on pediatric duty. If no pediatric doctor is on
+                    shift (small ED), the picker auto-flips to free-text
+                    fallback so the nurse can still record the name. */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className={labelCls}>Notified Doctor</label>
-                    <input type="text" value={notifiedDoctorName} onChange={(e) => setNotifiedDoctorName(e.target.value)} placeholder="Dr. name (when called)" className={inputCls} />
+                    <DoctorOnDutyPicker
+                      hospitalId={authUser?.hospitalId}
+                      zone={'PEDIATRIC' as EdZone}
+                      name={notifiedDoctorName}
+                      userId={notifiedDoctorUserId}
+                      onChange={(n, u) => { setNotifiedDoctorName(n); setNotifiedDoctorUserId(u); }}
+                      label="Notified Doctor"
+                      freeTextPlaceholder="Dr. name (when called)"
+                    />
                   </div>
                   <div>
                     <label className={labelCls}>Notified At</label>
@@ -1362,8 +1379,15 @@ export function PediatricTriageForm() {
                     </div>
                   </div>
                   <div>
-                    <label className={labelCls}>Attending Doctor</label>
-                    <input type="text" value={attendingDoctorName} onChange={(e) => setAttendingDoctorName(e.target.value)} placeholder="Dr. name (at bedside)" className={inputCls} />
+                    <DoctorOnDutyPicker
+                      hospitalId={authUser?.hospitalId}
+                      zone={'PEDIATRIC' as EdZone}
+                      name={attendingDoctorName}
+                      userId={attendingDoctorUserId}
+                      onChange={(n, u) => { setAttendingDoctorName(n); setAttendingDoctorUserId(u); }}
+                      label="Attending Doctor"
+                      freeTextPlaceholder="Dr. name (at bedside)"
+                    />
                   </div>
                   <div>
                     <label className={labelCls}>Attended At</label>

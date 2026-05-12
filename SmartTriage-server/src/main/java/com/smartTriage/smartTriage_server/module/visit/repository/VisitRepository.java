@@ -148,4 +148,17 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
                         "AND v.edRetriageDueAt < :now " +
                         "AND v.status NOT IN ('DISCHARGED', 'ADMITTED', 'TRANSFERRED', 'ICU_ADMITTED', 'DECEASED', 'LEFT_WITHOUT_BEING_SEEN')")
         java.util.List<Visit> findRetriageDueBefore(@Param("now") java.time.Instant now);
+
+        /**
+         * V56 — current zone census. Counts active visits (not discharged
+         * or moved off the floor) whose currentEdZone matches. Surfaces
+         * on the "Doctors on duty" picker so the triage nurse sees how
+         * busy each zone is when picking who to notify.
+         */
+        @Query("SELECT COUNT(v) FROM Visit v WHERE v.hospital.id = :hospitalId AND v.isActive = true " +
+                        "AND v.currentEdZone = :zone " +
+                        "AND v.status NOT IN ('DISCHARGED', 'ADMITTED', 'TRANSFERRED', 'ICU_ADMITTED', 'DECEASED', 'LEFT_WITHOUT_BEING_SEEN')")
+        long countActiveInZone(
+                        @Param("hospitalId") UUID hospitalId,
+                        @Param("zone") EdZone zone);
 }

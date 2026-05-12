@@ -74,6 +74,22 @@ public class ShiftAssignmentController {
     }
 
     /**
+     * V56 — Doctors currently on duty in a destination zone. Drives the
+     * triage form's Notified Doctor / Attending Doctor picker. Any
+     * authenticated clinical user at the hospital may call this — it's
+     * a read-side helper, not a sensitive write.
+     */
+    @GetMapping("/hospital/{hospitalId}/doctors-on-duty")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    public ResponseEntity<ApiResponse<List<com.smartTriage.smartTriage_server.module.shift.dto.DoctorOnDutyResponse>>>
+            getDoctorsOnDuty(
+                    @PathVariable UUID hospitalId,
+                    @RequestParam EdZone zone) {
+        return ResponseEntity.ok(ApiResponse.success(
+                shiftAssignmentService.getDoctorsOnDuty(hospitalId, zone)));
+    }
+
+    /**
      * Get current shift metadata (date, period).
      */
     @GetMapping("/current-period")

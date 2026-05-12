@@ -527,4 +527,21 @@ public class TriageRecord extends BaseEntity {
     /** Time doctor attended */
     @Column(name = "doctor_attended_at")
     private Instant doctorAttendedAt;
+
+    /**
+     * V56 — precise audit link to the User row of the notified doctor,
+     * when the nurse picked from the on-duty dropdown. NULL when the
+     * "Other…" free-text fallback was used (locum / unscheduled doctor),
+     * in which case only {@link #notifiedDoctorName} carries the info.
+     * Having the UUID lets the alert pipeline route Tier 1 to a specific
+     * user instead of broadcasting zone-wide.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "notified_doctor_user_id")
+    private User notifiedDoctor;
+
+    /** V56 — precise audit link to the attending doctor. Same semantics. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "attending_doctor_user_id")
+    private User attendingDoctor;
 }

@@ -4,6 +4,7 @@ import type {
   BulkPlanResult,
   CopyWeekRequest,
   CreateShiftAssignmentRequest,
+  DoctorOnDutyResponse,
   EdZone,
   ShiftAssignmentResponse,
   ShiftPeriodInfo,
@@ -21,6 +22,16 @@ export const shiftApi = {
   /** Get assignments for a specific zone */
   getZoneAssignments: (hospitalId: string, zone: EdZone) =>
     get<ShiftAssignmentResponse[]>(`/shifts/hospital/${hospitalId}/zone/${zone}`),
+
+  /**
+   * V56 — Doctors currently on duty in a destination zone. Drives the
+   * triage form's Notified Doctor / Attending Doctor picker. Sorted
+   * server-side by clinical hierarchy.
+   */
+  getDoctorsOnDuty: (hospitalId: string, zone: EdZone) =>
+    get<DoctorOnDutyResponse[]>(
+      `/shifts/hospital/${hospitalId}/doctors-on-duty?zone=${encodeURIComponent(zone)}`,
+    ),
 
   /** Get current shift period info */
   getCurrentPeriod: () =>

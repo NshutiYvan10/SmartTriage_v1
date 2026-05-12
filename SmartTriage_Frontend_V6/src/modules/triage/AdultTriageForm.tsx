@@ -16,6 +16,7 @@ import { bedsApi } from '@/api/beds';
 import { iotApi } from '@/api/iot';
 import type { DeviceResponse, EdZone } from '@/api/types';
 import StabilizeAndPullModal, { type PulledVitals } from './StabilizeAndPullModal';
+import DoctorOnDutyPicker from './DoctorOnDutyPicker';
 import type { VitalKey } from '@/lib/vitalStability';
 import { BedSuggestionModal } from './BedSuggestionModal';
 import { alertApi } from '@/api/alerts';
@@ -409,8 +410,10 @@ export function AdultTriageForm() {
   // notified doctor's name when they make the call; the attending name +
   // time is filled when the doctor physically arrives at the bedside.
   const [notifiedDoctorName, setNotifiedDoctorName] = useState('');
+  const [notifiedDoctorUserId, setNotifiedDoctorUserId] = useState<string | null>(null);
   const [doctorNotifiedAt, setDoctorNotifiedAt] = useState<string>('');
   const [attendingDoctorName, setAttendingDoctorName] = useState('');
+  const [attendingDoctorUserId, setAttendingDoctorUserId] = useState<string | null>(null);
   const [doctorAttendedAt, setDoctorAttendedAt] = useState<string>('');
   const [triageFinished, setTriageFinished] = useState(false);
   const [triageFinishTime, setTriageFinishTime] = useState<Date | null>(null);
@@ -621,10 +624,12 @@ export function AdultTriageForm() {
           // Form Footer — Nurse + doctor-notification timestamps
           triageNurseName: nurseName || undefined,
           notifiedDoctorName: notifiedDoctorName || undefined,
+          notifiedDoctorUserId: notifiedDoctorUserId || undefined,
           doctorNotifiedAt: doctorNotifiedAt
             ? new Date(doctorNotifiedAt).toISOString()
             : undefined,
           attendingDoctorName: attendingDoctorName || undefined,
+          attendingDoctorUserId: attendingDoctorUserId || undefined,
           doctorAttendedAt: doctorAttendedAt
             ? new Date(doctorAttendedAt).toISOString()
             : undefined,
@@ -1414,44 +1419,71 @@ export function AdultTriageForm() {
                   same fields. */}
               <div className="pt-2 mt-2 border-t border-slate-200/70">
                 <div className="flex items-center gap-1.5 mb-2"><Bell className="w-3 h-3 text-cyan-500" /><h4 className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Doctor Notification</h4></div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelCls}>Notified Doctor</label>
-                    <input type="text" value={notifiedDoctorName} onChange={(e) => setNotifiedDoctorName(e.target.value)} placeholder="Dr. name (when called)" className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Notified At</label>
-                    <div className="flex items-center gap-1">
-                      <input type="datetime-local" value={doctorNotifiedAt} onChange={(e) => setDoctorNotifiedAt(e.target.value)} className={`${inputCls} flex-1`} />
-                      <button
-                        type="button"
-                        onClick={() => setDoctorNotifiedAt(new Date().toISOString().slice(0, 16))}
-                        className="px-2 py-1.5 text-[10px] font-bold rounded-lg bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 transition-colors whitespace-nowrap"
-                        title="Set to right now"
-                      >
-                        Now
-                      </button>
+                {/* V56 — destination zone derives from the triage category.
+                    RED → RESUS, ORANGE → ACUTE, YELLOW/GREEN → GENERAL.
+                    Same mapping the existing Zone-Aware Doctor Notification
+                    banner uses below; the picker just reads from it. */}
+                {(() => {
+                  const destZone: EdZone | null =
+                    categoryResult.category === 'RED' ? 'RESUS'
+                    : categoryResult.category === 'ORANGE' ? 'ACUTE'
+                    : categoryResult.category === 'YELLOW' || categoryResult.category === 'GREEN' ? 'GENERAL'
+                    : null;
+                  return (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <DoctorOnDutyPicker
+                          hospitalId={authUser?.hospitalId}
+                          zone={destZone}
+                          name={notifiedDoctorName}
+                          userId={notifiedDoctorUserId}
+                          onChange={(n, u) => { setNotifiedDoctorName(n); setNotifiedDoctorUserId(u); }}
+                          label="Notified Doctor"
+                          freeTextPlaceholder="Dr. name (when called)"
+                        />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Notified At</label>
+                        <div className="flex items-center gap-1">
+                          <input type="datetime-local" value={doctorNotifiedAt} onChange={(e) => setDoctorNotifiedAt(e.target.value)} className={`${inputCls} flex-1`} />
+                          <button
+                            type="button"
+                            onClick={() => setDoctorNotifiedAt(new Date().toISOString().slice(0, 16))}
+                            className="px-2 py-1.5 text-[10px] font-bold rounded-lg bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 transition-colors whitespace-nowrap"
+                            title="Set to right now"
+                          >
+                            Now
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <DoctorOnDutyPicker
+                          hospitalId={authUser?.hospitalId}
+                          zone={destZone}
+                          name={attendingDoctorName}
+                          userId={attendingDoctorUserId}
+                          onChange={(n, u) => { setAttendingDoctorName(n); setAttendingDoctorUserId(u); }}
+                          label="Attending Doctor"
+                          freeTextPlaceholder="Dr. name (at bedside)"
+                        />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Attended At</label>
+                        <div className="flex items-center gap-1">
+                          <input type="datetime-local" value={doctorAttendedAt} onChange={(e) => setDoctorAttendedAt(e.target.value)} className={`${inputCls} flex-1`} />
+                          <button
+                            type="button"
+                            onClick={() => setDoctorAttendedAt(new Date().toISOString().slice(0, 16))}
+                            className="px-2 py-1.5 text-[10px] font-bold rounded-lg bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 transition-colors whitespace-nowrap"
+                            title="Set to right now"
+                          >
+                            Now
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <label className={labelCls}>Attending Doctor</label>
-                    <input type="text" value={attendingDoctorName} onChange={(e) => setAttendingDoctorName(e.target.value)} placeholder="Dr. name (at bedside)" className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Attended At</label>
-                    <div className="flex items-center gap-1">
-                      <input type="datetime-local" value={doctorAttendedAt} onChange={(e) => setDoctorAttendedAt(e.target.value)} className={`${inputCls} flex-1`} />
-                      <button
-                        type="button"
-                        onClick={() => setDoctorAttendedAt(new Date().toISOString().slice(0, 16))}
-                        className="px-2 py-1.5 text-[10px] font-bold rounded-lg bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 transition-colors whitespace-nowrap"
-                        title="Set to right now"
-                      >
-                        Now
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
               </div>
             </div>
             <div className="space-y-3">

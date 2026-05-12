@@ -8,6 +8,7 @@ import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundExcep
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import com.smartTriage.smartTriage_server.module.hospital.repository.HospitalRepository;
 import com.smartTriage.smartTriage_server.module.shift.dto.CreateShiftAssignmentRequest;
+import com.smartTriage.smartTriage_server.module.shift.dto.DoctorOnDutyResponse;
 import com.smartTriage.smartTriage_server.module.shift.dto.ShiftAssignmentResponse;
 import com.smartTriage.smartTriage_server.module.shift.entity.ShiftAssignment;
 import com.smartTriage.smartTriage_server.module.shift.mapper.ShiftAssignmentMapper;
@@ -60,6 +61,8 @@ public class ShiftAssignmentService {
     private final UserRepository userRepository;
     private final HospitalRepository hospitalRepository;
     private final StaffLeaveRepository staffLeaveRepository;
+    /** V56 — used to surface zone census on the doctor-on-duty picker. */
+    private final com.smartTriage.smartTriage_server.module.visit.repository.VisitRepository visitRepository;
 
     /**
      * Determine the current shift period based on current time.
@@ -322,6 +325,70 @@ public class ShiftAssignmentService {
                         hospitalId, shiftDate, shiftPeriod, zone)
                 .stream()
                 .map(ShiftAssignmentMapper::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * V56 — Doctors currently on duty in the given zone, ordered by
+     * clinical hierarchy (PRIMARY_DOCTOR → SUPERVISING_DOCTOR → RESIDENT).
+     *
+     * <p>Drives the triage form's Notified-Doctor / Attending-Doctor
+     * picker. Filters to today's shift date + current shift period, the
+     * caller-supplied zone, and the three doctor shift functions. Each
+     * row carries the zone-aggregate active-patient count as a "how busy
+     * is this zone right now" proxy.
+     *
+     * <p>Returns an empty list when no doctors are on duty in that zone.
+     * The caller (UI) handles the 0-doctors edge case with a fallback
+     * free-text field; this method does not synthesize fallback rows.
+     */
+    public List<DoctorOnDutyResponse> getDoctorsOnDuty(UUID hospitalId, EdZone zone) {
+        LocalDate shiftDate = getCurrentShiftDate();
+        ShiftPeriod shiftPeriod = getCurrentShiftPeriod();
+
+        List<ShiftAssignment> zoneAssignments = shiftAssignmentRepository
+                .findByHospitalIdAndShiftDateAndShiftPeriodAndZoneAndIsActiveTrue(
+                        hospitalId, shiftDate, shiftPeriod, zone);
+
+        // Compute zone census once (not per-doctor — they share it).
+        long zoneCensus = visitRepository.countActiveInZone(hospitalId, zone);
+
+        // Clinical hierarchy for sort order. Lower rank = listed first.
+        java.util.function.ToIntFunction<ShiftFunction> rank = sf -> switch (sf) {
+            case PRIMARY_DOCTOR     -> 0;
+            case SUPERVISING_DOCTOR -> 1;
+            case RESIDENT           -> 2;
+            default                 -> Integer.MAX_VALUE; // shouldn't appear here
+        };
+
+        return zoneAssignments.stream()
+                .filter(sa -> sa.getUser() != null
+                        && sa.getUser().getRole() == com.smartTriage.smartTriage_server.common.enums.Role.DOCTOR
+                        && (sa.getShiftFunction() == ShiftFunction.PRIMARY_DOCTOR
+                                || sa.getShiftFunction() == ShiftFunction.SUPERVISING_DOCTOR
+                                || sa.getShiftFunction() == ShiftFunction.RESIDENT))
+                .sorted(java.util.Comparator
+                        .<ShiftAssignment>comparingInt(sa -> rank.applyAsInt(sa.getShiftFunction()))
+                        .thenComparing(sa -> {
+                            User u = sa.getUser();
+                            String first = u.getFirstName() != null ? u.getFirstName() : "";
+                            String last  = u.getLastName()  != null ? u.getLastName()  : "";
+                            return (first + " " + last).trim();
+                        }))
+                .map(sa -> {
+                    User u = sa.getUser();
+                    String fullName = ((u.getFirstName() != null ? u.getFirstName() : "")
+                            + " " + (u.getLastName() != null ? u.getLastName() : "")).trim();
+                    return DoctorOnDutyResponse.builder()
+                            .userId(u.getId())
+                            .fullName(fullName.isEmpty() ? u.getEmail() : "Dr. " + fullName)
+                            .shiftFunction(sa.getShiftFunction())
+                            .zone(sa.getZone())
+                            .shiftLead(sa.isShiftLead())
+                            .zonePatientCount(zoneCensus)
+                            .lastActiveAt(null) // not tracked yet — placeholder for future "stale session" hint
+                            .build();
+                })
                 .collect(Collectors.toList());
     }
 

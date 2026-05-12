@@ -473,4 +473,15 @@ public class PerformTriageRequest {
 
     /** Timestamp when doctor attended (ISO 8601 from frontend) */
     private String doctorAttendedAt;
+
+    /**
+     * V56 — precise user-id of the notified doctor, captured when the
+     * nurse picks from the on-duty picker. NULL when the "Other…"
+     * free-text fallback was used (locum / unscheduled doctor); only
+     * {@link #notifiedDoctorName} carries the info in that case.
+     */
+    private java.util.UUID notifiedDoctorUserId;
+
+    /** V56 — precise user-id of the attending doctor. Same semantics. */
+    private java.util.UUID attendingDoctorUserId;
 }

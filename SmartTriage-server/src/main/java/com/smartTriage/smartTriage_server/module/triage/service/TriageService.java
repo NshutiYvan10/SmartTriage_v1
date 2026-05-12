@@ -318,6 +318,11 @@ public class TriageService {
                 .doctorNotifiedAt(parseInstant(request.getDoctorNotifiedAt()))
                 .attendingDoctorName(request.getAttendingDoctorName())
                 .doctorAttendedAt(parseInstant(request.getDoctorAttendedAt()))
+                // V56 — precise user-id links when the nurse picked from
+                // the on-duty doctor dropdown. NULL on the locum/free-text
+                // path; the name string still carries that info.
+                .notifiedDoctor(resolveUserOrNull(request.getNotifiedDoctorUserId()))
+                .attendingDoctor(resolveUserOrNull(request.getAttendingDoctorUserId()))
 
                 .build();
 
@@ -827,6 +832,17 @@ public class TriageService {
             log.debug("Could not resolve current user from security context");
         }
         return null;
+    }
+
+    /**
+     * V56 — resolve a user-id reference to a User entity for the
+     * notified/attending doctor audit link. Returns null on missing id
+     * or unknown user — the row stays loose-typed via the free-text
+     * name field, same as the locum / free-text fallback path.
+     */
+    private User resolveUserOrNull(java.util.UUID userId) {
+        if (userId == null) return null;
+        return userRepository.findByIdAndIsActiveTrue(userId).orElse(null);
     }
 
     /**

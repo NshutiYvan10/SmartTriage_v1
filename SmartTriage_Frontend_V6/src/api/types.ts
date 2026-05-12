@@ -698,6 +698,10 @@ export interface PerformTriageRequest {
   doctorNotifiedAt?: string;   // ISO 8601
   attendingDoctorName?: string;
   doctorAttendedAt?: string;   // ISO 8601
+  /** V56 — precise user-id when picked from the on-duty dropdown. */
+  notifiedDoctorUserId?: string;
+  /** V56 — precise user-id when picked from the on-duty dropdown. */
+  attendingDoctorUserId?: string;
 }
 
 export interface TriageRecordResponse {
@@ -1183,6 +1187,24 @@ export interface ApplyTemplateRequest {
    * The manual "Apply Template" UI button sends OVERWRITE.
    */
   mode?: 'FILL_EMPTY' | 'OVERWRITE';
+}
+
+/**
+ * V56 — One option in the Triage form's Notified Doctor / Attending Doctor
+ * picker. Returned by GET /shifts/hospital/{hospitalId}/doctors-on-duty?zone=X.
+ * Sorted server-side by clinical hierarchy: PRIMARY_DOCTOR → SUPERVISING_DOCTOR
+ * → RESIDENT.
+ */
+export interface DoctorOnDutyResponse {
+  userId: string;
+  fullName: string;
+  shiftFunction: 'PRIMARY_DOCTOR' | 'SUPERVISING_DOCTOR' | 'RESIDENT';
+  zone: EdZone;
+  shiftLead: boolean;
+  /** Zone-aggregate active patient count (proxy for "how busy"). */
+  zonePatientCount: number;
+  /** Last activity timestamp, or null when not tracked. */
+  lastActiveAt: string | null;
 }
 
 export interface BulkPlanResultSlot {
