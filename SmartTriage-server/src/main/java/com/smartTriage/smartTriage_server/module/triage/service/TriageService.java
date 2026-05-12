@@ -400,7 +400,9 @@ public class TriageService {
         try {
             deviceService.stopTriageMonitorSessionForVisit(
                     visit.getId(),
-                    currentUser != null ? currentUser.getFullName() : "System");
+                    currentUser != null
+                            ? (currentUser.getFirstName() + " " + currentUser.getLastName()).trim()
+                            : "System");
         } catch (Exception e) {
             log.warn("V54 — non-fatal: triage-monitor session cleanup failed for visit {}: {}",
                     visit.getVisitNumber(), e.getMessage());
