@@ -28,6 +28,7 @@ import { useTheme } from '@/hooks/useTheme';
 import {
   evaluateStability,
   formatVital,
+  MIN_AGREEING_SAMPLES,
   roundForVital,
   STABILITY_WINDOW_SIZE,
   VITAL_TOLERANCES,
@@ -160,16 +161,56 @@ export default function StabilizeAndPullModal({ visitId, device, onClose, onUse,
     [readings],
   );
 
+  /**
+   * "Active" vital = one we expect to capture from the monitor in this
+   * pull. A vital is excluded from the all-stable gate when:
+   *   - it's marked `skipVitals` by the parent (nurse already typed it
+   *     manually, so monitor value should not overwrite), OR
+   *   - the device has never produced a reading for it in the current
+   *     window (`no_signal` — probe disconnected / not measured).
+   * Excluded vitals don't block the Use button.
+   */
+  const activeResults = results.filter(r =>
+    !skipVitals?.has(r.key) && r.state !== 'no_signal'
+  );
+  const stableCount = activeResults.filter(r => r.state === 'stable').length;
+  const activeCount = activeResults.length;
+  const allActiveStable = activeCount > 0 && stableCount === activeCount;
   const anyStable = results.some(r => r.state === 'stable');
 
+  // ── 3b. Elapsed-time clock — drives the "Use available now" fallback ──
+  // Ticks once per second after the first reading lands. Used to enable
+  // a partial-use escape hatch when one specific vital is stuck (e.g.
+  // pediatric RR is genuinely too variable to ever cluster) so the
+  // nurse isn't held hostage by an outlier.
+  const [secondsWaiting, setSecondsWaiting] = useState(0);
+  useEffect(() => {
+    if (readings.length === 0) {
+      setSecondsWaiting(0);
+      return;
+    }
+    const t = window.setInterval(() => setSecondsWaiting(s => s + 1), 1000);
+    return () => window.clearInterval(t);
+  }, [readings.length > 0]);
+  const FALLBACK_SHOW_AFTER_SECS = 30;
+  const showFallback = !allActiveStable && anyStable && secondsWaiting >= FALLBACK_SHOW_AFTER_SECS;
+
   // ── 4. Confirm & hand the snapshot back to the parent ────────────
-  const handleUse = () => {
+  /**
+   * `mode = 'all'`     — every active vital is stable; capture them all.
+   * `mode = 'partial'` — fallback path; capture the stable ones only.
+   *                      Skipped/no-signal/stabilizing vitals stay empty
+   *                      for manual entry.
+   */
+  const handleUse = (mode: 'all' | 'partial' = 'all') => {
     const out: PulledVitals = {
       capturedAt: new Date(),
       deviceName: device.deviceName,
     };
     for (const r of results) {
-      if (r.state === 'stable' && r.value != null && !skipVitals?.has(r.key)) {
+      if (skipVitals?.has(r.key)) continue;
+      if (r.state !== 'stable' || r.value == null) continue;
+      if (mode === 'partial' || allActiveStable) {
         out[r.key] = roundForVital(r.value, r.key);
       }
     }
@@ -240,6 +281,31 @@ export default function StabilizeAndPullModal({ visitId, device, onClose, onUse,
             </div>
           )}
 
+          {/* Progress banner — at-a-glance "X of N stable" */}
+          {sessionStarted && activeCount > 0 && (
+            <div className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border ${
+              allActiveStable
+                ? 'bg-emerald-500/10 border-emerald-500/30'
+                : 'bg-cyan-500/10 border-cyan-500/30'
+            }`}>
+              {allActiveStable
+                ? <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                : <Loader2 className="w-4 h-4 text-cyan-500 animate-spin flex-shrink-0" />}
+              <div className="flex-1 min-w-0">
+                <p className={`text-xs font-bold ${allActiveStable ? 'text-emerald-600' : 'text-cyan-700'}`}>
+                  {allActiveStable
+                    ? `All ${activeCount} vital${activeCount === 1 ? '' : 's'} stable — ready to capture`
+                    : `${stableCount} of ${activeCount} vitals stable — waiting for the rest`}
+                </p>
+                {!allActiveStable && (
+                  <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    {secondsWaiting >= 5 ? `Watching for ${secondsWaiting}s` : 'Watching the monitor…'}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {results.map(r => (
             <VitalRow
               key={r.key}
@@ -250,8 +316,9 @@ export default function StabilizeAndPullModal({ visitId, device, onClose, onUse,
           ))}
 
           <p className={`text-[10px] mt-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            🟢 = stable · 🟡 = stabilizing · 🔴 = no signal. Only 🟢 vitals are pulled into the form.
-            Manual entry remains available for any vital you skip.
+            🟢 stable · 🟡 stabilizing · 🔴 poor signal · ⚪ not connected. The capture
+            button activates once all reporting vitals are stable.
+            Manual entry stays available for anything you skip.
           </p>
         </div>
 
@@ -275,11 +342,28 @@ export default function StabilizeAndPullModal({ visitId, device, onClose, onUse,
           >
             Cancel
           </button>
+          {/* Fallback escape hatch — appears after 30s if one vital is
+              stuck stabilizing (typically pediatric RR). Lets the nurse
+              capture what IS stable and type the rest manually instead
+              of waiting forever. */}
+          {showFallback && (
+            <button
+              onClick={() => handleUse('partial')}
+              className={`px-3 py-2 text-[11px] font-bold rounded-xl transition-colors flex items-center gap-1.5 ${
+                isDark ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+              }`}
+              title={`Use the ${stableCount} stable vital${stableCount === 1 ? '' : 's'} now; type the rest manually`}
+            >
+              <Zap className="w-3.5 h-3.5" /> Use stable {stableCount} now
+            </button>
+          )}
           <button
-            onClick={handleUse}
-            disabled={!anyStable}
-            className="px-4 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 text-white shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2 disabled:opacity-50 disabled:hover:translate-y-0"
-            title={anyStable ? 'Pull stable values into the triage form' : 'Wait until at least one vital is stable'}
+            onClick={() => handleUse('all')}
+            disabled={!allActiveStable}
+            className="px-4 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 text-white shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2 disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
+            title={allActiveStable
+              ? 'All vitals stable — capture into the triage form'
+              : `Waiting: ${stableCount} of ${activeCount} stable`}
           >
             <Zap className="w-3.5 h-3.5" /> Use these values
           </button>
@@ -297,17 +381,42 @@ interface RowProps {
 
 function VitalRow({ result, skipped, isDark }: RowProps) {
   const cfg = VITAL_TOLERANCES[result.key];
+
+  // Skipped (manual override) gets its own muted palette so the nurse
+  // immediately sees which fields the modal is leaving alone.
+  if (skipped) {
+    return (
+      <div className={`flex items-center justify-between gap-3 px-3 py-2 rounded-xl border ${
+        isDark ? 'bg-white/5 border-white/10' : 'bg-slate-100 border-slate-200'
+      }`}>
+        <div className="flex items-center gap-2 min-w-0">
+          <div className={`w-4 h-4 rounded-full border ${isDark ? 'border-slate-500' : 'border-slate-400'}`} />
+          <div className="min-w-0">
+            <p className={`text-xs font-bold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{cfg.label}</p>
+            <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+              Skipped — you already entered this manually
+            </p>
+          </div>
+        </div>
+        <div className={`text-sm font-mono font-bold whitespace-nowrap ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>—</div>
+      </div>
+    );
+  }
+
   const palette =
     result.state === 'stable'      ? { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-600', icon: <CheckCircle className="w-4 h-4 text-emerald-500" /> }
     : result.state === 'stabilizing' ? { bg: 'bg-amber-500/10',  border: 'border-amber-500/30',   text: 'text-amber-600',  icon: <Loader2 className="w-4 h-4 text-amber-500 animate-spin" /> }
-    : /* unstable */                  { bg: 'bg-red-500/10',     border: 'border-red-500/30',     text: 'text-red-500',    icon: <AlertTriangle className="w-4 h-4 text-red-500" /> };
+    : result.state === 'unstable'    ? { bg: 'bg-red-500/10',     border: 'border-red-500/30',     text: 'text-red-500',    icon: <AlertTriangle className="w-4 h-4 text-red-500" /> }
+    : /* no_signal */                  { bg: isDark ? 'bg-white/5' : 'bg-slate-100', border: isDark ? 'border-white/10' : 'border-slate-200', text: isDark ? 'text-slate-400' : 'text-slate-500', icon: <div className={`w-4 h-4 rounded-full border-2 ${isDark ? 'border-slate-500' : 'border-slate-400'}`} /> };
 
   const display =
     result.state === 'stable' && result.value != null
       ? formatVital(result.value, result.key)
-      : result.latest != null
-        ? `${formatVital(result.latest, result.key)} (drifting)`
-        : '—';
+      : result.state === 'no_signal'
+        ? '—'
+        : result.latest != null
+          ? formatVital(result.latest, result.key)
+          : '—';
 
   return (
     <div className={`flex items-center justify-between gap-3 px-3 py-2 rounded-xl border ${palette.bg} ${palette.border}`}>
@@ -316,13 +425,11 @@ function VitalRow({ result, skipped, isDark }: RowProps) {
         <div className="min-w-0">
           <p className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>{cfg.label}</p>
           <p className={`text-[10px] ${palette.text}`}>
-            {skipped
-              ? 'Skipped — manual value already entered'
-              : result.state === 'stable'
-                ? `Stable — ${result.agreeingCount} agreeing readings within ±${cfg.tolerance}${cfg.unit === '°C' ? '' : ' '}${cfg.unit}`
-                : result.state === 'stabilizing'
-                  ? `Stabilizing — ${result.agreeingCount}/3 agreeing readings`
-                  : (result.reason ?? 'Unstable signal')}
+            {result.state === 'stable'
+              ? `Stable — ${result.agreeingCount} readings agree within ±${cfg.tolerance}${cfg.unit === '°C' ? '' : ' '}${cfg.unit}`
+              : result.state === 'stabilizing'
+                ? `Stabilizing — ${result.agreeingCount}/${MIN_AGREEING_SAMPLES} readings agree`
+                : (result.reason ?? 'Unstable signal')}
           </p>
         </div>
       </div>
