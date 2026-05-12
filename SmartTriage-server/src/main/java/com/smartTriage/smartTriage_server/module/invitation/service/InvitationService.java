@@ -80,12 +80,35 @@ public class InvitationService {
                 .build();
         tokenRepository.save(invitation);
 
-        // Send invitation email
+        // Send invitation email — best-effort. SMTP failure must not roll
+        // back the user creation (which would block ALL invitations when
+        // SMTP isn't configured, surfaced to the admin as the unhelpful
+        // "An unexpected error occurred" generic message). The user row
+        // and invitation token are persisted regardless; the admin can
+        // share the activation link manually or use Resend Invitation
+        // once SMTP is configured.
         String roleName = request.getRole().name().replace("_", " ");
-        emailService.sendInvitationEmail(request.getEmail(), token, roleName, hospital.getName());
+        boolean emailSent;
+        try {
+            emailService.sendInvitationEmail(request.getEmail(), token, roleName, hospital.getName());
+            emailSent = true;
+        } catch (Exception emailErr) {
+            emailSent = false;
+            log.warn("Invitation email FAILED for {} (role {}, hospital {}): {}. "
+                    + "User created with PENDING_ACTIVATION — admin can resend or share the "
+                    + "activation link manually. Check SMTP configuration (SMTP_HOST, SMTP_USERNAME, "
+                    + "SMTP_PASSWORD, SMTP_FROM env vars).",
+                    request.getEmail(), request.getRole(), hospital.getName(),
+                    emailErr.getMessage());
+        }
 
-        log.info("Invitation sent to {} for role {} at hospital {}",
-                request.getEmail(), request.getRole(), hospital.getName());
+        if (emailSent) {
+            log.info("Invitation sent to {} for role {} at hospital {}",
+                    request.getEmail(), request.getRole(), hospital.getName());
+        } else {
+            log.info("Invitation created (email delivery deferred) for {} role {} at {}",
+                    request.getEmail(), request.getRole(), hospital.getName());
+        }
 
         return UserMapper.toResponse(user);
     }

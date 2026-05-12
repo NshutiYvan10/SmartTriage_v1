@@ -74,6 +74,19 @@ public class EmailService {
     }
 
     private void sendHtmlEmail(String to, String subject, String htmlBody) {
+        // Fail fast with a clear message when SMTP isn't configured —
+        // empty fromAddress would otherwise throw a cryptic
+        // AddressException deep in JavaMail. The friendly exception
+        // surfaces via GlobalExceptionHandler as a 400 with the
+        // operator-readable hint instead of an opaque 500.
+        if (fromAddress == null || fromAddress.isBlank()) {
+            throw new com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException(
+                    "Email is not configured on this server (missing SMTP_FROM). "
+                            + "The user has been created and a pending invitation token issued — "
+                            + "an administrator can share the activation link manually or configure "
+                            + "SMTP (SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM) and use "
+                            + "\"Resend Invitation\".");
+        }
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -85,7 +98,12 @@ public class EmailService {
             log.info("Email sent to {}: {}", to, subject);
         } catch (MessagingException | java.io.UnsupportedEncodingException e) {
             log.error("Failed to send email to {}: {}", to, e.getMessage());
-            throw new RuntimeException("Failed to send invitation email. Please check SMTP configuration.", e);
+            // Wrap in a ClinicalBusinessException so GlobalExceptionHandler
+            // returns a clear 400 message instead of the generic
+            // "An unexpected error occurred. Contact system administrator."
+            throw new com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException(
+                    "Failed to send invitation email: " + e.getMessage()
+                            + ". Please check SMTP configuration.");
         }
     }
 }
