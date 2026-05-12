@@ -342,6 +342,60 @@ public class DeviceService {
         IoTDevice device = findDeviceOrThrow(request.getDeviceId());
         Visit visit = visitService.findVisitOrThrow(request.getVisitId());
 
+        // V54 takeover — Triage-zone monitors are shared across incoming
+        // patients by design. A previous nurse's triage session may still
+        // be active because their triage was abandoned mid-form, or because
+        // V54's stop-on-submit hook silently failed. Either way, the
+        // current "Pull from Monitor" click is an explicit signal that
+        // this device belongs to the current visit now. Evict the stale
+        // session and treat the device as ONLINE for the validation gate.
+        //
+        // Bedside (non-triage) monitors keep the strict gate: there a
+        // takeover would silently lose the previous patient's audit
+        // continuity, which is a clinical-safety concern.
+        boolean isTriageMonitorTakeover = device.isTriageMonitor();
+        if (isTriageMonitorTakeover) {
+            // Capture immutable references for the lambdas below — the
+            // `device` local is reassigned to `fresh` further down, so
+            // it isn't effectively final.
+            final IoTDevice takeoverDevice = device;
+            final Visit takeoverVisit = visit;
+            sessionRepository.findByDeviceIdAndSessionActiveTrueAndIsActiveTrue(takeoverDevice.getId())
+                    .ifPresent(prev -> {
+                        log.info("V54 — triage-monitor takeover: evicting session {} on device {} "
+                                        + "(was visit {}) so visit {} can take it",
+                                prev.getId(), takeoverDevice.getSerialNumber(),
+                                prev.getVisit().getVisitNumber(), takeoverVisit.getVisitNumber());
+                        prev.endSession(
+                                request.getStartedByName() != null ? request.getStartedByName() : "System",
+                                "Triage takeover — previous session evicted");
+                        sessionRepository.save(prev);
+                    });
+            // Also evict any orphaned session on the new visit (rare —
+            // would mean this visit had a partial session from a different
+            // device). Same takeover rationale.
+            sessionRepository.findByVisitIdAndSessionActiveTrueAndIsActiveTrue(takeoverVisit.getId())
+                    .ifPresent(prev -> {
+                        log.info("V54 — triage-monitor takeover: evicting prior session {} on visit {} "
+                                        + "(was device {}) so device {} can take it",
+                                prev.getId(), takeoverVisit.getVisitNumber(),
+                                prev.getDevice().getSerialNumber(), takeoverDevice.getSerialNumber());
+                        prev.endSession(
+                                request.getStartedByName() != null ? request.getStartedByName() : "System",
+                                "Triage takeover — previous session evicted");
+                        sessionRepository.save(prev);
+                    });
+            // Flip the device back to ONLINE so the gate below passes.
+            // We re-fetch to capture any concurrent updates from the
+            // simulator's heartbeat path.
+            IoTDevice fresh = deviceRepository.findById(device.getId()).orElse(device);
+            if (fresh.getStatus() == DeviceStatus.MONITORING) {
+                fresh.setStatus(DeviceStatus.ONLINE);
+                deviceRepository.save(fresh);
+                device = fresh;
+            }
+        }
+
         // Validate: device must be ONLINE (not already MONITORING or OFFLINE)
         if (device.getStatus() != DeviceStatus.ONLINE
                 && device.getStatus() != DeviceStatus.REGISTERED) {
@@ -350,37 +404,47 @@ public class DeviceService {
                             "Current status: " + device.getStatus());
         }
 
-        // Validate: no active session on this device
-        // If device is ONLINE but has a stale active session (e.g., after server
-        // restart
-        // or simulator toggle), auto-close it instead of blocking the new assignment.
-        sessionRepository.findByDeviceIdAndSessionActiveTrueAndIsActiveTrue(device.getId())
+        // Validate: no active session on this device.
+        // For non-triage devices we still allow the "device was reset"
+        // recovery — close a stale session when the status itself looks
+        // healthy (ONLINE/REGISTERED). For triage devices the takeover
+        // above already cleared everything; this guard is a defensive
+        // no-op in that case.
+        //
+        // Capture a final reference because `device` was reassigned in
+        // the takeover branch and the lambda needs an effectively-final
+        // capture.
+        final IoTDevice deviceForGate = device;
+        sessionRepository.findByDeviceIdAndSessionActiveTrueAndIsActiveTrue(deviceForGate.getId())
                 .ifPresent(staleSession -> {
-                    if (device.getStatus() == DeviceStatus.ONLINE
-                            || device.getStatus() == DeviceStatus.REGISTERED) {
-                        // Device was reset/restarted — close the orphaned session
+                    if (deviceForGate.getStatus() == DeviceStatus.ONLINE
+                            || deviceForGate.getStatus() == DeviceStatus.REGISTERED) {
                         log.warn("Auto-closing stale session {} for device {} (device status: {})",
-                                staleSession.getId(), device.getSerialNumber(), device.getStatus());
+                                staleSession.getId(), deviceForGate.getSerialNumber(), deviceForGate.getStatus());
                         staleSession.setSessionActive(false);
                         staleSession.setEndedAt(Instant.now());
                         staleSession.setEndReason("Auto-closed: device was reset");
                         sessionRepository.save(staleSession);
                     } else {
                         throw new IllegalStateException(
-                                "Device " + device.getSerialNumber() +
+                                "Device " + deviceForGate.getSerialNumber() +
                                         " already has an active monitoring session for visit " +
                                         staleSession.getVisit().getVisitNumber());
                     }
                 });
 
-        // Validate: no active session on this visit from another device
-        sessionRepository.findByVisitIdAndSessionActiveTrueAndIsActiveTrue(visit.getId())
-                .ifPresent(s -> {
-                    throw new IllegalStateException(
-                            "Visit " + visit.getVisitNumber() +
-                                    " is already being monitored by device " +
-                                    s.getDevice().getSerialNumber());
-                });
+        // Validate: no active session on this visit from another device.
+        // Triage-monitor takeover already cleared this above; bedside path
+        // still enforces the constraint to prevent silent data loss.
+        if (!isTriageMonitorTakeover) {
+            sessionRepository.findByVisitIdAndSessionActiveTrueAndIsActiveTrue(visit.getId())
+                    .ifPresent(s -> {
+                        throw new IllegalStateException(
+                                "Visit " + visit.getVisitNumber() +
+                                        " is already being monitored by device " +
+                                        s.getDevice().getSerialNumber());
+                    });
+        }
 
         // Create session
         DeviceSession session = DeviceSession.builder()
