@@ -19,6 +19,7 @@ import { DiagnosisPanel } from './DiagnosisPanel';
 import { InvestigationPanel } from './InvestigationPanel';
 import { MedicationPanel } from './MedicationPanel';
 import { useTheme } from '@/hooks/useTheme';
+import { useCanPerformTriage } from '@/hooks/useCanPerformTriage';
 import { useAuthStore } from '@/store/authStore';
 import { visitApi } from '@/api/visits';
 import type { DispositionRequest } from '@/api/visits';
@@ -727,6 +728,11 @@ export function VisitDetailPage() {
 // ═══════ OVERVIEW TAB ═══════
 function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, investigations, medications, alerts, pendingTransfer, reload, navigate, glassCard, glassInner, isDark, text }: any) {
   const unackAlerts = alerts.filter((a: ClinicalAlertResponse) => !a.acknowledged).length;
+  // RBAC — only users whose TODAY'S shift gives them triage authority can
+  // click the "Re-triage now" button. Zone Nurses (including those with
+  // permanent Charge Nurse designation working a non-CN shift) see the
+  // banner but the action is grayed.
+  const canTriage = useCanPerformTriage();
 
   // Round 3 — show a prominent banner when the most recent triage was
   // created automatically by a worsening clinical sign and the matching
@@ -773,10 +779,18 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
           </p>
           <button
             onClick={() => goToRetriage(matchingUnackedRetriageAlert)}
-            className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md hover:-translate-y-0.5 transition-all"
+            disabled={!canTriage}
+            title={canTriage
+              ? 'Open the re-triage form for this patient'
+              : 'Your current shift does not authorise triage. The Triage Nurse or Charge Nurse on duty will pick this up.'}
+            className={`mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg shadow-md transition-all ${
+              canTriage
+                ? 'bg-gradient-to-r from-red-500 to-red-600 text-white hover:-translate-y-0.5'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            }`}
           >
             <Stethoscope className="w-3 h-3" />
-            Re-triage now
+            {canTriage ? 'Re-triage now' : 'Triage authority required'}
           </button>
         </div>
       </div>
@@ -1704,6 +1718,9 @@ function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction
 // ═══════ MONITOR TAB ═══════
 // ═══════ ALERTS TAB ═══════
 function AlertsTab({ alerts, onAcknowledge, visit, navigate, glassCard, glassInner: _glassInner, isDark: _isDark, text }: any) {
+  // RBAC — same gate as the Overview-tab banner: only users whose
+  // TODAY'S shift gives them triage authority can click "Re-triage now".
+  const canTriage = useCanPerformTriage();
   const severityColors: Record<string, string> = {
     CRITICAL: 'text-red-500 bg-red-500/10 border-red-500/20',
     HIGH: 'text-orange-500 bg-orange-500/10 border-orange-500/20',
@@ -1768,9 +1785,17 @@ function AlertsTab({ alerts, onAcknowledge, visit, navigate, glassCard, glassInn
               {isRetriage && (
                 <button
                   onClick={() => goToRetriage(a)}
-                  className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 text-white shadow-md hover:-translate-y-0.5 transition-all inline-flex items-center gap-1"
+                  disabled={!canTriage}
+                  title={canTriage
+                    ? 'Open the re-triage form for this patient'
+                    : 'Your current shift does not authorise triage. The Triage Nurse or Charge Nurse on duty will pick this up.'}
+                  className={`px-3 py-1.5 text-[10px] font-bold rounded-lg shadow-md transition-all inline-flex items-center gap-1 ${
+                    canTriage
+                      ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 text-white hover:-translate-y-0.5'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  }`}
                 >
-                  <Stethoscope className="w-3 h-3" /> Re-triage now
+                  <Stethoscope className="w-3 h-3" /> {canTriage ? 'Re-triage now' : 'Triage authority required'}
                 </button>
               )}
               {!a.acknowledged && (
