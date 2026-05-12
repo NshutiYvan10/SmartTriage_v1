@@ -144,15 +144,34 @@ public class TriageRecordResponse {
     private String attendingDoctorName;
     private Instant doctorAttendedAt;
 
-    // --- Bed Suggestion (Phase G #2) ---
-    // Populated only on the response from POST /triage (performTriage), so
-    // the form can show the nurse a "Place in suggested bed?" confirm. Null
-    // on subsequent reads (history, getLatest) — those return the stored
-    // record without re-running the suggestion engine.
+    // --- Bed assignment outcome ---
+    // Populated only on the response from POST /triage (performTriage).
+    //
+    // Option A flow: when a destination-zone bed is available, the
+    // backend auto-places the patient in the same transaction as the
+    // triage. The frontend then shows a success toast (not a modal).
+    // When no bed is available the suggestion fields are still returned
+    // empty and `autoPlaced` is false — the frontend falls back to the
+    // BedSuggestionModal so the nurse can intervene manually.
     private UUID suggestedBedId;
     private String suggestedBedCode;
     private EdZone suggestedBedZone;
     private boolean suggestedBedHasMonitor;
+
+    /**
+     * True when the placement happened automatically as part of this
+     * triage submission. False when no bed was available (or another
+     * non-fatal placement issue) — in that case the frontend should
+     * surface the suggestion / manual-placement modal.
+     */
+    private boolean autoPlaced;
+
+    /**
+     * Human-readable note about the placement outcome, shown in the
+     * frontend success/warning toast.
+     * Example: "Placed in Bed RESUS-3 (monitor streaming)".
+     */
+    private String autoPlacementNote;
 
     private Instant createdAt;
 }

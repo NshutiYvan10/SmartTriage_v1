@@ -635,11 +635,30 @@ export function AdultTriageForm() {
             : undefined,
         });
 
-        // Bed suggestion (Phase G #2) — only present on perform responses.
-        // Server-side rules: RED→RESUS, ORANGE→ACUTE (or PEDIATRIC for kids),
-        // YELLOW→PEDIATRIC for kids; GREEN/BLUE produce no suggestion. The
-        // nurse confirms before the patient is actually placed.
-        if (triageResponse.suggestedBedId && triageResponse.suggestedBedCode && triageResponse.suggestedBedZone) {
+        // Option A — bed assignment now happens in the same transaction
+        // as the triage on the backend. Three response shapes:
+        //
+        //   1. `autoPlaced=true` with a suggested bed → backend already
+        //      placed the patient. Render the success banner directly
+        //      (no modal click needed). This is the happy path.
+        //
+        //   2. `autoPlaced=false` with a suggested bed → backend
+        //      computed a suggestion but auto-place failed (rare race).
+        //      Fall back to the BedSuggestionModal so the nurse confirms.
+        //
+        //   3. No suggested bed → category produces no zone (BLUE/GREEN
+        //      with no AMBULATORY zone defined) or zone is full. No
+        //      banner, no modal — placement is fully manual.
+        if (triageResponse.autoPlaced
+            && triageResponse.suggestedBedCode && triageResponse.suggestedBedZone) {
+          setBedPlaced({
+            code: triageResponse.suggestedBedCode,
+            zone: triageResponse.suggestedBedZone,
+            hasMonitor: !!triageResponse.suggestedBedHasMonitor,
+          });
+        } else if (triageResponse.suggestedBedId && triageResponse.suggestedBedCode && triageResponse.suggestedBedZone) {
+          // Fallback — auto-place didn't happen (no bed / race); modal asks
+          // the nurse to confirm or pick differently.
           setSuggestedBed({
             id: triageResponse.suggestedBedId,
             code: triageResponse.suggestedBedCode,

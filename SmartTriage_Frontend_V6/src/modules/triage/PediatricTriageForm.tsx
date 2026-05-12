@@ -4,7 +4,7 @@ import {
   AlertTriangle, AlertCircle, CheckCircle, Clock, Shield, Baby, Heart,
   Wind, Eye, Activity, User, FileText,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Bell, Stethoscope, Brain,
-  ArrowLeft, Save, Timer, Sparkles,
+  ArrowLeft, Save, Timer, Sparkles, BedDouble,
 } from 'lucide-react';
 import { usePatientStore } from '@/store/patientStore';
 import { useAuditStore } from '@/store/auditStore';
@@ -402,6 +402,9 @@ export function PediatricTriageForm() {
   }, [authUser?.fullName]);
   const [triageFinished, setTriageFinished] = useState(false);
   const [triageFinishTime, setTriageFinishTime] = useState<Date | null>(null);
+  // Option A — backend auto-places the patient as part of triage submit.
+  // Capture the outcome here so we can render a confirmation banner.
+  const [bedPlaced, setBedPlaced] = useState<{ code: string; zone: EdZone; hasMonitor: boolean } | null>(null);
 
   // Special-case clinical flags (mirrors Adult). Assault triggers
   // forensic chain; suicide triggers safety sitter.
@@ -585,7 +588,9 @@ export function PediatricTriageForm() {
       const isInfant = ageBand === 'INFANT';
 
       try {
-        await triageApi.perform({
+        // Option A — capture the response so we can show a confirmation
+        // banner if the backend auto-placed the patient in a bed.
+        const triageResponse = await triageApi.perform({
           visitId: sourceVisitId,
 
           // ── Section 1 — Emergency Signs (KFH peds form) ──
@@ -700,6 +705,18 @@ export function PediatricTriageForm() {
             ? new Date(doctorAttendedAt).toISOString()
             : undefined,
         });
+
+        // Option A — backend may have auto-placed the patient in a bed
+        // as part of the triage transaction. Surface that as a banner
+        // so the nurse sees the placement happened.
+        if (triageResponse?.autoPlaced
+            && triageResponse.suggestedBedCode && triageResponse.suggestedBedZone) {
+          setBedPlaced({
+            code: triageResponse.suggestedBedCode,
+            zone: triageResponse.suggestedBedZone,
+            hasMonitor: !!triageResponse.suggestedBedHasMonitor,
+          });
+        }
       } catch (err) {
         // Backend submission failed — local store update has already
         // happened, so the nurse sees the result. The audit log will
@@ -1454,6 +1471,18 @@ export function PediatricTriageForm() {
                 <div>
                   <p className="text-xs font-bold text-green-800">Triage completed successfully</p>
                   <p className="text-[10px] text-green-600">Patient assigned {categoryResult.category} at {triageFinishTime?.toLocaleTimeString()}.{categoryResult.category === 'RED' || categoryResult.category === 'ORANGE' ? ' Treatment timer has started.' : ` Doctor should see patient within ${categoryResult.maxTimeToDoctor}.`}</p>
+                </div>
+              </div>
+            )}
+            {bedPlaced && (
+              <div className="mb-3 rounded-lg p-3 flex items-center gap-2.5" style={{ background: 'rgba(207,250,254,0.6)', border: '1px solid rgba(103,232,249,0.4)' }}>
+                <BedDouble className="w-4 h-4 text-cyan-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-bold text-cyan-800">Patient placed in bed {bedPlaced.code}</p>
+                  <p className="text-[10px] text-cyan-700">
+                    Zone: {bedPlaced.zone}
+                    {bedPlaced.hasMonitor ? ' · Monitor will begin streaming vitals automatically.' : ' · No monitor assigned to this bed.'}
+                  </p>
                 </div>
               </div>
             )}

@@ -34,6 +34,25 @@ public final class TriageRecordMapper {
      * they call the unary {@link #toResponse(TriageRecord)} overload.
      */
     public static TriageRecordResponse toResponse(TriageRecord r, Bed suggestedBed) {
+        return toResponse(r, suggestedBed, false, null);
+    }
+
+    /**
+     * Bed-aware overload used by the performTriage path when the
+     * placement outcome must be returned alongside the suggestion.
+     *
+     * @param r            persisted triage record
+     * @param suggestedBed the bed that was suggested (or auto-placed
+     *                     into). May be null when no bed was available
+     *                     and auto-placement was skipped.
+     * @param autoPlaced   true when the placement happened in this
+     *                     transaction (Option A flow). False when the
+     *                     frontend must fall back to the modal.
+     * @param note         human-readable note shown in the frontend
+     *                     toast. Null when no message is needed.
+     */
+    public static TriageRecordResponse toResponse(
+            TriageRecord r, Bed suggestedBed, boolean autoPlaced, String note) {
         TriageRecordResponse response = toResponse(r, (ClinicalSignEvent) null);
         if (suggestedBed != null) {
             response.setSuggestedBedId(suggestedBed.getId());
@@ -41,6 +60,8 @@ public final class TriageRecordMapper {
             response.setSuggestedBedZone(suggestedBed.getZone());
             response.setSuggestedBedHasMonitor(suggestedBed.isHasMonitor());
         }
+        response.setAutoPlaced(autoPlaced);
+        response.setAutoPlacementNote(note);
         return response;
     }
 

@@ -389,15 +389,58 @@ public class TriageService {
         // not fail because of timeline bookkeeping.
         clinicalSignService.recordBaselineFromTriage(record);
 
-        // Phase G #2 — bed suggestion. Compute against the freshly-saved
-        // visit so the response can offer the nurse a one-click placement.
-        // Failure or empty optional both result in null suggestion fields
-        // on the response, which the form treats as "no suggestion shown".
+        // Bed assignment — Option A: auto-place in the destination zone
+        // when a bed is available, in the same transaction as the triage.
+        // Eliminates the modal click that was previously required.
+        //
+        // Failure modes:
+        //   - suggestion engine throws or returns empty (no bed in zone) →
+        //     autoPlaced=false; frontend falls back to BedSuggestionModal
+        //     and gives the nurse manual placement options.
+        //   - placePatient throws (rare — e.g. concurrent placement won
+        //     the bed first) → autoPlaced=false; same fallback path.
+        //
+        // The triage record is still saved either way — the bed is a
+        // separate concern, never blocks triage. Patient is triaged;
+        // worst case the nurse places them in the next breath.
         Bed suggestedBed = null;
+        boolean autoPlaced = false;
+        String autoPlacementNote = null;
         try {
             suggestedBed = bedService.suggestBedForVisit(visit.getId()).orElse(null);
         } catch (Exception e) {
             log.warn("Bed suggestion failed for visit {}: {}", visit.getVisitNumber(), e.getMessage());
+        }
+
+        if (suggestedBed != null) {
+            try {
+                com.smartTriage.smartTriage_server.module.bed.dto.PlacePatientRequest placeReq =
+                        new com.smartTriage.smartTriage_server.module.bed.dto.PlacePatientRequest();
+                placeReq.setVisitId(visit.getId());
+                String actorName = currentUser != null
+                        ? (currentUser.getFirstName() + " " + currentUser.getLastName()).trim()
+                        : "Triage (auto)";
+                bedService.placePatient(suggestedBed.getId(), placeReq, actorName);
+                autoPlaced = true;
+                autoPlacementNote = suggestedBed.isHasMonitor()
+                        ? "Placed in Bed " + suggestedBed.getCode()
+                                + " (" + suggestedBed.getZone() + ") — monitor streaming."
+                        : "Placed in Bed " + suggestedBed.getCode()
+                                + " (" + suggestedBed.getZone() + ") — no monitor.";
+                log.info("Auto-placed visit {} in bed {} after triage",
+                        visit.getVisitNumber(), suggestedBed.getCode());
+            } catch (Exception e) {
+                // Non-fatal — fall through to "suggest, manual confirm"
+                // so the triage record is preserved. The frontend modal
+                // surfaces this case so the nurse can finish placement.
+                autoPlaced = false;
+                autoPlacementNote = "Auto-placement failed: " + e.getMessage()
+                        + ". Pick a bed manually.";
+                log.warn("Auto-place after triage failed for visit {}: {}",
+                        visit.getVisitNumber(), e.getMessage());
+            }
+        } else {
+            autoPlacementNote = "No bed available in destination zone — pick one manually.";
         }
 
         // V54 — close out any triage-zone monitor session started by the
@@ -413,7 +456,7 @@ public class TriageService {
                     visit.getVisitNumber(), e.getMessage());
         }
 
-        return TriageRecordMapper.toResponse(record, suggestedBed);
+        return TriageRecordMapper.toResponse(record, suggestedBed, autoPlaced, autoPlacementNote);
     }
 
     /**

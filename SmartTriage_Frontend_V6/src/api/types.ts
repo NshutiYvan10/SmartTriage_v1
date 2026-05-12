@@ -810,6 +810,16 @@ export interface TriageRecordResponse {
   suggestedBedCode?: string | null;
   suggestedBedZone?: EdZone | null;
   suggestedBedHasMonitor?: boolean;
+  /**
+   * Option A — true when the backend already placed the patient in the
+   * suggested bed as part of this triage submission. Frontend shows a
+   * success toast instead of the BedSuggestionModal. False means the
+   * nurse needs to pick a bed manually (no bed available, or a rare
+   * placement race lost) — fall back to the modal.
+   */
+  autoPlaced?: boolean;
+  /** Human-readable note for the success/warning toast. */
+  autoPlacementNote?: string | null;
 
   createdAt: string;
 }
