@@ -50,23 +50,29 @@ export function RoleGuard({ page, feature, allowDesignations, requiresShiftFunct
   const designationGrants =
     !!allowDesignations && !!user.designation && allowDesignations.includes(user.designation);
 
-  // RBAC fix — when a shift-function gate is declared, the user must
-  // either hold one of the required functions on today's shift OR be
-  // a cross-zone authority (CN designation / shift-lead badge) OR
-  // (for the triage gate specifically) have a CHARGE_NURSE shift
-  // function which is the documented override path.
+  // RBAC: shift-function gate. Authority follows TODAY'S assignment, not
+  // permanent designation — a senior nurse rostered as ZONE_NURSE today
+  // is a zone nurse today and cannot reach triage-only pages on the
+  // strength of their permanent CHARGE_NURSE title.
+  //
+  // Allowed:
+  //   - matching shift function on today's assignment
+  //   - shift-lead badge holder (daily, transferable — covers the
+  //     "Triage Nurse called out, senior nurse steps in" case)
+  //   - shift function == CHARGE_NURSE today
+  // Denied:
+  //   - admins (never clinical)
+  //   - users whose permanent designation is CHARGE_NURSE but whose
+  //     shift function today is something else
   let shiftGatePasses = true;
   if (requiresShiftFunction && requiresShiftFunction.length > 0) {
-    // Admins explicitly never pass shift-function gates.
     if (user.role === 'SUPER_ADMIN' || user.role === 'HOSPITAL_ADMIN') {
       shiftGatePasses = false;
     } else {
       const fn = user.currentShiftFunction;
-      const isChargeNurseAuthority =
-        user.designation === 'CHARGE_NURSE'
-        || user.isShiftLead === true
-        || fn === 'CHARGE_NURSE';
-      shiftGatePasses = isChargeNurseAuthority
+      const onDutyChargeNurse =
+        user.isShiftLead === true || fn === 'CHARGE_NURSE';
+      shiftGatePasses = onDutyChargeNurse
         || (!!fn && requiresShiftFunction.includes(fn));
     }
   }

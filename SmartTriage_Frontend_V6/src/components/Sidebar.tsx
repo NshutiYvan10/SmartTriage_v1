@@ -210,16 +210,17 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
     'zone-transfers',
   ]);
 
-  // RBAC fix — Triage Queue is shift-function-gated, not role-gated.
-  // Visible only to users with an active TRIAGE_NURSE shift function OR
-  // any Charge Nurse authority (designation, shift-lead badge, CN shift
-  // function). Hidden from admins, Zone Nurses, Doctors, etc.
+  // RBAC: Triage Queue visibility is gated by TODAY'S shift assignment,
+  // not permanent designation. A senior nurse whose permanent
+  // designation is CHARGE_NURSE but who is rostered as ZONE_NURSE today
+  // does not see the Triage Queue — their job today is zone work.
+  // Triage emergencies are handled via the shift-lead badge, which is
+  // daily and transferable.
   const isShiftLead = user?.isShiftLead === true;
   const currentShiftFunction = user?.currentShiftFunction ?? null;
   const isTriageAuthority =
     currentShiftFunction === 'TRIAGE_NURSE'
     || currentShiftFunction === 'CHARGE_NURSE'
-    || isChargeNurse
     || isShiftLead;
 
   // Filter sections based on role permissions

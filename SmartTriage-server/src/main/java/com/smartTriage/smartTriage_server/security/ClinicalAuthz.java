@@ -264,11 +264,31 @@ public class ClinicalAuthz {
     }
 
     /**
-     * RBAC fix — combined check for "may this caller perform a triage write?"
-     * The Triage Nurse always can. A Charge Nurse (designation OR shift-lead
-     * holder OR shift function == CHARGE_NURSE) can override / pick up triage
-     * if the Triage Nurse is overwhelmed. Doctors do not triage in this system.
-     * Admins are denied.
+     * Whether the caller may perform a triage write right now.
+     *
+     * <p>Authority follows the <strong>daily shift assignment</strong>, not
+     * permanent designation. "Once a Charge Nurse" is not a free pass to
+     * triage on a day when you're rostered as a Zone Nurse — your job
+     * today is what your shift function says today.
+     *
+     * <p>Allowed:
+     * <ul>
+     *   <li>Today's TRIAGE_NURSE — the canonical authority.</li>
+     *   <li>Today's CHARGE_NURSE shift function — actual CN on duty.</li>
+     *   <li>Today's shift-lead badge holder — the badge is the canonical
+     *       "you're in charge of the floor right now" signal and can be
+     *       transferred mid-shift if a senior nurse needs to step in.</li>
+     * </ul>
+     *
+     * <p>Denied (previously allowed via designation backdoor):
+     * <ul>
+     *   <li>Nurse with {@code Designation.CHARGE_NURSE} working a
+     *       non-CN shift today (e.g. rostered as ZONE_NURSE in ACUTE).
+     *       For emergencies they need the shift-lead badge transferred,
+     *       not just their permanent title.</li>
+     *   <li>Admins (SUPER_ADMIN / HOSPITAL_ADMIN) — never clinical.</li>
+     *   <li>Doctors — triage is a nurse function in this system.</li>
+     * </ul>
      */
     @Transactional(readOnly = true)
     public boolean callerCanPerformTriage(Authentication authentication) {
@@ -281,15 +301,17 @@ public class ClinicalAuthz {
             if (callerIsTodaysTriageNurse(authentication)) {
                 return true;
             }
-            // Charge Nurse — designation OR current shift function OR active shift-lead.
-            if (user.getRole() == Role.NURSE && user.getDesignation() == Designation.CHARGE_NURSE) {
-                return true;
-            }
+            // Shift-lead badge — daily, transferable, designed exactly for
+            // "this person is acting in charge right now". This is the
+            // override path for emergencies (Triage Nurse called out sick,
+            // a senior nurse picks up the badge and the duty with it).
             Optional<UUID> hospitalIdOpt = userRepository.findHospitalIdByUserId(user.getId());
             if (hospitalIdOpt.isPresent()
                     && shiftAssignmentService.isUserCurrentShiftLead(user.getId(), hospitalIdOpt.get())) {
                 return true;
             }
+            // Today's shift function == CHARGE_NURSE. Same idea: the
+            // person actually rostered as CN today, not a permanent title.
             return shiftAssignmentService.getCurrentShiftForUser(user.getId())
                     .map(sa -> sa.getShiftFunction() == ShiftFunction.CHARGE_NURSE)
                     .orElse(false);
