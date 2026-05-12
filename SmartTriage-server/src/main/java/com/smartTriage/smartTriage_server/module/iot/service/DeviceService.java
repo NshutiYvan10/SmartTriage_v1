@@ -539,34 +539,87 @@ public class DeviceService {
     }
 
     /**
-     * V54 — Stop any active monitoring session for this visit that's bound
-     * to a triage-zone monitor. Called by TriageService after a successful
-     * triage submission so we don't leak sessions started by the "Pull from
-     * Monitor" flow.
+     * V54 — Close the triage-monitor session for a visit when triage is
+     * complete. Called by TriageService.performTriage after the triage
+     * record is saved.
      *
-     * Bedside-monitor sessions (devices flagged as triage_monitor = false,
-     * e.g. those auto-paired via assignedBed) are intentionally left running
-     * — those continue through the patient's stay.
+     * Bedside-monitor sessions (devices with triage_monitor = false,
+     * e.g. those auto-paired via assignedBed) are intentionally left
+     * running — those continue through the patient's stay.
+     *
+     * <h3>Why REQUIRES_NEW</h3>
+     * Previously this method joined the caller's transaction. When the
+     * simulator's heartbeat bumped @Version between our load and save,
+     * we threw OptimisticLockingFailureException — Spring marked the
+     * outer triage TX as rollback-only, and the user saw
+     * "The record was modified concurrently. Please try again." even
+     * though the triage record was perfectly valid.
+     *
+     * Running this in its own transaction insulates the triage commit
+     * from any session-cleanup race. Worst case the session-end fails;
+     * the triage still commits, and the next heartbeat or the
+     * triage-monitor takeover on the next "Pull from Monitor" click
+     * reconciles.
      */
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void stopTriageMonitorSessionForVisit(UUID visitId, String endedByName) {
-        sessionRepository.findByVisitIdAndSessionActiveTrueAndIsActiveTrue(visitId)
-                .ifPresent(session -> {
-                    IoTDevice device = session.getDevice();
-                    if (device != null && device.isTriageMonitor()) {
-                        try {
-                            stopMonitoring(session.getId(),
-                                    endedByName != null ? endedByName : "System",
-                                    "Triage complete");
-                            log.info("V54 — triage-monitor session {} stopped for visit {} after triage submit",
-                                    session.getId(), visitId);
-                        } catch (Exception e) {
-                            // Don't let a session-stop failure roll back the triage record.
-                            log.warn("V54 — failed to stop triage-monitor session {} for visit {}: {}",
-                                    session.getId(), visitId, e.getMessage());
-                        }
-                    }
-                });
+        DeviceSession session = sessionRepository
+                .findByVisitIdAndSessionActiveTrueAndIsActiveTrue(visitId)
+                .orElse(null);
+        if (session == null) return;
+
+        IoTDevice device = session.getDevice();
+        if (device == null || !device.isTriageMonitor()) {
+            // Bedside-monitor session — leave it running. The bedside
+            // device continues monitoring the patient through their stay.
+            return;
+        }
+
+        UUID sessionId = session.getId();
+        UUID deviceId = device.getId();
+        String serial = device.getSerialNumber();
+        String actor = endedByName != null ? endedByName : "System";
+
+        // 1. End the session — uses the retry helper so the simulator's
+        //    concurrent totalReadings increment doesn't fail us.
+        evictSessionWithRetry(sessionId, actor, "Triage complete");
+
+        // 2. Flip the device back to ONLINE — same retry pattern as the
+        //    start path. After 3 failed attempts we log + give up; the
+        //    simulator's autoPairIfMissingSession path on the next
+        //    heartbeat (~5s) will notice no active session and leave the
+        //    status alone, or a subsequent "Pull from Monitor" takeover
+        //    will re-set it.
+        IoTDevice published = null;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                IoTDevice fresh = deviceRepository.findByIdAndIsActiveTrue(deviceId).orElse(null);
+                if (fresh == null) return;
+                if (fresh.getStatus() == DeviceStatus.MONITORING) {
+                    fresh.setStatus(DeviceStatus.ONLINE);
+                    fresh = deviceRepository.saveAndFlush(fresh);
+                }
+                published = fresh;
+                break;
+            } catch (org.springframework.dao.OptimisticLockingFailureException e) {
+                if (attempt == 3) {
+                    log.warn("V54 — device {} status flip to ONLINE lost the race 3 times after "
+                                    + "triage-monitor session {} ended. Session is closed; status "
+                                    + "will reconcile on next heartbeat.",
+                            serial, sessionId);
+                    return;
+                }
+                log.debug("V54 — concurrent device update on attempt {}/3 for {} during triage stop — retrying",
+                        attempt, serial);
+            }
+        }
+
+        log.info("V54 — triage-monitor session {} stopped for visit {} after triage submit",
+                sessionId, visitId);
+
+        if (published != null) {
+            publishDeviceStatus(published);
+        }
     }
 
     /**
