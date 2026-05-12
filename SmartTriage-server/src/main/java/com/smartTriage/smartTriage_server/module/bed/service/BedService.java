@@ -1064,44 +1064,42 @@ public class BedService {
         TriageCategory category = visit.getCurrentTriageCategory();
         if (category == null) return Optional.empty();
 
-        EdZone targetZone = pickTargetZone(category, visit.isPediatric());
-        if (targetZone == null) return Optional.empty();
+        // Use the visit's currentEdZone — ZoneRoutingService has already
+        // decided it from category + hospital config (peds-resus,
+        // ambulatory zone, neonatal unit). Trusting that decision keeps
+        // bed suggestion in lockstep with the visit's actual routing.
+        //
+        // Previous version had a duplicate switch (pickTargetZone) that
+        // disagreed for adult YELLOW (returned null → no suggestion at
+        // all) even though the visit was routed to GENERAL. That left
+        // adult YELLOW patients triaged but unplaced.
+        EdZone targetZone = visit.getCurrentEdZone();
+        if (targetZone == null || targetZone == EdZone.TRIAGE) {
+            // No destination set (pre-triage) or still in the holding
+            // zone — don't auto-suggest. Shouldn't happen in the
+            // post-triage path but defensive.
+            return Optional.empty();
+        }
 
         UUID hospitalId = visit.getHospital().getId();
         List<Bed> available = bedRepository.findAvailableInZone(hospitalId, targetZone);
         if (available.isEmpty()) {
-            if (category == TriageCategory.RED) {
-                log.warn("[bedsuggest] No available beds in {} for RED visit {} — "
-                        + "manual placement required", targetZone, visit.getVisitNumber());
-            }
+            log.warn("[bedsuggest] No available beds in {} for {} visit {} — "
+                    + "manual placement required", targetZone, category, visit.getVisitNumber());
             return Optional.empty();
         }
 
-        // Prefer monitored beds for RED/ORANGE.
-        boolean preferMonitor = category == TriageCategory.RED || category == TriageCategory.ORANGE;
-        if (preferMonitor) {
-            Optional<Bed> monitored = available.stream()
-                    .filter(Bed::isHasMonitor)
-                    .findFirst();
-            if (monitored.isPresent()) return monitored;
-        }
+        // Always prefer a monitored bed when one is available, regardless
+        // of category. Continuous monitoring is the safer default; any
+        // patient who DOESN'T need it can be transferred to a non-
+        // monitored bed later, but the reverse (a deteriorating patient
+        // on an unmonitored bed) is the harder failure to recover from.
+        Optional<Bed> monitored = available.stream()
+                .filter(Bed::isHasMonitor)
+                .findFirst();
+        if (monitored.isPresent()) return monitored;
 
         // Fallback: first available in the zone (already sorted by displayOrder).
         return Optional.of(available.get(0));
-    }
-
-    /**
-     * Resolve the destination zone for a triaged visit. Pure function;
-     * exposed package-private so tests (and the route layer, if added
-     * later) can verify the routing matrix without instantiating the full
-     * service.
-     */
-    static EdZone pickTargetZone(TriageCategory category, boolean isPediatric) {
-        return switch (category) {
-            case RED    -> EdZone.RESUS;
-            case ORANGE -> isPediatric ? EdZone.PEDIATRIC : EdZone.ACUTE;
-            case YELLOW -> isPediatric ? EdZone.PEDIATRIC : null;
-            case GREEN, BLUE -> null;
-        };
     }
 }
