@@ -663,7 +663,9 @@ public class BedService {
      */
     private void publishDeviceStatusChangeAfterCommit(IoTDevice device) {
         final UUID hospitalId;
-        final Map<String, String> payload;
+        // RealTimeEventPublisher.publishDeviceStatusChange takes
+        // Map<String,Object>; keep this loose-typed to match.
+        final Map<String, Object> payload;
         try {
             hospitalId = device.getHospital().getId();
             payload = Map.of(

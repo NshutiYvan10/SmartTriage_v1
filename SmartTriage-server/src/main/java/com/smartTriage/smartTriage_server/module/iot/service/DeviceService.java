@@ -604,7 +604,8 @@ public class DeviceService {
         // Snapshot every field we need inside the TX while the entity is
         // attached. The actual publish reads from this map only.
         final java.util.UUID hospitalId;
-        final java.util.Map<String, String> payload;
+        // Loose-typed to match RealTimeEventPublisher.publishDeviceStatusChange(Map<String,Object>).
+        final java.util.Map<String, Object> payload;
         try {
             hospitalId = device.getHospital().getId();
             payload = java.util.Map.of(
