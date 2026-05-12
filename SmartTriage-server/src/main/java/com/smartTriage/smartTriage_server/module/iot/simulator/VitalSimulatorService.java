@@ -199,14 +199,20 @@ public class VitalSimulatorService {
                         // check-in. Runs in processHeartbeat's own TX.
                         deviceService.processHeartbeat(device, "127.0.0.1");
                     } else {
-                        // ONLINE / MONITORING: fast inline refresh. No state
-                        // transition needed, so skip the extra TX hop.
-                        device.setLastHeartbeatAt(Instant.now());
-                        if (device.getBatteryLevel() == null)
-                            device.setBatteryLevel(100);
-                        if (device.getWifiRssi() == null)
-                            device.setWifiRssi(-40);
-                        deviceRepository.save(device);
+                        // ONLINE / MONITORING: fast inline refresh via
+                        // @Modifying UPDATE that does NOT bump @Version.
+                        // Eliminates the race that surfaced "The record
+                        // was modified concurrently" to nurses every
+                        // time they touched a device the simulator was
+                        // also writing to. Existing battery / wifi
+                        // values are preserved; null → defaults to a
+                        // sane synthetic for the unconfigured-device case.
+                        Integer battery = device.getBatteryLevel() != null
+                                ? device.getBatteryLevel() : 100;
+                        Integer wifi = device.getWifiRssi() != null
+                                ? device.getWifiRssi() : -40;
+                        deviceRepository.updateTelemetry(
+                                device.getId(), Instant.now(), null, battery, wifi);
                     }
                 } catch (ObjectOptimisticLockingFailureException e) {
                     log.debug("SIM: skipping heartbeat for {} — concurrent update",

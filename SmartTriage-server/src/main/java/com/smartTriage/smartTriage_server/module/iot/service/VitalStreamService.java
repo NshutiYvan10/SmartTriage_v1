@@ -51,6 +51,7 @@ public class VitalStreamService {
     private final VitalStreamRepository streamRepository;
     private final VitalSignsRepository vitalSignsRepository;
     private final IoTDeviceRepository deviceRepository;
+    private final com.smartTriage.smartTriage_server.module.iot.repository.DeviceSessionRepository sessionRepository;
     private final VitalValidationEngine validationEngine;
     private final RealTimeEventPublisher eventPublisher;
 
@@ -115,30 +116,44 @@ public class VitalStreamService {
 
         stream = streamRepository.save(stream);
 
-        // Update session statistics
+        // Counter increment via @Modifying UPDATE — does NOT bump
+        // session.@Version, so concurrent user-facing writes (takeover,
+        // end-session, etc.) no longer race with the simulator's
+        // 5-second tick. See DeviceSessionRepository.incrementReadings.
+        sessionRepository.incrementReadings(session.getId(), validation.isValid() ? 0 : 1);
+        // Keep the in-memory entity counters in sync so any caller that
+        // reads `session` later in the same TX sees the latest values.
         session.incrementReadings();
         if (!validation.isValid()) {
             session.incrementRejected();
         }
 
-        // Re-fetch device to get latest version (avoids optimistic lock conflict
-        // when multiple sources update the same device concurrently)
-        IoTDevice freshDevice = deviceRepository.findById(device.getId())
-                .orElse(device);
+        // Telemetry update on device — same @Modifying-UPDATE pattern.
+        // Does NOT bump device.@Version, so a nurse clicking "Pull from
+        // Monitor" mid-stream no longer collides with this write.
+        // We pass `firmwareVersion` separately if present — that's
+        // genuine business state, not telemetry, so it still goes
+        // through save() below to preserve the version check on that
+        // narrow field.
+        deviceRepository.updateTelemetry(
+                device.getId(),
+                now,                              // heartbeatAt — always updated
+                now,                              // dataAt — always updated (we just got data)
+                payload.getBatteryLevel(),        // null → preserves existing
+                payload.getWifiRssi());           // null → preserves existing
 
-        // Update device metadata
-        freshDevice.setLastDataAt(now);
-        if (payload.getBatteryLevel() != null) {
-            freshDevice.setBatteryLevel(payload.getBatteryLevel());
-        }
-        if (payload.getWifiRssi() != null) {
-            freshDevice.setWifiRssi(payload.getWifiRssi());
-        }
+        // Firmware version reports rarely (only when the device boots
+        // with new firmware). Treat as a real business write — keeps
+        // @Version protection for the field that matters. The race
+        // window here is negligible (firmware changes once per device-
+        // upgrade cycle, not every 5 seconds).
         if (payload.getFirmwareVersion() != null) {
-            freshDevice.setFirmwareVersion(payload.getFirmwareVersion());
+            IoTDevice freshDevice = deviceRepository.findById(device.getId()).orElse(device);
+            if (!payload.getFirmwareVersion().equals(freshDevice.getFirmwareVersion())) {
+                freshDevice.setFirmwareVersion(payload.getFirmwareVersion());
+                deviceRepository.save(freshDevice);
+            }
         }
-        freshDevice.setLastHeartbeatAt(now);
-        deviceRepository.save(freshDevice);
 
         // Build acknowledgment
         DeviceAckResponse ack = DeviceAckResponse.builder()

@@ -5,6 +5,7 @@ import com.smartTriage.smartTriage_server.module.iot.entity.IoTDevice;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -84,4 +85,40 @@ public interface IoTDeviceRepository extends JpaRepository<IoTDevice, UUID> {
         @Query("SELECT d FROM IoTDevice d WHERE d.isActive = true AND d.hospital.id = :hospitalId " +
                         "AND d.assignedBed IS NOT NULL ORDER BY d.assignedBed.zone ASC, d.assignedBed.code ASC")
         List<IoTDevice> findAllAssignedToBeds(@Param("hospitalId") UUID hospitalId);
+
+        /**
+         * High-frequency telemetry update that intentionally <strong>does
+         * NOT bump {@code @Version}</strong>. Used by the simulator's
+         * 5-second heartbeat tick and the vital-stream ingest path —
+         * every active device gets a metadata write every tick.
+         *
+         * <p>These writes update bookkeeping fields only (lastHeartbeatAt,
+         * lastDataAt, batteryLevel, wifiRssi). No business logic depends
+         * on a particular version of these fields. But because they ran
+         * through {@code repository.save(entity)} previously, every tick
+         * bumped the version, and any concurrent user-facing write
+         * (Pull from Monitor, Place Patient, etc.) would lose the race
+         * and surface "The record was modified concurrently" to the
+         * nurse.
+         *
+         * <p>JPQL UPDATE bypasses Hibernate's optimistic-lock check
+         * because the change isn't going through the entity lifecycle.
+         * Use this everywhere the simulator (or any high-frequency
+         * non-business writer) needs to update these fields. For
+         * legitimate business-state writes (status transitions, etc.)
+         * keep using {@code save()} so optimistic locking still
+         * protects against real user-user conflicts.
+         */
+        @Modifying
+        @Query("UPDATE IoTDevice d SET d.lastHeartbeatAt = :heartbeatAt, "
+                        + "d.lastDataAt = COALESCE(:dataAt, d.lastDataAt), "
+                        + "d.batteryLevel = COALESCE(:battery, d.batteryLevel), "
+                        + "d.wifiRssi = COALESCE(:wifiRssi, d.wifiRssi) "
+                        + "WHERE d.id = :id")
+        int updateTelemetry(
+                        @Param("id") UUID id,
+                        @Param("heartbeatAt") Instant heartbeatAt,
+                        @Param("dataAt") Instant dataAt,
+                        @Param("battery") Integer battery,
+                        @Param("wifiRssi") Integer wifiRssi);
 }
