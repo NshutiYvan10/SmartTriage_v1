@@ -102,21 +102,45 @@ public class TriageService {
         boolean isPediatric = visit.isPediatric();
 
         // --- Resolve vital signs ---
-        VitalSigns vitals = null;
+        // The nurse's form values are the authoritative input for THIS
+        // triage assessment and must never be silently overridden by a
+        // stale IoT snapshot. Strict priority order:
+        //
+        //   1. Explicit vitalSignsId reference → use that exact row
+        //      (rare; audit-replay or vitals-first workflow).
+        //   2. Form carries any vital value → build a fresh VitalSigns
+        //      row from the form and persist it. Applies equally to
+        //      manually-typed values and values pulled from a monitor
+        //      and (possibly) edited in the form. The new row becomes
+        //      the latest VitalSigns for the visit and the one bound
+        //      to the TriageRecord below.
+        //   3. No form vitals → fall back to the latest VitalSigns on
+        //      file (e.g. paramedic baseline, prior care). Preserves
+        //      the legacy behaviour for vitals-less manual triage.
+        //   4. Nothing at all → vitals stays null; the calculator step
+        //      below defaults TEWS to 0 and emits a warning log line.
+        //
+        // Missing form vitals are NOT backfilled from any IoT row —
+        // a missing field must never silently inherit a monitor
+        // reading the nurse may have rejected. The TEWS calculator
+        // already treats null as 0, which is conservative.
+        //
+        // Regression context: the V54 "Pull from Monitor" feature
+        // keeps a triage-zone monitor session open while the nurse
+        // fills the form. VitalStreamService periodically writes IoT
+        // snapshot VitalSigns rows during that session. The previous
+        // resolution logic preferred those snapshots over the form,
+        // producing GREEN/2 readings even when the nurse explicitly
+        // entered ORANGE-level vitals — the bug this block fixes.
+        VitalSigns vitals;
         if (request.getVitalSignsId() != null) {
             vitals = vitalSignsRepository.findByIdAndIsActiveTrue(request.getVitalSignsId())
-                    .orElseThrow(() -> new ResourceNotFoundException("VitalSigns", "id", request.getVitalSignsId()));
-        } else {
-            vitals = vitalSignsRepository
-                    .findFirstByVisitIdAndIsActiveTrueOrderByRecordedAtDesc(visit.getId())
-                    .orElse(null);
-        }
-
-        // If no VitalSigns exist in DB, build a transient one from the triage form
-        // values
-        // so that TEWS calculation can still use the nurse-entered vitals.
-        if (vitals == null && hasFormVitals(request)) {
-            log.info("No DB VitalSigns for visit {} — using triage form vitals for TEWS", visit.getVisitNumber());
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "VitalSigns", "id", request.getVitalSignsId()));
+        } else if (hasFormVitals(request)) {
+            log.info("Triage on visit {} — building fresh VitalSigns from form values "
+                            + "(form is authoritative; any stale IoT snapshot is ignored).",
+                    visit.getVisitNumber());
             vitals = VitalSigns.builder()
                     .visit(visit)
                     .recordedAt(Instant.now())
@@ -128,22 +152,11 @@ public class TriageService {
                     .painScore(request.getPainScore())
                     .source(com.smartTriage.smartTriage_server.common.enums.VitalSource.MANUAL_ENTRY)
                     .build();
-            // Persist so future lookups find it
             vitals = vitalSignsRepository.save(vitals);
-        } else if (vitals != null) {
-            // Fill in any missing vital fields from the form if the DB record has gaps
-            if (vitals.getRespiratoryRate() == null && request.getRespiratoryRate() != null)
-                vitals.setRespiratoryRate(request.getRespiratoryRate());
-            if (vitals.getHeartRate() == null && request.getHeartRate() != null)
-                vitals.setHeartRate(request.getHeartRate());
-            if (vitals.getSystolicBp() == null && request.getSystolicBP() != null)
-                vitals.setSystolicBp(request.getSystolicBP());
-            if (vitals.getTemperature() == null && request.getTemperature() != null)
-                vitals.setTemperature(request.getTemperature());
-            if (vitals.getSpo2() == null && request.getSpo2() != null)
-                vitals.setSpo2(request.getSpo2());
-            if (vitals.getPainScore() == null && request.getPainScore() != null)
-                vitals.setPainScore(request.getPainScore());
+        } else {
+            vitals = vitalSignsRepository
+                    .findFirstByVisitIdAndIsActiveTrueOrderByRecordedAtDesc(visit.getId())
+                    .orElse(null);
         }
 
         // --- STEP 1: Calculate TEWS (uses correct engine based on patient type) ---
