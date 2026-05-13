@@ -5,13 +5,19 @@ import { visitApi } from '@/api/visits';
 import type { PatientResponse, VisitResponse, VisitStatus } from '@/api/types';
 
 /**
- * Compute a patient's age in years (with fractional months for infants)
- * from an ISO date string. Returns 0 when DOB is missing or unparseable.
+ * Compute a patient's display age from an ISO DOB string.
  *
- * Why fractional: the display layer renders `< 1` as `${Math.round(age *
- * 12)}mo` so a 4-month-old shows as "4mo" and a 26-year-old shows as
- * "26y". Sending DOB rather than a pre-computed integer year preserves
- * that resolution and stays accurate as the page sits open.
+ * Returns:
+ *   - completed integer years for age ≥ 1 (matches the conventional
+ *     "completed years since birthday" interpretation; mirrors the
+ *     backend's Period.between(dob, now).getYears())
+ *   - fractional years for age < 1 so the display layer's
+ *     `< 1 ? Math.round(age * 12) + 'mo' : age + 'y'` rendering
+ *     produces "4mo" for a 4-month-old.
+ *
+ * Returns 0 when DOB is missing or unparseable — display sites
+ * tolerate this (renders as "0mo"). Future-dated DOBs also fall back
+ * to 0 rather than negative numbers.
  */
 function ageInYearsFromDob(dob: string | null | undefined): number {
   if (!dob) return 0;
@@ -19,10 +25,12 @@ function ageInYearsFromDob(dob: string | null | undefined): number {
   if (isNaN(birth.getTime())) return 0;
   const now = new Date();
   const ms = now.getTime() - birth.getTime();
-  if (ms < 0) return 0;
-  // 365.2425 days/year matches the Gregorian average; close enough for
-  // display purposes and avoids leap-year drift on long-lived patients.
-  return ms / (1000 * 60 * 60 * 24 * 365.2425);
+  if (ms <= 0) return 0;
+  // 365.2425 days/year matches the Gregorian average; avoids leap-year
+  // drift on long-lived patients. Floor to whole years once we're past
+  // the first birthday so adults render as "25y" not "25.92y".
+  const rawYears = ms / (1000 * 60 * 60 * 24 * 365.2425);
+  return rawYears >= 1 ? Math.floor(rawYears) : rawYears;
 }
 
 // ── Map backend VisitStatus → frontend triageStatus ──
