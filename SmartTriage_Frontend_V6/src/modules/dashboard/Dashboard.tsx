@@ -75,10 +75,26 @@ export function Dashboard() {
     ? { background: 'rgba(8,47,73,0.95)' }
     : { background: 'rgba(248,250,252,1)' };
 
-  // Hydration is owned by useDataInit + the pre-fetch in
-  // authStore.login(). Dashboard intentionally does NOT trigger its
-  // own fetch — that path used to double-fetch with useDataInit and
-  // contributed to the post-login render flicker.
+  // Self-healing hydration. The login pre-fetch + useDataInit both
+  // try to populate the stores, but in practice the dashboard was
+  // sometimes mounting with empty data right after login (the
+  // user-reported "blank, need to reload" bug). This effect makes
+  // the dashboard self-protecting: if it mounts with an empty
+  // patient list AND we have an authenticated user, trigger the
+  // fetches directly. Idempotent — extra calls just refresh.
+  const fetchActiveVisits = usePatientStore((s) => s.fetchActiveVisits);
+  const fetchAlerts = useAlertStore((s) => s.fetchAlerts);
+  useEffect(() => {
+    if (!user?.hospitalId) return;
+    if (patients.length === 0) {
+      void fetchActiveVisits(user.hospitalId);
+      void fetchAlerts(user.hospitalId);
+    }
+    // Run on first mount with a logged-in user. Re-renders that
+    // change patients.length should NOT re-trigger; that's what
+    // useDataInit + the WebSocket subscriptions are for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.hospitalId]);
 
   // Zone-aware filter: DOCTOR/NURSE see only their zone's patients;
   // SUPER_ADMIN/HOSPITAL_ADMIN see all patients.

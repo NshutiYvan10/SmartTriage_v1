@@ -27,15 +27,23 @@ import { useDeviceStore } from '@/store/deviceStore';
 export function useDataInit() {
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const hospitalId = useAuthStore((s) => s.user?.hospitalId ?? null);
+  // Track the last *successful* fetch key. Reset to null whenever
+  // userId becomes null (logout) so a subsequent log-in as the same
+  // user still triggers a fresh fetch. Previously the ref persisted
+  // across logout, which silently suppressed the post-login hydrate
+  // for any logout-relogin-same-user cycle in the same tab.
   const lastFetchedFor = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!userId || !hospitalId) return;
-    // Skip if we already hydrated for this user. Resetting on logout
-    // happens by way of `userId` becoming null and then a new value.
-    if (lastFetchedFor.current === userId) return;
+    if (!userId || !hospitalId) {
+      // Clear the gate so the next login re-fetches.
+      lastFetchedFor.current = null;
+      return;
+    }
+    const key = `${userId}:${hospitalId}`;
+    if (lastFetchedFor.current === key) return;
 
-    lastFetchedFor.current = userId;
+    lastFetchedFor.current = key;
     Promise.allSettled([
       usePatientStore.getState().fetchActiveVisits(hospitalId),
       useAlertStore.getState().fetchAlerts(hospitalId),
