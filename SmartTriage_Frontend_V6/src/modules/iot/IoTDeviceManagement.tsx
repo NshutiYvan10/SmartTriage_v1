@@ -4,12 +4,15 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Cpu, Plus, RefreshCw, Loader2, Power, PowerOff, Wifi,
   WifiOff, Settings, Activity, Send, XCircle,
   UserCheck, Users, X, Search, Heart, AlertTriangle, Monitor,
-  BatteryFull, Zap, Copy, CheckCircle, Key, BedDouble,
+  BatteryFull, Zap, Copy, CheckCircle, Key, BedDouble, Eye,
 } from 'lucide-react';
+import MonitoringStatePill from '@/modules/monitoring/MonitoringStatePill';
+import type { EdZone } from '@/api/types';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
 import { usePatientStore } from '@/store/patientStore';
@@ -33,6 +36,7 @@ const DEVICE_TYPES = ['ESP32_MONITOR', 'PULSE_OXIMETER', 'ECG_MONITOR', 'BP_MONI
 
 export function IoTDeviceManagement() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const patients = usePatientStore((s) => s.patients);
   const userHospitalId = user?.hospitalId || 'a0000000-0000-0000-0000-000000000001';
@@ -59,6 +63,12 @@ export function IoTDeviceManagement() {
 
   const [devices, setDevices] = useState<DeviceResponse[]>([]);
   const [sessions, setSessions] = useState<DeviceSessionResponse[]>([]);
+  /**
+   * Zone filter for the Active Monitoring Sessions card. `null` = "All".
+   * Avoids drowning the admin's view at large hospitals while preserving
+   * the hospital-wide count for at-a-glance awareness.
+   */
+  const [sessionZoneFilter, setSessionZoneFilter] = useState<EdZone | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
@@ -669,37 +679,109 @@ export function IoTDeviceManagement() {
           </div>
         )}
 
-        {/* Active Monitoring Sessions Panel */}
-        {sessions.length > 0 && (
-          <div className="rounded-2xl p-5 animate-fade-up" style={glassCard}>
-            <div className="flex items-center gap-2 mb-4">
-              <Heart className="w-4 h-4 text-cyan-500" />
-              <h3 className={`text-sm font-bold ${text.heading}`}>Active Monitoring Sessions</h3>
-              <span className="ml-auto px-2 py-0.5 rounded-lg bg-cyan-500/10 text-cyan-500 text-[10px] font-bold">{sessions.length} active</span>
+        {/* Active Monitoring Sessions Panel —
+            View-only operational dashboard for the admin. Starting and
+            stopping monitoring is a clinical decision (sensors need to
+            be placed / removed, the patient assessed), so this card no
+            longer carries a Stop button. Admins who need to disconnect
+            a device hardware-side use Service Status / Decommission on
+            the device tile. The "View" button on each row deep-links to
+            Constant Monitoring so an admin who spots an issue can
+            escalate to a clinician without taking the action here. */}
+        {sessions.length > 0 && (() => {
+          // Zones present across the active sessions — drives which
+          // filter pills are worth showing. No point rendering RESUS
+          // if nobody is being monitored there.
+          const zonesPresent = new Set<EdZone>();
+          for (const s of sessions) {
+            if (s.bedZone) zonesPresent.add(s.bedZone);
+          }
+          const orderedZones: EdZone[] = ['RESUS', 'ACUTE', 'PEDIATRIC', 'ISOLATION', 'OBSERVATION', 'GENERAL', 'AMBULATORY', 'NEONATAL', 'TRIAGE'];
+          const visibleZones = orderedZones.filter((z) => zonesPresent.has(z));
+
+          const filtered = sessionZoneFilter
+            ? sessions.filter((s) => s.bedZone === sessionZoneFilter)
+            : sessions;
+          return (
+            <div className="rounded-2xl p-5 animate-fade-up" style={glassCard}>
+              <div className="flex items-center gap-2 mb-3">
+                <Heart className="w-4 h-4 text-cyan-500" />
+                <h3 className={`text-sm font-bold ${text.heading}`}>Active Monitoring Sessions</h3>
+                <span className="ml-auto px-2 py-0.5 rounded-lg bg-cyan-500/10 text-cyan-500 text-[10px] font-bold">{sessions.length} active hospital-wide</span>
+              </div>
+
+              {/* Zone filter pills */}
+              {visibleZones.length > 0 && (
+                <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+                  <button
+                    onClick={() => setSessionZoneFilter(null)}
+                    className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-colors ${
+                      sessionZoneFilter === null
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    All ({sessions.length})
+                  </button>
+                  {visibleZones.map((z) => {
+                    const count = sessions.filter((s) => s.bedZone === z).length;
+                    const active = sessionZoneFilter === z;
+                    return (
+                      <button
+                        key={z}
+                        onClick={() => setSessionZoneFilter(active ? null : z)}
+                        className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-colors ${
+                          active
+                            ? 'bg-cyan-600 text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {z} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {filtered.length === 0 ? (
+                <div className={`text-center text-xs ${text.muted} py-4`}>
+                  No active sessions in {sessionZoneFilter}.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filtered.map(s => {
+                    const dev = devices.find(d => d.id === s.deviceId);
+                    const name = s.patientName || 'Unidentified patient';
+                    return (
+                      <div key={s.id} className="flex items-center gap-3 rounded-xl p-3" style={glassInner}>
+                        <Activity className="w-4 h-4 text-cyan-500 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs font-bold truncate ${text.heading}`}>
+                            {name}
+                            {s.bedCode && (
+                              <span className={`ml-2 text-[10px] font-medium ${text.muted}`}>
+                                · Bed {s.bedCode}{s.bedZone ? ` (${s.bedZone})` : ''}
+                              </span>
+                            )}
+                          </p>
+                          <p className={`text-[10px] ${text.muted}`}>{dev?.deviceName || s.deviceId} · Started {format(new Date(s.startedAt), 'HH:mm')}</p>
+                        </div>
+                        <MonitoringStatePill state={s.monitoringState} compact />
+                        <button
+                          onClick={() => navigate('/monitoring')}
+                          className="px-2 py-1 text-[10px] font-bold rounded-lg bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 transition-colors inline-flex items-center gap-1"
+                          title="View in Constant Monitoring"
+                        >
+                          <Eye className="w-3 h-3" /> View
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <div className="space-y-2">
-              {sessions.map(s => {
-                const pt = getPatientForVisit(s.visitId);
-                const dev = devices.find(d => d.id === s.deviceId);
-                return (
-                  <div key={s.id} className="flex items-center gap-3 rounded-xl p-3" style={glassInner}>
-                    <Activity className="w-4 h-4 text-cyan-500 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-bold truncate ${text.heading}`}>{pt?.fullName || 'Unknown Patient'}</p>
-                      <p className={`text-[10px] ${text.muted}`}>{dev?.deviceName || s.deviceId} · Started {format(new Date(s.startedAt), 'HH:mm')}</p>
-                    </div>
-                    {pt?.category && (
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold text-white ${pt.category === 'RED' ? 'bg-red-500' : pt.category === 'ORANGE' ? 'bg-orange-500' : pt.category === 'YELLOW' ? 'bg-yellow-500' : 'bg-green-500'}`}>{pt.category}</span>
-                    )}
-                    <button onClick={() => handleStopMonitoring(s.id)} className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors">
-                      Stop
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ── Patient Selection Dialog (modal overlay) ── */}
         {assignDevice && (

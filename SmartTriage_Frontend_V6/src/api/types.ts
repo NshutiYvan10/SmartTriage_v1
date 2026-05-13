@@ -1104,6 +1104,14 @@ export interface DeviceSessionResponse {
   deviceSerialNumber: string;
   visitId: string;
   visitNumber: string;
+  /**
+   * Patient name, bed code, and zone carried directly on the session
+   * payload so admin / shift-lead surfaces can render real names
+   * without consulting their (zone-scoped) patient store.
+   */
+  patientName: string | null;
+  bedCode: string | null;
+  bedZone: EdZone | null;
   startedByName: string;
   startedAt: string;
   endedByName: string | null;
