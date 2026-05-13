@@ -52,6 +52,16 @@ public class DeviceService {
     private final RealTimeEventPublisher eventPublisher;
 
     /**
+     * Used to "freeze" the last live reading into the VitalSigns table
+     * at lifecycle exits (Pause / Stop / Disconnect). Without this, a
+     * clinician who reloads the page after pressing Pause or Stop sees
+     * the most recent VitalSigns row — which can be a triage form
+     * entry or a 60-second-old periodic snapshot — rather than the
+     * actual last live reading they observed before the transition.
+     */
+    private final VitalStreamService vitalStreamService;
+
+    /**
      * Optional simulator dependency — only resolves in dev/sim builds
      * (smarttriage.simulation.enabled=true). Used to "kickstart" a
      * single reading the moment monitoring starts/resumes, so the
@@ -636,6 +646,12 @@ public class DeviceService {
             throw new IllegalStateException("Session is already ended");
         }
 
+        // Freeze the last live reading into VitalSigns before closing
+        // so a page reload after Stop shows what the clinician saw
+        // immediately before pressing End — not the older periodic
+        // snapshot or the triage row.
+        snapshotLatestStreamForSession(sessionId);
+
         session.endSession(endedByName, reason != null ? reason : "Manual stop");
         session = sessionRepository.save(session);
 
@@ -827,6 +843,36 @@ public class DeviceService {
     }
 
     /**
+     * Snapshot the most recent VitalStream reading into the VitalSigns
+     * table for this session's visit. Used at lifecycle exits (Pause,
+     * Stop, Disconnect) so that a page reload after the exit returns
+     * the actual last live reading, not the older periodic snapshot
+     * or the triage form's row.
+     *
+     * <p>Best-effort: any failure here is logged and swallowed —
+     * the clinical lifecycle transition (Pause / Stop / Disconnect)
+     * takes priority and must not be undone by a snapshotting
+     * problem. A failure here just means the user might see slightly
+     * stale values on reload until the next stream snapshot.
+     *
+     * @param sessionId the active session that's about to exit a
+     *                  streaming state
+     */
+    @Transactional
+    public void snapshotLatestStreamForSession(UUID sessionId) {
+        if (sessionId == null) return;
+        try {
+            DeviceSession s = sessionRepository.findById(sessionId).orElse(null);
+            if (s == null || s.getVisit() == null || s.getDevice() == null) return;
+            vitalStreamService.createVitalSnapshot(
+                    s.getVisit().getId(), s.getDevice().getSerialNumber());
+        } catch (Exception e) {
+            log.warn("Lifecycle-exit vital snapshot failed for session {}: {}",
+                    sessionId, e.getMessage());
+        }
+    }
+
+    /**
      * Transactional helper for transitioning a session's monitoring
      * state from outside a managed JPA context (e.g. the heartbeat
      * scheduler). Re-fetches the entity inside this transaction, sets
@@ -863,6 +909,10 @@ public class DeviceService {
                 || cur == com.smartTriage.smartTriage_server.common.enums.MonitoringState.ENDED) {
             return IoTMapper.toResponse(session);
         }
+        // Freeze the last live reading into VitalSigns before pausing
+        // so a page reload after Pause shows the actual last-seen
+        // values rather than reverting to triage / an older snapshot.
+        snapshotLatestStreamForSession(sessionId);
         session.setPausedAt(Instant.now());
         session.setPausedByName(pausedByName);
         session.transitionState(com.smartTriage.smartTriage_server.common.enums.MonitoringState.PAUSED);

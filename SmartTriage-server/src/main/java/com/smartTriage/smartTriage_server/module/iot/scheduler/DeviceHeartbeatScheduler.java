@@ -109,6 +109,12 @@ public class DeviceHeartbeatScheduler {
                 session.incrementAlerts();
             }
 
+            // Freeze the last live reading into VitalSigns before
+            // moving the session to DISCONNECTED so a page reload
+            // shows the last-known values rather than the older
+            // periodic snapshot.
+            deviceService.snapshotLatestStreamForSession(session.getId());
+
             // Session is NOT closed — transition to DISCONNECTED so that
             // when the device reconnects (or a replacement is paired)
             // the timeline stays one continuous record. Closing here
