@@ -3,6 +3,36 @@ import { VitalSigns, VitalReading } from '@/types';
 import { vitalApi } from '@/api/vitals';
 import type { VitalSignsResponse } from '@/api/types';
 
+/**
+ * True when the fetched DB row is at least as fresh as what we already
+ * have in memory.
+ *
+ * The slow (30s) HTTP poll path runs alongside the high-frequency
+ * WebSocket stream. While monitoring is live, the WebSocket has
+ * already written the most recent reading to {@link VitalState.vitalsByPatient}.
+ * The clinical {@link VitalSigns} table only gets a row every ~60s
+ * (the periodic IoT snapshot) or once at triage submission — so the
+ * "latest DB row" returned by {@code vitalApi.getLatest} can easily
+ * be OLDER than the live in-memory value.
+ *
+ * After a clinician presses Stop the WebSocket goes silent. The next
+ * HTTP poll would then overwrite the live in-memory vitals with an
+ * older row — typically the triage form's entry if monitoring was
+ * brief — which presented to the user as "Stop reverts vitals to the
+ * original triage values." Returning false here when the in-memory
+ * timestamp is fresher keeps the last live reading frozen on screen,
+ * which is the clinically expected behaviour.
+ */
+function fetchedIsFresher(fetchedRecordedAt: string, prev: VitalSigns | undefined): boolean {
+  if (!prev) return true;
+  const fetchedAt = new Date(fetchedRecordedAt).getTime();
+  const inMemoryAt = prev.timestamp instanceof Date
+    ? prev.timestamp.getTime()
+    : new Date(prev.timestamp as unknown as string).getTime();
+  if (!Number.isFinite(fetchedAt) || !Number.isFinite(inMemoryAt)) return true;
+  return fetchedAt > inMemoryAt;
+}
+
 // ── Map backend → frontend VitalSigns ──
 //
 // IMPORTANT — ECG handling
@@ -60,6 +90,9 @@ export const useVitalStore = create<VitalState>((set, get) => ({
     try {
       const latest = await vitalApi.getLatest(visitId);
       const prev = get().vitalsByPatient.get(visitId);
+      // Don't clobber a fresher WebSocket-delivered reading with an
+      // older DB row — see fetchedIsFresher for the full rationale.
+      if (!fetchedIsFresher(latest.recordedAt, prev)) return;
       get().updateVitals(visitId, mapToVitalSigns(latest, prev));
     } catch {
       // No vitals recorded yet — silently ignore
@@ -74,10 +107,14 @@ export const useVitalStore = create<VitalState>((set, get) => ({
 
       // Set latest as current vitals — pass the previous vitals so the
       // live WebSocket-supplied ECG is not overwritten by the clinical
-      // snapshot (which has no ECG column).
+      // snapshot (which has no ECG column). Same freshness guard as
+      // fetchLatestVitals so the line-chart history below still gets
+      // populated even when we skip the current-vitals overwrite.
       const latest = records[0]; // Most recent first
       const prev = get().vitalsByPatient.get(visitId);
-      get().updateVitals(visitId, mapToVitalSigns(latest, prev));
+      if (fetchedIsFresher(latest.recordedAt, prev)) {
+        get().updateVitals(visitId, mapToVitalSigns(latest, prev));
+      }
 
       // Build history from all records
       const { vitalHistory } = get();

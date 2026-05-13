@@ -587,23 +587,40 @@ export function ConstantMonitoring() {
   const wsUnsubs = useRef<Map<string, () => void>>(new Map());
   const trendUnsubs = useRef<Map<string, () => void>>(new Map());
 
-  // Build a set of visit IDs that have an active device streaming
-  const devicePairedVisitIds = useMemo(() => {
-    const devices = allDevices();
-    const ids = new Set<string>();
-    devices.forEach((d) => {
-      if (d.pairedPatientId && d.isStreaming) {
-        ids.add(d.pairedPatientId);
-      }
-    });
-    return ids;
-  }, [allDevices, lastRefresh]); // re-evaluate on refresh ticks
-
+  // ── Incremental sync: WebSocket vital subscriptions track the
+  //    session state, not the device store ──
+  //
+  // The previous gate was driven by `useDeviceStore.allDevices()` which
+  // refreshes only on the 30-second `lastRefresh` tick. After a
+  // clinician pressed Start the session-state pill flipped to LIVE in
+  // ~500 ms, but the WebSocket subscription waited up to 30 seconds
+  // for the device store to catch up — so the numeric vitals stayed
+  // frozen even though the pill said LIVE. Switching the gate to
+  // `sessionsByVisitId` (which is already tight-polled at 500 ms
+  // during STARTING + immediately after Start/Resume) closes that gap.
+  //
+  // We also split the effect into "incremental sync" (this one, no
+  // destructive cleanup) and a separate unmount-only cleanup below,
+  // so that frequent session-map updates during STARTING don't tear
+  // down and rebuild every WebSocket sub every 500 ms.
   useEffect(() => {
     const currentSubs = wsUnsubs.current;
 
-    // Subscribe to new visit IDs
-    devicePairedVisitIds.forEach((visitId) => {
+    // States that should receive live vital readings. PAUSED is
+    // intentionally excluded — paused sessions stop streaming on the
+    // backend; un-subscribing here visually freezes the chart on the
+    // last value.
+    const desired = new Set<string>();
+    sessionsByVisitId.forEach((session, visitId) => {
+      if (!session) return;
+      const s = session.monitoringState;
+      if (s === 'STARTING' || s === 'LIVE' || s === 'DEGRADED' || s === 'STALLED') {
+        desired.add(visitId);
+      }
+    });
+
+    // Add subs for visits that need them but don't have them yet.
+    desired.forEach((visitId) => {
       if (!currentSubs.has(visitId)) {
         const unsub = subscribeToVitals(visitId, (vs) => {
           useVitalStore.getState().updateVitals(visitId, {
@@ -625,20 +642,27 @@ export function ConstantMonitoring() {
       }
     });
 
-    // Unsubscribe from visit IDs no longer paired
+    // Drop subs for visits that have left the desired set (Pause,
+    // End, etc.).
     currentSubs.forEach((unsub, visitId) => {
-      if (!devicePairedVisitIds.has(visitId)) {
+      if (!desired.has(visitId)) {
         unsub();
         currentSubs.delete(visitId);
       }
     });
+    // No cleanup on dep change — unmount cleanup is handled by the
+    // dedicated effect below.
+  }, [sessionsByVisitId]);
 
-    // Cleanup all on unmount
+  // Unmount-only cleanup — close every still-open WebSocket sub when
+  // the page is left. Empty dep array → the cleanup only fires on
+  // unmount, never on the high-frequency sessionsByVisitId churn.
+  useEffect(() => {
     return () => {
-      currentSubs.forEach((unsub) => unsub());
-      currentSubs.clear();
+      wsUnsubs.current.forEach((unsub) => unsub());
+      wsUnsubs.current.clear();
     };
-  }, [devicePairedVisitIds]);
+  }, []);
 
   // ── Seed trendStatus from active sessions ──
   // The backend pushes /topic/trend/{visitId} ONLY when the label changes.
@@ -671,10 +695,23 @@ export function ConstantMonitoring() {
   // Backend classifies trend (with hysteresis) and pushes WORSENING/STABLE/
   // IMPROVING to /topic/trend/{visitId}. This replaces the old client-side
   // HR-only heuristic that caused badge flicker.
+  //
+  // Same session-state gate + non-destructive incremental sync as the
+  // vitals subscription above — trend signals only make sense while
+  // monitoring is actually streaming.
   useEffect(() => {
     const currentSubs = trendUnsubs.current;
 
-    devicePairedVisitIds.forEach((visitId) => {
+    const desired = new Set<string>();
+    sessionsByVisitId.forEach((session, visitId) => {
+      if (!session) return;
+      const s = session.monitoringState;
+      if (s === 'STARTING' || s === 'LIVE' || s === 'DEGRADED' || s === 'STALLED') {
+        desired.add(visitId);
+      }
+    });
+
+    desired.forEach((visitId) => {
       if (!currentSubs.has(visitId)) {
         const unsub = subscribeToTrendChanges(visitId, (ev) => {
           setTrendByVisitId((prev) => {
@@ -688,17 +725,21 @@ export function ConstantMonitoring() {
     });
 
     currentSubs.forEach((unsub, visitId) => {
-      if (!devicePairedVisitIds.has(visitId)) {
+      if (!desired.has(visitId)) {
         unsub();
         currentSubs.delete(visitId);
       }
     });
+    // No cleanup on dep change — unmount cleanup below.
+  }, [sessionsByVisitId]);
 
+  // Unmount cleanup for trend subscriptions.
+  useEffect(() => {
     return () => {
-      currentSubs.forEach((unsub) => unsub());
-      currentSubs.clear();
+      trendUnsubs.current.forEach((unsub) => unsub());
+      trendUnsubs.current.clear();
     };
-  }, [devicePairedVisitIds]);
+  }, []);
 
   const patients = useMemo(() => {
     const monitorable = storePatients.filter((p) =>
