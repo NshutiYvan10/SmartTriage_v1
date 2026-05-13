@@ -54,13 +54,22 @@ public class ZoneRoutingService {
         boolean hasAmbulatoryZone = hospital != null
                 && bedRepository.countByHospitalIdAndZoneAndIsActiveTrue(
                         hospital.getId(), EdZone.AMBULATORY) > 0;
+        // Drive YELLOW (adult) routing from bed inventory the same way
+        // GREEN drives AMBULATORY: if the hospital provisions any
+        // OBSERVATION beds, YELLOW patients land there; otherwise they
+        // fall back to GENERAL. Admin-added observation beds activate
+        // the route automatically.
+        boolean hasObservationZone = hospital != null
+                && bedRepository.countByHospitalIdAndZoneAndIsActiveTrue(
+                        hospital.getId(), EdZone.OBSERVATION) > 0;
         boolean isNeonatal = isNeonatal(visit);
         EdZone zone = EdZone.forPatientPlacement(
                 category, visit.isPediatric(), isNeonatal,
-                hasPedsResus, hasAmbulatoryZone, hasNeonatalUnit);
-        log.debug("[zone-routing] visit={} category={} peds={} neonatal={} hasPedsResus={} hasAmbulatory={} hasNeonatal={} → {}",
+                hasPedsResus, hasAmbulatoryZone, hasNeonatalUnit,
+                hasObservationZone);
+        log.debug("[zone-routing] visit={} category={} peds={} neonatal={} hasPedsResus={} hasAmbulatory={} hasObservation={} hasNeonatal={} → {}",
                 visit.getVisitNumber(), category, visit.isPediatric(), isNeonatal,
-                hasPedsResus, hasAmbulatoryZone, hasNeonatalUnit, zone);
+                hasPedsResus, hasAmbulatoryZone, hasObservationZone, hasNeonatalUnit, zone);
         return zone;
     }
 

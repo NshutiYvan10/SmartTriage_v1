@@ -72,23 +72,30 @@ public enum EdZone {
      *
      * <p>Decision matrix:
      * <table>
-     *   <tr><th>Category</th><th>Pediatric?</th><th>Has peds resus?</th><th>Has ambulatory?</th><th>Zone</th></tr>
-     *   <tr><td>RED</td><td>no</td><td>—</td><td>—</td><td>RESUS</td></tr>
-     *   <tr><td>RED</td><td>yes</td><td>true</td><td>—</td><td>PEDIATRIC</td></tr>
-     *   <tr><td>RED</td><td>yes</td><td>false</td><td>—</td><td>RESUS *</td></tr>
-     *   <tr><td>ORANGE</td><td>no</td><td>—</td><td>—</td><td>ACUTE</td></tr>
-     *   <tr><td>ORANGE/YELLOW</td><td>yes</td><td>—</td><td>—</td><td>PEDIATRIC</td></tr>
-     *   <tr><td>YELLOW</td><td>no</td><td>—</td><td>—</td><td>GENERAL</td></tr>
-     *   <tr><td>GREEN</td><td>yes</td><td>—</td><td>—</td><td>PEDIATRIC</td></tr>
-     *   <tr><td>GREEN</td><td>no</td><td>—</td><td>true</td><td>AMBULATORY</td></tr>
-     *   <tr><td>GREEN</td><td>no</td><td>—</td><td>false</td><td>GENERAL</td></tr>
-     *   <tr><td>BLUE</td><td>—</td><td>—</td><td>—</td><td>GENERAL</td></tr>
+     *   <tr><th>Category</th><th>Pediatric?</th><th>Has peds resus?</th><th>Has observation?</th><th>Has ambulatory?</th><th>Zone</th></tr>
+     *   <tr><td>RED</td><td>no</td><td>—</td><td>—</td><td>—</td><td>RESUS</td></tr>
+     *   <tr><td>RED</td><td>yes</td><td>true</td><td>—</td><td>—</td><td>PEDIATRIC</td></tr>
+     *   <tr><td>RED</td><td>yes</td><td>false</td><td>—</td><td>—</td><td>RESUS *</td></tr>
+     *   <tr><td>ORANGE</td><td>no</td><td>—</td><td>—</td><td>—</td><td>ACUTE</td></tr>
+     *   <tr><td>ORANGE/YELLOW</td><td>yes</td><td>—</td><td>—</td><td>—</td><td>PEDIATRIC</td></tr>
+     *   <tr><td>YELLOW</td><td>no</td><td>—</td><td>true</td><td>—</td><td>OBSERVATION</td></tr>
+     *   <tr><td>YELLOW</td><td>no</td><td>—</td><td>false</td><td>—</td><td>GENERAL</td></tr>
+     *   <tr><td>GREEN</td><td>yes</td><td>—</td><td>—</td><td>—</td><td>PEDIATRIC</td></tr>
+     *   <tr><td>GREEN</td><td>no</td><td>—</td><td>—</td><td>true</td><td>AMBULATORY</td></tr>
+     *   <tr><td>GREEN</td><td>no</td><td>—</td><td>—</td><td>false</td><td>GENERAL</td></tr>
+     *   <tr><td>BLUE</td><td>—</td><td>—</td><td>—</td><td>—</td><td>GENERAL</td></tr>
      * </table>
      *
      * <p>* Pediatric RED with no peds resus capability still routes to
      * main RESUS — that's where the equipment lives. Under-routing a
      * critical paeds patient to a peds zone without a defibrillator is
      * the failure mode we're guarding against.
+     *
+     * <p>YELLOW (non-pediatric) → OBSERVATION when the hospital provisions
+     * Observation Unit beds; otherwise falls back to GENERAL. Same
+     * graceful-degradation pattern used for the AMBULATORY zone.
+     * Pediatric YELLOW still routes to PEDIATRIC (peds zone owns all
+     * non-RED peds patients regardless of category).
      *
      * @param category the patient's current triage category
      * @param isPediatric true when the visit is on a pediatric form
@@ -106,7 +113,8 @@ public enum EdZone {
             boolean hospitalHasAmbulatoryZone) {
         return forPatientPlacement(category, isPediatric, /* isNeonatal */ false,
                 hospitalHasPediatricResus, hospitalHasAmbulatoryZone,
-                /* hospitalHasNeonatalUnit */ false);
+                /* hospitalHasNeonatalUnit */ false,
+                /* hospitalHasObservationZone */ false);
     }
 
     /**
@@ -137,7 +145,8 @@ public enum EdZone {
             boolean isNeonatal,
             boolean hospitalHasPediatricResus,
             boolean hospitalHasAmbulatoryZone,
-            boolean hospitalHasNeonatalUnit) {
+            boolean hospitalHasNeonatalUnit,
+            boolean hospitalHasObservationZone) {
         if (category == null) return TRIAGE;
 
         // Neonatal branch — supersedes everything else when the
@@ -164,7 +173,13 @@ public enum EdZone {
 
         return switch (category) {
             case ORANGE -> ACUTE;
-            case YELLOW -> GENERAL;
+            // YELLOW (adult) → OBSERVATION when the hospital provisions
+            // observation beds. Falls back to GENERAL for facilities
+            // that don't run an Observation Unit. Same opt-in pattern
+            // used for AMBULATORY: derived from bed inventory in the
+            // caller (ZoneRoutingService) so adding observation beds
+            // through admin tooling automatically activates the route.
+            case YELLOW -> hospitalHasObservationZone ? OBSERVATION : GENERAL;
             case GREEN -> hospitalHasAmbulatoryZone ? AMBULATORY : GENERAL;
             case BLUE -> GENERAL;
             default -> GENERAL;
