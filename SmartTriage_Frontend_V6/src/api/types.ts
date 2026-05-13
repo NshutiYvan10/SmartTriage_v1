@@ -403,6 +403,13 @@ export interface VisitResponse {
   visitNumber: string;
   patientId: string;
   patientName: string;
+  /**
+   * Identity fields populated by VisitMapper from the joined patient.
+   * Carrying DOB rather than a pre-computed age lets the frontend
+   * render months-granular ages for infants and stay correct over time.
+   */
+  patientDateOfBirth: string | null;
+  patientGender: Gender | null;
   hospitalId: string;
   arrivalMode: ArrivalMode;
   arrivalTime: string;

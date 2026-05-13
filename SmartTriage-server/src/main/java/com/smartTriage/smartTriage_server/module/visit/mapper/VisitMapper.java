@@ -15,6 +15,12 @@ public final class VisitMapper {
                 .visitNumber(visit.getVisitNumber())
                 .patientId(visit.getPatient().getId())
                 .patientName(formatPatientName(visit))
+                // Carry DOB + gender on the list payload so every view
+                // (triage queue, patients list, monitoring, dashboard)
+                // can render age/gender from the same source the visit
+                // record uses, without an N+1 fetch per row.
+                .patientDateOfBirth(visit.getPatient().getDateOfBirth())
+                .patientGender(visit.getPatient().getGender())
                 .hospitalId(visit.getHospital().getId())
                 .arrivalMode(visit.getArrivalMode())
                 .arrivalTime(visit.getArrivalTime())

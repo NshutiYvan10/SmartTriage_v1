@@ -4,6 +4,27 @@ import { patientApi } from '@/api/patients';
 import { visitApi } from '@/api/visits';
 import type { PatientResponse, VisitResponse, VisitStatus } from '@/api/types';
 
+/**
+ * Compute a patient's age in years (with fractional months for infants)
+ * from an ISO date string. Returns 0 when DOB is missing or unparseable.
+ *
+ * Why fractional: the display layer renders `< 1` as `${Math.round(age *
+ * 12)}mo` so a 4-month-old shows as "4mo" and a 26-year-old shows as
+ * "26y". Sending DOB rather than a pre-computed integer year preserves
+ * that resolution and stays accurate as the page sits open.
+ */
+function ageInYearsFromDob(dob: string | null | undefined): number {
+  if (!dob) return 0;
+  const birth = new Date(dob);
+  if (isNaN(birth.getTime())) return 0;
+  const now = new Date();
+  const ms = now.getTime() - birth.getTime();
+  if (ms < 0) return 0;
+  // 365.2425 days/year matches the Gregorian average; close enough for
+  // display purposes and avoids leap-year drift on long-lived patients.
+  return ms / (1000 * 60 * 60 * 24 * 365.2425);
+}
+
 // ── Map backend VisitStatus → frontend triageStatus ──
 function mapVisitStatus(status: VisitStatus): Patient['triageStatus'] {
   switch (status) {
@@ -156,8 +177,14 @@ export const usePatientStore = create<PatientState>((set, get) => ({
         // hydrate the full record without a second list lookup.
         patientId: v.patientId,
         fullName: v.patientName || 'Unknown',
-        age: 0, // populated on demand by PatientDetailView
-        gender: 'MALE' as Patient['gender'], // placeholder until detail fetch
+        // Derive age in years (with fractional months for infants) from
+        // the DOB carried on the visit response. Previously hardcoded to
+        // 0, which made every adult render as "0mo · M" in the queue.
+        // Falls back to 0 only when DOB is genuinely missing — display
+        // sites tolerate that (renders as "0mo").
+        age: ageInYearsFromDob(v.patientDateOfBirth),
+        gender: (v.patientGender as Patient['gender']) || 'MALE',
+        dateOfBirth: v.patientDateOfBirth ?? undefined,
         chiefComplaint: v.chiefComplaint || '',
         arrivalMode: (v.arrivalMode as Patient['arrivalMode']) || 'WALK_IN',
         arrivalTimestamp: new Date(v.arrivalTime),

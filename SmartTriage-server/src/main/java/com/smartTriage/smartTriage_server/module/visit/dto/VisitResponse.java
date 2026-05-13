@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Data
@@ -20,6 +21,19 @@ public class VisitResponse {
     private String visitNumber;
     private UUID patientId;
     private String patientName;
+    /**
+     * Identity fields that travel with every visit-list payload so the
+     * triage queue, patients list, monitoring grid, etc. can render age
+     * and gender correctly without an N+1 fetch per row. The list
+     * mapper on the frontend previously hardcoded `age: 0` and
+     * `gender: 'MALE'` because these weren't on the wire — that's the
+     * "0mo · M" rendering the user saw on Luna Gisa even though her
+     * actual DOB was stored correctly. Carrying DOB rather than a
+     * pre-computed age lets the frontend render months-granular ages
+     * for infants and stays correct as time passes between fetches.
+     */
+    private LocalDate patientDateOfBirth;
+    private Gender patientGender;
     private UUID hospitalId;
     private ArrivalMode arrivalMode;
     private Instant arrivalTime;
