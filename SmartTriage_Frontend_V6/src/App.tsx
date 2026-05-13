@@ -59,6 +59,7 @@ import { QualityDashboard } from './modules/quality/QualityDashboard';
 import { SurgePredictionView } from './modules/prediction/SurgePredictionView';
 import { LabOrdersView } from './modules/lab/LabOrdersView';
 import { ParamedicDashboard } from './modules/ems/ParamedicDashboard';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 function AppContent() {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -144,6 +145,14 @@ function AppContent() {
         style={{ marginLeft: `${sidebarWidth + 32}px` }}
       >
         <div className="relative z-10 animate-fade-in">
+          {/* ── Clinical-safety failsafe ──
+              Wrap every route in an ErrorBoundary so a thrown error
+              during render (e.g. a transient race between auth and
+              store hydration) shows a recoverable fallback instead
+              of unmounting the whole tree to a blank gradient page —
+              the silent failure mode behind every "had to reload to
+              see the dashboard" report. */}
+          <ErrorBoundary routeLabel={location.pathname.replace('/', '') || 'page'}>
           <Routes>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/entry" element={<RoleGuard page="entry"><EntryRegistration /></RoleGuard>} />
@@ -207,6 +216,7 @@ function AppContent() {
             <Route path="/quality" element={<RoleGuard page="quality"><QualityDashboard /></RoleGuard>} />
             <Route path="/prediction" element={<RoleGuard page="prediction"><SurgePredictionView /></RoleGuard>} />
           </Routes>
+          </ErrorBoundary>
         </div>
 
       </main>

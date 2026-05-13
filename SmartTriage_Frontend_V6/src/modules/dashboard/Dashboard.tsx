@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/Badge';
 import { AlertPanel } from '@/components/ui/AlertPanel';
 import { Patient, TriageCategory } from '@/types';
 import { getCategoryColor } from '@/utils/tewsCalculator';
-import { formatDistanceToNow } from 'date-fns';
+import { safeFormatDistanceToNow } from '@/utils/safeDate';
 import { useMyShift, getZoneForCategory } from '@/hooks/useMyShift';
 import { ShiftStartBanner } from '@/components/ShiftStartBanner';
 import { CriticalLabBanner } from '@/modules/lab/CriticalLabBanner';
@@ -260,7 +260,7 @@ export function Dashboard() {
                                 </p>
                                 <div className="flex items-center gap-3 mt-1.5">
                                   <p className={`text-[11px] ${isDark ? 'text-slate-500' : 'text-gray-400'} font-medium`}>
-                                    {formatDistanceToNow(a.timestamp, { addSuffix: true })}
+                                    {safeFormatDistanceToNow(a.timestamp, { addSuffix: true })}
                                   </p>
                                   {a.satsTargetMinutes != null && a.satsTargetMinutes > 0 && (
                                     <span className="flex items-center gap-1">
@@ -782,7 +782,7 @@ export function Dashboard() {
                           <p className="text-[11px] text-slate-500 mt-0.5 truncate">{alert.patientName} {alert.visitNumber ? `— ${alert.visitNumber}` : ''}</p>
                         )}
                         <div className="flex items-center gap-2 mt-1">
-                          <p className="text-[11px] text-slate-400">{formatDistanceToNow(alert.timestamp, { addSuffix: true })}</p>
+                          <p className="text-[11px] text-slate-400">{safeFormatDistanceToNow(alert.timestamp, { addSuffix: true })}</p>
                           {/* SATS Countdown Timer */}
                           {alert.satsTargetMinutes != null && alert.satsTargetMinutes > 0 && (
                             <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-orange-50 border border-orange-200">
