@@ -470,10 +470,29 @@ export function EntryRegistration() {
       const allergiesText = formData.allergies.length > 0 ? formData.allergies.join(', ') : undefined;
       const conditionsText = formData.existingConditions.length > 0 ? formData.existingConditions.join(', ') : undefined;
 
+      // DOB resolution: if the nurse picked an exact DOB, use it; otherwise
+      // derive a synthetic DOB from the entered age so the backend can still
+      // compute Patient.isPediatric correctly. Without this, an age-only
+      // registration sends no DOB and the patient defaults to adult routing,
+      // which is right MOST of the time but wrong for paediatric patients
+      // whose age was entered numerically (the common Rwandan field path
+      // when DOB is unknown). The synthetic DOB anchors at today minus the
+      // entered years; rough but clinically-accurate-enough — the doctor
+      // can correct it later from the patient record.
+      const ageNum = formData.age ? parseInt(formData.age, 10) : NaN;
+      const syntheticDob = !formData.dateOfBirth
+        && Number.isFinite(ageNum) && ageNum >= 0 && ageNum <= 120
+        ? (() => {
+            const today = new Date();
+            const dob = new Date(today.getFullYear() - ageNum, today.getMonth(), today.getDate());
+            return dob.toISOString().split('T')[0];
+          })()
+        : undefined;
+
       const patient = await registerPatientApi({
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
-        dateOfBirth: formData.dateOfBirth || undefined,
+        dateOfBirth: formData.dateOfBirth || syntheticDob || undefined,
         gender: formData.gender,
         nationalId: formData.nationalId || undefined,
         phoneNumber: formData.contactPersonPhone || undefined,

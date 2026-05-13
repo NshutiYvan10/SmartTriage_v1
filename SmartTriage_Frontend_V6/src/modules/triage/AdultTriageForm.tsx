@@ -21,6 +21,7 @@ import type { VitalKey } from '@/lib/vitalStability';
 import { BedSuggestionModal } from './BedSuggestionModal';
 import { alertApi } from '@/api/alerts';
 import { vitalApi } from '@/api/vitals';
+import { patientApi } from '@/api/patients';
 import {
   validateTEWSInputs,
   getAbnormalValidations,
@@ -273,6 +274,49 @@ export function AdultTriageForm() {
   const [nextOfKin, setNextOfKin] = useState(patient?.contactPerson?.name || '');
   const [phoneNumber, setPhoneNumber] = useState(patient?.contactPerson?.phone || '');
   const [arrivalMode, setArrivalMode] = useState(patient?.arrivalMode || 'WALK_IN');
+
+  // ── Hydrate patient demographics from the backing patient row ──
+  //
+  // patientStore.fetchActiveVisits hardcodes `age: 0` because the visit
+  // list payload is name-only — the same data path that produced the
+  // "0mo · M" rendering on Luna Gisa in the triage queue. On form open
+  // we fetch the full patient and overwrite the empty initial state for
+  // dob / patientAge / gender / names (when blank) so the nurse sees
+  // the same identity fields she captured at registration without
+  // having to re-type them. Read-only behaviour is mirrored from
+  // EntryRegistration: when DOB is present, age is auto-derived and
+  // the input becomes read-only.
+  useEffect(() => {
+    const backingPatientId = (patient as unknown as { patientId?: string } | undefined)?.patientId;
+    if (!backingPatientId) return;
+    let cancelled = false;
+    patientApi.getById(backingPatientId)
+      .then((p) => {
+        if (cancelled || !p) return;
+        if (p.dateOfBirth) {
+          setDob(p.dateOfBirth);
+          const birth = new Date(p.dateOfBirth);
+          const today = new Date();
+          let years = today.getFullYear() - birth.getFullYear();
+          const monthDiff = today.getMonth() - birth.getMonth();
+          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) years--;
+          if (years >= 0 && years <= 120) setPatientAge(String(years));
+        } else if (typeof p.ageInYears === 'number' && p.ageInYears >= 0) {
+          setPatientAge(String(p.ageInYears));
+        }
+        // Fill identity fields when the list payload didn't carry them.
+        // Never overwrite a value the nurse has already typed.
+        setPatientNames((prev) => prev || `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim());
+        if (p.gender) setGender((prev) => prev === 'MALE' && !patient?.gender ? p.gender : prev);
+      })
+      .catch(() => { /* non-fatal — nurse can still fill manually */ });
+    return () => { cancelled = true; };
+    // patient.patientId is the backing-row id (distinct from visit id). We
+    // intentionally do NOT depend on `patient` itself — that would loop on
+    // every store update. Re-fire only when the underlying patient row
+    // changes (effectively never within a single triage form lifetime).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(patient as unknown as { patientId?: string } | undefined)?.patientId]);
 
   // Emergency signs
   const [checkedSigns, setCheckedSigns] = useState<Record<string, boolean>>({});
@@ -861,7 +905,23 @@ export function AdultTriageForm() {
               <div><label className={labelCls}>Patient Names</label><input type="text" value={patientNames} onChange={(e) => setPatientNames(e.target.value)} className={inputCls} /></div>
               <div><label className={labelCls}>Date of Birth</label><input type="date" value={dob} onChange={(e) => setDob(e.target.value)} className={inputCls} /></div>
               <div className="grid grid-cols-2 gap-2">
-                <div><label className={labelCls}>Age (yrs)</label><input type="number" value={patientAge} onChange={(e) => setPatientAge(e.target.value)} className={inputCls} /></div>
+                <div>
+                  <label className={labelCls}>Age (yrs)</label>
+                  {/* Age is auto-derived from DOB when DOB is present —
+                      same pattern as EntryRegistration. Editable only
+                      when DOB is empty (e.g. nurse entered age, never
+                      captured a precise DOB). */}
+                  <input
+                    type="number"
+                    value={patientAge}
+                    onChange={(e) => setPatientAge(e.target.value)}
+                    className={`${inputCls} ${dob ? 'opacity-70 cursor-not-allowed' : ''}`}
+                    readOnly={!!dob}
+                    min="0"
+                    max="120"
+                  />
+                  {dob && <p className="text-emerald-500 text-[10px] mt-1 font-medium">Auto-calculated from DOB</p>}
+                </div>
                 <div><label className={labelCls}>Gender</label><select value={gender} onChange={(e) => setGender(e.target.value)} className={selectCls}><option value="MALE">Male</option><option value="FEMALE">Female</option></select></div>
               </div>
               <div><label className={labelCls}>IP / MR Number</label><input type="text" value={ipMrNumber} onChange={(e) => setIpMrNumber(e.target.value)} className={inputCls} /></div>

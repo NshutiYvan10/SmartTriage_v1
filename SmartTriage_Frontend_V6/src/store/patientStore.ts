@@ -186,10 +186,20 @@ export const usePatientStore = create<PatientState>((set, get) => ({
   registerPatientApi: async (data) => {
     try {
       // Single atomic call — creates both patient + visit in one transaction
+      //
+      // dateOfBirth must NEVER be defaulted to "today" when the caller
+      // didn't provide one. The backend uses Patient.dateOfBirth to
+      // derive Patient.isPediatric (DOB + 13y > now), and a today-default
+      // silently makes every DOB-less patient a 0-month-old infant —
+      // routing them to the pediatric triage form and the pediatric
+      // calculator. This is the clinical-safety regression we hit on
+      // Luna Gisa. Send undefined when no DOB was captured; the backend
+      // tolerates a null DOB (Patient.isPediatric returns false) and the
+      // patient defaults to adult routing — the conservative direction.
       const result = await patientApi.register({
         firstName: data.firstName,
         lastName: data.lastName,
-        dateOfBirth: data.dateOfBirth || new Date().toISOString().split('T')[0],
+        dateOfBirth: data.dateOfBirth || undefined,
         gender: data.gender as any,
         nationalId: data.nationalId,
         phoneNumber: data.phoneNumber,
