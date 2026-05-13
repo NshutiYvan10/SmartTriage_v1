@@ -183,22 +183,11 @@ public class InvitationService {
                 .build();
         tokenRepository.save(invitation);
 
-        // Resend email — best-effort, same policy as inviteUser. A SMTP
-        // outage must not roll back the new token (which would leave the
-        // user with the old, just-invalidated link and no way forward).
-        // The new token is persisted; the admin can re-trigger resend
-        // once SMTP is healthy, or share the activation URL out of band.
+        // Resend email
         String roleName = user.getRole().name().replace("_", " ");
-        try {
-            emailService.sendInvitationEmail(user.getEmail(), token, roleName, user.getHospital().getName());
-            log.info("Invitation resent to {}", user.getEmail());
-        } catch (Exception emailErr) {
-            log.warn("Resend-invitation email FAILED for {} (role {}, hospital {}): {}. "
-                            + "New token issued — admin can re-resend once SMTP is configured, or "
-                            + "share the activation link manually.",
-                    user.getEmail(), user.getRole(), user.getHospital().getName(),
-                    emailErr.getMessage());
-        }
+        emailService.sendInvitationEmail(user.getEmail(), token, roleName, user.getHospital().getName());
+
+        log.info("Invitation resent to {}", user.getEmail());
     }
 
     /**
