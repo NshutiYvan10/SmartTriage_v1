@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.iot.dto;
 
+import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.MonitoringState;
 import com.smartTriage.smartTriage_server.common.enums.TrendStatus;
 import lombok.AllArgsConstructor;
@@ -25,6 +26,17 @@ public class DeviceSessionResponse {
     private String deviceSerialNumber;
     private UUID visitId;
     private String visitNumber;
+    /**
+     * Patient identity carried on the session payload so admin / shift-
+     * lead surfaces that don't have the visit's full patient record in
+     * their zone-scoped store (e.g. IoT Device Management's Active
+     * Monitoring Sessions card) can render the real name instead of
+     * "Unknown Patient".
+     */
+    private String patientName;
+    /** Bed code + zone for operational filtering / display. */
+    private String bedCode;
+    private EdZone bedZone;
     private Instant startedAt;
     private Instant endedAt;
     private boolean sessionActive;

@@ -49,6 +49,32 @@ public final class IoTMapper {
     }
 
     public static DeviceSessionResponse toResponse(DeviceSession session) {
+        // Patient name + bed are read defensively — the session's
+        // Visit / Patient / Bed associations are lazy, so a session
+        // mapped outside a Hibernate session would throw on access.
+        // Mapping happens inside the @Transactional service methods
+        // that return these DTOs, so the lazy loads do succeed there;
+        // the try/catch is belt-and-braces for ad-hoc callers.
+        String pName = null;
+        String bCode = null;
+        com.smartTriage.smartTriage_server.common.enums.EdZone bZone = null;
+        try {
+            com.smartTriage.smartTriage_server.module.visit.entity.Visit v = session.getVisit();
+            if (v != null) {
+                if (v.getPatient() != null) {
+                    String fn = v.getPatient().getFirstName();
+                    String ln = v.getPatient().getLastName();
+                    pName = ((fn == null ? "" : fn) + " " + (ln == null ? "" : ln)).trim();
+                    if (pName.isEmpty()) pName = null;
+                }
+                if (v.getCurrentBed() != null) {
+                    bCode = v.getCurrentBed().getCode();
+                    bZone = v.getCurrentBed().getZone();
+                }
+            }
+        } catch (Exception ignored) {
+            // Lazy-init outside a session — leave the fields null.
+        }
         return DeviceSessionResponse.builder()
                 .id(session.getId())
                 .deviceId(session.getDevice().getId())
@@ -56,6 +82,9 @@ public final class IoTMapper {
                 .deviceSerialNumber(session.getDevice().getSerialNumber())
                 .visitId(session.getVisit().getId())
                 .visitNumber(session.getVisit().getVisitNumber())
+                .patientName(pName)
+                .bedCode(bCode)
+                .bedZone(bZone)
                 .startedAt(session.getStartedAt())
                 .endedAt(session.getEndedAt())
                 .sessionActive(session.isSessionActive())

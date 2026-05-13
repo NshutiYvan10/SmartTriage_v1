@@ -77,6 +77,17 @@ public class VitalSimulatorService {
     private final HospitalRepository hospitalRepository;
     private final PlatformTransactionManager transactionManager;
 
+    /**
+     * Used to refresh a managed entity inside the tick's transaction so
+     * state committed by another transaction (e.g. a clinician pressing
+     * End) is visible per-iteration rather than only being read once at
+     * the start of the tick. Without this, the simulator could stream
+     * one final reading to a just-ended session — the "vitals changed
+     * slightly after Stop" symptom reported during testing.
+     */
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
+
     private static final String SIM_SERIAL = "SIM-ESP32-001";
     private static final String SIM_DEVICE_NAME = "Simulated Multi-Parameter Monitor";
 
@@ -250,6 +261,24 @@ public class VitalSimulatorService {
             sessionSequence.keySet().removeIf(id -> !activeIds.contains(id));
 
             for (DeviceSession session : activeSessions) {
+                // Refresh the entity each iteration so a clinician
+                // who pressed End / Pause AFTER we fetched the list
+                // (but before we reach this session in the loop) is
+                // honoured. Without this re-read the in-memory state
+                // is whatever was true at fetch-time — typically LIVE
+                // — and we'd stream one final reading into a session
+                // that has since been ended. That's the bounded
+                // race the user hit ("vitals changed slightly after
+                // Stop"); refresh closes it.
+                try {
+                    entityManager.refresh(session);
+                } catch (Exception e) {
+                    // Row was deleted under us — skip this session.
+                    log.debug("SIM: session {} disappeared during tick, skipping",
+                            session.getId());
+                    continue;
+                }
+                if (!session.isSessionActive()) continue;
                 com.smartTriage.smartTriage_server.common.enums.MonitoringState ms =
                         session.getMonitoringState();
                 if (ms == com.smartTriage.smartTriage_server.common.enums.MonitoringState.PAUSED
