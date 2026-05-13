@@ -4,12 +4,11 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Cpu, Plus, RefreshCw, Loader2, Power, PowerOff, Wifi,
   WifiOff, Settings, Activity, Send, XCircle,
   UserCheck, Users, X, Search, Heart, AlertTriangle, Monitor,
-  BatteryFull, Zap, Copy, CheckCircle, Key, BedDouble, Eye,
+  BatteryFull, Battery, Zap, Copy, CheckCircle, Key, BedDouble,
 } from 'lucide-react';
 import MonitoringStatePill from '@/modules/monitoring/MonitoringStatePill';
 import type { EdZone } from '@/api/types';
@@ -36,7 +35,6 @@ const DEVICE_TYPES = ['ESP32_MONITOR', 'PULSE_OXIMETER', 'ECG_MONITOR', 'BP_MONI
 
 export function IoTDeviceManagement() {
   const { glassCard, glassInner, isDark, text } = useTheme();
-  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const patients = usePatientStore((s) => s.patients);
   const userHospitalId = user?.hospitalId || 'a0000000-0000-0000-0000-000000000001';
@@ -679,15 +677,20 @@ export function IoTDeviceManagement() {
           </div>
         )}
 
-        {/* Active Monitoring Sessions Panel —
-            View-only operational dashboard for the admin. Starting and
-            stopping monitoring is a clinical decision (sensors need to
-            be placed / removed, the patient assessed), so this card no
-            longer carries a Stop button. Admins who need to disconnect
-            a device hardware-side use Service Status / Decommission on
-            the device tile. The "View" button on each row deep-links to
-            Constant Monitoring so an admin who spots an issue can
-            escalate to a clinician without taking the action here. */}
+        {/* Active Monitor Performance —
+            Hospital-admin operational view of every device that is
+            currently running a monitoring session. The focus is the
+            device, not the patient: device serial, battery, signal
+            strength, throughput, and the session state (which doubles
+            as a device-health signal — STALLED / DEGRADED /
+            DISCONNECTED all surface real device problems).
+            Patient name + bed are shown only as context so the admin
+            can correlate "which patient is on the device that just
+            lost signal". No clinical action buttons live here —
+            Start / Pause / Stop are clinician decisions and stay on
+            the Constant Monitoring page; device-level controls
+            (power, service status, decommission) stay on the device
+            tile elsewhere on this page. */}
         {sessions.length > 0 && (() => {
           // Zones present across the active sessions — drives which
           // filter pills are worth showing. No point rendering RESUS
@@ -702,13 +705,27 @@ export function IoTDeviceManagement() {
           const filtered = sessionZoneFilter
             ? sessions.filter((s) => s.bedZone === sessionZoneFilter)
             : sessions;
+
+          // WiFi-signal qualitative label from RSSI (dBm). Used to
+          // colour the per-row signal chip so weak links are obvious.
+          const signalMeta = (rssi: number | null | undefined): { label: string; cls: string } => {
+            if (rssi == null) return { label: '—', cls: 'text-slate-400' };
+            if (rssi >= -50) return { label: 'Excellent', cls: 'text-emerald-600' };
+            if (rssi >= -60) return { label: 'Good', cls: 'text-emerald-500' };
+            if (rssi >= -70) return { label: 'Fair', cls: 'text-amber-500' };
+            return { label: 'Poor', cls: 'text-red-500' };
+          };
+
           return (
             <div className="rounded-2xl p-5 animate-fade-up" style={glassCard}>
-              <div className="flex items-center gap-2 mb-3">
-                <Heart className="w-4 h-4 text-cyan-500" />
-                <h3 className={`text-sm font-bold ${text.heading}`}>Active Monitoring Sessions</h3>
-                <span className="ml-auto px-2 py-0.5 rounded-lg bg-cyan-500/10 text-cyan-500 text-[10px] font-bold">{sessions.length} active hospital-wide</span>
+              <div className="flex items-center gap-2 mb-1">
+                <Activity className="w-4 h-4 text-cyan-500" />
+                <h3 className={`text-sm font-bold ${text.heading}`}>Active Monitor Performance</h3>
+                <span className="ml-auto px-2 py-0.5 rounded-lg bg-cyan-500/10 text-cyan-500 text-[10px] font-bold">{sessions.length} active</span>
               </div>
+              <p className={`text-[10px] ${text.muted} mb-3`}>
+                Device health for every active monitoring session — battery, signal, throughput, state.
+              </p>
 
               {/* Zone filter pills */}
               {visibleZones.length > 0 && (
@@ -751,29 +768,55 @@ export function IoTDeviceManagement() {
                 <div className="space-y-2">
                   {filtered.map(s => {
                     const dev = devices.find(d => d.id === s.deviceId);
-                    const name = s.patientName || 'Unidentified patient';
+                    const battery = dev?.batteryLevel ?? null;
+                    const batteryCls = battery == null
+                      ? 'text-slate-400'
+                      : battery < 20 ? 'text-red-500'
+                      : battery < 40 ? 'text-amber-500'
+                      : 'text-emerald-600';
+                    const BatteryIcon = battery != null && battery < 20 ? Battery : BatteryFull;
+                    const sig = signalMeta(dev?.wifiRssi);
+                    const rejectPct = s.totalReadings > 0
+                      ? Math.round((s.rejectedReadings / s.totalReadings) * 100)
+                      : 0;
                     return (
                       <div key={s.id} className="flex items-center gap-3 rounded-xl p-3" style={glassInner}>
-                        <Activity className="w-4 h-4 text-cyan-500 flex-shrink-0" />
+                        <Cpu className="w-4 h-4 text-cyan-500 flex-shrink-0" />
+
+                        {/* Device identity (primary) + patient/bed (context) */}
                         <div className="flex-1 min-w-0">
                           <p className={`text-xs font-bold truncate ${text.heading}`}>
-                            {name}
-                            {s.bedCode && (
-                              <span className={`ml-2 text-[10px] font-medium ${text.muted}`}>
-                                · Bed {s.bedCode}{s.bedZone ? ` (${s.bedZone})` : ''}
-                              </span>
-                            )}
+                            {dev?.deviceName || 'Unknown monitor'}
+                            <span className={`ml-2 font-mono text-[10px] font-normal ${text.muted}`}>
+                              {s.deviceSerialNumber}
+                            </span>
                           </p>
-                          <p className={`text-[10px] ${text.muted}`}>{dev?.deviceName || s.deviceId} · Started {format(new Date(s.startedAt), 'HH:mm')}</p>
+                          <p className={`text-[10px] truncate ${text.muted} mt-0.5`}>
+                            {s.patientName || 'Unidentified patient'}
+                            {s.bedCode ? ` · Bed ${s.bedCode}` : ''}
+                            {s.bedZone ? ` (${s.bedZone})` : ''}
+                            {` · since ${format(new Date(s.startedAt), 'HH:mm')}`}
+                          </p>
                         </div>
+
+                        {/* Device-performance metrics (hidden on narrow screens) */}
+                        <div className="hidden md:flex items-center gap-3 text-[10px] flex-shrink-0">
+                          {battery != null && (
+                            <span className={`flex items-center gap-1 font-bold ${batteryCls}`} title="Battery">
+                              <BatteryIcon className="w-3.5 h-3.5" />
+                              {battery}%
+                            </span>
+                          )}
+                          <span className={`flex items-center gap-1 font-medium ${sig.cls}`} title="WiFi signal">
+                            <Wifi className="w-3.5 h-3.5" />
+                            {sig.label}
+                          </span>
+                          <span className={`tabular-nums ${text.muted}`} title="Validated readings · rejection rate">
+                            {s.totalReadings} rdg{rejectPct > 0 ? ` · ${rejectPct}% rej` : ''}
+                          </span>
+                        </div>
+
                         <MonitoringStatePill state={s.monitoringState} compact />
-                        <button
-                          onClick={() => navigate('/monitoring')}
-                          className="px-2 py-1 text-[10px] font-bold rounded-lg bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 transition-colors inline-flex items-center gap-1"
-                          title="View in Constant Monitoring"
-                        >
-                          <Eye className="w-3 h-3" /> View
-                        </button>
                       </div>
                     );
                   })}
