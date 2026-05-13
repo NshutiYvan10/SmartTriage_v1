@@ -614,37 +614,56 @@ export function AdultTriageForm() {
           mobility: tewsInput.mobility as 'WALKING' | 'WITH_HELP' | 'STRETCHER',
           avpu: avpuMap[tewsInput.avpu] || 'ALERT',
           traumaStatus: tewsInput.trauma ? 'TRAUMA' : 'NO_TRAUMA',
-          // Discriminators — Very Urgent
-          vuFocalNeurologicDeficit: !!checkedVeryUrgent['focal_neuro_deficit'] || !!checkedSigns['focal_neuro_deficit'],
-          vuAlteredMentalStatus: !!checkedVeryUrgent['altered_mental_status'],
-          vuChestPain: !!checkedSigns['chest_pain'] || !!checkedVeryUrgent['chest_pain'],
-          vuPoisoningOverdose: !!checkedVeryUrgent['poisoning_overdose'],
-          vuShortnessOfBreath: !!checkedVeryUrgent['shortness_of_breath'],
-          vuAggression: !!checkedVeryUrgent['aggression'],
-          vuCoughingVomitingBlood: !!checkedVeryUrgent['coughing_vomiting_blood'],
-          vuDiabeticHighGlucose: !!checkedVeryUrgent['diabetic_high_glucose'],
-          vuPregnantAbdominalPain: !!checkedVeryUrgent['pregnant_abdominal_pain'],
-          vuBurnOver20Percent: !!checkedVeryUrgent['burn_over_20_percent'],
-          vuOpenFracture: !!checkedVeryUrgent['open_fracture'],
-          vuThreatenedLimb: !!checkedVeryUrgent['threatened_limb'],
-          vuEyeInjury: !!checkedVeryUrgent['eye_injury'],
-          vuLargeJointDislocation: !!checkedVeryUrgent['large_joint_dislocation'],
-          vuSevereMechanismOfInjury: !!checkedVeryUrgent['severe_mechanism_of_injury'],
-          vuVerySeverePain: !!checkedVeryUrgent['very_severe_pain'],
-          vuPregnantAbdominalTrauma: !!checkedVeryUrgent['pregnant_abdominal_trauma'],
-          // Discriminators — Urgent
-          urgUnableToDrinkVomits: !!checkedUrgent['unable_to_drink_vomits'],
-          urgAbdominalPain: !!checkedUrgent['abdominal_pain'],
-          urgVeryPale: !!checkedUrgent['very_pale'],
-          urgPregnantVaginalBleeding: !!checkedUrgent['pregnant_vaginal_bleeding'],
-          urgDiabeticVeryHighGlucose: !!checkedUrgent['diabetic_very_high_glucose'],
-          urgFingerToeDislocation: !!checkedUrgent['finger_toe_dislocation'],
-          urgClosedFracture: !!checkedUrgent['closed_fracture'],
-          urgBurnWithoutUrgentSigns: !!checkedUrgent['burn_without_urgent_signs'],
-          urgPregnantTraumaNonAbdominal: !!checkedUrgent['pregnant_trauma_non_abdominal'],
-          urgModeratePain: !!checkedUrgent['moderate_pain'],
-          urgLacerationAbscess: !!checkedUrgent['laceration_abscess'],
-          urgForeignBodyAspiration: !!checkedUrgent['foreign_body_aspiration'],
+          // ── Discriminators — Very Urgent ──
+          //
+          // The adult VU/URG checkbox IDs in src/utils/discriminators.ts
+          // are prefixed (`vu_*` / `u_*`) and aligned to the clinical
+          // categories shown in the UI. The backend's
+          // PerformTriageRequest fields are the Rwanda-standard fixed
+          // discriminator set. We map each backend field to the closest
+          // semantic UI item; items in the rich UI list that have no
+          // backend slot are left unmapped for now (Option A scope).
+          // The emergency-signs section (`checkedSigns`) uses unprefixed
+          // IDs that match the EMERGENCY_SIGN_GROUPS definition and is
+          // OR'd in where the same flag appears in both places.
+          vuFocalNeurologicDeficit:
+            !!checkedVeryUrgent['vu_acute_focal_deficit']
+            || !!checkedSigns['focal_neuro_deficit'],
+          vuAlteredMentalStatus: !!checkedVeryUrgent['vu_severe_headache'],
+          vuChestPain:
+            !!checkedSigns['chest_pain']
+            || !!checkedVeryUrgent['vu_chest_pain'],
+          vuPoisoningOverdose: false, // no UI source in adult discriminators
+          vuShortnessOfBreath: !!checkedVeryUrgent['vu_acute_asthma'],
+          vuAggression: false, // no UI source in adult discriminators
+          vuCoughingVomitingBlood:
+            !!checkedVeryUrgent['vu_haemoptysis']
+            || !!checkedVeryUrgent['vu_gi_haemorrhage'],
+          vuDiabeticHighGlucose: !!checkedVeryUrgent['vu_diabetic_emergency'],
+          vuPregnantAbdominalPain: false, // no UI source in adult VU
+          vuBurnOver20Percent: false, // no UI source in adult VU
+          vuOpenFracture: !!checkedVeryUrgent['vu_open_fracture'],
+          vuThreatenedLimb: !!checkedVeryUrgent['vu_limb_ischaemia'],
+          vuEyeInjury: !!checkedVeryUrgent['vu_eye_injury_vision'],
+          vuLargeJointDislocation: false, // no UI source in adult VU
+          vuSevereMechanismOfInjury: !!checkedVeryUrgent['vu_suspected_spinal'],
+          vuVerySeverePain: false, // no UI source in adult VU
+          vuPregnantAbdominalTrauma: false, // no UI source in adult VU
+          // ── Discriminators — Urgent ──
+          urgUnableToDrinkVomits: !!checkedUrgent['u_vomiting_dehydration'],
+          urgAbdominalPain: !!checkedUrgent['u_abdominal_pain_moderate'],
+          urgVeryPale: false, // no UI source in adult URG
+          urgPregnantVaginalBleeding: false, // no UI source in adult URG
+          urgDiabeticVeryHighGlucose: false, // no UI source in adult URG
+          urgFingerToeDislocation: !!checkedUrgent['u_joint_dislocation'],
+          urgClosedFracture: !!checkedUrgent['u_closed_fracture'],
+          urgBurnWithoutUrgentSigns: !!checkedUrgent['u_minor_burns'],
+          urgPregnantTraumaNonAbdominal: false, // no UI source in adult URG
+          urgModeratePain: !!checkedUrgent['u_moderate_pain'],
+          urgLacerationAbscess:
+            !!checkedUrgent['u_laceration_sutures']
+            || !!checkedUrgent['u_abscess_cellulitis'],
+          urgForeignBodyAspiration: false, // no UI source in adult URG
           // Clinical metadata
           presentingComplaints: chiefComplaint,
           clinicalNotes: discriminatorNotes || undefined,
