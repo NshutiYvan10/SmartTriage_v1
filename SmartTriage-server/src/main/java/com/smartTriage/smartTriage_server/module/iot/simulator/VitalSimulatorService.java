@@ -224,7 +224,24 @@ public class VitalSimulatorService {
                 }
             }
 
-            // ── Step 2: Stream vitals for ALL active monitoring sessions ──
+            // ── Step 2: Stream vitals for sessions in active clinical states ──
+            //
+            // The simulator only streams to sessions in states that
+            // represent "the patient is being monitored right now":
+            //   STARTING, LIVE, DEGRADED, STALLED
+            //
+            // PAUSED is excluded: the clinician put monitoring on hold
+            // (patient at imaging / procedure). Continuing to stream
+            // would defeat the pause and show vitals scrolling on a
+            // paused patient.
+            //
+            // DISCONNECTED is excluded: the whole point of DISCONNECTED
+            // is that the device has lost its link. In dev mode where
+            // the simulator IS the device, mimicking the disconnect
+            // means stopping the stream until something reconnects.
+            //
+            // ENDED is implicitly excluded because session_active=false
+            // closes the row. NOT_STARTED has no session row at all.
             List<DeviceSession> activeSessions = sessionRepository.findBySessionActiveTrueAndIsActiveTrue();
 
             // Clean up sequence counters for ended sessions
@@ -233,6 +250,13 @@ public class VitalSimulatorService {
             sessionSequence.keySet().removeIf(id -> !activeIds.contains(id));
 
             for (DeviceSession session : activeSessions) {
+                com.smartTriage.smartTriage_server.common.enums.MonitoringState ms =
+                        session.getMonitoringState();
+                if (ms == com.smartTriage.smartTriage_server.common.enums.MonitoringState.PAUSED
+                        || ms == com.smartTriage.smartTriage_server.common.enums.MonitoringState.DISCONNECTED
+                        || ms == com.smartTriage.smartTriage_server.common.enums.MonitoringState.ENDED) {
+                    continue;
+                }
                 try {
                     streamVitalsForSession(session);
                 } catch (Exception e) {

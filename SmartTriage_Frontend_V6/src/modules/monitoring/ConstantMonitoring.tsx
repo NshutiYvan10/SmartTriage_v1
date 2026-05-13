@@ -519,6 +519,24 @@ export function ConstantMonitoring() {
     refreshSessions(monitorableIds);
   }, [monitorableIds, lastRefresh, refreshSessions]);
 
+  // Tight-poll any visit currently in STARTING. The first validated
+  // reading flips the backend state to LIVE within a few seconds; the
+  // 30s baseline refresh tick would leave the "Connecting…" pill
+  // sitting on the screen far longer than the actual transition. The
+  // poll auto-stops once everything settled into a non-transient
+  // state.
+  useEffect(() => {
+    const startingIds = monitorableIds.filter((id) => {
+      const s = sessionsByVisitId.get(id);
+      return s != null && s.monitoringState === 'STARTING';
+    });
+    if (startingIds.length === 0) return;
+    const interval = setInterval(() => {
+      refreshSessions(startingIds);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [monitorableIds, sessionsByVisitId, refreshSessions]);
+
   const handleStartMonitoring = useCallback(async (patient: Patient) => {
     await iotApi.startMonitoringForVisit(patient.id, authUser?.fullName || 'Clinician');
     // Refresh immediately so the pill flips to STARTING.
@@ -1202,14 +1220,27 @@ export function ConstantMonitoring() {
                               );
                             })()}
                           </div>
-                          <EcgWaveformChart
-                            heartRate={patient.currentVitals.heartRate || 75}
-                            stDeviation={patient.currentVitals.ecg || 0}
-                            rhythm={patient.currentVitals.ecgRhythm || 'NSR'}
-                            qrsDuration={patient.currentVitals.ecgQrsDuration}
-                            isLive={true}
-                            height={160}
-                          />
+                          {(() => {
+                            // The ECG waveform must reflect monitoring state,
+                            // not just "is there a vitals object". When state
+                            // is NOT_STARTED / PAUSED / DISCONNECTED / ENDED
+                            // the chart should freeze on a flat baseline so
+                            // the clinician can see at a glance that the
+                            // trace is not real-time data.
+                            const session = sessionsByVisitId.get(patient.id);
+                            const state = session ? session.monitoringState : 'NOT_STARTED';
+                            const liveNow = state === 'LIVE' || state === 'DEGRADED';
+                            return (
+                              <EcgWaveformChart
+                                heartRate={liveNow ? (patient.currentVitals.heartRate || 75) : 0}
+                                stDeviation={liveNow ? (patient.currentVitals.ecg || 0) : 0}
+                                rhythm={liveNow ? (patient.currentVitals.ecgRhythm || 'NSR') : 'NSR'}
+                                qrsDuration={patient.currentVitals.ecgQrsDuration}
+                                isLive={liveNow}
+                                height={160}
+                              />
+                            );
+                          })()}
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
