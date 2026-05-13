@@ -280,53 +280,64 @@ public class DeviceService {
     }
 
     /**
-     * If the device has an assigned bed holding an active visit but no current
-     * DeviceSession, open one and transition the device to MONITORING. No-op
-     * if any precondition is missing.
+     * Recover an existing DISCONNECTED session when its device returns
+     * online. Under the clinician-initiated monitoring model, the
+     * heartbeat path never creates a new session — the clinician's
+     * explicit Start is what opens monitoring. But if the clinician
+     * previously started a session and the device subsequently lost
+     * its heartbeat, this method bridges the gap when the device
+     * reconnects: state moves DISCONNECTED → STARTING (the watcher
+     * will promote to LIVE once a fresh validated reading lands).
+     *
+     * <p>No-op when:
+     * <ul>
+     *   <li>device has no assigned bed (portable / unbound)</li>
+     *   <li>bed has no current visit</li>
+     *   <li>no active session exists for this device + visit (clinician
+     *       hasn't pressed Start yet — leave it alone)</li>
+     *   <li>active session exists but is not in DISCONNECTED state
+     *       (nothing to recover)</li>
+     * </ul>
      */
     @Transactional
     protected void autoPairIfMissingSession(IoTDevice device) {
         com.smartTriage.smartTriage_server.module.bed.entity.Bed bed = device.getAssignedBed();
         if (bed == null) {
-            return; // portable device — nothing to pair
+            return;
         }
         Visit visit = bed.getCurrentVisit();
         if (visit == null) {
-            return; // bed has no patient
-        }
-
-        // Already paired?
-        boolean alreadyPaired = sessionRepository
-                .findByDeviceIdAndSessionActiveTrueAndIsActiveTrue(device.getId())
-                .isPresent();
-        if (alreadyPaired) {
             return;
         }
 
-        // Close any stray session on the visit from a different device
-        sessionRepository.findByVisitIdAndSessionActiveTrueAndIsActiveTrue(visit.getId())
-                .ifPresent(stale -> {
-                    log.warn("Auto-closing prior session {} on visit {} before heartbeat auto-pair",
-                            stale.getId(), visit.getVisitNumber());
-                    stale.endSession("System", "Auto-closed: heartbeat re-pairing");
-                    sessionRepository.save(stale);
-                });
+        DeviceSession session = sessionRepository
+                .findByDeviceIdAndSessionActiveTrueAndIsActiveTrue(device.getId())
+                .orElse(null);
+        if (session == null) {
+            // No session — clinician hasn't started monitoring. Wait.
+            return;
+        }
+        if (!session.getVisit().getId().equals(visit.getId())) {
+            // Session is for a different visit (stale state). Don't
+            // touch — administrative cleanup territory.
+            return;
+        }
+        if (session.getMonitoringState()
+                != com.smartTriage.smartTriage_server.common.enums.MonitoringState.DISCONNECTED) {
+            return; // nothing to recover
+        }
 
-        DeviceSession session = DeviceSession.builder()
-                .device(device)
-                .visit(visit)
-                .startedAt(Instant.now())
-                .sessionActive(true)
-                .startedByName("Heartbeat auto-pair")
-                .build();
+        session.transitionState(
+                com.smartTriage.smartTriage_server.common.enums.MonitoringState.STARTING);
         sessionRepository.save(session);
 
         IoTDevice fresh = deviceRepository.findById(device.getId()).orElse(device);
         fresh.setStatus(DeviceStatus.MONITORING);
         deviceRepository.save(fresh);
 
-        log.info("Self-healing auto-pair: device {} → visit {} via bed {}",
-                fresh.getSerialNumber(), visit.getVisitNumber(), bed.getCode());
+        log.info("Self-healing recovery: session {} DISCONNECTED → STARTING "
+                        + "(device {} reconnected to visit {})",
+                session.getId(), fresh.getSerialNumber(), visit.getVisitNumber());
     }
 
     // ====================================================================
@@ -760,6 +771,73 @@ public class DeviceService {
                 .findByVisitIdAndSessionActiveTrueAndIsActiveTrue(visitId)
                 .map(IoTMapper::toResponse)
                 .orElse(null);
+    }
+
+    /**
+     * Transactional helper for transitioning a session's monitoring
+     * state from outside a managed JPA context (e.g. the heartbeat
+     * scheduler). Re-fetches the entity inside this transaction, sets
+     * the state via the entity's transitionState helper, and saves.
+     * No-op when state is already at {@code next} or session has been
+     * removed.
+     */
+    @Transactional
+    public void transitionSessionState(UUID sessionId,
+            com.smartTriage.smartTriage_server.common.enums.MonitoringState next) {
+        if (sessionId == null || next == null) return;
+        DeviceSession fresh = sessionRepository.findById(sessionId).orElse(null);
+        if (fresh == null) return;
+        if (fresh.getMonitoringState() == next) return;
+        fresh.transitionState(next);
+        sessionRepository.save(fresh);
+    }
+
+    /**
+     * Pause monitoring for a session. Vitals continue to ingest (audit
+     * trail intact) but the session's monitoringState is PAUSED so the
+     * deterioration / auto-retriage engines skip it and the UI shows
+     * a paused indicator. Used when the patient leaves the bed for
+     * imaging / procedure / toilet — anywhere monitoring is expected to
+     * resume on the same session.
+     */
+    @Transactional
+    public DeviceSessionResponse pauseMonitoring(UUID sessionId, String pausedByName) {
+        DeviceSession session = sessionRepository.findByIdAndIsActiveTrue(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("DeviceSession", "id", sessionId));
+        com.smartTriage.smartTriage_server.common.enums.MonitoringState cur =
+                session.getMonitoringState();
+        if (cur == com.smartTriage.smartTriage_server.common.enums.MonitoringState.PAUSED
+                || cur == com.smartTriage.smartTriage_server.common.enums.MonitoringState.ENDED) {
+            return IoTMapper.toResponse(session);
+        }
+        session.setPausedAt(Instant.now());
+        session.setPausedByName(pausedByName);
+        session.transitionState(com.smartTriage.smartTriage_server.common.enums.MonitoringState.PAUSED);
+        sessionRepository.save(session);
+        log.info("Monitoring paused on session {} by {}", sessionId, pausedByName);
+        return IoTMapper.toResponse(session);
+    }
+
+    /**
+     * Resume monitoring from PAUSED back into the active flow. Goes
+     * through STARTING so the warm-up gate / first-reading promotion
+     * fire the same way the initial Start did.
+     */
+    @Transactional
+    public DeviceSessionResponse resumeMonitoring(UUID sessionId, String resumedByName) {
+        DeviceSession session = sessionRepository.findByIdAndIsActiveTrue(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("DeviceSession", "id", sessionId));
+        if (session.getMonitoringState()
+                != com.smartTriage.smartTriage_server.common.enums.MonitoringState.PAUSED) {
+            throw new com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException(
+                    "Session is not paused — cannot resume.");
+        }
+        session.setResumedAt(Instant.now());
+        session.setResumedByName(resumedByName);
+        session.transitionState(com.smartTriage.smartTriage_server.common.enums.MonitoringState.STARTING);
+        sessionRepository.save(session);
+        log.info("Monitoring resumed on session {} by {}", sessionId, resumedByName);
+        return IoTMapper.toResponse(session);
     }
 
     public Page<DeviceSessionResponse> getSessionHistory(UUID visitId, Pageable pageable) {

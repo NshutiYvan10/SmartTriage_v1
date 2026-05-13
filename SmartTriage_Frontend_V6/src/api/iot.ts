@@ -64,6 +64,18 @@ export const iotApi = {
       `/iot/monitoring/stop/${sessionId}?endedByName=${encodeURIComponent(endedByName)}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`
     ),
 
+  pauseMonitoring: (sessionId: string, pausedByName?: string) =>
+    post<DeviceSessionResponse>(
+      `/iot/monitoring/pause/${sessionId}${pausedByName ? `?pausedByName=${encodeURIComponent(pausedByName)}` : ''}`,
+      {}
+    ),
+
+  resumeMonitoring: (sessionId: string, resumedByName?: string) =>
+    post<DeviceSessionResponse>(
+      `/iot/monitoring/resume/${sessionId}${resumedByName ? `?resumedByName=${encodeURIComponent(resumedByName)}` : ''}`,
+      {}
+    ),
+
   getActiveSessions: (hospitalId: string) =>
     get<DeviceSessionResponse[]>(`/iot/monitoring/active/${hospitalId}`),
 

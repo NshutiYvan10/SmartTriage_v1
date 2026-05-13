@@ -27,7 +27,7 @@ import {
 import { useTheme } from '@/hooks/useTheme';
 import MonitoringStatePill from './MonitoringStatePill';
 import StartMonitoringConfirmModal from './StartMonitoringConfirmModal';
-import { Play } from 'lucide-react';
+import { Play, Pause, PlayCircle, Square } from 'lucide-react';
 
 /* ── Monitoring Showcase Config ── */
 const monitorShowcaseConfig = [
@@ -525,6 +525,34 @@ export function ConstantMonitoring() {
     refreshSessions([patient.id]);
   }, [authUser?.fullName, refreshSessions]);
 
+  const handlePauseMonitoring = useCallback(async (visitId: string, sessionId: string) => {
+    try {
+      await iotApi.pauseMonitoring(sessionId, authUser?.fullName || 'Clinician');
+      refreshSessions([visitId]);
+    } catch (e) {
+      console.error('Pause monitoring failed', e);
+    }
+  }, [authUser?.fullName, refreshSessions]);
+
+  const handleResumeMonitoring = useCallback(async (visitId: string, sessionId: string) => {
+    try {
+      await iotApi.resumeMonitoring(sessionId, authUser?.fullName || 'Clinician');
+      refreshSessions([visitId]);
+    } catch (e) {
+      console.error('Resume monitoring failed', e);
+    }
+  }, [authUser?.fullName, refreshSessions]);
+
+  const handleEndMonitoring = useCallback(async (visitId: string, sessionId: string) => {
+    if (!window.confirm('End continuous monitoring for this patient? The session will be closed and cannot be resumed; a new Start will open a fresh session.')) return;
+    try {
+      await iotApi.stopMonitoring(sessionId, authUser?.fullName || 'Clinician', 'Stopped by clinician');
+      refreshSessions([visitId]);
+    } catch (e) {
+      console.error('End monitoring failed', e);
+    }
+  }, [authUser?.fullName, refreshSessions]);
+
   // ── WebSocket subscriptions for patients with paired IoT devices ──
   // Subscribe to /topic/vitals/{visitId} for every patient that has a
   // streaming device. This gives true real-time updates every ~5s.
@@ -960,6 +988,52 @@ export function ConstantMonitoring() {
                                   >
                                     <Play className="w-3 h-3" />
                                     Start
+                                  </button>
+                                )}
+                                {session && (state === 'LIVE' || state === 'DEGRADED' || state === 'STALLED') && (
+                                  <>
+                                    <button
+                                      onClick={() => handlePauseMonitoring(patient.id, session.id)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors"
+                                      title="Pause monitoring (patient at imaging / procedure)"
+                                    >
+                                      <Pause className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleEndMonitoring(patient.id, session.id)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
+                                      title="End monitoring"
+                                    >
+                                      <Square className="w-3 h-3" />
+                                    </button>
+                                  </>
+                                )}
+                                {session && state === 'PAUSED' && (
+                                  <>
+                                    <button
+                                      onClick={() => handleResumeMonitoring(patient.id, session.id)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm"
+                                      title="Resume monitoring"
+                                    >
+                                      <PlayCircle className="w-3 h-3" />
+                                      Resume
+                                    </button>
+                                    <button
+                                      onClick={() => handleEndMonitoring(patient.id, session.id)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
+                                      title="End monitoring"
+                                    >
+                                      <Square className="w-3 h-3" />
+                                    </button>
+                                  </>
+                                )}
+                                {session && state === 'DISCONNECTED' && (
+                                  <button
+                                    onClick={() => handleEndMonitoring(patient.id, session.id)}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
+                                    title="End monitoring (e.g. swap device)"
+                                  >
+                                    <Square className="w-3 h-3" />
                                   </button>
                                 )}
                               </>

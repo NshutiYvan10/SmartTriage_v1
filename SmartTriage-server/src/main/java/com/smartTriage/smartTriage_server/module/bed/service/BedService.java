@@ -550,20 +550,13 @@ public class BedService {
             bedRepository.save(bed);
             log.info("Assigned device {} to bed {}", device.getSerialNumber(), bed.getCode());
 
-            // If a patient is already in this bed, start monitoring immediately.
-            //
-            // Pass the just-saved device into autoStartSessionForBed directly
-            // rather than letting it re-query by assigned_bed_id. The repository
-            // save() above does not auto-flush, so a fresh query within the same
-            // transaction can return empty even though we just set the pairing —
-            // which silently no-ops the session creation. That's the failure
-            // mode behind the user's "I have to remove + re-place the patient
-            // to make it go LIVE" workflow: the second placement sees the
-            // fully-committed pairing, but the initial pair-then-place lost the
-            // race. Passing the device skips the re-query entirely.
-            if (bed.isOccupied()) {
-                autoStartSessionForBed(bed, device, bed.getCurrentVisit(), actorName);
-            }
+            // Monitoring start is clinician-initiated under the new
+            // workflow — see Phase 1 audit. Admin pairing a monitor
+            // makes the bed *capable* of monitoring; the clinician's
+            // explicit Start (with the "sensors placed" attestation
+            // modal) is what opens the session. If a patient is
+            // already in the bed, the Constant Monitoring page will
+            // show the NOT_STARTED pill + Start button.
         } else {
             // Pure detach — hasMonitor remains as-is (admin decision)
             bedRepository.save(bed);

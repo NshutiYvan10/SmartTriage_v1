@@ -191,6 +191,34 @@ public class IoTDeviceController {
         return ResponseEntity.ok(ApiResponse.success("Monitoring stopped", response));
     }
 
+    /**
+     * Pause monitoring for a session — patient is leaving the bed for
+     * imaging / procedure. Vitals still ingest (audit trail intact) but
+     * deterioration and retriage engines skip a paused session. Resume
+     * via the corresponding endpoint.
+     */
+    @PostMapping("/monitoring/pause/{sessionId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    public ResponseEntity<ApiResponse<DeviceSessionResponse>> pauseMonitoring(
+            @PathVariable UUID sessionId,
+            @RequestParam(required = false) String pausedByName) {
+        DeviceSessionResponse response = deviceService.pauseMonitoring(sessionId, pausedByName);
+        return ResponseEntity.ok(ApiResponse.success("Monitoring paused", response));
+    }
+
+    /**
+     * Resume a paused monitoring session. Transitions to STARTING so
+     * the warm-up window applies before alerts and retriage can fire.
+     */
+    @PostMapping("/monitoring/resume/{sessionId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    public ResponseEntity<ApiResponse<DeviceSessionResponse>> resumeMonitoring(
+            @PathVariable UUID sessionId,
+            @RequestParam(required = false) String resumedByName) {
+        DeviceSessionResponse response = deviceService.resumeMonitoring(sessionId, resumedByName);
+        return ResponseEntity.ok(ApiResponse.success("Monitoring resumed", response));
+    }
+
     @GetMapping("/monitoring/active/{hospitalId}")
     @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<DeviceSessionResponse>>> getActiveSessions(

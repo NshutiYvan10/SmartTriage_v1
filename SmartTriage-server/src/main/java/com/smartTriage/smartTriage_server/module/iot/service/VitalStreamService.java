@@ -170,6 +170,22 @@ public class VitalStreamService {
 
         // Push validated readings to WebSocket after transaction commits
         if (validation.isValid()) {
+            // Promote the session to LIVE on the first validated reading.
+            // Handles both STARTING (initial Start) and STALLED → LIVE
+            // recovery without needing the watcher to wake. PAUSED and
+            // DISCONNECTED stay where they are — clinician must Resume
+            // (PAUSED), or the heartbeat self-heal must run first
+            // (DISCONNECTED → STARTING).
+            com.smartTriage.smartTriage_server.common.enums.MonitoringState s =
+                    session.getMonitoringState();
+            if (s == com.smartTriage.smartTriage_server.common.enums.MonitoringState.STARTING
+                    || s == com.smartTriage.smartTriage_server.common.enums.MonitoringState.STALLED
+                    || s == com.smartTriage.smartTriage_server.common.enums.MonitoringState.DEGRADED) {
+                session.transitionState(
+                        com.smartTriage.smartTriage_server.common.enums.MonitoringState.LIVE);
+                sessionRepository.save(session);
+            }
+
             final VitalStream savedStream = stream;
             TransactionSynchronizationManager.registerSynchronization(
                     new TransactionSynchronization() {

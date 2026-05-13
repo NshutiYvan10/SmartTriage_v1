@@ -54,4 +54,29 @@ public interface VitalStreamRepository extends JpaRepository<VitalStream, UUID> 
     /** Paginated stream history for a visit */
     Page<VitalStream> findByVisitIdAndIsActiveTrueOrderByCapturedAtDesc(
             UUID visitId, Pageable pageable);
+
+    /**
+     * MonitoringStateWatcher — most recent validated reading on this
+     * session. Used to decide LIVE vs STALLED.
+     */
+    Optional<VitalStream> findFirstBySessionIdAndIsValidatedTrueAndIsActiveTrueOrderByCapturedAtDesc(
+            UUID sessionId);
+
+    /**
+     * MonitoringStateWatcher — rejection-rate computation. Counts both
+     * total and rejected readings for a session in a time window.
+     */
+    long countBySessionIdAndIsActiveTrueAndCapturedAtAfter(UUID sessionId, Instant after);
+
+    long countBySessionIdAndIsValidatedFalseAndIsActiveTrueAndCapturedAtAfter(
+            UUID sessionId, Instant after);
+
+    /**
+     * MonitoringStateWatcher — count of POOR / INVALID signal readings
+     * in a window. Triggers DEGRADED when sustained.
+     */
+    long countBySessionIdAndIsActiveTrueAndSignalQualityInAndCapturedAtAfter(
+            UUID sessionId,
+            java.util.List<com.smartTriage.smartTriage_server.common.enums.SignalQuality> qualities,
+            Instant after);
 }
