@@ -270,6 +270,36 @@ public class VitalSimulatorService {
         }
     }
 
+    /**
+     * Push one synthetic reading for a specific session right now,
+     * outside the regular 5-second tick. Called by DeviceService
+     * after a clinician presses Start / Resume so the session
+     * transitions STARTING → LIVE immediately instead of waiting
+     * for the next scheduled tick.
+     *
+     * <p>No-op when the session does not exist or is in a state the
+     * simulator does not stream to (PAUSED / DISCONNECTED / ENDED).
+     * The regular tick will keep streaming on its 5-second cadence
+     * after this kickstart.
+     */
+    public void streamSingleReadingNow(UUID sessionId) {
+        if (!ready) return;
+        DeviceSession session = sessionRepository.findById(sessionId).orElse(null);
+        if (session == null || !session.isSessionActive()) return;
+        com.smartTriage.smartTriage_server.common.enums.MonitoringState ms =
+                session.getMonitoringState();
+        if (ms == com.smartTriage.smartTriage_server.common.enums.MonitoringState.PAUSED
+                || ms == com.smartTriage.smartTriage_server.common.enums.MonitoringState.DISCONNECTED
+                || ms == com.smartTriage.smartTriage_server.common.enums.MonitoringState.ENDED) {
+            return;
+        }
+        try {
+            streamVitalsForSession(session);
+        } catch (Exception e) {
+            log.debug("SIM kickstart failed for session {}: {}", sessionId, e.getMessage());
+        }
+    }
+
     private void streamVitalsForSession(DeviceSession session) {
         IoTDevice device = session.getDevice();
         long seq = sessionSequence.merge(session.getId(), 1L, Long::sum);

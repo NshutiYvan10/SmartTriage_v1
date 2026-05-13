@@ -27,6 +27,7 @@ import {
 import { useTheme } from '@/hooks/useTheme';
 import MonitoringStatePill from './MonitoringStatePill';
 import StartMonitoringConfirmModal from './StartMonitoringConfirmModal';
+import EndMonitoringConfirmModal from './EndMonitoringConfirmModal';
 import { Play, Pause, PlayCircle, Square } from 'lucide-react';
 
 /* ── Monitoring Showcase Config ── */
@@ -455,6 +456,10 @@ export function ConstantMonitoring() {
   const [sessionsByVisitId, setSessionsByVisitId] = useState<Map<string, import('@/api/types').DeviceSessionResponse | null>>(new Map());
   // Modal target: patient for whom Start Monitoring was clicked.
   const [startTarget, setStartTarget] = useState<Patient | null>(null);
+  // Modal target for End: { patient, sessionId } — sessionId is captured
+  // at click-time so the confirmation can act even if the row's state
+  // has changed by the time the clinician confirms.
+  const [endTarget, setEndTarget] = useState<{ patient: Patient; sessionId: string } | null>(null);
 
   // Refresh device store on mount AND every 30s tick. A device's
   // status flips to MONITORING only after a DeviceSession is created
@@ -519,12 +524,10 @@ export function ConstantMonitoring() {
     refreshSessions(monitorableIds);
   }, [monitorableIds, lastRefresh, refreshSessions]);
 
-  // Tight-poll any visit currently in STARTING. The first validated
-  // reading flips the backend state to LIVE within a few seconds; the
-  // 30s baseline refresh tick would leave the "Connecting…" pill
-  // sitting on the screen far longer than the actual transition. The
-  // poll auto-stops once everything settled into a non-transient
-  // state.
+  // Tight-poll any visit currently in STARTING. The backend kickstarts
+  // a simulator reading on Start/Resume so the transition happens in
+  // milliseconds; a 500ms poll picks that up effectively instantly.
+  // Auto-stops once everything settles into a non-transient state.
   useEffect(() => {
     const startingIds = monitorableIds.filter((id) => {
       const s = sessionsByVisitId.get(id);
@@ -533,14 +536,19 @@ export function ConstantMonitoring() {
     if (startingIds.length === 0) return;
     const interval = setInterval(() => {
       refreshSessions(startingIds);
-    }, 2000);
+    }, 500);
     return () => clearInterval(interval);
   }, [monitorableIds, sessionsByVisitId, refreshSessions]);
 
   const handleStartMonitoring = useCallback(async (patient: Patient) => {
     await iotApi.startMonitoringForVisit(patient.id, authUser?.fullName || 'Clinician');
-    // Refresh immediately so the pill flips to STARTING.
+    // Refresh immediately so the pill flips to STARTING; the tight
+    // 500ms poll then catches the LIVE transition that the backend
+    // kickstart triggers within a few hundred ms.
     refreshSessions([patient.id]);
+    // One more refresh at ~600ms covers the very common case where the
+    // simulator's kickstart reading lands just as we return.
+    setTimeout(() => refreshSessions([patient.id]), 600);
   }, [authUser?.fullName, refreshSessions]);
 
   const handlePauseMonitoring = useCallback(async (visitId: string, sessionId: string) => {
@@ -556,18 +564,20 @@ export function ConstantMonitoring() {
     try {
       await iotApi.resumeMonitoring(sessionId, authUser?.fullName || 'Clinician');
       refreshSessions([visitId]);
+      // Same kickstart-poll pattern as Start.
+      setTimeout(() => refreshSessions([visitId]), 600);
     } catch (e) {
       console.error('Resume monitoring failed', e);
     }
   }, [authUser?.fullName, refreshSessions]);
 
   const handleEndMonitoring = useCallback(async (visitId: string, sessionId: string) => {
-    if (!window.confirm('End continuous monitoring for this patient? The session will be closed and cannot be resumed; a new Start will open a fresh session.')) return;
     try {
       await iotApi.stopMonitoring(sessionId, authUser?.fullName || 'Clinician', 'Stopped by clinician');
       refreshSessions([visitId]);
     } catch (e) {
       console.error('End monitoring failed', e);
+      throw e;
     }
   }, [authUser?.fullName, refreshSessions]);
 
@@ -1018,7 +1028,7 @@ export function ConstantMonitoring() {
                                       <Pause className="w-3 h-3" />
                                     </button>
                                     <button
-                                      onClick={() => handleEndMonitoring(patient.id, session.id)}
+                                      onClick={() => setEndTarget({ patient, sessionId: session.id })}
                                       className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
                                       title="End monitoring"
                                     >
@@ -1037,7 +1047,7 @@ export function ConstantMonitoring() {
                                       Resume
                                     </button>
                                     <button
-                                      onClick={() => handleEndMonitoring(patient.id, session.id)}
+                                      onClick={() => setEndTarget({ patient, sessionId: session.id })}
                                       className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
                                       title="End monitoring"
                                     >
@@ -1047,7 +1057,7 @@ export function ConstantMonitoring() {
                                 )}
                                 {session && state === 'DISCONNECTED' && (
                                   <button
-                                    onClick={() => handleEndMonitoring(patient.id, session.id)}
+                                    onClick={() => setEndTarget({ patient, sessionId: session.id })}
                                     className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
                                     title="End monitoring (e.g. swap device)"
                                   >
@@ -1494,6 +1504,14 @@ export function ConstantMonitoring() {
           patientName={startTarget.fullName}
           onConfirm={() => handleStartMonitoring(startTarget)}
           onClose={() => setStartTarget(null)}
+        />
+      )}
+
+      {endTarget && (
+        <EndMonitoringConfirmModal
+          patientName={endTarget.patient.fullName}
+          onConfirm={() => handleEndMonitoring(endTarget.patient.id, endTarget.sessionId)}
+          onClose={() => setEndTarget(null)}
         />
       )}
     </div>

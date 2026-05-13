@@ -51,6 +51,19 @@ public class DeviceService {
     private final VisitService visitService;
     private final RealTimeEventPublisher eventPublisher;
 
+    /**
+     * Optional simulator dependency — only resolves in dev/sim builds
+     * (smarttriage.simulation.enabled=true). Used to "kickstart" a
+     * single reading the moment monitoring starts/resumes, so the
+     * STARTING → LIVE transition happens immediately instead of
+     * waiting up to one full simulator tick. In production the
+     * simulator bean is absent and the kickstart is a no-op; real
+     * ESP32 devices send their own first packet on their natural
+     * schedule.
+     */
+    private final org.springframework.beans.factory.ObjectProvider<
+            com.smartTriage.smartTriage_server.module.iot.simulator.VitalSimulatorService> simulatorProvider;
+
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     // ====================================================================
@@ -517,7 +530,47 @@ public class DeviceService {
         // Notify frontend of device status change
         publishDeviceStatus(freshDevice);
 
+        // Sim-only kickstart: pump one reading right after commit so
+        // STARTING flips to LIVE in milliseconds instead of waiting up
+        // to a full 5-second simulator tick. No-op in production.
+        kickstartSimulatorAfterCommit(session.getId());
+
         return IoTMapper.toResponse(session);
+    }
+
+    /**
+     * Sim-only helper — registers an afterCommit callback that asks
+     * the simulator to stream one reading for this session right now.
+     * Wrapped to be safe when the simulator bean is absent (production)
+     * or the TX has no active synchronization manager.
+     */
+    private void kickstartSimulatorAfterCommit(UUID sessionId) {
+        if (sessionId == null) return;
+        com.smartTriage.smartTriage_server.module.iot.simulator.VitalSimulatorService sim =
+                simulatorProvider.getIfAvailable();
+        if (sim == null) return;
+        try {
+            if (org.springframework.transaction.support.TransactionSynchronizationManager
+                    .isSynchronizationActive()) {
+                org.springframework.transaction.support.TransactionSynchronizationManager
+                        .registerSynchronization(
+                                new org.springframework.transaction.support.TransactionSynchronization() {
+                                    @Override
+                                    public void afterCommit() {
+                                        try {
+                                            sim.streamSingleReadingNow(sessionId);
+                                        } catch (Exception e) {
+                                            log.debug("Simulator kickstart failed for session {}: {}",
+                                                    sessionId, e.getMessage());
+                                        }
+                                    }
+                                });
+            } else {
+                sim.streamSingleReadingNow(sessionId);
+            }
+        } catch (Exception e) {
+            log.debug("Could not schedule simulator kickstart: {}", e.getMessage());
+        }
     }
 
     /**
@@ -837,6 +890,8 @@ public class DeviceService {
         session.transitionState(com.smartTriage.smartTriage_server.common.enums.MonitoringState.STARTING);
         sessionRepository.save(session);
         log.info("Monitoring resumed on session {} by {}", sessionId, resumedByName);
+        // Same kickstart as start — Resume should look instant too.
+        kickstartSimulatorAfterCommit(sessionId);
         return IoTMapper.toResponse(session);
     }
 
