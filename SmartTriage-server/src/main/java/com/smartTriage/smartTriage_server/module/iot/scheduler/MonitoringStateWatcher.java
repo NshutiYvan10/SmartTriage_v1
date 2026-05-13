@@ -121,13 +121,36 @@ public class MonitoringStateWatcher {
         }
 
         // Last validated reading age.
+        //
+        // Reference time = the LATER of (last validated reading's
+        // capturedAt) and (the session's most recent transition into
+        // a streaming state). Without the state-transition floor, a
+        // freshly-resumed session can be tripped to STALLED before
+        // the kickstart reading is ingested: the most recent
+        // VitalStream on the row is from BEFORE the pause (could be
+        // arbitrarily old), so the 30s threshold is already crossed
+        // the instant the watcher tick runs.
+        //
+        // Using monitoringStateAt as a floor means a fresh
+        // STARTING (whether from Start or from Resume) gets the same
+        // 30-second grace window as a brand-new session, and STALL
+        // only fires after 30 seconds without ANY new reading
+        // following the transition.
         Optional<VitalStream> last = streamRepository
                 .findFirstBySessionIdAndIsValidatedTrueAndIsActiveTrueOrderByCapturedAtDesc(
                         session.getId());
         Instant now = Instant.now();
-        long secondsSinceLastReading = last
-                .map(r -> java.time.Duration.between(r.getCapturedAt(), now).getSeconds())
-                .orElseGet(() -> java.time.Duration.between(session.getStartedAt(), now).getSeconds());
+        Instant stateAt = session.getMonitoringStateAt() != null
+                ? session.getMonitoringStateAt()
+                : session.getStartedAt();
+        Instant reference;
+        if (last.isPresent()) {
+            Instant lastReadingAt = last.get().getCapturedAt();
+            reference = lastReadingAt.isAfter(stateAt) ? lastReadingAt : stateAt;
+        } else {
+            reference = stateAt;
+        }
+        long secondsSinceLastReading = java.time.Duration.between(reference, now).getSeconds();
 
         if (secondsSinceLastReading >= STALL_AFTER_SECONDS) {
             if (state != MonitoringState.STALLED) {
