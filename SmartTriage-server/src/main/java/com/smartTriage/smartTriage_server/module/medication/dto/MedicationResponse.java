@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.medication.dto;
 
+import com.smartTriage.smartTriage_server.common.enums.MedicationPriority;
 import com.smartTriage.smartTriage_server.common.enums.MedicationRoute;
 import com.smartTriage.smartTriage_server.common.enums.MedicationStatus;
 import lombok.AllArgsConstructor;
@@ -27,6 +28,12 @@ public class MedicationResponse {
     private String dose;
     private MedicationRoute route;
     private String frequency;
+
+    /** Workflow 3 — STAT / URGENT / ROUTINE. Drives nurse queue
+     *  sort, SLA monitor, and visual treatment. */
+    private MedicationPriority priority;
+    /** Pre-rendered display label e.g. "STAT". */
+    private String priorityLabel;
 
     // Prescribing chain
     private UUID prescribedById;

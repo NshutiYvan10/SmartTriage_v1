@@ -165,6 +165,25 @@ public class RealTimeEventPublisher {
     }
 
     // ====================================================================
+    // MEDICATION TOPICS (Workflow 3)
+    // ====================================================================
+
+    /**
+     * Push a medication event to the hospital's medications topic.
+     * Fired on prescribe and every workflow transition (administer,
+     * countersign, hold, refuse, cancel) so the nurse medication
+     * queue stays live without polling, and any open visit-detail
+     * page sees the row flip status in real time. The payload is a
+     * {@code MedicationResponse} — subscribers replace the row in
+     * their cached list by id.
+     */
+    public void publishMedication(UUID hospitalId, Object medicationResponse) {
+        String topic = "/topic/medications/" + hospitalId;
+        messagingTemplate.convertAndSend(topic, medicationResponse);
+        log.debug("Published medication event to {}", topic);
+    }
+
+    // ====================================================================
     // EMS / PARAMEDIC TOPICS
     // ====================================================================
 

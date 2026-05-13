@@ -37,6 +37,13 @@ public final class MedicationSafetyMapper {
                 .warnings(result.warnings())
                 .blockers(result.blockers())
                 .severity(severity)
+                // Workflow 2 — structured allergy metadata. Null fields when no
+                // allergy match. The dialog uses these to render the right
+                // flavour (soft/moderate/hard/anaphylaxis).
+                .allergyMatchSeverity(result.allergyMatchSeverity() != null
+                        ? result.allergyMatchSeverity().name() : null)
+                .allergyMatchedAllergen(result.allergyMatchedAllergen())
+                .allergyReaction(result.allergyReaction())
                 .build();
     }
 

@@ -18,6 +18,8 @@ public final class MedicationMapper {
                 .dose(med.getDose())
                 .route(med.getRoute())
                 .frequency(med.getFrequency())
+                .priority(med.getPriority())
+                .priorityLabel(med.getPriority() != null ? med.getPriority().getLabel() : null)
                 .prescribedById(med.getPrescribedBy() != null ? med.getPrescribedBy().getId() : null)
                 .prescribedByName(med.getPrescribedByName())
                 .prescribedAt(med.getPrescribedAt())

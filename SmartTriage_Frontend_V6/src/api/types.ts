@@ -62,6 +62,29 @@ export type InvestigationType = 'LABORATORY' | 'RADIOLOGY' | 'ECG' | 'ULTRASOUND
 export type InvestigationStatus = 'ORDERED' | 'SPECIMEN_COLLECTED' | 'IN_PROGRESS' | 'RESULTED' | 'CANCELLED';
 export type MedicationRoute = 'PO' | 'IV' | 'IM' | 'SC' | 'SL' | 'PR' | 'INH' | 'NEB' | 'TOP' | 'NASAL' | 'OPHTHALMIC' | 'OTIC' | 'ETT' | 'IO' | 'OTHER';
 export type MedicationStatus = 'PRESCRIBED' | 'ADMINISTERED' | 'HELD' | 'REFUSED' | 'CANCELLED';
+
+/**
+ * Workflow 3 — structured urgency tier for a medication order.
+ * Drives the nurse queue sort, STAT/URGENT SLA monitor, and the
+ * real-time toast on incoming prescriptions.
+ */
+export type MedicationPriority = 'STAT' | 'URGENT' | 'ROUTINE';
+
+/** Display metadata + SLA minutes for each priority tier. */
+export const MEDICATION_PRIORITIES: Array<{
+  value: MedicationPriority;
+  label: string;
+  description: string;
+  slaMinutes: number;
+  /** Tailwind tint for chips / badges. */
+  tint: string;
+  /** Stronger tint when the order is overdue (past SLA). */
+  overdueTint: string;
+}> = [
+  { value: 'STAT',    label: 'STAT',    description: 'Give immediately — within 10 min', slaMinutes: 10,  tint: 'bg-red-100 text-red-800 border-red-300',         overdueTint: 'bg-red-600 text-white border-red-700' },
+  { value: 'URGENT',  label: 'Urgent',  description: 'Give within 30 min',               slaMinutes: 30,  tint: 'bg-orange-100 text-orange-800 border-orange-300', overdueTint: 'bg-orange-600 text-white border-orange-700' },
+  { value: 'ROUTINE', label: 'Routine', description: 'Give per scheduled frequency',    slaMinutes: 240, tint: 'bg-emerald-100 text-emerald-800 border-emerald-300', overdueTint: 'bg-amber-500 text-white border-amber-600' },
+];
 export type DeviceType = 'ESP32_MONITOR' | 'PULSE_OXIMETER' | 'ECG_MONITOR' | 'BP_MONITOR' | 'TEMPERATURE_PROBE' | 'GLUCOMETER' | 'AMBULANCE_MONITOR' | 'OTHER';
 export type DeviceStatus = 'REGISTERED' | 'ONLINE' | 'OFFLINE' | 'MONITORING' | 'ERROR' | 'DECOMMISSIONED';
 export type SignalQuality = 'GOOD' | 'ACCEPTABLE' | 'POOR' | 'INVALID' | 'UNKNOWN';
@@ -966,6 +989,10 @@ export interface PrescribeMedicationRequest {
   dose?: string;
   route: MedicationRoute;
   frequency?: string;
+  /** Workflow 3 — STAT / URGENT / ROUTINE. Defaults ROUTINE on the
+   *  backend when omitted. STAT starts a 10-min SLA timer and
+   *  fires a real-time toast on the nurse queue. */
+  priority?: MedicationPriority;
   prescribedByName?: string;
   notes?: string;
   /** TRUE when the prescriber acknowledged a known-allergy conflict in
@@ -975,6 +1002,11 @@ export interface PrescribeMedicationRequest {
   /** Free-text snapshot of the matches the dialog showed at decision
    *  time, formatted by formatAllergyMatches() in utils/allergyCheck. */
   allergyOverrideMatches?: string;
+  /** Workflow 2 — structured allergy severity captured at decision
+   *  time. Drives the override alert's severity calibration on the
+   *  backend. Nullable for backward compat: if absent, the backend
+   *  anchors at CRITICAL to fail safe. */
+  allergyOverrideSeverity?: AllergySeverity;
   /** TRUE when the prescriber acknowledged a drug–drug interaction in
    *  the PrescribeSafetyDialog and chose to prescribe anyway. */
   prescribedDespiteInteraction?: boolean;
@@ -1002,6 +1034,11 @@ export interface MedicationResponse {
   dose: string;
   route: MedicationRoute;
   frequency: string;
+  /** Workflow 3 — STAT / URGENT / ROUTINE. Drives the nurse-queue
+   *  sort + visual treatment. Always present on responses from
+   *  V59+; older clients can defensively default to ROUTINE. */
+  priority?: MedicationPriority;
+  priorityLabel?: string;
   status: MedicationStatus;
   prescribedById: string;
   prescribedByName: string;
@@ -1199,6 +1236,15 @@ export interface ClinicalAlertResponse {
 export interface CreateShiftAssignmentRequest {
   userId: string;
   zone: EdZone;
+  /**
+   * Workflow 4 — additional zones the clinician also covers on this
+   * shift, beyond {@link zone} (their primary posting). Optional;
+   * omit or send an empty array for single-zone coverage. The
+   * backend rejects entries equal to {@link zone}.
+   *
+   * Sent as an array on the wire and parsed into a Set server-side.
+   */
+  additionalZones?: EdZone[];
   shiftFunction: ShiftFunction;
   /** Optional — set to true to also grant the shift-lead badge (transfers it from any current holder). */
   isShiftLead?: boolean;
@@ -1283,6 +1329,16 @@ export interface ShiftAssignmentResponse {
   userDesignation: Designation | null;
   userDesignationLabel: string | null;
   zone: EdZone;
+  /**
+   * Workflow 4 — additional zones this assignment covers beyond
+   * the primary {@link zone}. Empty array when single-zone. The
+   * frontend uses this list to:
+   *   • subscribe to {@code /topic/alerts/{hospitalId}/{zone}} for
+   *     each covered zone (alerts fan out per-zone),
+   *   • render covered-zone chips on the dashboard header so the
+   *     clinician sees what they're on the hook for.
+   */
+  additionalZones: EdZone[];
   shiftFunction: ShiftFunction;
   startedAt: string | null;
   endedAt: string | null;
@@ -1554,4 +1610,79 @@ export interface CreateShiftSwapRequest {
 
 export interface SwapDecisionRequest {
   note?: string;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// PATIENT ALLERGIES (Workflow 2 — V58)
+// ══════════════════════════════════════════════════════════════════
+//
+// Replaces the legacy free-text Patient.knownAllergies model with a
+// structured per-allergy record carrying severity, reaction, and
+// verification status. The free-text column stays in place as a
+// fallback for un-migrated records; new entries should go through
+// the structured endpoints.
+
+export type AllergySeverity =
+  | 'MILD'
+  | 'MODERATE'
+  | 'SEVERE'
+  | 'ANAPHYLAXIS'
+  | 'UNKNOWN';
+
+export type AllergyVerificationStatus =
+  | 'PATIENT_REPORTED'
+  | 'CONFIRMED'
+  | 'REFUTED';
+
+/** Severity ladder shown in the dropdown — order matches the backend
+ *  enum and the PrescribeSafetyDialog flavour mapping. */
+export const ALLERGY_SEVERITIES: Array<{
+  value: AllergySeverity;
+  label: string;
+  description: string;
+  /** Tailwind tint for chips / badges. */
+  tint: string;
+}> = [
+  { value: 'MILD',        label: 'Mild',        description: 'Localised rash or mild GI upset',                  tint: 'bg-yellow-500/15 text-yellow-700 border-yellow-300' },
+  { value: 'MODERATE',    label: 'Moderate',    description: 'Widespread urticaria or mild bronchospasm',        tint: 'bg-orange-500/15 text-orange-700 border-orange-300' },
+  { value: 'SEVERE',      label: 'Severe',      description: 'Angioedema or severe bronchospasm',                tint: 'bg-red-500/15 text-red-700 border-red-300' },
+  { value: 'ANAPHYLAXIS', label: 'Anaphylaxis', description: 'Shock or airway compromise — life-threatening',    tint: 'bg-red-700/20 text-red-800 border-red-500' },
+  { value: 'UNKNOWN',     label: 'Unknown',     description: "Patient reports an allergy but can't describe it", tint: 'bg-slate-500/15 text-slate-700 border-slate-300' },
+];
+
+export interface PatientAllergyResponse {
+  id: string;
+  patientId: string;
+  /** FK to a drug formulary entry — null for free-text allergens. */
+  allergenFormularyId: string | null;
+  allergenName: string;
+  severity: AllergySeverity;
+  severityLabel: string;
+  reaction: string | null;
+  onsetDate: string | null;
+  verificationStatus: AllergyVerificationStatus;
+  verificationStatusLabel: string;
+  recordedByName: string | null;
+  recordedAt: string | null;
+  refutedByName: string | null;
+  refutedAt: string | null;
+  refuteReason: string | null;
+}
+
+export interface RecordAllergyRequest {
+  allergenName: string;
+  /** Optional FK — set when the clinician picked from the formulary
+   *  catalog. Free-text entries omit this. */
+  allergenFormularyId?: string;
+  severity: AllergySeverity;
+  reaction?: string;
+  /** ISO date (YYYY-MM-DD). */
+  onsetDate?: string;
+  verificationStatus?: AllergyVerificationStatus;
+  recordedByName?: string;
+}
+
+export interface RefuteAllergyRequest {
+  reason: string;
+  refutedByName?: string;
 }

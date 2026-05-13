@@ -149,6 +149,15 @@ export interface AllergyMatch {
   /** Why we matched: 'direct' = drug name contains the allergen token
    *  itself; 'cross' = drug name matches a sibling in the family. */
   matchType: 'direct' | 'cross';
+  /** Workflow 2 — structured severity from PatientAllergyResponse,
+   *  set only when the match came from a structured row. Free-text
+   *  fallback matches leave this undefined (the dialog then treats
+   *  the match as MODERATE — a safe default). */
+  severity?: import('@/api/types').AllergySeverity;
+  /** Reaction text from the structured allergy record, if any. */
+  reaction?: string;
+  /** Source row id — lets the dialog deep-link "open allergy record". */
+  allergyId?: string;
 }
 
 /**
@@ -207,19 +216,118 @@ export function checkDrugAgainstAllergies(
 /**
  * Serialize matches into the wire-format string the backend persists
  * verbatim into medication_administrations.allergy_override_matches.
- * Format: "<token> [(<family>)]; …"
+ * Format: "<token> [(<family>)] [severity:LABEL] [reaction:TEXT]; …"
  *
  * Stable, human-readable, not JSON — this is an audit snapshot, not
  * structured data for re-parsing.
  *
- * Example output: "penicillin (penicillins/beta-lactam); peanuts"
+ * Example outputs:
+ *   "penicillin (penicillins/beta-lactam) [severity:ANAPHYLAXIS] [reaction:facial swelling]; peanuts"
+ *   "penicillin (penicillins/beta-lactam); peanuts"   (no structured detail)
  */
 export function formatAllergyMatches(matches: AllergyMatch[]): string {
   return matches
-    .map((m) =>
-      m.matchType === 'cross' && m.family
+    .map((m) => {
+      const head = m.matchType === 'cross' && m.family
         ? `${m.patientAllergen} (${m.family})`
-        : m.patientAllergen,
-    )
+        : m.patientAllergen;
+      const severity = m.severity ? ` [severity:${m.severity}]` : '';
+      const reaction = m.reaction ? ` [reaction:${m.reaction}]` : '';
+      return `${head}${severity}${reaction}`;
+    })
     .join('; ');
+}
+
+/**
+ * Workflow 2 — match a prescribed drug against the patient's
+ * structured allergy rows. Same family/cross-reactivity expansion as
+ * {@link checkDrugAgainstAllergies} but each returned match carries
+ * the source row's severity, reaction text, and id so the dialog
+ * can render the right flavour (soft acknowledge for MILD; hard
+ * stop with override reason for SEVERE / ANAPHYLAXIS).
+ *
+ * Callers should prefer this function when {@code structuredAllergies}
+ * is non-empty and fall back to {@link checkDrugAgainstAllergies}
+ * against the legacy free-text column otherwise — that way a patient
+ * who hasn't been re-captured yet still gets a safety dialog (just
+ * without graded severity).
+ */
+export function checkDrugAgainstStructuredAllergies(
+  drugName: string | null | undefined,
+  structuredAllergies: ReadonlyArray<import('@/api/types').PatientAllergyResponse>,
+): AllergyMatch[] {
+  if (!drugName || structuredAllergies.length === 0) return [];
+  const drug = drugName.trim().toLowerCase();
+  if (!drug) return [];
+
+  const matches: AllergyMatch[] = [];
+  const seen = new Set<string>();
+
+  for (const row of structuredAllergies) {
+    if (row.verificationStatus === 'REFUTED') continue;
+    const token = (row.allergenName || '').trim().toLowerCase();
+    if (!token) continue;
+
+    // 1) Direct substring match in either direction.
+    if (drug.includes(token) || token.includes(drug)) {
+      const key = `${row.id}|direct`;
+      if (!seen.has(key)) {
+        matches.push({
+          patientAllergen: row.allergenName,
+          matchType: 'direct',
+          severity: row.severity,
+          reaction: row.reaction ?? undefined,
+          allergyId: row.id,
+        });
+        seen.add(key);
+      }
+    }
+
+    // 2) Cross-reactivity expansion against the family table.
+    for (const family of CROSS_REACTIVITY) {
+      const triggered = family.triggers.some((trig) => token.includes(trig));
+      if (!triggered) continue;
+      const hit = family.keywords.some((kw) => drug.includes(kw));
+      if (!hit) continue;
+      const key = `${row.id}|${family.family}`;
+      if (seen.has(key)) continue;
+      matches.push({
+        patientAllergen: row.allergenName,
+        family: family.family,
+        matchType: 'cross',
+        severity: row.severity,
+        reaction: row.reaction ?? undefined,
+        allergyId: row.id,
+      });
+      seen.add(key);
+    }
+  }
+
+  return matches;
+}
+
+/**
+ * Highest-severity match wins — drives the prescribe-safety dialog
+ * variant and the alert-severity calibration sent back to the
+ * backend. UNKNOWN is treated alongside MODERATE because we
+ * deliberately don't downgrade an allergy whose reaction we don't
+ * know. Returns null when no match carries a structured severity
+ * (e.g. only legacy free-text matches fired).
+ */
+export function highestAllergySeverity(
+  matches: AllergyMatch[],
+): import('@/api/types').AllergySeverity | null {
+  const rank: Record<import('@/api/types').AllergySeverity, number> = {
+    MILD: 1,
+    MODERATE: 2,
+    UNKNOWN: 2,
+    SEVERE: 3,
+    ANAPHYLAXIS: 4,
+  };
+  let best: import('@/api/types').AllergySeverity | null = null;
+  for (const m of matches) {
+    if (!m.severity) continue;
+    if (best === null || rank[m.severity] > rank[best]) best = m.severity;
+  }
+  return best;
 }

@@ -1,6 +1,7 @@
 package com.smartTriage.smartTriage_server.module.medication.entity;
 
 import com.smartTriage.smartTriage_server.common.entity.BaseEntity;
+import com.smartTriage.smartTriage_server.common.enums.MedicationPriority;
 import com.smartTriage.smartTriage_server.common.enums.MedicationRoute;
 import com.smartTriage.smartTriage_server.common.enums.MedicationStatus;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
@@ -64,6 +65,20 @@ public class MedicationAdministration extends BaseEntity {
     /** Frequency/schedule (e.g., "STAT", "Q6H", "PRN") */
     @Column(name = "frequency", length = 50)
     private String frequency;
+
+    /**
+     * Structured urgency tier — drives the nurse medication queue
+     * sort, the STAT/URGENT SLA monitor, and the real-time push
+     * prioritisation. Default ROUTINE for backward compatibility with
+     * the legacy free-text {@code frequency} model: when this column
+     * was added the existing rows had no priority signal and we
+     * deliberately don't try to infer STAT from "STAT" appearing in
+     * the frequency string — that's a UI hint, not a contract.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "priority", nullable = false, length = 16)
+    @Builder.Default
+    private MedicationPriority priority = MedicationPriority.ROUTINE;
 
     /** Time the medication was prescribed/ordered */
     @Column(name = "prescribed_at", nullable = false)

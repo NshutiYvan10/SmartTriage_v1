@@ -186,6 +186,16 @@ export function subscribeToLabOrders(
   return subscribeToTopic(`/topic/lab/${hospitalId}`, callback);
 }
 
+/** Subscribe to medication events for a hospital (Workflow 3).
+ *  Payload is a MedicationResponse — emitted on prescribe and every
+ *  workflow transition (administer/countersign/hold/refuse/cancel). */
+export function subscribeToMedications(
+  hospitalId: string,
+  callback: (med: any) => void
+): () => void {
+  return subscribeToTopic(`/topic/medications/${hospitalId}`, callback);
+}
+
 /** Subscribe to alerts for a specific ED zone */
 export function subscribeToZoneAlerts(
   hospitalId: string,

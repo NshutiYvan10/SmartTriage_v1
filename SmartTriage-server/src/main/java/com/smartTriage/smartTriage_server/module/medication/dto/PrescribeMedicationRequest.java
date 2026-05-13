@@ -1,5 +1,7 @@
 package com.smartTriage.smartTriage_server.module.medication.dto;
 
+import com.smartTriage.smartTriage_server.common.enums.AllergySeverity;
+import com.smartTriage.smartTriage_server.common.enums.MedicationPriority;
 import com.smartTriage.smartTriage_server.common.enums.MedicationRoute;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -32,6 +34,14 @@ public class PrescribeMedicationRequest {
 
     private String frequency;
 
+    /**
+     * Workflow 3 — structured urgency tier. Defaults to ROUTINE on
+     * the backend when omitted so old clients keep working without
+     * upgrade. STAT raises the order to the top of the nurse queue
+     * and starts a 10-minute SLA timer.
+     */
+    private MedicationPriority priority;
+
     /** Optional: explicit prescriber name if not current user */
     private String prescribedByName;
 
@@ -53,6 +63,18 @@ public class PrescribeMedicationRequest {
      * prescriber saw at decision time.
      */
     private String allergyOverrideMatches;
+
+    /**
+     * Structured severity of the allergy that was overridden (V58 /
+     * Workflow 2). Nullable for backward compatibility — when the
+     * frontend hasn't been upgraded, the override alert falls back to
+     * CRITICAL (the safest assumption). When present, the severity
+     * scales the generated ClinicalAlert:
+     *   ANAPHYLAXIS / SEVERE → CRITICAL
+     *   MODERATE / UNKNOWN   → HIGH
+     *   MILD                 → MEDIUM
+     */
+    private AllergySeverity allergyOverrideSeverity;
 
     // ────────── INTERACTION OVERRIDE (V24) ──────────
     // Populated by the same PrescribeSafetyDialog when an interaction

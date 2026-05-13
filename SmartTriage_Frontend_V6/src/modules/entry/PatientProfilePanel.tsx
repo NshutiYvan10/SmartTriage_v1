@@ -32,6 +32,7 @@ import {
 import { patientApi } from '@/api/patients';
 import type { PatientResponse } from '@/api/types';
 import { useTheme } from '@/hooks/useTheme';
+import { PatientAllergiesPanel } from '@/modules/patient/PatientAllergiesPanel';
 
 interface Props {
   /** Provide either patientId (panel fetches) … */
@@ -316,6 +317,20 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
               {allergiesEmpty
                 ? 'None on record'
                 : patient.knownAllergies}
+            </div>
+            {!allergiesEmpty && (
+              <p className={`mt-1 text-[10px] ${subtleTextCls} italic`}>
+                Legacy free-text — captured before structured allergies were introduced.
+                Record a structured entry below so the safety engine can grade severity.
+              </p>
+            )}
+
+            {/* Structured allergies panel (V58 / Workflow 2). Replaces
+                the legacy free-text textarea above for the safety check
+                — the engine reads structured rows first, falls back to
+                the free-text only when none exist. */}
+            <div className="mt-2 pt-2 border-t border-red-200/60">
+              <PatientAllergiesPanel patientId={patient.id} editable={editable} />
             </div>
           </div>
         </div>

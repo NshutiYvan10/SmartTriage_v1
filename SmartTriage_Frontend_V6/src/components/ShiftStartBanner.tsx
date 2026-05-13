@@ -129,6 +129,20 @@ export function ShiftStartBanner({ assignment, patients }: Props) {
                   Shift Lead
                 </span>
               )}
+              {/* Workflow 4 — covered-zone chips. Multi-zone
+                  coverage is the small-hospital reality (one doctor
+                  for RESUS + ACUTE + PEDIATRIC). Surfacing it on the
+                  banner makes the responsibility unambiguous so the
+                  clinician knows what they're seeing in the patient
+                  list and alert stream. */}
+              {assignment.additionalZones && assignment.additionalZones.length > 0 && (
+                <span
+                  className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/30 text-cyan-50 border border-cyan-300/30 inline-flex items-center gap-1"
+                  title="Additional zones covered on this shift"
+                >
+                  + {assignment.additionalZones.join(' · ')}
+                </span>
+              )}
             </div>
 
             <h2 className="text-lg font-bold mt-1">

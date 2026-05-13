@@ -35,6 +35,7 @@ export type AppPage =
   | 'med-safety'
   | 'med-safety-overrides'
   | 'lab'
+  | 'med-queue'
   | 'ems'
   | 'pathways'
   | 'icu'
@@ -199,6 +200,12 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'pathways', 'med-safety', 'med-safety-overrides', 'icu',
     // Documentation & handover
     'documentation', 'handover', 'lab', 'ems',
+    // Medication administration queue (Workflow 3) — doctors can see
+    // the queue too because they often need to verify a colleague's
+    // STAT order landed and is being acted on. The separation-of-
+    // duties backend check still prevents them administering their
+    // own prescriptions.
+    'med-queue',
     // Reports (own)
     'reports',
     // Self-service shift surface
@@ -214,6 +221,10 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'pathways',
     // Documentation & handover
     'documentation', 'handover', 'lab', 'ems',
+    // Medication administration queue (Workflow 3) — the main
+    // surface for the nurse: every PRESCRIBED med across the
+    // hospital, STAT first, real-time push.
+    'med-queue',
     // Safety reporting
     'safety-incidents',
     // Self-service shift surfaces only. A regular nurse sees their own
@@ -228,26 +239,36 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   ],
 
   // ── Registration only ──
+  // No 'my-schedule' / 'shift-calendar' — the registration desk
+  // operates on its own departmental rota, not the Charge Nurse's
+  // daily ED roster. The ShiftFunction enum has no REGISTRAR value
+  // (see common/enums/ShiftFunction.java), so the page would show
+  // an empty schedule and only mislead the user.
   REGISTRAR: [
     'dashboard', 'entry', 'patients',
     'notifications', 'profile',
-    
-    'my-schedule',
   ],
 
   // ── Pre-hospital / transport ──
+  // No 'my-schedule' for now — there is no PARAMEDIC ShiftFunction
+  // in the shift module today, so the page would render empty. EMS
+  // crews in real Rwandan practice DO work 24/7 rotations, but
+  // their roster is currently managed outside SmartTriage. Re-add
+  // this entry the moment a PARAMEDIC ShiftFunction is introduced.
   PARAMEDIC: [
     'dashboard', 'ems', 'entry', 'patients',
     'notifications', 'profile',
     'handover',
-    'my-schedule',
   ],
 
   // ── Lab-focused ──
+  // No 'my-schedule' — lab technicians work fixed-hour departmental
+  // shifts, not the rotating Charge-Nurse-managed ED roster. The
+  // ShiftFunction enum has no LAB_TECHNICIAN value, so the page
+  // would show an empty schedule.
   LAB_TECHNICIAN: [
     'dashboard', 'patients', 'lab',
     'notifications', 'profile',
-    'my-schedule',
   ],
 
   // ── View-only ──

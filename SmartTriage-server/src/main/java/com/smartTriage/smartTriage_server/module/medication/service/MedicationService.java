@@ -2,11 +2,14 @@ package com.smartTriage.smartTriage_server.module.medication.service;
 
 import com.smartTriage.smartTriage_server.common.enums.AlertSeverity;
 import com.smartTriage.smartTriage_server.common.enums.AlertType;
+import com.smartTriage.smartTriage_server.common.enums.AllergySeverity;
+import com.smartTriage.smartTriage_server.common.enums.MedicationPriority;
 import com.smartTriage.smartTriage_server.common.enums.MedicationStatus;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
+import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher;
 import com.smartTriage.smartTriage_server.module.medication.dto.AdministerMedicationRequest;
 import com.smartTriage.smartTriage_server.module.medication.dto.CountersignMedicationRequest;
 import com.smartTriage.smartTriage_server.module.medication.dto.MedicationResponse;
@@ -14,12 +17,15 @@ import com.smartTriage.smartTriage_server.module.medication.dto.PrescribeMedicat
 import com.smartTriage.smartTriage_server.module.medication.entity.MedicationAdministration;
 import com.smartTriage.smartTriage_server.module.medication.mapper.MedicationMapper;
 import com.smartTriage.smartTriage_server.module.medication.repository.MedicationAdministrationRepository;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.visit.service.VisitService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +60,14 @@ public class MedicationService {
      * surface in AlertsTab on the visit and the global AlertsView.
      */
     private final ClinicalAlertRepository clinicalAlertRepository;
+    /**
+     * Workflow 3 — real-time push for the nurse medication queue.
+     * Broadcasts on {@code /topic/medications/{hospitalId}} every
+     * time a medication is created or transitions state so the
+     * nurse's queue and any open visit-detail page update without
+     * polling.
+     */
+    private final RealTimeEventPublisher realTimeEventPublisher;
 
     // ====================================================================
     // PRESCRIBE
@@ -78,14 +92,27 @@ public class MedicationService {
         Instant interactionOverrideAt = interactionOverride ? Instant.now() : null;
         String interactionMatches = interactionOverride ? request.getInteractionOverrideMatches() : null;
 
+        // Workflow 3 — resolve the authenticated user so we can stamp
+        // the prescribed_by_id FK. Without it the separation-of-duties
+        // check on administer can't reliably compare prescriber vs
+        // administerer (names are typo-prone). Falls back to a null
+        // FK gracefully — old clients that don't carry auth keep
+        // working through the legacy name field.
+        User prescriber = resolveCurrentUser();
+
         MedicationAdministration med = MedicationAdministration.builder()
                 .visit(visit)
                 .drugName(request.getDrugName())
                 .dose(request.getDose())
                 .route(request.getRoute())
                 .frequency(request.getFrequency())
+                .priority(request.getPriority() != null
+                        ? request.getPriority() : MedicationPriority.ROUTINE)
                 .prescribedAt(Instant.now())
-                .prescribedByName(request.getPrescribedByName())
+                .prescribedBy(prescriber)
+                .prescribedByName(request.getPrescribedByName() != null
+                        ? request.getPrescribedByName()
+                        : formatUserName(prescriber))
                 .status(MedicationStatus.PRESCRIBED)
                 .notes(request.getNotes())
                 .prescribedDespiteAllergy(allergyOverride)
@@ -105,11 +132,22 @@ public class MedicationService {
         // queryable form of the same fact; the WARN log is the
         // ops/grep-friendly form. Both are kept on purpose.
         if (allergyOverride) {
-            log.warn("ALLERGY OVERRIDE — visit:{} drug:{} prescriber:{} matches:{}",
+            // Workflow 2 — severity-aware alert. The frontend now passes
+            // the structured AllergySeverity from the safety dialog when
+            // it has one; if the field is null (old frontend, or the
+            // legacy free-text fallback fired without a known severity)
+            // we anchor at CRITICAL to fail safe.
+            AlertSeverity allergyAlertSeverity = mapAllergyOverrideSeverity(
+                    request.getAllergyOverrideSeverity());
+            log.warn("ALLERGY OVERRIDE — visit:{} drug:{} prescriber:{} severity:{} matches:{}",
                     visit.getVisitNumber(), med.getDrugName(),
-                    med.getPrescribedByName(), allergyMatches);
-            createOverrideAlert(visit, med, "Allergy override", allergyMatches,
-                    AlertSeverity.CRITICAL);
+                    med.getPrescribedByName(),
+                    request.getAllergyOverrideSeverity(),
+                    allergyMatches);
+            String label = request.getAllergyOverrideSeverity() != null
+                    ? "Allergy override (" + request.getAllergyOverrideSeverity().getLabel() + ")"
+                    : "Allergy override";
+            createOverrideAlert(visit, med, label, allergyMatches, allergyAlertSeverity);
         }
         if (interactionOverride) {
             log.warn("INTERACTION OVERRIDE — visit:{} drug:{} prescriber:{} matches:{}",
@@ -124,12 +162,14 @@ public class MedicationService {
             createInteractionScopedAlerts(visit, med, interactionMatches);
         }
         if (!allergyOverride && !interactionOverride) {
-            log.info("Medication prescribed for visit {} — drug:{} dose:{} route:{} freq:{}",
+            log.info("Medication prescribed for visit {} — drug:{} dose:{} route:{} freq:{} priority:{}",
                     visit.getVisitNumber(), med.getDrugName(), med.getDose(),
-                    med.getRoute(), med.getFrequency());
+                    med.getRoute(), med.getFrequency(), med.getPriority());
         }
 
-        return MedicationMapper.toResponse(med);
+        MedicationResponse response = MedicationMapper.toResponse(med);
+        broadcastMedication(med, response);
+        return response;
     }
 
     /**
@@ -143,6 +183,22 @@ public class MedicationService {
      * snapshot so a consumer of the alert can read what fired without
      * joining back to the medication row.
      */
+    /**
+     * Map the structured {@link AllergySeverity} the frontend
+     * captured at decision time into the alert pipeline's {@link
+     * AlertSeverity} scale. Null defaults to CRITICAL — when we don't
+     * know the severity we treat the override as the highest-regret
+     * class so the alert is impossible to miss.
+     */
+    private AlertSeverity mapAllergyOverrideSeverity(AllergySeverity allergySeverity) {
+        if (allergySeverity == null) return AlertSeverity.CRITICAL;
+        return switch (allergySeverity) {
+            case ANAPHYLAXIS, SEVERE -> AlertSeverity.CRITICAL;
+            case MODERATE, UNKNOWN -> AlertSeverity.HIGH;
+            case MILD -> AlertSeverity.MEDIUM;
+        };
+    }
+
     private void createOverrideAlert(
             Visit visit,
             MedicationAdministration med,
@@ -347,8 +403,29 @@ public class MedicationService {
                             + ". Only PRESCRIBED medications can be administered.");
         }
 
+        // Workflow 3 — separation of duties. The clinician who prescribed
+        // the order must not be the same one to record administration:
+        // the second pair of eyes is the whole point of the MAR chain of
+        // custody. Compared by user FK because names are typo-prone.
+        // Backward compat: if the legacy row has no prescribedBy FK
+        // (older prescriptions pre-Workflow-3), the check is skipped —
+        // we can't enforce what we can't identify, and we don't want to
+        // freeze pre-existing pending orders.
+        User administerer = resolveCurrentUser();
+        if (administerer != null && med.getPrescribedBy() != null
+                && administerer.getId().equals(med.getPrescribedBy().getId())) {
+            throw new ClinicalBusinessException(
+                    "Separation of duties: the clinician who prescribed '"
+                            + med.getDrugName()
+                            + "' cannot also record its administration. "
+                            + "A second clinician must complete this step.");
+        }
+
         med.setAdministeredAt(Instant.now());
-        med.setAdministeredByName(request.getAdministeredByName());
+        med.setAdministeredBy(administerer);
+        med.setAdministeredByName(request.getAdministeredByName() != null
+                ? request.getAdministeredByName()
+                : formatUserName(administerer));
         med.setStatus(MedicationStatus.ADMINISTERED);
 
         if (request.getNotes() != null && !request.getNotes().isBlank()) {
@@ -358,10 +435,13 @@ public class MedicationService {
 
         med = medicationRepository.save(med);
 
-        log.info("Medication administered — id:{} drug:{} visit:{}",
-                med.getId(), med.getDrugName(), med.getVisit().getVisitNumber());
+        log.info("Medication administered — id:{} drug:{} visit:{} by:{}",
+                med.getId(), med.getDrugName(), med.getVisit().getVisitNumber(),
+                med.getAdministeredByName());
 
-        return MedicationMapper.toResponse(med);
+        MedicationResponse response = MedicationMapper.toResponse(med);
+        broadcastMedication(med, response);
+        return response;
     }
 
     // ====================================================================
@@ -378,8 +458,35 @@ public class MedicationService {
                             + ". Only ADMINISTERED medications can be countersigned.");
         }
 
+        // Workflow 3 — separation of duties extends to the countersign
+        // step: a third pair of eyes. The countersigner must differ
+        // from BOTH the prescriber and the administerer. Same FK-based
+        // comparison + backward-compat skip when the legacy row lacks
+        // a User FK.
+        User countersigner = resolveCurrentUser();
+        if (countersigner != null) {
+            if (med.getPrescribedBy() != null
+                    && countersigner.getId().equals(med.getPrescribedBy().getId())) {
+                throw new ClinicalBusinessException(
+                        "Separation of duties: the prescribing clinician for '"
+                                + med.getDrugName()
+                                + "' cannot also countersign its administration.");
+            }
+            if (med.getAdministeredBy() != null
+                    && countersigner.getId().equals(med.getAdministeredBy().getId())) {
+                throw new ClinicalBusinessException(
+                        "Separation of duties: the administering clinician for '"
+                                + med.getDrugName()
+                                + "' cannot countersign their own administration. "
+                                + "A different clinician must complete this step.");
+            }
+        }
+
         med.setCountersignedAt(Instant.now());
-        med.setCountersignedByName(request.getCountersignedByName());
+        med.setCountersignedBy(countersigner);
+        med.setCountersignedByName(request.getCountersignedByName() != null
+                ? request.getCountersignedByName()
+                : formatUserName(countersigner));
 
         if (request.getNotes() != null && !request.getNotes().isBlank()) {
             String existingNotes = med.getNotes() != null ? med.getNotes() + " | " : "";
@@ -391,7 +498,9 @@ public class MedicationService {
         log.info("Medication countersigned — id:{} drug:{} by:{}",
                 med.getId(), med.getDrugName(), med.getCountersignedByName());
 
-        return MedicationMapper.toResponse(med);
+        MedicationResponse response = MedicationMapper.toResponse(med);
+        broadcastMedication(med, response);
+        return response;
     }
 
     // ====================================================================
@@ -415,7 +524,9 @@ public class MedicationService {
 
         med = medicationRepository.save(med);
         log.info("Medication held — id:{} drug:{} reason:{}", med.getId(), med.getDrugName(), reason);
-        return MedicationMapper.toResponse(med);
+        MedicationResponse response = MedicationMapper.toResponse(med);
+        broadcastMedication(med, response);
+        return response;
     }
 
     @Transactional
@@ -430,7 +541,9 @@ public class MedicationService {
 
         med = medicationRepository.save(med);
         log.info("Medication cancelled — id:{} drug:{} reason:{}", med.getId(), med.getDrugName(), reason);
-        return MedicationMapper.toResponse(med);
+        MedicationResponse response = MedicationMapper.toResponse(med);
+        broadcastMedication(med, response);
+        return response;
     }
 
     @Transactional
@@ -450,7 +563,9 @@ public class MedicationService {
 
         med = medicationRepository.save(med);
         log.info("Medication refused — id:{} drug:{} reason:{}", med.getId(), med.getDrugName(), reason);
-        return MedicationMapper.toResponse(med);
+        MedicationResponse response = MedicationMapper.toResponse(med);
+        broadcastMedication(med, response);
+        return response;
     }
 
     // ====================================================================
@@ -490,6 +605,19 @@ public class MedicationService {
         return MedicationMapper.toResponse(med);
     }
 
+    /**
+     * Nurse medication queue — every PRESCRIBED medication across the
+     * hospital that has not yet been administered (or held / refused /
+     * cancelled). Sorted STAT → URGENT → ROUTINE then oldest first
+     * within each tier so the most overdue STAT bubbles to the top.
+     */
+    public List<MedicationResponse> getPendingQueueForHospital(UUID hospitalId) {
+        return medicationRepository.findPendingForHospital(hospitalId)
+                .stream()
+                .map(MedicationMapper::toResponse)
+                .collect(Collectors.toList());
+    }
+
     // ====================================================================
     // INTERNAL
     // ====================================================================
@@ -498,5 +626,51 @@ public class MedicationService {
         return medicationRepository.findByIdAndIsActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "MedicationAdministration", "id", id));
+    }
+
+    /**
+     * Resolve the User entity from the SecurityContext, if any.
+     * Returns null gracefully so callers can keep working with the
+     * legacy free-text name path (e.g. tests with no auth, or
+     * older API clients).
+     */
+    private User resolveCurrentUser() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null) return null;
+            Object principal = auth.getPrincipal();
+            return (principal instanceof User user) ? user : null;
+        } catch (Exception e) {
+            log.debug("Could not resolve current user from SecurityContext: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** "Dr First Last" — falls back to email when names are blank. */
+    private String formatUserName(User u) {
+        if (u == null) return null;
+        String first = u.getFirstName() != null ? u.getFirstName().trim() : "";
+        String last = u.getLastName() != null ? u.getLastName().trim() : "";
+        String joined = (first + " " + last).trim();
+        return joined.isEmpty() ? u.getEmail() : joined;
+    }
+
+    /**
+     * Broadcast a medication event on {@code /topic/medications/{hospitalId}}
+     * so the nurse queue and any open visit-detail page can react in
+     * real time. Wrapped in try/catch — a STOMP failure must never
+     * roll back the persistence transaction. Called from every
+     * lifecycle transition (prescribe / administer / countersign /
+     * hold / cancel / refuse).
+     */
+    private void broadcastMedication(MedicationAdministration med, MedicationResponse response) {
+        try {
+            if (med.getVisit() == null || med.getVisit().getHospital() == null) return;
+            UUID hospitalId = med.getVisit().getHospital().getId();
+            realTimeEventPublisher.publishMedication(hospitalId, response);
+        } catch (Exception e) {
+            log.warn("Failed to broadcast medication event for {}: {}",
+                    med.getId(), e.getMessage());
+        }
     }
 }

@@ -65,6 +65,19 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
             @Param("cutoff") Instant cutoff);
 
     /**
+     * Orders still in ORDERED status (specimen not yet received by
+     * the lab) past the cutoff — used by the stuck-in-ORDERED
+     * early-warning check so an alert fires before the total
+     * turnaround SLA is breached.
+     */
+    @Query("SELECT o FROM LabOrder o WHERE o.isActive = true AND o.priority = :priority " +
+            "AND o.status = com.smartTriage.smartTriage_server.common.enums.LabOrderStatus.ORDERED " +
+            "AND o.orderedAt < :cutoff")
+    List<LabOrder> findStuckInOrderedByPriority(
+            @Param("priority") LabPriority priority,
+            @Param("cutoff") Instant cutoff);
+
+    /**
      * Critical results not acknowledged within the cutoff time.
      */
     @Query("SELECT o FROM LabOrder o WHERE o.isActive = true AND o.isCritical = true " +

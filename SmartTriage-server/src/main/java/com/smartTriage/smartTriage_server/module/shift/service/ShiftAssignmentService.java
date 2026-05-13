@@ -203,23 +203,61 @@ public class ShiftAssignmentService {
             clearShiftLeadForShift(hospitalId, shiftDate, shiftPeriod);
         }
 
+        // Workflow 4 — additional zones validation. The frontend
+        // multi-select sends a Set<EdZone>; empty/null means single-
+        // zone coverage (legacy default). We reject any entry equal
+        // to the primary zone (no-op) so a confused Charge Nurse
+        // doesn't silently get fewer zones than they thought.
+        java.util.Set<com.smartTriage.smartTriage_server.common.enums.EdZone> additionalZones =
+                normaliseAdditionalZones(request.getAdditionalZones(), request.getZone());
+
         ShiftAssignment assignment = ShiftAssignment.builder()
                 .hospital(hospital)
                 .shiftDate(shiftDate)
                 .shiftPeriod(shiftPeriod)
                 .user(user)
                 .zone(request.getZone())
+                .additionalZones(additionalZones)
                 .shiftFunction(request.getShiftFunction())
                 .startedAt(Instant.now())
                 .isShiftLead(makeShiftLead)
                 .build();
 
         assignment = shiftAssignmentRepository.save(assignment);
-        log.info("Shift assignment created: {} → {} zone, function {}{} on {} {}",
-                user.getEmail(), request.getZone(), request.getShiftFunction(),
+        log.info("Shift assignment created: {} → primary {}{}, function {}{} on {} {}",
+                user.getEmail(), request.getZone(),
+                additionalZones.isEmpty() ? "" : " + " + additionalZones,
+                request.getShiftFunction(),
                 makeShiftLead ? " [SHIFT-LEAD]" : "", shiftDate, shiftPeriod);
 
         return ShiftAssignmentMapper.toResponse(assignment);
+    }
+
+    /**
+     * Workflow 4 — validate + de-duplicate the additional-zone
+     * collection from a CreateShiftAssignmentRequest. Returns an
+     * EnumSet (which the entity is happy to persist) and:
+     *
+     * <ul>
+     *   <li>treats null / empty input as the legacy single-zone path,</li>
+     *   <li>rejects an entry equal to the primary zone with a clear
+     *       user-facing message — silently dropping it would mask a
+     *       Charge Nurse error.</li>
+     * </ul>
+     */
+    private java.util.Set<com.smartTriage.smartTriage_server.common.enums.EdZone> normaliseAdditionalZones(
+            java.util.Set<com.smartTriage.smartTriage_server.common.enums.EdZone> raw,
+            com.smartTriage.smartTriage_server.common.enums.EdZone primary) {
+        if (raw == null || raw.isEmpty()) {
+            return java.util.EnumSet.noneOf(
+                    com.smartTriage.smartTriage_server.common.enums.EdZone.class);
+        }
+        if (raw.contains(primary)) {
+            throw new ClinicalBusinessException(
+                    "Additional zones cannot include the primary zone (" + primary
+                            + "). Drop it from the list — the primary posting is already covered.");
+        }
+        return java.util.EnumSet.copyOf(raw);
     }
 
     /**
@@ -489,10 +527,28 @@ public class ShiftAssignmentService {
         if (request.getShiftFunction() != null) {
             assignment.setShiftFunction(request.getShiftFunction());
         }
+        // Workflow 4 — the Charge Nurse can edit the multi-zone
+        // coverage of an existing assignment. The DTO conveys absence
+        // of the field as null (don't touch) and an explicit empty
+        // set as "drop all extras"; we forward both meanings.
+        if (request.getAdditionalZones() != null) {
+            assignment.setAdditionalZones(
+                    normaliseAdditionalZones(request.getAdditionalZones(), assignment.getZone()));
+        } else if (request.getZone() != null
+                && assignment.getAdditionalZones() != null
+                && assignment.getAdditionalZones().contains(request.getZone())) {
+            // Primary just changed to a value that used to live in the
+            // additional set — drop the duplicate so the entity invariant
+            // (primary ∉ additional) holds.
+            assignment.getAdditionalZones().remove(request.getZone());
+        }
 
         assignment = shiftAssignmentRepository.save(assignment);
-        log.info("Shift assignment updated: {} → zone {}, function {}",
-                assignmentId, assignment.getZone(), assignment.getShiftFunction());
+        log.info("Shift assignment updated: {} → primary {}{}, function {}",
+                assignmentId, assignment.getZone(),
+                assignment.getAdditionalZones() == null || assignment.getAdditionalZones().isEmpty()
+                        ? "" : " + " + assignment.getAdditionalZones(),
+                assignment.getShiftFunction());
         return ShiftAssignmentMapper.toResponse(assignment);
     }
 

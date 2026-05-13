@@ -26,6 +26,18 @@ export interface AuthUser {
    * uses these to decide what to show.
    */
   currentZone?: EdZone | null;
+  /**
+   * Workflow 4 — additional zones the user is covering on this
+   * shift beyond {@link currentZone}. Empty array when single-
+   * zone coverage. Drives:
+   *   • the WebSocket subscription set (one /topic/alerts/{hospital}
+   *     /{zone} per covered zone),
+   *   • the covered-zone chips in the dashboard header,
+   *   • client-side fallbacks for "what zones do I cover today".
+   * The authoritative copy still lives on the server's
+   * ShiftAssignment; this is a cache populated from /shifts/me/current.
+   */
+  additionalZones?: EdZone[];
   /** True when this user holds the shift-lead badge — cross-zone visibility. */
   isShiftLead?: boolean;
   /** True when the user has an active shift assignment of any kind. */
@@ -308,6 +320,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
           const updated: AuthUser = {
             ...currentUser,
             currentZone: null,
+            additionalZones: [],
             isShiftLead: false,
             isOnShift: false,
             currentShiftFunction: null,
@@ -319,6 +332,13 @@ export const useAuthStore = create<AuthState>((set, get) => {
         const updated: AuthUser = {
           ...currentUser,
           currentZone: (assignment.zone as EdZone) ?? null,
+          // Workflow 4 — the assignment may carry extra zones the
+          // user is also covering. Surface them so the WebSocket
+          // subscription set, the dashboard chips, and any other
+          // multi-zone consumer can read from one source of truth.
+          additionalZones: Array.isArray(assignment.additionalZones)
+            ? (assignment.additionalZones as EdZone[])
+            : [],
           isShiftLead: !!assignment.isShiftLead,
           isOnShift: true,
           // RBAC fix — surface the shift function so RoleGuard can gate

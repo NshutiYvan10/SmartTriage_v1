@@ -23,6 +23,11 @@ public final class ShiftAssignmentMapper {
                         ? entity.getUser().getDesignation().getLabel()
                         : null)
                 .zone(entity.getZone())
+                .additionalZones(
+                        entity.getAdditionalZones() != null && !entity.getAdditionalZones().isEmpty()
+                                ? java.util.EnumSet.copyOf(entity.getAdditionalZones())
+                                : java.util.EnumSet.noneOf(
+                                        com.smartTriage.smartTriage_server.common.enums.EdZone.class))
                 .shiftFunction(entity.getShiftFunction())
                 .startedAt(entity.getStartedAt())
                 .endedAt(entity.getEndedAt())

@@ -78,7 +78,21 @@ export function useWebSocket(myZone?: EdZone | null) {
   const user = useAuthStore((s) => s.user);
   const connected = useRef(false);
   const unsubFns = useRef<Array<() => void>>([]);
-  const zoneRef = useRef<EdZone | null | undefined>(undefined);
+
+  // Workflow 4 — multi-zone coverage. The full covered set is the
+  // primary zone (passed in or from auth) UNION the user's
+  // additionalZones. We re-derive a stable key so re-renders that
+  // produce the same set don't tear down + recreate subscriptions.
+  const coveredZones: EdZone[] = (() => {
+    const set = new Set<EdZone>();
+    const primary = myZone ?? user?.currentZone ?? null;
+    if (primary) set.add(primary);
+    if (Array.isArray(user?.additionalZones)) {
+      for (const z of user!.additionalZones!) set.add(z);
+    }
+    return Array.from(set);
+  })();
+  const coveredKey = coveredZones.slice().sort().join(',');
 
   useEffect(() => {
     if (!user || connected.current) return;
@@ -102,14 +116,18 @@ export function useWebSocket(myZone?: EdZone | null) {
         unsubFns.current.push(unsubUser);
       }
 
-      // Subscribe to zone-specific alerts if user is assigned to a zone
-      if (myZone) {
-        console.log(`[useWebSocket] Subscribing to zone: ${myZone}`);
-        const unsubZone = subscribeToZoneAlerts(hospitalId, myZone, (alert: ClinicalAlertResponse) => {
+      // Workflow 4 — one /topic/alerts/{hospital}/{zone} subscription
+      // per covered zone. Backend publishes per-zone today; we extend
+      // the FAN-IN on the subscriber side so a single doctor covering
+      // RESUS + ACUTE + PEDIATRIC receives alerts for all three.
+      // Dedup against backendId in dedupeAndAdd keeps overlapping
+      // hospital-wide + zone topics from double-rendering.
+      for (const zone of coveredZones) {
+        console.log(`[useWebSocket] Subscribing to zone: ${zone}`);
+        const unsubZone = subscribeToZoneAlerts(hospitalId, zone, (alert: ClinicalAlertResponse) => {
           dedupeAndAdd(alert);
         });
         unsubFns.current.push(unsubZone);
-        zoneRef.current = myZone;
       }
     });
 
@@ -121,7 +139,8 @@ export function useWebSocket(myZone?: EdZone | null) {
       disconnectWebSocket();
       connected.current = false;
     };
-  }, [user, myZone]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, coveredKey]);
 }
 
 /**

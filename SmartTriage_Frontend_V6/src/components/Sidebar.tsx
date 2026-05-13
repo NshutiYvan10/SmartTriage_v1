@@ -137,6 +137,7 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
       label: 'Lab & Docs',
       items: [
         { id: 'lab', label: 'Lab Orders', icon: FlaskConical, pageId: 'lab' as AppPage },
+        { id: 'med-queue', label: 'Med Queue', icon: Pill, pageId: 'med-queue' as AppPage },
         { id: 'ems', label: 'Siren', icon: Siren, pageId: 'ems' as AppPage },
         { id: 'documentation', label: 'Documentation', icon: FileText, pageId: 'documentation' as AppPage },
         { id: 'handover', label: 'Handover', icon: ClipboardCheck, pageId: 'handover' as AppPage },

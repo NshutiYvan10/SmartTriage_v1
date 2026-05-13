@@ -28,11 +28,31 @@ public enum AlertType {
     // Medication safety alert types
     MEDICATION_SAFETY_BLOCK,
     MEDICATION_SAFETY_WARNING,
+    /**
+     * STAT medication has been sitting in PRESCRIBED status past the
+     * 10-minute administration SLA. Severity CRITICAL — STAT means
+     * "give immediately" and a missed STAT is patient-safety harm.
+     */
+    STAT_MEDICATION_OVERDUE,
+    /**
+     * URGENT medication has been sitting in PRESCRIBED status past
+     * the 30-minute SLA. Severity HIGH — less time-critical than
+     * STAT but still flags missed care.
+     */
+    URGENT_MEDICATION_OVERDUE,
 
     // Lab turnaround alert types
     STAT_LAB_OVERDUE,
     URGENT_LAB_OVERDUE,
     CRITICAL_VALUE_UNACKNOWLEDGED,
+    /**
+     * Early-warning alert: a lab order has been sitting in ORDERED
+     * status (specimen not yet received by the lab) past one-third of
+     * its priority's total SLA. Fires before STAT_LAB_OVERDUE /
+     * URGENT_LAB_OVERDUE would so the lab tech / runner has a chance
+     * to act before the total turnaround SLA is breached.
+     */
+    LAB_NOT_RECEIVED,
 
     // EMS / paramedic workflow
     EMS_PRE_ARRIVAL,                       // Ambulance is en route — bay prep

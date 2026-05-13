@@ -92,6 +92,16 @@ export function ShiftAssignment() {
   const [selectedZone, setSelectedZone] = useState<EdZone>('GENERAL');
   const [selectedFunction, setSelectedFunction] = useState<ShiftFunction>('ZONE_NURSE');
   const [assignAsLead, setAssignAsLead] = useState(false);
+  // Workflow 4 — optional additional zones the clinician will also
+  // cover this shift. Empty = single-zone (the legacy default).
+  // We deliberately filter the primary zone out of the selectable
+  // set so the Charge Nurse can't pick a no-op combo.
+  const [additionalZones, setAdditionalZones] = useState<EdZone[]>([]);
+
+  // Drop the primary zone from the multi-select when it changes.
+  useEffect(() => {
+    setAdditionalZones((prev) => prev.filter((z) => z !== selectedZone));
+  }, [selectedZone]);
 
   const showToast = (msg: string, type: 'success' | 'error') => {
     setToast({ msg, type });
@@ -127,6 +137,9 @@ export function ShiftAssignment() {
       await shiftApi.assign(hospitalId, {
         userId: selectedUser,
         zone: selectedZone,
+        // Workflow 4 — additional coverage; omit the field when
+        // empty so we don't push an unnecessary key on the wire.
+        ...(additionalZones.length > 0 ? { additionalZones } : {}),
         shiftFunction: selectedFunction,
         isShiftLead: assignAsLead,
       });
@@ -136,6 +149,7 @@ export function ShiftAssignment() {
       );
       setSelectedUser('');
       setAssignAsLead(false);
+      setAdditionalZones([]);
       loadData();
     } catch (err: any) {
       console.error('Failed to assign:', err);
@@ -431,6 +445,60 @@ export function ShiftAssignment() {
             </div>
           </div>
 
+          {/* Workflow 4 — additional-coverage multi-select.
+              Visible whenever a staff member is selected. Chip-style
+              toggle so the Charge Nurse can quickly add RESUS +
+              PEDIATRIC on top of an ACUTE primary posting. The
+              primary zone itself is auto-excluded by the effect
+              above. */}
+          {selectedUser && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>
+                  Also covers ({additionalZones.length})
+                  <span className="ml-2 normal-case tracking-normal font-medium text-slate-400">
+                    Optional — multi-zone coverage for small-ED shifts
+                  </span>
+                </label>
+                {additionalZones.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setAdditionalZones([])}
+                    className="text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-600"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {ZONES.filter((z) => z.zone !== selectedZone).map((z) => {
+                  const active = additionalZones.includes(z.zone);
+                  return (
+                    <button
+                      key={z.zone}
+                      type="button"
+                      onClick={() => {
+                        setAdditionalZones((prev) =>
+                          active ? prev.filter((x) => x !== z.zone) : [...prev, z.zone]);
+                      }}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border ${
+                        active
+                          ? `bg-gradient-to-r ${z.gradient} ${z.borderAccent} ${ZONE_TEXT_COLORS[z.zone]}`
+                          : isDark
+                            ? 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
+                            : 'bg-slate-100 border-slate-200 text-slate-500 hover:bg-slate-200'
+                      }`}
+                      title={active ? `Drop ${z.label} from coverage` : `Add ${z.label} to coverage`}
+                    >
+                      <span>{z.icon}</span>
+                      {z.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Shift-lead checkbox */}
           <div className="mt-4">
             <label
@@ -556,6 +624,14 @@ export function ShiftAssignment() {
                                     {a.userDesignationLabel && (
                                       <p className={`text-[10px] mt-0.5 ${text.muted}`}>{a.userDesignationLabel}</p>
                                     )}
+                                    {a.additionalZones && a.additionalZones.length > 0 && (
+                                      <p className={`text-[10px] mt-0.5 ${text.muted}`}>
+                                        Also covers:{' '}
+                                        {a.additionalZones
+                                          .map((z) => ZONES.find((zz) => zz.zone === z)?.label ?? z)
+                                          .join(', ')}
+                                      </p>
+                                    )}
                                   </div>
                                   <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                                     {!isLead && (
@@ -638,6 +714,14 @@ export function ShiftAssignment() {
                                     </div>
                                     {a.userDesignationLabel && (
                                       <p className={`text-[10px] mt-0.5 ${text.muted}`}>{a.userDesignationLabel}</p>
+                                    )}
+                                    {a.additionalZones && a.additionalZones.length > 0 && (
+                                      <p className={`text-[10px] mt-0.5 ${text.muted}`}>
+                                        Also covers:{' '}
+                                        {a.additionalZones
+                                          .map((z) => ZONES.find((zz) => zz.zone === z)?.label ?? z)
+                                          .join(', ')}
+                                      </p>
                                     )}
                                   </div>
                                   <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">

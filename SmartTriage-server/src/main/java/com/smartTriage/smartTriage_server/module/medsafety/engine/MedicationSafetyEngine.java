@@ -1,11 +1,14 @@
 package com.smartTriage.smartTriage_server.module.medsafety.engine;
 
+import com.smartTriage.smartTriage_server.common.enums.AllergySeverity;
 import com.smartTriage.smartTriage_server.common.enums.MedicationStatus;
 import com.smartTriage.smartTriage_server.module.medication.entity.MedicationAdministration;
 import com.smartTriage.smartTriage_server.module.medication.repository.MedicationAdministrationRepository;
 import com.smartTriage.smartTriage_server.module.medsafety.entity.DrugFormulary;
 import com.smartTriage.smartTriage_server.module.medsafety.repository.DrugFormularyRepository;
 import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
+import com.smartTriage.smartTriage_server.module.patient.entity.PatientAllergy;
+import com.smartTriage.smartTriage_server.module.patient.repository.PatientAllergyRepository;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +33,7 @@ public class MedicationSafetyEngine {
 
     private final DrugFormularyRepository formularyRepository;
     private final MedicationAdministrationRepository medicationRepository;
+    private final PatientAllergyRepository patientAllergyRepository;
 
     /**
      * Cross-allergenicity map: if a patient is allergic to the key, they may
@@ -68,7 +72,8 @@ public class MedicationSafetyEngine {
         Double prescribedDoseMg = parseDoseMg(med.getDose());
 
         // Run individual checks
-        MedicationSafetyResult.CheckResult allergyResult = checkAllergies(patient, formularyOpt.orElse(null), med.getDrugName());
+        AllergyCheckOutcome allergyOutcome = checkAllergies(patient, formularyOpt.orElse(null), med.getDrugName());
+        MedicationSafetyResult.CheckResult allergyResult = allergyOutcome.checkResult();
         MedicationSafetyResult.CheckResult doseResult = checkDoseRange(formularyOpt.orElse(null), prescribedDoseMg, patient, weightKg);
         MedicationSafetyResult.CheckResult interactionResult = checkDrugInteractions(formularyOpt.orElse(null), visit, med);
         MedicationSafetyResult.CheckResult duplicateResult = checkDuplicateTherapy(formularyOpt.orElse(null), visit, med);
@@ -84,8 +89,9 @@ public class MedicationSafetyEngine {
 
         boolean overallSafe = blockers.isEmpty() && warnings.isEmpty();
 
-        log.info("Safety check complete for drug '{}': overallSafe={}, warnings={}, blockers={}",
-                med.getDrugName(), overallSafe, warnings.size(), blockers.size());
+        log.info("Safety check complete for drug '{}': overallSafe={}, warnings={}, blockers={}, allergySeverity={}",
+                med.getDrugName(), overallSafe, warnings.size(), blockers.size(),
+                allergyOutcome.matchedSeverity());
 
         return new MedicationSafetyResult(
                 allergyResult,
@@ -94,64 +100,253 @@ public class MedicationSafetyEngine {
                 duplicateResult,
                 overallSafe,
                 warnings,
-                blockers
+                blockers,
+                allergyOutcome.matchedSeverity(),
+                allergyOutcome.matchedAllergenName(),
+                allergyOutcome.matchedReaction()
         );
+    }
+
+    /**
+     * Internal wrapper that pairs the engine's {@link
+     * MedicationSafetyResult.CheckResult} for the allergy check with
+     * the structured severity / allergen / reaction that triggered
+     * the match (when one was found). The metadata flows through
+     * {@link MedicationSafetyResult} to the prescribe-time safety
+     * dialog so it can render the right flavour (soft warning for
+     * MILD, hard stop for SEVERE/ANAPHYLAXIS).
+     */
+    private record AllergyCheckOutcome(
+            MedicationSafetyResult.CheckResult checkResult,
+            AllergySeverity matchedSeverity,
+            String matchedAllergenName,
+            String matchedReaction
+    ) {
+        static AllergyCheckOutcome ok() {
+            return new AllergyCheckOutcome(
+                    MedicationSafetyResult.CheckResult.ok(), null, null, null);
+        }
     }
 
     // ====================================================================
     // ALLERGY CHECK
     // ====================================================================
 
-    private MedicationSafetyResult.CheckResult checkAllergies(
+    /**
+     * Allergy check — Workflow 2.
+     *
+     * <p>Consults the structured {@link PatientAllergy} rows first. If
+     * none exist for the patient (un-migrated record), falls back to
+     * parsing the legacy free-text {@code Patient.knownAllergies}
+     * column. Multiple structured matches are reconciled by picking
+     * the highest {@link AllergySeverity#rank()} so the dialog
+     * flavour reflects the worst recorded reaction.
+     *
+     * <p>Severity mapping into {@link MedicationSafetyResult.Severity}:
+     * <ul>
+     *   <li>{@code ANAPHYLAXIS} / {@code SEVERE} → CRITICAL (hard
+     *       stop — goes into {@code blockers}).</li>
+     *   <li>{@code MODERATE} / {@code UNKNOWN} → CRITICAL (hard stop
+     *       — we don't downgrade unknown reactions).</li>
+     *   <li>{@code MILD} → HIGH (soft warning — goes into {@code
+     *       warnings}; the dialog renders an acknowledge-only
+     *       flavour rather than a hard block).</li>
+     * </ul>
+     */
+    private AllergyCheckOutcome checkAllergies(
+            Patient patient,
+            DrugFormulary formulary,
+            String drugName) {
+
+        // 1) Structured allergies — the authoritative source post-V58.
+        List<PatientAllergy> structuredAllergies =
+                patientAllergyRepository.findActiveByPatientId(patient.getId());
+
+        if (!structuredAllergies.isEmpty()) {
+            return checkStructuredAllergies(structuredAllergies, formulary, drugName);
+        }
+
+        // 2) Fallback: legacy free-text knownAllergies for patients whose
+        //    profile hasn't been re-captured yet. Severity is unknowable
+        //    from this column — surface as a structured MODERATE (hard
+        //    stop with override-reason required) rather than CRITICAL so
+        //    we don't permanently anchor at the worst case for the
+        //    legacy population.
+        return checkLegacyFreeTextAllergies(patient, formulary, drugName);
+    }
+
+    private AllergyCheckOutcome checkStructuredAllergies(
+            List<PatientAllergy> patientAllergies,
+            DrugFormulary formulary,
+            String drugName) {
+
+        String drugNameLower = drugName.toLowerCase().trim();
+        Set<String> drugAllergenGroups = formulary != null && formulary.getAllergenGroups() != null
+                ? parseCommaList(formulary.getAllergenGroups())
+                : Collections.emptySet();
+
+        PatientAllergy worstMatch = null;
+        String worstMatchReason = null;  // human-readable match reason
+
+        for (PatientAllergy allergy : patientAllergies) {
+            String allergenLower = allergy.getAllergenName() != null
+                    ? allergy.getAllergenName().toLowerCase().trim()
+                    : "";
+            if (allergenLower.isEmpty()) continue;
+
+            String matchReason = null;
+
+            // a) Formulary FK match — the patient's allergy row points to
+            //    the same formulary entry as the prescribed drug. The
+            //    strongest possible signal.
+            if (allergy.getAllergenFormulary() != null && formulary != null
+                    && allergy.getAllergenFormulary().getId() != null
+                    && allergy.getAllergenFormulary().getId().equals(formulary.getId())) {
+                matchReason = String.format(
+                        "Patient is allergic to '%s' — prescribed drug '%s' is the same formulary entry",
+                        allergy.getAllergenName(), drugName);
+            }
+            // b) Direct name substring match in either direction.
+            else if (drugNameLower.contains(allergenLower) || allergenLower.contains(drugNameLower)) {
+                matchReason = String.format(
+                        "Patient is allergic to '%s' — prescribed drug '%s' is a direct name match",
+                        allergy.getAllergenName(), drugName);
+            }
+            // c) Drug's allergen group contains the patient's allergen.
+            else if (!drugAllergenGroups.isEmpty() && drugAllergenGroups.contains(allergenLower)) {
+                matchReason = String.format(
+                        "Patient allergy '%s' matches drug allergen group for '%s'",
+                        allergy.getAllergenName(), drugName);
+            }
+            // d) Cross-allergenicity expansion.
+            else if (!drugAllergenGroups.isEmpty()) {
+                Set<String> crossReactive = CROSS_ALLERGENICITY.getOrDefault(
+                        allergenLower, Collections.emptySet());
+                for (String crossAllergen : crossReactive) {
+                    if (drugAllergenGroups.contains(crossAllergen)) {
+                        matchReason = String.format(
+                                "Cross-allergy: Patient allergy '%s' is cross-reactive with '%s' (allergen group of '%s')",
+                                allergy.getAllergenName(), crossAllergen, drugName);
+                        break;
+                    }
+                }
+            }
+
+            if (matchReason == null) continue;
+
+            AllergySeverity candidateSeverity = allergy.getSeverity() != null
+                    ? allergy.getSeverity() : AllergySeverity.UNKNOWN;
+
+            if (worstMatch == null
+                    || candidateSeverity.rank() > (worstMatch.getSeverity() != null
+                            ? worstMatch.getSeverity().rank() : 0)) {
+                worstMatch = allergy;
+                worstMatchReason = matchReason;
+            }
+        }
+
+        if (worstMatch == null) {
+            return AllergyCheckOutcome.ok();
+        }
+
+        AllergySeverity severity = worstMatch.getSeverity() != null
+                ? worstMatch.getSeverity() : AllergySeverity.UNKNOWN;
+        String message = formatAllergyMessage(severity, worstMatchReason,
+                worstMatch.getReaction());
+        log.warn(message);
+
+        MedicationSafetyResult.CheckResult checkResult = severity == AllergySeverity.MILD
+                ? MedicationSafetyResult.CheckResult.warning(message)
+                : MedicationSafetyResult.CheckResult.critical(message);
+
+        return new AllergyCheckOutcome(
+                checkResult,
+                severity,
+                worstMatch.getAllergenName(),
+                worstMatch.getReaction());
+    }
+
+    private AllergyCheckOutcome checkLegacyFreeTextAllergies(
             Patient patient,
             DrugFormulary formulary,
             String drugName) {
 
         if (patient.getKnownAllergies() == null || patient.getKnownAllergies().isBlank()) {
-            return MedicationSafetyResult.CheckResult.ok();
+            return AllergyCheckOutcome.ok();
         }
 
         Set<String> patientAllergies = parseCommaList(patient.getKnownAllergies());
-
-        // Direct drug name match
         String drugNameLower = drugName.toLowerCase().trim();
+
+        String matchedAllergen = null;
+        String matchReason = null;
+
+        // Direct drug name match.
         for (String allergy : patientAllergies) {
             if (drugNameLower.contains(allergy) || allergy.contains(drugNameLower)) {
-                String msg = String.format("ALLERGY ALERT: Patient is allergic to '%s' — prescribed drug '%s' is a direct match",
+                matchedAllergen = allergy;
+                matchReason = String.format(
+                        "Patient is allergic to '%s' — prescribed drug '%s' is a direct name match",
                         allergy, drugName);
-                log.warn(msg);
-                return MedicationSafetyResult.CheckResult.critical(msg);
+                break;
             }
         }
 
-        // Check against formulary allergen groups
-        if (formulary != null && formulary.getAllergenGroups() != null && !formulary.getAllergenGroups().isBlank()) {
+        // Allergen-group + cross-reactivity match.
+        if (matchReason == null && formulary != null
+                && formulary.getAllergenGroups() != null
+                && !formulary.getAllergenGroups().isBlank()) {
             Set<String> drugAllergenGroups = parseCommaList(formulary.getAllergenGroups());
-
+            outer:
             for (String allergy : patientAllergies) {
-                // Direct allergen group match
                 if (drugAllergenGroups.contains(allergy)) {
-                    String msg = String.format("ALLERGY ALERT: Patient allergy '%s' matches drug allergen group for '%s'",
+                    matchedAllergen = allergy;
+                    matchReason = String.format(
+                            "Patient allergy '%s' matches drug allergen group for '%s'",
                             allergy, drugName);
-                    log.warn(msg);
-                    return MedicationSafetyResult.CheckResult.critical(msg);
+                    break;
                 }
-
-                // Cross-allergenicity check
-                Set<String> crossReactive = CROSS_ALLERGENICITY.getOrDefault(allergy, Collections.emptySet());
+                Set<String> crossReactive = CROSS_ALLERGENICITY.getOrDefault(
+                        allergy, Collections.emptySet());
                 for (String crossAllergen : crossReactive) {
                     if (drugAllergenGroups.contains(crossAllergen)) {
-                        String msg = String.format(
-                                "CROSS-ALLERGY ALERT: Patient allergy '%s' has cross-reactivity with '%s' (allergen group of '%s')",
+                        matchedAllergen = allergy;
+                        matchReason = String.format(
+                                "Cross-allergy: Patient allergy '%s' is cross-reactive with '%s' (allergen group of '%s')",
                                 allergy, crossAllergen, drugName);
-                        log.warn(msg);
-                        return MedicationSafetyResult.CheckResult.critical(msg);
+                        break outer;
                     }
                 }
             }
         }
 
-        return MedicationSafetyResult.CheckResult.ok();
+        if (matchReason == null) {
+            return AllergyCheckOutcome.ok();
+        }
+
+        // Legacy free-text doesn't carry severity. Treat as MODERATE —
+        // safe middle ground: hard stop with override-reason required,
+        // but the prescriber isn't anchored at ANAPHYLAXIS for an
+        // allergy whose reaction was never recorded.
+        AllergySeverity assumedSeverity = AllergySeverity.MODERATE;
+        String message = formatAllergyMessage(assumedSeverity, matchReason, null);
+        log.warn(message);
+
+        return new AllergyCheckOutcome(
+                MedicationSafetyResult.CheckResult.critical(message),
+                assumedSeverity,
+                matchedAllergen,
+                null);
+    }
+
+    private String formatAllergyMessage(
+            AllergySeverity severity, String matchReason, String reaction) {
+        StringBuilder sb = new StringBuilder("ALLERGY ALERT (");
+        sb.append(severity.name()).append("): ").append(matchReason);
+        if (reaction != null && !reaction.isBlank()) {
+            sb.append(". Prior reaction: ").append(reaction);
+        }
+        return sb.toString();
     }
 
     // ====================================================================

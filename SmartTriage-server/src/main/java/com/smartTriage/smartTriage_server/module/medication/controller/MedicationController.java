@@ -153,4 +153,19 @@ public class MedicationController {
         List<MedicationResponse> response = medicationService.getMedicationHistoryForPatient(patientId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
+
+    /**
+     * Nurse medication queue (Workflow 3) — every PRESCRIBED
+     * medication across the hospital that has not yet been
+     * administered, sorted STAT → URGENT → ROUTINE then oldest
+     * first. Drives the standalone "Medication Queue" page.
+     */
+    @GetMapping("/queue/{hospitalId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    public ResponseEntity<ApiResponse<List<MedicationResponse>>> getPendingQueueForHospital(
+            @PathVariable UUID hospitalId) {
+        List<MedicationResponse> response = medicationService.getPendingQueueForHospital(hospitalId);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
 }

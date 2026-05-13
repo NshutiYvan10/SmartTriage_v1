@@ -53,4 +53,38 @@ public interface MedicationAdministrationRepository extends JpaRepository<Medica
            "AND m.administeredAt IS NULL " +
            "GROUP BY m.visit.id")
     List<Object[]> countPendingByVisitIds(@Param("visitIds") java.util.Collection<UUID> visitIds);
+
+    /**
+     * Nurse medication queue (Workflow 3) — every active PRESCRIBED
+     * medication for a hospital that has not yet been administered.
+     * Sorted by priority tier (STAT first, then URGENT, then
+     * ROUTINE) and within each tier oldest first so the most
+     * overdue STAT bubbles to the top of the screen.
+     */
+    @Query("SELECT m FROM MedicationAdministration m " +
+           "WHERE m.visit.hospital.id = :hospitalId AND m.isActive = true " +
+           "AND m.status = com.smartTriage.smartTriage_server.common.enums.MedicationStatus.PRESCRIBED " +
+           "AND m.administeredAt IS NULL " +
+           "ORDER BY CASE m.priority " +
+           "    WHEN com.smartTriage.smartTriage_server.common.enums.MedicationPriority.STAT THEN 0 " +
+           "    WHEN com.smartTriage.smartTriage_server.common.enums.MedicationPriority.URGENT THEN 1 " +
+           "    ELSE 2 END, " +
+           "m.prescribedAt ASC")
+    List<MedicationAdministration> findPendingForHospital(@Param("hospitalId") UUID hospitalId);
+
+    /**
+     * STAT-monitor query — PRESCRIBED meds older than the given
+     * cutoff, filtered by priority. Used by
+     * {@code MedicationStatMonitorService} to fire STAT / URGENT
+     * SLA-breach alerts.
+     */
+    @Query("SELECT m FROM MedicationAdministration m " +
+           "WHERE m.isActive = true " +
+           "AND m.priority = :priority " +
+           "AND m.status = com.smartTriage.smartTriage_server.common.enums.MedicationStatus.PRESCRIBED " +
+           "AND m.administeredAt IS NULL " +
+           "AND m.prescribedAt < :cutoff")
+    List<MedicationAdministration> findOverduePrescribedByPriority(
+            @Param("priority") com.smartTriage.smartTriage_server.common.enums.MedicationPriority priority,
+            @Param("cutoff") java.time.Instant cutoff);
 }

@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -37,6 +38,18 @@ public class CreateShiftAssignmentRequest {
 
     @NotNull(message = "Zone is required")
     private EdZone zone;
+
+    /**
+     * Workflow 4 — additional zones this clinician also covers on
+     * this shift, beyond the primary {@link #zone}. Optional; null
+     * or an empty set means single-zone coverage (the legacy
+     * default).
+     *
+     * <p>Must not include the primary zone — the service rejects
+     * that as a no-op user error. Duplicate entries in the request
+     * are collapsed by the Set semantics.
+     */
+    private Set<EdZone> additionalZones;
 
     @NotNull(message = "Shift function is required")
     private ShiftFunction shiftFunction;

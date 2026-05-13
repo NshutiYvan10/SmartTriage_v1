@@ -43,4 +43,11 @@ export const medicationApi = {
    */
   getPatientHistory: (patientId: string) =>
     get<MedicationResponse[]>(`/medications/patient/${patientId}/history`),
+
+  /**
+   * Nurse medication queue (Workflow 3) — every PRESCRIBED med
+   * across the hospital not yet administered. Sorted STAT first.
+   */
+  getQueue: (hospitalId: string) =>
+    get<MedicationResponse[]>(`/medications/queue/${hospitalId}`),
 };

@@ -31,7 +31,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Search, X, Pill, Send, Loader2, CheckCircle2, AlertTriangle, Sparkles, Calculator, ShieldAlert } from 'lucide-react';
 import { medsafetyApi, type DrugFormulary } from '@/api/medsafety';
-import type { PrescribeMedicationRequest, MedicationRoute, PatientResponse, VisitResponse, TriageRecordResponse } from '@/api/types';
+import type { PrescribeMedicationRequest, MedicationRoute, MedicationPriority, PatientResponse, VisitResponse, TriageRecordResponse } from '@/api/types';
+import { MEDICATION_PRIORITIES } from '@/api/types';
 
 const ROUTE_LABELS: Record<string, string> = {
   PO: 'Oral',
@@ -112,6 +113,11 @@ export function MedicationPanel({
   const [dose, setDose] = useState('');
   const [frequency, setFrequency] = useState('');
   const [notes, setNotes] = useState('');
+  // Workflow 3 — structured urgency. Defaults ROUTINE; the doctor
+  // explicitly upgrades to URGENT/STAT for time-critical orders.
+  // STAT raises the order to the top of the nurse queue and starts
+  // a 10-min SLA timer.
+  const [priority, setPriority] = useState<MedicationPriority>('ROUTINE');
 
   // Patient weight resolution: latest triage's childWeightKg is the
   // most recently confirmed value (pediatric registration captures it,
@@ -201,9 +207,10 @@ export function MedicationPanel({
       dose: dose.trim() || undefined,
       route,
       frequency: frequency.trim() || undefined,
+      priority,
       notes: notes.trim() || undefined,
     });
-  }, [canSubmit, onSubmit, visit.id, selected, query, dose, route, frequency, notes]);
+  }, [canSubmit, onSubmit, visit.id, selected, query, dose, route, frequency, priority, notes]);
 
   return (
     <div className="rounded-2xl p-5 animate-fade-up space-y-4" style={glassCard}>
@@ -360,6 +367,33 @@ export function MedicationPanel({
           )}
         </div>
       )}
+
+      {/* Urgency tier — Workflow 3. STAT pushes to the top of the
+          nurse queue and starts a 10-minute SLA timer. */}
+      <div>
+        <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
+          Urgency
+        </label>
+        <div className="grid grid-cols-3 gap-2">
+          {MEDICATION_PRIORITIES.map((p) => {
+            const active = priority === p.value;
+            return (
+              <button
+                key={p.value}
+                type="button"
+                onClick={() => setPriority(p.value)}
+                title={p.description}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
+                  active ? p.tint : 'bg-slate-500/10 text-slate-500 border-transparent hover:bg-slate-500/20'
+                }`}
+              >
+                <div>{p.label}</div>
+                <div className="text-[10px] font-normal opacity-80 mt-0.5">SLA {p.slaMinutes}m</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Dose, route, frequency, notes */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

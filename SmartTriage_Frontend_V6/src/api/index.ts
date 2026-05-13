@@ -2,6 +2,7 @@
 export { apiRequest, get, post, put, patch, del, ApiError, getAccessToken, setTokens, clearTokens, restoreTokens } from './client';
 export { authApi } from './auth';
 export { patientApi } from './patients';
+export { patientAllergyApi } from './patientAllergies';
 export { visitApi } from './visits';
 export { vitalApi } from './vitals';
 export { triageApi } from './triage';
@@ -34,6 +35,6 @@ export { qualityApi } from './quality';
 export { predictionApi } from './prediction';
 export { mohReportApi } from './mohreport';
 export { governanceApi } from './governance';
-export { connectWebSocket, disconnectWebSocket, subscribeToVitals, subscribeToAlerts, subscribeToZoneAlerts, subscribeToUserAlerts, subscribeToDevices, subscribeToTriageChanges, subscribeToBedChanges } from './websocket';
+export { connectWebSocket, disconnectWebSocket, subscribeToVitals, subscribeToAlerts, subscribeToZoneAlerts, subscribeToUserAlerts, subscribeToDevices, subscribeToTriageChanges, subscribeToBedChanges, subscribeToLabOrders, subscribeToMedications } from './websocket';
 export type { BedChangeEvent } from './websocket';
 export type * from './types';

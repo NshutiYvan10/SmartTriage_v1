@@ -5,6 +5,7 @@ import com.smartTriage.smartTriage_server.common.enums.AlertType;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.InvestigationStatus;
 import com.smartTriage.smartTriage_server.common.enums.InvestigationType;
+import com.smartTriage.smartTriage_server.common.enums.LabPriority;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
@@ -15,6 +16,7 @@ import com.smartTriage.smartTriage_server.module.clinical.dto.RecordInvestigatio
 import com.smartTriage.smartTriage_server.module.clinical.entity.Investigation;
 import com.smartTriage.smartTriage_server.module.clinical.mapper.ClinicalMapper;
 import com.smartTriage.smartTriage_server.module.clinical.repository.InvestigationRepository;
+import com.smartTriage.smartTriage_server.module.lab.service.LabOrderService;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.visit.service.VisitService;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +27,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -47,6 +51,23 @@ public class InvestigationService {
         private final InvestigationRepository investigationRepository;
         private final VisitService visitService;
         private final ClinicalAlertRepository clinicalAlertRepository;
+        private final LabOrderService labOrderService;
+
+        /**
+         * Investigation types that should also create a {@link
+         * com.smartTriage.smartTriage_server.module.lab.entity.LabOrder}
+         * so the lab tech's inbox and {@code /topic/lab/{hospitalId}}
+         * subscribers see the order in real time.
+         *
+         * <p>Radiology / imaging / ECG types do NOT belong here —
+         * those have (or will have) their own dashboards. Adding them
+         * to the lab queue would only generate noise.
+         */
+        private static final Set<InvestigationType> LAB_ROUTABLE_TYPES = EnumSet.of(
+                        InvestigationType.LABORATORY,
+                        InvestigationType.BLOOD_GAS,
+                        InvestigationType.URINALYSIS,
+                        InvestigationType.RAPID_TEST);
 
         // ====================================================================
         // ORDER
@@ -73,7 +94,43 @@ public class InvestigationService {
                                 visit.getVisitNumber(), investigation.getInvestigationType(),
                                 investigation.getTestName(), investigation.getPriority());
 
+                // Lab-routable types must also create a LabOrder so the lab
+                // tech inbox + /topic/lab/{hospitalId} subscribers see the
+                // order. Without this hook the doctor's order is silently
+                // dropped from the lab queue — exactly the silent-failure
+                // mode the clinical-safety standard rules out.
+                if (LAB_ROUTABLE_TYPES.contains(investigation.getInvestigationType())) {
+                        LabPriority priority = parseLabPriority(investigation.getPriority());
+                        // The InvestigationPanel concatenates "Indication: …"
+                        // and "Lab notes: …" into the single notes field.
+                        // Surface the same text on the lab-order's
+                        // clinicalIndication so the lab inbox shows the
+                        // full reason; leave LabOrder.notes blank for the
+                        // lab side to annotate during processing.
+                        labOrderService.attachLabOrderForInvestigation(
+                                        investigation,
+                                        priority,
+                                        null,
+                                        investigation.getNotes(),
+                                        null);
+                }
+
                 return ClinicalMapper.toResponse(investigation);
+        }
+
+        /**
+         * Investigation priority is persisted as a free String to
+         * keep the column flexible across investigation types; map it
+         * to the strongly-typed {@link LabPriority} for the lab side,
+         * defaulting to ROUTINE if the value isn't recognised.
+         */
+        private LabPriority parseLabPriority(String value) {
+                if (value == null) return LabPriority.ROUTINE;
+                try {
+                        return LabPriority.valueOf(value.trim().toUpperCase());
+                } catch (IllegalArgumentException e) {
+                        return LabPriority.ROUTINE;
+                }
         }
 
         // ====================================================================

@@ -284,15 +284,24 @@ public class VisitService {
         }
 
         // 4. Zone-bound clinical roles (DOCTOR, NURSE) — patients in
-        //    the caller's currently-assigned zone. Off-shift returns
-        //    empty by design: the frontend renders this as "you're
-        //    not on shift", which is the correct cue rather than
-        //    leaking other zones' data.
+        //    EVERY zone the caller is covering on their current shift.
+        //    Workflow 4: primary zone + any additionalZones from the
+        //    shift assignment, unioned into the existing multi-zone
+        //    query. Off-shift returns empty by design: the frontend
+        //    renders this as "you're not on shift", which is the
+        //    correct cue rather than leaking other zones' data.
         return shiftAssignmentService
                 .getCurrentShiftForUser(user.getId())
-                .map(sa -> sa.getZone())
-                .map(zone -> visitRepository
-                        .findActiveVisitsInZones(hospitalId, java.util.List.of(zone), pageable)
+                .map(sa -> {
+                    java.util.Set<com.smartTriage.smartTriage_server.common.enums.EdZone> zones =
+                            java.util.EnumSet.of(sa.getZone());
+                    if (sa.getAdditionalZones() != null && !sa.getAdditionalZones().isEmpty()) {
+                        zones.addAll(sa.getAdditionalZones());
+                    }
+                    return zones;
+                })
+                .map(zones -> visitRepository
+                        .findActiveVisitsInZones(hospitalId, zones, pageable)
                         .map(VisitMapper::toResponse))
                 .orElseGet(() -> org.springframework.data.domain.Page.empty(pageable));
     }
@@ -318,8 +327,15 @@ public class VisitService {
             }
             return shiftAssignmentService
                     .getCurrentShiftForUser(user.getId())
-                    .map(sa -> zone.equals(sa.getZone())
-                            && hospitalId.equals(sa.getHospitalId()))
+                    .map(sa -> {
+                        // Workflow 4 — caller is assigned to the zone
+                        // if it matches the primary OR is in their
+                        // additional-coverage set.
+                        if (!hospitalId.equals(sa.getHospitalId())) return false;
+                        if (zone.equals(sa.getZone())) return true;
+                        return sa.getAdditionalZones() != null
+                                && sa.getAdditionalZones().contains(zone);
+                    })
                     .orElse(false);
         } catch (Exception e) {
             log.error("callerIsAssignedToZone error: {}", e.getMessage(), e);

@@ -11,6 +11,8 @@ import lombok.*;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.EnumSet;
+import java.util.Set;
 
 /**
  * Records which staff member is assigned to which ED zone during a specific
@@ -57,6 +59,35 @@ public class ShiftAssignment extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "zone", nullable = false, length = 20)
     private EdZone zone;
+
+    /**
+     * Workflow 4 — additional zones this clinician covers on this
+     * shift, beyond {@link #zone} (their primary posting).
+     *
+     * <p>Small-hospital deployments may only have one or two doctors
+     * who must cover RESUS + ACUTE + PEDIATRIC simultaneously. With
+     * single-zone assignments, patients in the unposted zones are
+     * invisible to that doctor — a documented silent-failure mode.
+     * This collection lets the Charge Nurse explicitly extend a
+     * clinician's coverage on the same shift row.
+     *
+     * <p>Constraints enforced by {@code ShiftAssignmentService}:
+     * <ul>
+     *   <li>the set must not include {@link #zone} (the primary
+     *       is already covered),</li>
+     *   <li>entries are unique (the Set semantics give that
+     *       free, but the DB has a composite PK as belt-and-
+     *       braces).</li>
+     * </ul>
+     */
+    @ElementCollection(targetClass = EdZone.class, fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "shift_assignment_additional_zones",
+            joinColumns = @JoinColumn(name = "shift_assignment_id"))
+    @Column(name = "zone", nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    private Set<EdZone> additionalZones = EnumSet.noneOf(EdZone.class);
 
     @Enumerated(EnumType.STRING)
     @Column(name = "shift_function", nullable = false, length = 30)

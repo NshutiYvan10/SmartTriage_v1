@@ -34,7 +34,15 @@ import { patientApi } from '@/api/patients';
 import { PatientHistoryPanel } from '@/modules/entry/PatientHistoryPanel';
 import { PatientProfilePanel } from '@/modules/entry/PatientProfilePanel';
 import { PrescribeSafetyDialog } from '@/modules/visit/PrescribeSafetyDialog';
-import { checkDrugAgainstAllergies, formatAllergyMatches, type AllergyMatch } from '@/utils/allergyCheck';
+import {
+  checkDrugAgainstAllergies,
+  checkDrugAgainstStructuredAllergies,
+  formatAllergyMatches,
+  highestAllergySeverity,
+  type AllergyMatch,
+} from '@/utils/allergyCheck';
+import { patientAllergyApi } from '@/api/patientAllergies';
+import type { PatientAllergyResponse } from '@/api/types';
 import {
   checkInteractions, formatInteractionMatches,
   checkDuplicateTherapy, formatDuplicateMatches,
@@ -205,6 +213,13 @@ export function VisitDetailPage() {
   // Patient is fetched separately (visit only carries patientId).
   // Used for allergy cross-checking at prescribe time.
   const [patient, setPatient] = useState<PatientResponse | null>(null);
+  // Workflow 2 — structured allergy records. The prescribe-time
+  // safety check prefers these over the legacy free-text column on
+  // patient.knownAllergies because they carry per-row severity +
+  // reaction, which drive the dialog flavour and the override
+  // alert calibration. Empty array when none on file; we then fall
+  // back to the legacy free-text match.
+  const [structuredAllergies, setStructuredAllergies] = useState<PatientAllergyResponse[]>([]);
   // Phase 2 zone routing — current pending transfer (if any) for this
   // visit. Drives the inter-zone handover banner. Re-fetched on every
   // loadData so accept/decline reflects immediately.
@@ -288,6 +303,12 @@ export function VisitDetailPage() {
       .getById(visit.patientId)
       .then((p) => { if (!cancelled) setPatient(p); })
       .catch(() => { /* swallow — non-critical */ });
+    // Structured allergies (V58) — populated in parallel. Empty array
+    // is the safe default (legacy free-text fallback will apply).
+    patientAllergyApi
+      .list(visit.patientId)
+      .then((rows) => { if (!cancelled) setStructuredAllergies(Array.isArray(rows) ? rows : []); })
+      .catch(() => { /* swallow — non-critical, legacy fallback covers */ });
     return () => { cancelled = true; };
   }, [visit?.patientId]);
 
@@ -374,6 +395,11 @@ export function VisitDetailPage() {
     teratogenOverride: TeratogenMatch[] = [],
     geriatricOverride: GeriatricMatch[] = [],
     renalEgfrOverride: RenalEgfrMatch[] = [],
+    /** Workflow 2 — free-text reason captured by the dialog when a
+     *  SEVERE / ANAPHYLAXIS allergy required deliberate override.
+     *  Appended to the audit snapshot. Undefined for the routine
+     *  single-click override flow. */
+    overrideReason?: string,
   ) => {
     setFormLoading(true);
     try {
@@ -401,6 +427,21 @@ export function VisitDetailPage() {
         geriatricOverride.length > 0 ||
         renalEgfrOverride.length > 0;
 
+      // Workflow 2 — severity + override reason flow into the audit
+      // snapshot and the alert-severity calibration. When no structured
+      // severity was matched (legacy free-text fallback fired), we
+      // omit allergyOverrideSeverity and the backend anchors at
+      // CRITICAL (safest).
+      const allergySev = allergyOverride.length > 0
+        ? highestAllergySeverity(allergyOverride)
+        : null;
+      const allergyMatchesText = allergyOverride.length > 0
+        ? formatAllergyMatches(allergyOverride)
+        : null;
+      const allergySnapshot = allergyMatchesText && overrideReason
+        ? `${allergyMatchesText} | Override reason: ${overrideReason}`
+        : allergyMatchesText;
+
       const payload: PrescribeMedicationRequest = {
         visitId: visit.id,
         prescribedByName: userName,
@@ -408,7 +449,8 @@ export function VisitDetailPage() {
         ...(allergyOverride.length > 0
           ? {
               prescribedDespiteAllergy: true,
-              allergyOverrideMatches: formatAllergyMatches(allergyOverride),
+              allergyOverrideMatches: allergySnapshot ?? undefined,
+              ...(allergySev ? { allergyOverrideSeverity: allergySev } : {}),
             }
           : {}),
         ...(interactionFlag
@@ -432,9 +474,17 @@ export function VisitDetailPage() {
     // relevant check rather than block on the lookup (the alternative
     // is a flicker dialog that never appears for a fast prescriber).
     // The backend remains the safety net of last resort.
-    const allergyMatches = patient
-      ? checkDrugAgainstAllergies(data.drugName, patient.knownAllergies)
-      : [];
+    // Workflow 2 — prefer structured allergies (severity + reaction
+    // available) over the legacy free-text column. Fall back only
+    // when no structured rows exist for the patient yet, so
+    // un-migrated records still get a safety dialog (with the legacy
+    // amber flavour because severity is unknowable).
+    const allergyMatches: AllergyMatch[] =
+      structuredAllergies.length > 0
+        ? checkDrugAgainstStructuredAllergies(data.drugName, structuredAllergies)
+        : patient
+          ? checkDrugAgainstAllergies(data.drugName, patient.knownAllergies)
+          : [];
     const activeForChecks = medications.map((m) => ({ drugName: m.drugName, status: m.status }));
     const interactionMatches = checkInteractions(data.drugName, activeForChecks);
     const duplicateMatches  = checkDuplicateTherapy(data.drugName, activeForChecks);
@@ -568,7 +618,7 @@ export function VisitDetailPage() {
     } catch (err) { console.error(err); }
   };
 
-  const handleMedicationAction = async (id: string, action: string) => {
+  const handleMedicationAction = async (id: string, action: string, reason?: string) => {
     try {
       switch (action) {
         case 'administer':
@@ -577,9 +627,25 @@ export function VisitDetailPage() {
         case 'countersign':
           await medicationApi.countersign(id, { medicationId: id, countersignedByName: userName });
           break;
+        case 'hold':
+          if (!reason) return;
+          await medicationApi.hold(id, reason);
+          break;
+        case 'refuse':
+          if (!reason) return;
+          await medicationApi.refuse(id, reason);
+          break;
       }
       loadData();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      // Surface backend ClinicalBusinessException to the user — e.g.
+      // separation-of-duties violation when the prescriber tries to
+      // administer their own order.
+      const message = err instanceof Error ? err.message : 'Action failed';
+      // eslint-disable-next-line no-alert
+      window.alert(message);
+      console.error(err);
+    }
   };
 
   const handleRecordDisposition = async (data: DispositionRequest) => {
@@ -707,7 +773,7 @@ export function VisitDetailPage() {
           rawAllergyString={patient?.knownAllergies ?? ''}
           loading={formLoading}
           onCancel={() => setPendingPrescribe(null)}
-          onOverride={() => submitPrescribe(
+          onOverride={(reason) => submitPrescribe(
             pendingPrescribe.data,
             pendingPrescribe.allergyMatches,
             pendingPrescribe.interactionMatches,
@@ -718,6 +784,7 @@ export function VisitDetailPage() {
             pendingPrescribe.teratogenMatches,
             pendingPrescribe.geriatricMatches,
             pendingPrescribe.renalEgfrMatches,
+            reason,
           )}
         />
       )}
@@ -1646,7 +1713,23 @@ function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction
               </div>
               <span className={`text-[10px] ${text.muted}`}>{med.prescribedAt ? format(new Date(med.prescribedAt), 'dd MMM HH:mm') : ''}</span>
             </div>
-            <p className={`text-sm font-medium ${text.heading}`}>{med.drugName} {med.dose && `— ${med.dose}`}</p>
+            <p className={`text-sm font-medium ${text.heading} inline-flex items-center gap-2 flex-wrap`}>
+              {med.drugName} {med.dose && `— ${med.dose}`}
+              {/* Workflow 3 — priority badge. STAT is the loudest
+                  visual so a distracted clinician spots time-critical
+                  orders at a glance. ROUTINE is muted (default state)
+                  so the page isn't a sea of green chips. */}
+              {med.priority === 'STAT' && (
+                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-100 text-red-800 border border-red-300">
+                  STAT
+                </span>
+              )}
+              {med.priority === 'URGENT' && (
+                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-orange-100 text-orange-800 border border-orange-300">
+                  Urgent
+                </span>
+              )}
+            </p>
             {med.frequency && <p className={`text-xs ${text.body}`}>{med.frequency}</p>}
             {med.prescribedDespiteAllergy && med.allergyOverrideMatches && (
               <p className="text-[10px] text-red-600 mt-1.5 font-medium break-words">
@@ -1694,11 +1777,44 @@ function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction
             {med.administeredByName && <p className={`text-[10px] mt-1 text-emerald-500`}>Administered by: {med.administeredByName}</p>}
             {med.countersignedByName && <p className={`text-[10px] text-violet-500`}>Countersigned by: {med.countersignedByName}</p>}
             {/* Actions */}
-            <div className="flex items-center gap-2 mt-3">
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
               {med.status === 'PRESCRIBED' && (
-                <button onClick={() => onAction(med.id, 'administer')} className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors">
-                  <CheckCircle2 className="w-3 h-3 inline mr-1" /> Administer
-                </button>
+                <>
+                  <button onClick={() => onAction(med.id, 'administer')} className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors">
+                    <CheckCircle2 className="w-3 h-3 inline mr-1" /> Administer
+                  </button>
+                  {/* Workflow 3 — Hold / Refuse buttons. The backend
+                      endpoints already exist; this surfaces them so a
+                      nurse can document a hold (e.g. NPO before
+                      procedure) or a refusal (patient declined)
+                      without having to bypass the system. */}
+                  <button
+                    onClick={() => {
+                      // eslint-disable-next-line no-alert
+                      const reason = window.prompt('Hold reason (e.g. NPO before procedure, awaiting labs)');
+                      if (reason && reason.trim().length >= 3) {
+                        onAction(med.id, 'hold', reason.trim());
+                      }
+                    }}
+                    className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 transition-colors"
+                    title="Hold this medication with a documented reason"
+                  >
+                    Hold
+                  </button>
+                  <button
+                    onClick={() => {
+                      // eslint-disable-next-line no-alert
+                      const reason = window.prompt('Refusal reason (patient declined / unable to take)');
+                      if (reason && reason.trim().length >= 3) {
+                        onAction(med.id, 'refuse', reason.trim());
+                      }
+                    }}
+                    className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors"
+                    title="Record that the patient refused this medication"
+                  >
+                    Refuse
+                  </button>
+                </>
               )}
               {med.status === 'ADMINISTERED' && !med.countersignedByName && (
                 <button onClick={() => onAction(med.id, 'countersign')} className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-violet-500/10 text-violet-500 hover:bg-violet-500/20 transition-colors">

@@ -106,6 +106,62 @@ public class LabOrderService {
         return response;
     }
 
+    /**
+     * Create a LabOrder linked to an Investigation row that has
+     * already been persisted by another caller (typically
+     * {@code InvestigationService.orderInvestigation} when the doctor
+     * orders a laboratory-class investigation through the visit
+     * detail page).
+     *
+     * <p>Why this exists: the doctor's order-entry path saves an
+     * {@code Investigation} row but does not by itself reach the lab
+     * tech — the lab inbox queries {@code lab_orders} and subscribes
+     * to {@code /topic/lab/{hospitalId}}. Without a matching LabOrder
+     * the order is silently dropped from the lab queue. This helper
+     * creates the LabOrder + fires the broadcast so the order
+     * appears in the lab inbox in real time, without forcing the
+     * doctor's UI to switch to the separate {@code /lab/order}
+     * endpoint (which requires fields the InvestigationPanel does
+     * not collect).
+     *
+     * <p>The caller MUST have already saved the {@code investigation}
+     * row; this method only creates the lab side and links to it.
+     */
+    @Transactional
+    public LabOrderResponse attachLabOrderForInvestigation(
+            Investigation investigation,
+            LabPriority priority,
+            String specimenType,
+            String clinicalIndication,
+            String notes) {
+        Visit visit = investigation.getVisit();
+        String orderNumber = generateOrderNumber();
+
+        LabOrder labOrder = LabOrder.builder()
+                .visit(visit)
+                .investigation(investigation)
+                .orderNumber(orderNumber)
+                .testName(investigation.getTestName())
+                .priority(priority != null ? priority : LabPriority.ROUTINE)
+                .status(LabOrderStatus.ORDERED)
+                .orderedAt(investigation.getOrderedAt() != null
+                        ? investigation.getOrderedAt() : Instant.now())
+                .orderedByName(investigation.getOrderedByName())
+                .specimenType(specimenType)
+                .clinicalIndication(clinicalIndication)
+                .notes(notes)
+                .build();
+
+        labOrder = labOrderRepository.save(labOrder);
+        log.info("Lab order {} attached to existing investigation {} — test: {} priority: {} visit: {}",
+                orderNumber, investigation.getId(), investigation.getTestName(),
+                labOrder.getPriority(), visit.getVisitNumber());
+
+        LabOrderResponse response = LabOrderMapper.toResponse(labOrder);
+        broadcastLabOrder(labOrder, response);
+        return response;
+    }
+
     // ====================================================================
     // WORKFLOW TRANSITIONS
     // ====================================================================
@@ -367,6 +423,16 @@ public class LabOrderService {
             inv.setIsCritical(order.isCritical());
             inv.setStatus(InvestigationStatus.RESULTED);
             investigationRepository.save(inv);
+
+            // Non-critical results would otherwise land silently — the
+            // doctor would have to refresh the Investigations tab to
+            // notice them. Fire an INVESTIGATION_RESULTED alert so the
+            // result reaches the existing alert pipeline. Critical
+            // results already got the more specific CRITICAL_LAB_RESULT
+            // alert above; skip them here to avoid double-notifying.
+            if (!order.isCritical()) {
+                createResultAvailableAlert(order, inv);
+            }
         }
 
         order = labOrderRepository.save(order);
@@ -705,5 +771,58 @@ public class LabOrderService {
         clinicalAlertRepository.save(alert);
 
         log.warn("CRITICAL LAB ALERT created for order {} — {}", order.getOrderNumber(), criticalResult.description());
+    }
+
+    /**
+     * Non-critical result-available alert. Mirrors the templating in
+     * {@code InvestigationService.generateResultAlert} so abnormal-
+     * but-not-critical and normal results push a notification to the
+     * doctor instead of landing silently on the row. Severity scales:
+     *   ABNORMAL → HIGH, NORMAL → MEDIUM.
+     *
+     * <p>Critical results never reach this path — they get the
+     * dedicated CRITICAL_LAB_RESULT alert in
+     * {@link #createCriticalValueAlert(LabOrder, CriticalValueResult)}.
+     *
+     * <p>If the alert pipeline ever changes, keep this method and
+     * {@code InvestigationService.generateResultAlert} in sync.
+     */
+    private void createResultAvailableAlert(LabOrder order, Investigation investigation) {
+        try {
+            AlertSeverity severity = investigation.getIsAbnormal()
+                    ? AlertSeverity.HIGH
+                    : AlertSeverity.MEDIUM;
+
+            String prefix = investigation.getIsAbnormal() ? "Abnormal " : "";
+            String title = prefix + "Result: " + order.getTestName();
+            String message = String.format(
+                    "Lab result for '%s' (Order %s) is now available for visit %s.%s",
+                    order.getTestName(),
+                    order.getOrderNumber(),
+                    order.getVisit().getVisitNumber(),
+                    investigation.getIsAbnormal() ? " Abnormal value detected." : "");
+
+            EdZone zone = order.getVisit().getCurrentTriageCategory() != null
+                    ? EdZone.fromTriageCategory(order.getVisit().getCurrentTriageCategory())
+                    : null;
+
+            ClinicalAlert alert = ClinicalAlert.builder()
+                    .visit(order.getVisit())
+                    .alertType(AlertType.INVESTIGATION_RESULTED)
+                    .severity(severity)
+                    .title(title)
+                    .message(message)
+                    .targetZone(zone)
+                    .autoGenerated(true)
+                    .build();
+
+            clinicalAlertRepository.save(alert);
+            log.info("INVESTIGATION_RESULTED alert created for order {} — test:'{}' severity:{}",
+                    order.getOrderNumber(), order.getTestName(), severity);
+        } catch (Exception e) {
+            // Alert generation must never block result release.
+            log.error("Failed to create result-available alert for order {}: {}",
+                    order.getOrderNumber(), e.getMessage());
+        }
     }
 }

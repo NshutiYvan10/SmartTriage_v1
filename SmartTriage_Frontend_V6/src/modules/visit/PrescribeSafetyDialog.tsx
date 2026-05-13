@@ -19,6 +19,7 @@
  * Pattern: render at the page root (outside the form) so a re-render
  * of the form doesn't tear it down mid-decision.
  */
+import { useMemo, useState } from 'react';
 import { AlertTriangle, X, ShieldAlert, Pill, Copy, Scale, Droplet, Baby, UserMinus } from 'lucide-react';
 import type { AllergyMatch } from '@/utils/allergyCheck';
 import type { InteractionMatch, DuplicateMatch } from '@/utils/interactionCheck';
@@ -79,8 +80,11 @@ interface Props {
   loading: boolean;
   /** User chose to abort. Close dialog, leave form untouched. */
   onCancel: () => void;
-  /** User chose to override. Caller proceeds with the prescribe call. */
-  onOverride: () => void;
+  /** User chose to override. Caller proceeds with the prescribe call.
+   *  When a SEVERE/ANAPHYLAXIS allergy match required an override
+   *  reason, that reason is passed back so the caller can append it
+   *  to the audit snapshot. {@code undefined} for the routine path. */
+  onOverride: (overrideReason?: string) => void;
 }
 
 export function PrescribeSafetyDialog({
@@ -99,6 +103,29 @@ export function PrescribeSafetyDialog({
   onCancel,
   onOverride,
 }: Props) {
+  // Workflow 2 — capture an override reason when the highest matched
+  // allergy is SEVERE or ANAPHYLAXIS. For MILD / MODERATE / UNKNOWN
+  // (or any legacy free-text match without a structured severity)
+  // the existing single-click override flow stays.
+  const highestAllergySev = useMemo<string | null>(() => {
+    const rank: Record<string, number> = {
+      MILD: 1, MODERATE: 2, UNKNOWN: 2, SEVERE: 3, ANAPHYLAXIS: 4,
+    };
+    let best: string | null = null;
+    for (const m of allergyMatches) {
+      if (!m.severity) continue;
+      if (best === null || rank[m.severity] > rank[best]) best = m.severity;
+    }
+    return best;
+  }, [allergyMatches]);
+
+  const requiresOverrideReason =
+    highestAllergySev === 'SEVERE' || highestAllergySev === 'ANAPHYLAXIS';
+
+  const [overrideReason, setOverrideReason] = useState('');
+  const overrideReasonOk =
+    !requiresOverrideReason || overrideReason.trim().length >= 10;
+
   const hasAllergy = allergyMatches.length > 0;
   const hasInteraction = interactionMatches.length > 0;
   const hasDuplicate = duplicateMatches.length > 0;
@@ -256,36 +283,113 @@ export function PrescribeSafetyDialog({
             </div>
           </div>
 
-          {/* ── Allergy conflicts ── */}
-          {hasAllergy && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
-                    Allergy conflicts
+          {/* ── Allergy conflicts (severity-aware — Workflow 2) ── */}
+          {hasAllergy && (() => {
+            // Highest-severity rank across all matches drives the
+            // visual flavour. Free-text fallback matches arrive
+            // without a severity — render in the legacy amber tone.
+            const sevRank: Record<string, number> = {
+              MILD: 1, MODERATE: 2, UNKNOWN: 2, SEVERE: 3, ANAPHYLAXIS: 4,
+            };
+            let topSev: string | undefined;
+            for (const m of allergyMatches) {
+              if (!m.severity) continue;
+              if (!topSev || sevRank[m.severity] > sevRank[topSev]) {
+                topSev = m.severity;
+              }
+            }
+            // Visual flavour per severity:
+            //   ANAPHYLAXIS → dark red (hardest stop)
+            //   SEVERE      → red
+            //   MODERATE/UNKNOWN → orange/amber (hard warning)
+            //   MILD        → yellow (soft warning)
+            //   no severity → amber (legacy fallback)
+            const flavour =
+              topSev === 'ANAPHYLAXIS' ? {
+                box: 'border-red-500 bg-red-100',
+                icon: 'text-red-800',
+                title: 'text-red-900',
+                body: 'text-red-900',
+                subtle: 'text-red-800/80',
+                label: 'ANAPHYLAXIS — life-threatening reaction on record',
+              } : topSev === 'SEVERE' ? {
+                box: 'border-red-400 bg-red-50',
+                icon: 'text-red-700',
+                title: 'text-red-800',
+                body: 'text-red-900',
+                subtle: 'text-red-800/80',
+                label: 'SEVERE allergy on record',
+              } : topSev === 'MODERATE' || topSev === 'UNKNOWN' ? {
+                box: 'border-orange-300 bg-orange-50',
+                icon: 'text-orange-700',
+                title: 'text-orange-800',
+                body: 'text-orange-900',
+                subtle: 'text-orange-800/80',
+                label: topSev === 'UNKNOWN'
+                  ? 'UNKNOWN reaction — treated as moderate'
+                  : 'MODERATE allergy on record',
+              } : topSev === 'MILD' ? {
+                box: 'border-yellow-300 bg-yellow-50',
+                icon: 'text-yellow-700',
+                title: 'text-yellow-800',
+                body: 'text-yellow-900',
+                subtle: 'text-yellow-800/80',
+                label: 'MILD allergy on record',
+              } : {
+                box: 'border-amber-300 bg-amber-50',
+                icon: 'text-amber-700',
+                title: 'text-amber-800',
+                body: 'text-amber-900',
+                subtle: 'text-amber-800/80',
+                label: 'Allergy match (severity not recorded)',
+              };
+            return (
+              <div className={`rounded-xl border p-3 ${flavour.box}`}>
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className={`w-4 h-4 ${flavour.icon} flex-shrink-0 mt-0.5`} />
+                  <div className="flex-1 min-w-0">
+                    <div className={`flex items-center gap-2 flex-wrap`}>
+                      <span className={`text-[11px] font-bold uppercase tracking-wider ${flavour.title}`}>
+                        Allergy conflict
+                      </span>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white border border-current ${flavour.title}`}>
+                        {flavour.label}
+                      </span>
+                    </div>
+                    <ul className="mt-1.5 space-y-1.5">
+                      {allergyMatches.map((m, i) => (
+                        <li key={i} className={`text-sm ${flavour.body}`}>
+                          <div>
+                            <span className="font-semibold">{m.patientAllergen}</span>
+                            {m.matchType === 'cross' && m.family && (
+                              <span className={flavour.subtle}>
+                                {' '}— same family as prescribed drug ({m.family})
+                              </span>
+                            )}
+                            {m.matchType === 'direct' && (
+                              <span className={flavour.subtle}>
+                                {' '}— direct match in drug name
+                              </span>
+                            )}
+                            {m.severity && (
+                              <span className={`ml-2 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/70 ${flavour.title}`}>
+                                {m.severity}
+                              </span>
+                            )}
+                          </div>
+                          {m.reaction && (
+                            <div className={`text-[11px] mt-0.5 ${flavour.subtle}`}>
+                              Prior reaction: <span className="font-medium">{m.reaction}</span>
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <ul className="mt-1.5 space-y-1">
-                    {allergyMatches.map((m, i) => (
-                      <li key={i} className="text-sm text-amber-900">
-                        <span className="font-semibold">{m.patientAllergen}</span>
-                        {m.matchType === 'cross' && m.family && (
-                          <span className="text-amber-800">
-                            {' '}— same family as prescribed drug ({m.family})
-                          </span>
-                        )}
-                        {m.matchType === 'direct' && (
-                          <span className="text-amber-800">
-                            {' '}— direct match in drug name
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ── Pregnancy / lactation precaution ── */}
           {hasTeratogen && (
@@ -782,6 +886,33 @@ export function PrescribeSafetyDialog({
           </p>
         </div>
 
+        {/* ── Override reason (Workflow 2 — SEVERE/ANAPHYLAXIS only) ── */}
+        {requiresOverrideReason && (
+          <div className="px-5 pb-3 border-t border-slate-200">
+            <label className="block mt-3 text-[11px] font-bold uppercase tracking-wider text-red-700">
+              Override reason <span className="text-red-600">*</span>
+            </label>
+            <p className="text-[11px] text-slate-600 mt-0.5 mb-2">
+              {highestAllergySev === 'ANAPHYLAXIS'
+                ? 'Anaphylaxis is on this patient\'s record. Document why this prescription is clinically justified — your reason is permanent and visible department-wide.'
+                : 'A severe allergy is on this patient\'s record. Document why this prescription is clinically justified — your reason is permanent and visible department-wide.'}
+            </p>
+            <textarea
+              rows={3}
+              value={overrideReason}
+              onChange={(e) => setOverrideReason(e.target.value)}
+              placeholder="e.g. Desensitisation protocol started 2 hours ago, monitored in resus, no alternative available."
+              className="w-full px-3 py-2 text-sm rounded-lg border border-red-300 outline-none focus:border-red-500"
+              disabled={loading}
+            />
+            <p className="text-[10px] text-slate-500 mt-1">
+              {overrideReason.trim().length < 10
+                ? `Need at least 10 characters (${overrideReason.trim().length}/10).`
+                : `${overrideReason.trim().length} characters.`}
+            </p>
+          </div>
+        )}
+
         {/* ── Actions ── */}
         <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 flex-shrink-0">
           <button
@@ -794,9 +925,10 @@ export function PrescribeSafetyDialog({
           </button>
           <button
             type="button"
-            onClick={onOverride}
-            disabled={loading}
-            className="px-4 py-2.5 text-sm font-bold rounded-xl bg-gradient-to-r from-red-600 to-red-500 text-white shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 inline-flex items-center gap-2"
+            onClick={() => onOverride(requiresOverrideReason ? overrideReason.trim() : undefined)}
+            disabled={loading || !overrideReasonOk}
+            className="px-4 py-2.5 text-sm font-bold rounded-xl bg-gradient-to-r from-red-600 to-red-500 text-white shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+            title={!overrideReasonOk ? 'Override reason required (at least 10 characters)' : undefined}
           >
             <AlertTriangle className="w-4 h-4" />
             {loading ? 'Prescribing…' : 'I acknowledge — prescribe anyway'}

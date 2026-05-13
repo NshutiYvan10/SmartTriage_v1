@@ -38,4 +38,19 @@ public class MedicationSafetyResponse {
 
     /** Severity level: NORMAL, HIGH, or CRITICAL */
     private String severity;
+
+    // ────────── ALLERGY MATCH DETAIL (Workflow 2) ──────────
+    // Populated when checkAllergies matched a structured PatientAllergy
+    // (or the legacy free-text fallback fired). Lets the prescribe-time
+    // safety dialog render the right flavour (soft warning for MILD,
+    // hard stop for SEVERE/ANAPHYLAXIS) and show the prior reaction.
+
+    /** Structured severity of the matched allergy, e.g. "ANAPHYLAXIS". Null when no match. */
+    private String allergyMatchSeverity;
+
+    /** Display name of the matched patient allergen, e.g. "penicillin". */
+    private String allergyMatchedAllergen;
+
+    /** Reaction text from the structured allergy record, if any. */
+    private String allergyReaction;
 }

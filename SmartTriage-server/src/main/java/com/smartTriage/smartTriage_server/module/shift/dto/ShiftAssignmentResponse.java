@@ -9,6 +9,7 @@ import lombok.*;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Set;
 import java.util.UUID;
 
 @Data
@@ -28,6 +29,16 @@ public class ShiftAssignmentResponse {
     private Designation userDesignation;
     private String userDesignationLabel;
     private EdZone zone;
+    /**
+     * Workflow 4 — additional zones this assignment covers beyond
+     * the primary {@link #zone}. The frontend uses this list to:
+     *   • subscribe to {@code /topic/alerts/{hospitalId}/{zone}}
+     *     for each covered zone,
+     *   • render covered-zone chips on the dashboard header,
+     *   • include the union in the zone-filtered patient list query.
+     * Empty set (not null) when single-zone coverage.
+     */
+    private Set<EdZone> additionalZones;
     private ShiftFunction shiftFunction;
     private Instant startedAt;
     private Instant endedAt;
