@@ -545,9 +545,19 @@ public class BedService {
             bedRepository.save(bed);
             log.info("Assigned device {} to bed {}", device.getSerialNumber(), bed.getCode());
 
-            // If a patient is already in this bed, start monitoring immediately
+            // If a patient is already in this bed, start monitoring immediately.
+            //
+            // Pass the just-saved device into autoStartSessionForBed directly
+            // rather than letting it re-query by assigned_bed_id. The repository
+            // save() above does not auto-flush, so a fresh query within the same
+            // transaction can return empty even though we just set the pairing —
+            // which silently no-ops the session creation. That's the failure
+            // mode behind the user's "I have to remove + re-place the patient
+            // to make it go LIVE" workflow: the second placement sees the
+            // fully-committed pairing, but the initial pair-then-place lost the
+            // race. Passing the device skips the re-query entirely.
             if (bed.isOccupied()) {
-                autoStartSessionForBed(bed, bed.getCurrentVisit(), actorName);
+                autoStartSessionForBed(bed, device, bed.getCurrentVisit(), actorName);
             }
         } else {
             // Pure detach — hasMonitor remains as-is (admin decision)
@@ -582,7 +592,19 @@ public class BedService {
      *         "monitor streaming" when nothing actually started).
      */
     private boolean autoStartSessionForBed(Bed bed, Visit visit, String startedByName) {
-        IoTDevice device = deviceRepository.findByAssignedBedIdAndIsActiveTrue(bed.getId()).orElse(null);
+        return autoStartSessionForBed(bed, /* prefetchedDevice */ null, visit, startedByName);
+    }
+
+    /**
+     * Overload that accepts a pre-fetched device. Callers that have just
+     * saved the device → bed pairing in the same transaction should pass
+     * the device in directly to avoid a re-query that may miss the unsaved
+     * pairing due to JPA persistence-context flush timing.
+     */
+    private boolean autoStartSessionForBed(Bed bed, IoTDevice prefetchedDevice, Visit visit, String startedByName) {
+        IoTDevice device = prefetchedDevice != null
+                ? prefetchedDevice
+                : deviceRepository.findByAssignedBedIdAndIsActiveTrue(bed.getId()).orElse(null);
         if (device == null) {
             // Bed.hasMonitor can be a stale flag (assignDevice sets it
             // true, detach never clears it). Reflect reality back to the
