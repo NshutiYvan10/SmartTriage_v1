@@ -1083,6 +1083,20 @@ export interface StartMonitoringRequest {
   startedByName?: string;
 }
 
+/**
+ * Clinical-facing monitoring lifecycle state — see the backend
+ * MonitoringState enum for the full transition table.
+ */
+export type MonitoringState =
+  | 'NOT_STARTED'
+  | 'STARTING'
+  | 'LIVE'
+  | 'DEGRADED'
+  | 'STALLED'
+  | 'PAUSED'
+  | 'DISCONNECTED'
+  | 'ENDED';
+
 export interface DeviceSessionResponse {
   id: string;
   deviceId: string;
@@ -1102,6 +1116,13 @@ export interface DeviceSessionResponse {
   retriagesTriggered: number;
   trendStatus: 'WORSENING' | 'STABLE' | 'IMPROVING' | 'UNKNOWN' | null;
   trendUpdatedAt: string | null;
+  monitoringState: MonitoringState;
+  monitoringStateAt: string | null;
+  pausedAt: string | null;
+  pausedByName: string | null;
+  resumedAt: string | null;
+  resumedByName: string | null;
+  continuityGroupId: string | null;
   createdAt: string;
 }
 

@@ -153,6 +153,34 @@ public class IoTDeviceController {
                 .body(ApiResponse.success("Monitoring started", response));
     }
 
+    /**
+     * Clinician-facing convenience endpoint: start monitoring for a
+     * visit without naming the device. The backend walks
+     * visit → currentBed → assignedDevice and opens a session. Used
+     * by the "Start Monitoring" inline button on Constant Monitoring.
+     */
+    @PostMapping("/monitoring/start-for-visit/{visitId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    public ResponseEntity<ApiResponse<DeviceSessionResponse>> startMonitoringForVisit(
+            @PathVariable UUID visitId,
+            @RequestParam(required = false) String startedByName) {
+        DeviceSessionResponse response = deviceService.startMonitoringForVisit(visitId, startedByName);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Monitoring started", response));
+    }
+
+    /**
+     * Returns the current monitoring session for a visit, or null when
+     * monitoring has not been started yet (frontend renders the
+     * "Awaiting Start" pill in that case).
+     */
+    @GetMapping("/monitoring/active-for-visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
+    public ResponseEntity<ApiResponse<DeviceSessionResponse>> getActiveSessionForVisit(
+            @PathVariable UUID visitId) {
+        return ResponseEntity.ok(ApiResponse.success(deviceService.getActiveSessionForVisit(visitId)));
+    }
+
     @PostMapping("/monitoring/stop/{sessionId}")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<DeviceSessionResponse>> stopMonitoring(

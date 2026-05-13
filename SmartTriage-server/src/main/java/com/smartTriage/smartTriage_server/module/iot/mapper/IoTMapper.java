@@ -68,6 +68,13 @@ public final class IoTMapper {
                 .retriagesTriggered(session.getRetriagesTriggered())
                 .trendStatus(session.getTrendStatus())
                 .trendUpdatedAt(session.getTrendUpdatedAt())
+                .monitoringState(session.getMonitoringState())
+                .monitoringStateAt(session.getMonitoringStateAt())
+                .pausedAt(session.getPausedAt())
+                .pausedByName(session.getPausedByName())
+                .resumedAt(session.getResumedAt())
+                .resumedByName(session.getResumedByName())
+                .continuityGroupId(session.getContinuityGroupId())
                 .createdAt(session.getCreatedAt())
                 .build();
     }

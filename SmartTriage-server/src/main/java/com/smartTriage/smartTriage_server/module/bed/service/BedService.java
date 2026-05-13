@@ -285,8 +285,13 @@ public class BedService {
 
         log.info("Placed visit {} in bed {} ({})", visit.getVisitNumber(), bed.getCode(), bed.getZone());
 
-        // Auto-create a DeviceSession if the bed has an assigned monitor
-        autoStartSessionForBed(bed, visit, actorName);
+        // Continuous monitoring is now clinician-initiated — see
+        // MonitoringState.NOT_STARTED in the design audit. Placement
+        // no longer opens a DeviceSession; instead a clinician explicitly
+        // presses "Start Monitoring" from the Constant Monitoring page
+        // once they've placed the sensors on the patient. This stops
+        // the previous failure mode where a session went LIVE with a
+        // bare cart-side probe and auto-retriage fired on noise.
 
         publishBedChange(bed, "PLACED");
         return toResponse(bed);

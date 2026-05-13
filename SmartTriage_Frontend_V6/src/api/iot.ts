@@ -49,6 +49,16 @@ export const iotApi = {
   startMonitoring: (data: StartMonitoringRequest) =>
     post<DeviceSessionResponse>('/iot/monitoring/start', data),
 
+  /**
+   * Clinician-facing start: open a session for a visit without naming
+   * the device. Backend walks visit → bed → assigned device.
+   */
+  startMonitoringForVisit: (visitId: string, startedByName?: string) =>
+    post<DeviceSessionResponse>(
+      `/iot/monitoring/start-for-visit/${visitId}${startedByName ? `?startedByName=${encodeURIComponent(startedByName)}` : ''}`,
+      {}
+    ),
+
   stopMonitoring: (sessionId: string, endedByName: string, reason?: string) =>
     post<DeviceSessionResponse>(
       `/iot/monitoring/stop/${sessionId}?endedByName=${encodeURIComponent(endedByName)}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`
@@ -56,6 +66,13 @@ export const iotApi = {
 
   getActiveSessions: (hospitalId: string) =>
     get<DeviceSessionResponse[]>(`/iot/monitoring/active/${hospitalId}`),
+
+  /**
+   * Returns the active session for a visit, or null when monitoring
+   * has not been started yet (clinician needs to press Start).
+   */
+  getActiveSessionForVisit: (visitId: string) =>
+    get<DeviceSessionResponse | null>(`/iot/monitoring/active-for-visit/${visitId}`),
 
   getSession: (sessionId: string) =>
     get<DeviceSessionResponse>(`/iot/monitoring/session/${sessionId}`),

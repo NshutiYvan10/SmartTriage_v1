@@ -25,6 +25,9 @@ import {
   getBatteryColor,
 } from '@/utils/iotDeviceManager';
 import { useTheme } from '@/hooks/useTheme';
+import MonitoringStatePill from './MonitoringStatePill';
+import StartMonitoringConfirmModal from './StartMonitoringConfirmModal';
+import { Play } from 'lucide-react';
 
 /* ── Monitoring Showcase Config ── */
 const monitorShowcaseConfig = [
@@ -446,6 +449,13 @@ export function ConstantMonitoring() {
   // re-fetches never wipe it.
   const [trendByVisitId, setTrendByVisitId] = useState<Map<string, 'WORSENING' | 'STABLE' | 'IMPROVING' | 'UNKNOWN'>>(new Map());
 
+  // visitId → monitoring session (or null if not started). Drives the
+  // MonitoringStatePill and the inline Start Monitoring button. Polled
+  // on a fixed interval AND on user actions.
+  const [sessionsByVisitId, setSessionsByVisitId] = useState<Map<string, import('@/api/types').DeviceSessionResponse | null>>(new Map());
+  // Modal target: patient for whom Start Monitoring was clicked.
+  const [startTarget, setStartTarget] = useState<Patient | null>(null);
+
   // Refresh device store on mount AND every 30s tick. A device's
   // status flips to MONITORING only after a DeviceSession is created
   // (e.g. via heartbeat auto-pair when a patient is placed in its bed).
@@ -475,6 +485,45 @@ export function ConstantMonitoring() {
       fetchVitalHistory(id);
     });
   }, [monitorableIds, lastRefresh]);
+
+  // ── Monitoring sessions per visit ──
+  //
+  // Drives the state pill and the Start / Pause / Resume / End controls.
+  // We refresh on every 30s tick (alongside the existing refresh loop)
+  // so state transitions written by the backend's MonitoringStateWatcher
+  // (Phase 2) show up without a manual reload.
+  const refreshSessions = useCallback(async (ids: string[]) => {
+    const entries = await Promise.all(
+      ids.map(async (id) => {
+        try {
+          const session = await iotApi.getActiveSessionForVisit(id);
+          return [id, session] as const;
+        } catch {
+          // Per-visit fetch failure is non-fatal; treat as "unknown" by
+          // leaving the previous value in place.
+          return null;
+        }
+      }),
+    );
+    setSessionsByVisitId((prev) => {
+      const next = new Map(prev);
+      for (const entry of entries) {
+        if (entry) next.set(entry[0], entry[1]);
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (monitorableIds.length === 0) return;
+    refreshSessions(monitorableIds);
+  }, [monitorableIds, lastRefresh, refreshSessions]);
+
+  const handleStartMonitoring = useCallback(async (patient: Patient) => {
+    await iotApi.startMonitoringForVisit(patient.id, authUser?.fullName || 'Clinician');
+    // Refresh immediately so the pill flips to STARTING.
+    refreshSessions([patient.id]);
+  }, [authUser?.fullName, refreshSessions]);
 
   // ── WebSocket subscriptions for patients with paired IoT devices ──
   // Subscribe to /topic/vitals/{visitId} for every patient that has a
@@ -887,6 +936,37 @@ export function ConstantMonitoring() {
                           </div>
                         </div>
 
+                        {/* Monitoring state pill + inline Start button.
+                            Always visible on the identity row so the
+                            clinician sees at-a-glance whether the patient
+                            is being monitored. NOT_STARTED also exposes
+                            the Start button right here — no need to open
+                            an admin page. */}
+                        <div
+                          className="flex items-center gap-2 flex-shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {(() => {
+                            const session = sessionsByVisitId.get(patient.id);
+                            const state = session ? session.monitoringState : 'NOT_STARTED';
+                            return (
+                              <>
+                                <MonitoringStatePill state={state} />
+                                {state === 'NOT_STARTED' && (
+                                  <button
+                                    onClick={() => setStartTarget(patient)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm"
+                                    title="Start continuous monitoring"
+                                  >
+                                    <Play className="w-3 h-3" />
+                                    Start
+                                  </button>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+
                         {/* Category + TEWS — always visible on identity row */}
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {patient.category && (
@@ -1039,17 +1119,11 @@ export function ConstantMonitoring() {
                               </span>
                             )}
                             {(() => {
-                              const devices = getDevicesForPatient(patient.id);
-                              const hasStreaming = devices.some((d) => d.isStreaming && d.connectionStatus === 'CONNECTED');
-                              return hasStreaming ? (
-                                <div className="flex items-center gap-1 ml-auto">
-                                  <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-                                  <span className="text-[10px] font-semibold text-emerald-500">LIVE</span>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-1 ml-auto">
-                                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full" />
-                                  <span className="text-[10px] font-semibold text-slate-400">DEMO</span>
+                              const session = sessionsByVisitId.get(patient.id);
+                              const state = session ? session.monitoringState : 'NOT_STARTED';
+                              return (
+                                <div className="ml-auto">
+                                  <MonitoringStatePill state={state} compact />
                                 </div>
                               );
                             })()}
@@ -1309,6 +1383,14 @@ export function ConstantMonitoring() {
         </div>
 
       </div>
+
+      {startTarget && (
+        <StartMonitoringConfirmModal
+          patientName={startTarget.fullName}
+          onConfirm={() => handleStartMonitoring(startTarget)}
+          onClose={() => setStartTarget(null)}
+        />
+      )}
     </div>
   );
 }

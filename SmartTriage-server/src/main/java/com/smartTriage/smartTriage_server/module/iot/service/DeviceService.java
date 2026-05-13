@@ -447,13 +447,19 @@ public class DeviceService {
                     });
         }
 
-        // Create session
+        // Create session in STARTING state — a state-watcher service will
+        // transition it to LIVE on the first validated reading, or to
+        // STALLED if 30s elapse with no validated reading. The previous
+        // implicit "open session means LIVE" model masked the warm-up
+        // window during which sensors may not yet be on the patient.
         DeviceSession session = DeviceSession.builder()
                 .device(device)
                 .visit(visit)
                 .startedAt(Instant.now())
                 .sessionActive(true)
                 .startedByName(request.getStartedByName())
+                .monitoringState(com.smartTriage.smartTriage_server.common.enums.MonitoringState.STARTING)
+                .monitoringStateAt(Instant.now())
                 .build();
 
         session = sessionRepository.save(session);
@@ -501,6 +507,57 @@ public class DeviceService {
         publishDeviceStatus(freshDevice);
 
         return IoTMapper.toResponse(session);
+    }
+
+    /**
+     * Clinician-initiated monitoring start, keyed only by visit id.
+     *
+     * <p>Used by the "Start Monitoring" button on the Constant Monitoring
+     * page. The clinician sees a patient row, not a device — so this
+     * method walks the visit → current bed → assigned device chain and
+     * delegates to {@link #startMonitoring(StartMonitoringRequest)}.
+     *
+     * <p>Throws a clear domain exception when:
+     *   <ul>
+     *     <li>the visit is not currently placed in any bed (no bed → no
+     *         pairing context),</li>
+     *     <li>the bed has no device assigned (admin must pair a monitor
+     *         first via Bed Management),</li>
+     *     <li>the device is OFFLINE or DECOMMISSIONED (clinician should
+     *         power-on or pair a different device).</li>
+     *   </ul>
+     */
+    @Transactional
+    public DeviceSessionResponse startMonitoringForVisit(java.util.UUID visitId, String startedByName) {
+        Visit visit = visitService.findVisitOrThrow(visitId);
+
+        com.smartTriage.smartTriage_server.module.bed.entity.Bed bed = visit.getCurrentBed();
+        if (bed == null) {
+            throw new com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException(
+                    "Patient is not placed in a bed. Place the patient in a bed before starting monitoring.");
+        }
+        IoTDevice device = deviceRepository
+                .findByAssignedBedIdAndIsActiveTrue(bed.getId())
+                .orElse(null);
+        if (device == null) {
+            throw new com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException(
+                    "Bed " + bed.getCode() + " has no monitor paired. Ask an admin to pair a "
+                            + "device to this bed in Bed Management, then start monitoring.");
+        }
+        if (device.getStatus() == DeviceStatus.OFFLINE
+                || device.getStatus() == DeviceStatus.DECOMMISSIONED) {
+            throw new com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException(
+                    "Monitor " + device.getSerialNumber() + " is " + device.getStatus()
+                            + ". Power on the device or pair a different monitor to bed "
+                            + bed.getCode() + ".");
+        }
+
+        com.smartTriage.smartTriage_server.module.iot.dto.StartMonitoringRequest req =
+                new com.smartTriage.smartTriage_server.module.iot.dto.StartMonitoringRequest();
+        req.setDeviceId(device.getId());
+        req.setVisitId(visit.getId());
+        req.setStartedByName(startedByName != null ? startedByName : "Clinician");
+        return startMonitoring(req);
     }
 
     /**
@@ -690,6 +747,19 @@ public class DeviceService {
         DeviceSession session = sessionRepository.findByIdAndIsActiveTrue(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("DeviceSession", "id", sessionId));
         return IoTMapper.toResponse(session);
+    }
+
+    /**
+     * Returns the current monitoring session for a visit, or null when
+     * monitoring has not been started for this visit yet. The frontend
+     * uses null to render the NOT_STARTED state pill with the Start
+     * Monitoring button.
+     */
+    public DeviceSessionResponse getActiveSessionForVisit(UUID visitId) {
+        return sessionRepository
+                .findByVisitIdAndSessionActiveTrueAndIsActiveTrue(visitId)
+                .map(IoTMapper::toResponse)
+                .orElse(null);
     }
 
     public Page<DeviceSessionResponse> getSessionHistory(UUID visitId, Pageable pageable) {

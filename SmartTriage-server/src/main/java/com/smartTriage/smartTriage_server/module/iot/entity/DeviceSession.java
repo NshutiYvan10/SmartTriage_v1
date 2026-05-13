@@ -1,12 +1,14 @@
 package com.smartTriage.smartTriage_server.module.iot.entity;
 
 import com.smartTriage.smartTriage_server.common.entity.BaseEntity;
+import com.smartTriage.smartTriage_server.common.enums.MonitoringState;
 import com.smartTriage.smartTriage_server.common.enums.TrendStatus;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * DeviceSession — links an IoT device to a patient's active visit for continuous monitoring.
@@ -115,6 +117,42 @@ public class DeviceSession extends BaseEntity {
     @Column(name = "trend_candidate", length = 16)
     private TrendStatus trendCandidate;
 
+    /**
+     * Clinical-facing monitoring lifecycle state. See {@link MonitoringState}
+     * for the full transition table. Default LIVE only for backfilled rows;
+     * new sessions opened via the manual start path begin at STARTING.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "monitoring_state", nullable = false, length = 20)
+    @Builder.Default
+    private MonitoringState monitoringState = MonitoringState.STARTING;
+
+    /** Timestamp of the last monitoring_state transition. */
+    @Column(name = "monitoring_state_at")
+    private Instant monitoringStateAt;
+
+    /** When the session was last paused (null if never paused). */
+    @Column(name = "paused_at")
+    private Instant pausedAt;
+
+    @Column(name = "paused_by_name", length = 255)
+    private String pausedByName;
+
+    /** When the session was last resumed (null if never resumed). */
+    @Column(name = "resumed_at")
+    private Instant resumedAt;
+
+    @Column(name = "resumed_by_name", length = 255)
+    private String resumedByName;
+
+    /**
+     * Continuity group — sessions split across a bed transfer carry the
+     * same UUID so the doctor's view can render one timeline. Null for
+     * standalone (untransferred) sessions.
+     */
+    @Column(name = "continuity_group_id")
+    private UUID continuityGroupId;
+
     public void incrementReadings() {
         this.totalReadings++;
     }
@@ -136,5 +174,17 @@ public class DeviceSession extends BaseEntity {
         this.endedAt = Instant.now();
         this.endedByName = endedByName;
         this.endReason = reason;
+        transitionState(MonitoringState.ENDED);
+    }
+
+    /**
+     * Single setter for monitoring_state that also stamps the
+     * transition time. Use this instead of the bare Lombok setter so
+     * audit / state-watcher logic always sees a consistent
+     * (state, state_at) pair.
+     */
+    public void transitionState(MonitoringState next) {
+        this.monitoringState = next;
+        this.monitoringStateAt = Instant.now();
     }
 }

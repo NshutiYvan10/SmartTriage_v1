@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.iot.dto;
 
+import com.smartTriage.smartTriage_server.common.enums.MonitoringState;
 import com.smartTriage.smartTriage_server.common.enums.TrendStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -36,5 +37,15 @@ public class DeviceSessionResponse {
     private int retriagesTriggered;
     private TrendStatus trendStatus;
     private Instant trendUpdatedAt;
+    /** Clinical-facing monitoring lifecycle state. */
+    private MonitoringState monitoringState;
+    /** Last state transition time, for UI freshness display. */
+    private Instant monitoringStateAt;
+    private Instant pausedAt;
+    private String pausedByName;
+    private Instant resumedAt;
+    private String resumedByName;
+    /** Groups split sessions (transferred patient) into one timeline. */
+    private UUID continuityGroupId;
     private Instant createdAt;
 }
