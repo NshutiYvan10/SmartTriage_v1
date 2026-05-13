@@ -332,8 +332,11 @@ public class BedService {
                 ? request.getReason()
                 : ("Patient transferred to " + dest.getCode());
 
-        // 1) Close the active session on the source bed's monitor (if any)
-        closeActiveSessionForVisit(visit, "Transfer: " + reason);
+        // 1) Close the active session on the source bed's monitor (if
+        //    any) and capture its continuity group id so the next
+        //    session inherits it — the chart is one timeline across
+        //    the move.
+        java.util.UUID continuityGroup = closeActiveSessionForVisit(visit, "Transfer: " + reason);
 
         // 2) Unlink source
         source.setCurrentVisit(null);
@@ -352,8 +355,14 @@ public class BedService {
                 source.getCode(), source.getZone(),
                 dest.getCode(), dest.getZone(), reason);
 
-        // 4) Auto-open a new session on the destination monitor (if any)
-        autoStartSessionForBed(dest, visit, actorName);
+        // 4) Auto-open a new session on the destination monitor (if
+        //    any) AND propagate the continuity group from the source
+        //    session so the chart treats the two as one record. This
+        //    is the one auto-start that we deliberately keep under
+        //    the clinician-initiated model: a transfer preserves
+        //    ongoing monitoring; the clinician's original Start
+        //    intent flows across the bed move.
+        autoStartSessionForBed(dest, visit, actorName, continuityGroup);
 
         publishBedChange(source, "TRANSFERRED_OUT");
         publishBedChange(dest, "TRANSFERRED_IN");
@@ -590,7 +599,19 @@ public class BedService {
      *         "monitor streaming" when nothing actually started).
      */
     private boolean autoStartSessionForBed(Bed bed, Visit visit, String startedByName) {
-        return autoStartSessionForBed(bed, /* prefetchedDevice */ null, visit, startedByName);
+        return autoStartSessionForBed(bed, /* prefetchedDevice */ null, visit, startedByName, null);
+    }
+
+    /**
+     * Overload for transfer-driven auto-start that propagates a
+     * continuity group id from the source session onto the new
+     * destination session. The chart then renders both sessions as
+     * one continuous monitoring record.
+     */
+    private boolean autoStartSessionForBed(Bed bed, Visit visit, String startedByName,
+                                           java.util.UUID continuityGroupId) {
+        return autoStartSessionForBed(bed, /* prefetchedDevice */ null, visit, startedByName,
+                continuityGroupId);
     }
 
     /**
@@ -600,6 +621,16 @@ public class BedService {
      * pairing due to JPA persistence-context flush timing.
      */
     private boolean autoStartSessionForBed(Bed bed, IoTDevice prefetchedDevice, Visit visit, String startedByName) {
+        return autoStartSessionForBed(bed, prefetchedDevice, visit, startedByName, null);
+    }
+
+    /**
+     * Full overload — accepts both the pre-fetched device and the
+     * continuity group id. Internal helper; callers pick the lighter
+     * overload that matches what they have.
+     */
+    private boolean autoStartSessionForBed(Bed bed, IoTDevice prefetchedDevice, Visit visit,
+                                           String startedByName, java.util.UUID continuityGroupId) {
         IoTDevice device = prefetchedDevice != null
                 ? prefetchedDevice
                 : deviceRepository.findByAssignedBedIdAndIsActiveTrue(bed.getId()).orElse(null);
@@ -654,6 +685,12 @@ public class BedService {
                 .startedAt(Instant.now())
                 .sessionActive(true)
                 .startedByName(startedByName != null ? startedByName : "Bed placement (auto)")
+                // Carry continuity from the source session when this is
+                // a transfer-driven auto-start so the doctor's view
+                // renders one continuous monitoring record.
+                .continuityGroupId(continuityGroupId)
+                .monitoringState(com.smartTriage.smartTriage_server.common.enums.MonitoringState.STARTING)
+                .monitoringStateAt(Instant.now())
                 .build();
         sessionRepository.save(session);
 
@@ -675,11 +712,27 @@ public class BedService {
         return true;
     }
 
-    /** Close the active monitoring session for a visit, if one exists. */
-    private void closeActiveSessionForVisit(Visit visit, String reason) {
-        if (visit == null) return;
-        sessionRepository.findByVisitIdAndSessionActiveTrueAndIsActiveTrue(visit.getId())
-                .ifPresent(session -> {
+    /**
+     * Close the active monitoring session for a visit, if one exists.
+     *
+     * <p>Returns the closed session's continuityGroupId (creating one
+     * if the session didn't have one yet) so callers — notably
+     * {@link #transferPatient} — can carry the same id onto the
+     * destination-bed session and keep the clinical chart as one
+     * continuous timeline across the move. Returns {@code null} when
+     * there was no active session to close.
+     */
+    private java.util.UUID closeActiveSessionForVisit(Visit visit, String reason) {
+        if (visit == null) return null;
+        return sessionRepository.findByVisitIdAndSessionActiveTrueAndIsActiveTrue(visit.getId())
+                .map(session -> {
+                    // Allocate a continuity group on the session if it
+                    // doesn't have one yet, so the next session in the
+                    // group can be linked.
+                    if (session.getContinuityGroupId() == null) {
+                        session.setContinuityGroupId(java.util.UUID.randomUUID());
+                    }
+                    java.util.UUID groupId = session.getContinuityGroupId();
                     session.endSession("System", reason);
                     sessionRepository.save(session);
 
@@ -693,12 +746,12 @@ public class BedService {
                     }
                     log.info("Closed session for visit {} — {}", visit.getVisitNumber(), reason);
 
-                    // Critical timing fix — push the device-status change
-                    // so the Monitoring page knows streaming has stopped.
                     if (statusChanged) {
                         publishDeviceStatusChangeAfterCommit(fresh);
                     }
-                });
+                    return groupId;
+                })
+                .orElse(null);
     }
 
     /**

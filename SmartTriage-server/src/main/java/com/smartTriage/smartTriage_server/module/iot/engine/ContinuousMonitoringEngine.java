@@ -90,6 +90,16 @@ public class ContinuousMonitoringEngine {
     private static final int TREND_WINDOW_MINUTES = 5;
     private static final int TREND_MIN_READINGS = 3;
 
+    /**
+     * Minimum number of validated readings before a non-SpO2 critical
+     * branch may fire. Phase 3 safety guard against single-reading
+     * artefacts (probe contacting bed sheet, brief signal dropout).
+     * SpO2 &lt; 92 is intentionally exempt — Rwandan protocol treats
+     * it as a per-reading red flag and an artefact there is rare
+     * enough that over-triggering is the safer side.
+     */
+    private static final int MIN_READINGS_FOR_ALERT = 2;
+
     // Auto-retriage cooldown (don't trigger more than once per interval)
     private static final int RETRIAGE_COOLDOWN_MINUTES = 10;
 
@@ -125,6 +135,25 @@ public class ContinuousMonitoringEngine {
         DeviceSession session = sessionRepository.findById(detachedSession.getId())
                 .orElse(detachedSession);
         Visit visit = session.getVisit();
+
+        // ── Phase 3 safety guards ──
+        //
+        // 1. Monitoring state — only LIVE / DEGRADED sessions feed the
+        //    deterioration + auto-retriage engines. The new
+        //    MonitoringState.allowsAutoRetriage() centralises this rule
+        //    so STARTING (warm-up), STALLED, PAUSED, DISCONNECTED and
+        //    ENDED sessions never trip an alert. Prevents the
+        //    "auto-retriage fires on the first noisy reading before
+        //    the nurse seated the SpO2 probe" failure mode that drove
+        //    the previous "auto-start at placement" model.
+        if (session.getMonitoringState() == null
+                || !session.getMonitoringState().allowsAutoRetriage()) {
+            return new MonitoringResult(false, DeteriorationPattern.NONE,
+                    "Session not in an auto-retriage-eligible state: "
+                            + session.getMonitoringState(),
+                    false, null, 0);
+        }
+
         Instant windowStart = Instant.now().minus(TREND_WINDOW_MINUTES, ChronoUnit.MINUTES);
         Instant windowEnd = Instant.now();
 
@@ -136,6 +165,16 @@ public class ContinuousMonitoringEngine {
             return new MonitoringResult(false, DeteriorationPattern.NONE,
                     "No recent readings", false, null, 0);
         }
+
+        // 2. Minimum-readings guard — single-reading anomalies don't
+        //    drive auto-retriage. A probe that briefly contacts the
+        //    bed sheet (HR=0) or a transient artefact can produce
+        //    one critical reading. Require ≥2 validated readings in
+        //    the trend window before any "single vital critical"
+        //    branch fires. SpO2 < 92 still uses the per-reading
+        //    Rwandan-protocol override below — that one is too
+        //    safety-critical to gate.
+        boolean meetsMinReadings = recentReadings.size() >= MIN_READINGS_FOR_ALERT;
 
         VitalStream latest = recentReadings.getLast(); // most recent (ASC order)
         List<String> findings = new ArrayList<>();
@@ -151,12 +190,22 @@ public class ContinuousMonitoringEngine {
         }
 
         // --- Check 2: Single vital critical ---
-        if (!critical) {
+        // Min-readings gate: a single critical reading is plausibly
+        // an artefact (probe-bed contact, brief dropout). Wait for
+        // confirmation. Multi-vital and rapid-decline branches below
+        // have their own MIN_READINGS (3) gate; SpO2 < 92 above is
+        // exempt by Rwandan protocol.
+        if (!critical && meetsMinReadings) {
             String singleCritical = checkSingleVitalCritical(latest);
             if (singleCritical != null) {
-                critical = true;
-                detectedPattern = DeteriorationPattern.SINGLE_VITAL_CRITICAL;
-                findings.add(singleCritical);
+                // Require the second-to-last reading to also be in the
+                // critical band for the same vital, before we fire.
+                VitalStream prev = recentReadings.get(recentReadings.size() - 2);
+                if (checkSingleVitalCritical(prev) != null) {
+                    critical = true;
+                    detectedPattern = DeteriorationPattern.SINGLE_VITAL_CRITICAL;
+                    findings.add(singleCritical + " (confirmed across 2 readings)");
+                }
             }
         }
 
