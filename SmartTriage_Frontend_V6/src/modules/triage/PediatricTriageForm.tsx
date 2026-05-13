@@ -597,14 +597,27 @@ export function PediatricTriageForm() {
     // system-triggered re-triages, zone routing, alerts) all
     // depend on this call.
     //
-    // sourceVisitId from the alert click-through is the actual visit
-    // id; otherwise we fall through to targetPatientId (in-memory
-    // patient id). When neither is a real visit (demo mode) the
-    // backend call is skipped because triage_records.visit_id is
-    // a hard FK.
+    // Two entry points produce a real visit id:
+    //   1. Alert click-through (Round 4a) — `?visitId=` query param,
+    //      captured as sourceVisitId at the top of the component.
+    //   2. Normal "Continue from triage queue" — patientStore loaded
+    //      the visit and we received it via getPatient(patientId);
+    //      that store entry's `id` IS the visit id (set by
+    //      fetchActiveVisits as `id: v.id`).
+    //
+    // Previously only path 1 was wired, so a peds patient triaged
+    // from the queue never sent the form to the backend — frontend
+    // showed YELLOW locally but on reload the visit was still
+    // pre-triage. Coalescing the two ids fixes that without changing
+    // the alert click-through behaviour.
+    //
+    // When neither id is present (pure demo / standalone-no-patient
+    // mode) the backend call is intentionally skipped because
+    // triage_records.visit_id is a hard FK.
     // ────────────────────────────────────────────────────────
 
-    if (sourceVisitId) {
+    const realVisitId = sourceVisitId || (patient ? patient.id : null);
+    if (realVisitId) {
       const avpuMap: Record<string, 'ALERT' | 'CONFUSED' | 'VERBAL' | 'PAIN' | 'UNRESPONSIVE'> = {
         ALERT: 'ALERT',
         CONFUSED: 'CONFUSED',
@@ -624,7 +637,7 @@ export function PediatricTriageForm() {
         // Option A — capture the response so we can show a confirmation
         // banner if the backend auto-placed the patient in a bed.
         const triageResponse = await triageApi.perform({
-          visitId: sourceVisitId,
+          visitId: realVisitId,
 
           // ── Section 1 — Emergency Signs (KFH peds form) ──
           // Airway / Breathing
