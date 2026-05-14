@@ -17,8 +17,11 @@ import com.smartTriage.smartTriage_server.module.clinical.entity.Investigation;
 import com.smartTriage.smartTriage_server.module.clinical.mapper.ClinicalMapper;
 import com.smartTriage.smartTriage_server.module.clinical.repository.InvestigationRepository;
 import com.smartTriage.smartTriage_server.module.lab.service.LabOrderService;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.visit.service.VisitService;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -77,11 +80,20 @@ public class InvestigationService {
         public InvestigationResponse orderInvestigation(OrderInvestigationRequest request) {
                 Visit visit = visitService.findVisitOrThrow(request.getVisitId());
 
+                // V62 — stamp ordered_by_id FK from SecurityContext so
+                // the doctor's "my investigations" aggregate view can
+                // filter reliably. Backward-compat: legacy rows without
+                // the FK still surface via name match in the doctor query.
+                User orderer = resolveCurrentUser();
+
                 Investigation investigation = Investigation.builder()
                                 .visit(visit)
                                 .investigationType(request.getInvestigationType())
                                 .testName(request.getTestName())
-                                .orderedByName(request.getOrderedByName())
+                                .orderedBy(orderer)
+                                .orderedByName(request.getOrderedByName() != null
+                                                ? request.getOrderedByName()
+                                                : formatUserName(orderer))
                                 .orderedAt(Instant.now())
                                 .priority(request.getPriority() != null ? request.getPriority() : "ROUTINE")
                                 .status(InvestigationStatus.ORDERED)
@@ -336,5 +348,61 @@ public class InvestigationService {
                         log.error("Failed to generate result alert for investigation {}: {}",
                                         investigation.getId(), e.getMessage());
                 }
+        }
+
+        // ====================================================================
+        // DOCTOR-SCOPED QUERIES (V62)
+        // ====================================================================
+
+        /**
+         * All investigations the given doctor has ordered, across
+         * every visit, newest first. Drives the doctor's standalone
+         * "Investigations" page (Workflow 2 refinement) so they can
+         * see what's pending / in progress / resulted across their
+         * whole list without opening every visit chart.
+         *
+         * <p>Filtering strategy:
+         * <ul>
+         *   <li>Primary: by {@code ordered_by_id} FK (post-V62 rows).</li>
+         *   <li>Fallback: case-insensitive name match against
+         *       {@code ordered_by_name} for legacy rows that lack the
+         *       FK. The user's full name is the only available
+         *       handle for those — imperfect but better than dropping
+         *       historical data from the view.</li>
+         * </ul>
+         */
+        public List<InvestigationResponse> getInvestigationsForDoctor(
+                        UUID doctorId, String doctorFullName) {
+                return investigationRepository
+                                .findByOrderedByIdOrLegacyName(doctorId, doctorFullName)
+                                .stream()
+                                .map(ClinicalMapper::toResponse)
+                                .collect(Collectors.toList());
+        }
+
+        /**
+         * Resolve the {@link User} from the SecurityContext. Returns
+         * null gracefully (test harnesses, anonymous flows). Same
+         * pattern as {@code MedicationService.resolveCurrentUser}.
+         */
+        private User resolveCurrentUser() {
+                try {
+                        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+                        if (auth == null) return null;
+                        Object principal = auth.getPrincipal();
+                        return (principal instanceof User user) ? user : null;
+                } catch (Exception e) {
+                        log.debug("Could not resolve current user: {}", e.getMessage());
+                        return null;
+                }
+        }
+
+        /** "First Last" — falls back to email when names are blank. */
+        private String formatUserName(User u) {
+                if (u == null) return null;
+                String first = u.getFirstName() != null ? u.getFirstName().trim() : "";
+                String last = u.getLastName() != null ? u.getLastName().trim() : "";
+                String joined = (first + " " + last).trim();
+                return joined.isEmpty() ? u.getEmail() : joined;
         }
 }

@@ -244,11 +244,43 @@ export function checkRenalRisk(
   drugName: string | null | undefined,
   chronicConditions: string | null | undefined,
   vitals: VitalsLike | null | undefined,
+  /**
+   * Workflow 2 refinement — structured chronic conditions. Each row
+   * carries an optional curated {@code conditionCode}; CKD / ESRD
+   * codes resolve to CKD-evidence even when the legacy free-text
+   * column is empty. Pass an empty array when no structured rows
+   * are available (callers that haven't been updated yet keep
+   * working through the legacy free-text path).
+   */
+  structuredConditions: ReadonlyArray<{
+    conditionCode?: string | null;
+    conditionName: string;
+    status: import('@/api/types').ChronicConditionStatus;
+  }> = [],
 ): RenalMatch[] {
   if (!drugName) return [];
 
   const cls = classifyDrug(drugName);
   if (!cls) return [];
+
+  // Structured first — check the catalog's `ckd` flag. We only
+  // consider ACTIVE / CONTROLLED rows; IN_REMISSION / RESOLVED
+  // don't drive renal gating.
+  const ckdRow = structuredConditions.find((r) => {
+    if (r.status !== 'ACTIVE' && r.status !== 'CONTROLLED') return false;
+    if (!r.conditionCode) return false;
+    // Inline the catalog flag check (avoids a circular import).
+    const code = r.conditionCode.trim().toUpperCase();
+    return code === 'CKD' || code === 'ESRD';
+  });
+  if (ckdRow) {
+    return [{
+      drugClassLabel: cls.label,
+      trigger: 'ckd',
+      concern: cls.concern,
+      conditionEvidence: ckdRow.conditionName,
+    }];
+  }
 
   const ckdEvidence = findCkdEvidence(chronicConditions);
   if (ckdEvidence) {

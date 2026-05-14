@@ -38,4 +38,14 @@ export const investigationApi = {
 
   getPending: (visitId: string) =>
     get<InvestigationResponse[]>(`/investigations/visit/${visitId}/pending`),
+
+  /**
+   * Workflow 2 refinement — every investigation the authenticated
+   * doctor has ordered, across every visit, newest first. Drives
+   * the standalone Doctor Investigations view. Backend filters by
+   * ordered_by_id FK (post-V62) with a case-insensitive name
+   * fallback for legacy rows.
+   */
+  getMyOrders: () =>
+    get<InvestigationResponse[]>(`/investigations/doctor/me`),
 };

@@ -66,4 +66,19 @@ public interface InvestigationRepository extends JpaRepository<Investigation, UU
             "SELECT i.visit.id FROM Investigation i WHERE i.id = :id")
     Optional<UUID> findVisitIdByInvestigationId(
             @org.springframework.data.repository.query.Param("id") UUID id);
+
+    /**
+     * Workflow 2 refinement — every investigation a specific doctor
+     * has ordered, across every visit, newest first. Matches by
+     * {@code ordered_by_id} FK (post-V62) AND by case-insensitive
+     * name fallback for legacy rows that lack the FK.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT i FROM Investigation i WHERE i.isActive = true " +
+            "AND ( i.orderedBy.id = :doctorId " +
+            "      OR (i.orderedBy IS NULL AND LOWER(i.orderedByName) = LOWER(:doctorName)) ) " +
+            "ORDER BY i.orderedAt DESC")
+    List<Investigation> findByOrderedByIdOrLegacyName(
+            @org.springframework.data.repository.query.Param("doctorId") UUID doctorId,
+            @org.springframework.data.repository.query.Param("doctorName") String doctorName);
 }

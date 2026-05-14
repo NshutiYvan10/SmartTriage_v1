@@ -129,4 +129,32 @@ public class InvestigationController {
                 .getPendingInvestigations(visitId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
+
+    /**
+     * Workflow 2 refinement — every investigation the authenticated
+     * doctor has ordered, across every visit, newest first.
+     * Replaces the "Doctor Lab Orders" sidebar entry: doctors no
+     * longer manage lab inboxes; they track their own orders here.
+     *
+     * <p>Filters by {@code ordered_by_id} FK with a case-insensitive
+     * name fallback for legacy rows (see
+     * {@code InvestigationRepository.findByOrderedByIdOrLegacyName}).
+     */
+    @GetMapping("/doctor/me")
+    @PreAuthorize("hasRole('DOCTOR')")
+    public ResponseEntity<ApiResponse<List<InvestigationResponse>>> getMyInvestigations(
+            org.springframework.security.core.Authentication authentication) {
+        Object principal = authentication != null ? authentication.getPrincipal() : null;
+        if (!(principal instanceof com.smartTriage.smartTriage_server.module.user.entity.User user)) {
+            return ResponseEntity.ok(ApiResponse.success(List.of()));
+        }
+        String fullName =
+                ((user.getFirstName() != null ? user.getFirstName().trim() : "")
+                        + " "
+                        + (user.getLastName() != null ? user.getLastName().trim() : ""))
+                .trim();
+        if (fullName.isEmpty()) fullName = user.getEmail();
+        return ResponseEntity.ok(ApiResponse.success(
+                investigationService.getInvestigationsForDoctor(user.getId(), fullName)));
+    }
 }

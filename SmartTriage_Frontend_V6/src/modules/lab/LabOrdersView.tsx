@@ -14,7 +14,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   FlaskConical, Clock, AlertTriangle, Loader2, RefreshCw,
   Inbox, Activity, Beaker, CheckCircle2, XCircle, Phone,
-  ClipboardCheck, AlertOctagon,
+  ClipboardCheck, AlertOctagon, History as HistoryIcon, Search,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { labApi } from '@/api/lab';
@@ -27,7 +28,19 @@ import { RejectSpecimenModal } from './RejectSpecimenModal';
 import { AcknowledgeCriticalModal } from './AcknowledgeCriticalModal';
 import { VerifyResultModal, RejectVerificationModal, OverrideVerificationModal } from './VerificationModals';
 
-type TechTab = 'inbox' | 'in-progress' | 'verification' | 'critical';
+type TechTab = 'inbox' | 'in-progress' | 'verification' | 'critical' | 'history';
+
+/**
+ * Workflow 2 refinement — statuses surfaced by the lab History tab.
+ * Live tabs cover everything BEFORE these states; History is for
+ * audit + re-look-up of completed work.
+ */
+const HISTORY_STATUS_OPTIONS: { value: LabOrderStatus | ''; label: string }[] = [
+  { value: '',          label: 'All completed' },
+  { value: 'RESULTED',  label: 'Resulted' },
+  { value: 'REJECTED',  label: 'Rejected' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+];
 
 const PRIORITY_TARGET_MIN: Record<LabPriority, number> = {
   STAT: 30,
@@ -78,6 +91,19 @@ export function LabOrdersView() {
   const [verification, setVerification] = useState<LabOrder[]>([]);
   const [critical, setCritical] = useState<LabOrder[]>([]);
 
+  // Workflow 2 refinement — History tab state. Paginated server-side
+  // search across RESULTED / REJECTED / CANCELLED (and any other
+  // state) so the tech can audit + re-look-up previously processed
+  // orders without the page being limited to live work.
+  const [historyRows, setHistoryRows] = useState<LabOrder[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyStatus, setHistoryStatus] = useState<LabOrderStatus | ''>('RESULTED');
+  const [historyQuery, setHistoryQuery] = useState('');
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyTotalPages, setHistoryTotalPages] = useState(0);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const HISTORY_PAGE_SIZE = 25;
+
   // Senior tech privilege — drives the Verify / Reject buttons
   const isHeadLabTech = user?.designation === 'HEAD_LAB_TECHNICIAN';
   const [loading, setLoading] = useState(true);
@@ -122,6 +148,38 @@ export function LabOrdersView() {
   }, [hospitalId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Workflow 2 refinement — history loader. Re-runs when filters
+  // change OR the tab becomes active. Debounced search keeps a fast
+  // typist from spamming the backend.
+  const loadHistory = useCallback(async () => {
+    if (!hospitalId) return;
+    setHistoryLoading(true);
+    try {
+      const res = await labApi.getHistory(hospitalId, {
+        status: historyStatus || undefined,
+        q: historyQuery || undefined,
+        page: historyPage,
+        size: HISTORY_PAGE_SIZE,
+      });
+      setHistoryRows(res.content || []);
+      setHistoryTotalPages(res.totalPages || 0);
+      setHistoryTotal(res.totalElements || 0);
+    } catch (err) {
+      console.error('[LabOrdersView] history load failed:', err);
+      flash('err', 'Failed to load history');
+    } finally {
+      setHistoryLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hospitalId, historyStatus, historyQuery, historyPage]);
+
+  // Trigger history load when the tab becomes active OR filters change.
+  useEffect(() => {
+    if (activeTab !== 'history') return;
+    const t = window.setTimeout(() => { void loadHistory(); }, 250);
+    return () => window.clearTimeout(t);
+  }, [activeTab, loadHistory]);
 
   // ── Live updates ─────────────────────────────────────────────────
   // Subscribe to /topic/lab/{hospitalId}. Each message is a full
@@ -182,17 +240,23 @@ export function LabOrdersView() {
 
   // ── Render ───────────────────────────────────────────────────────
   const tabs: { id: TechTab; label: string; icon: any; count: number }[] = [
-    { id: 'inbox',        label: 'Inbox',        icon: Inbox,        count: inbox.length },
-    { id: 'in-progress',  label: 'In Progress',  icon: Activity,     count: inProgress.length },
+    { id: 'inbox',        label: 'Inbox',        icon: Inbox,          count: inbox.length },
+    { id: 'in-progress',  label: 'In Progress',  icon: Activity,       count: inProgress.length },
     { id: 'verification', label: 'Verification', icon: ClipboardCheck, count: verification.length },
-    { id: 'critical',     label: 'Critical',     icon: AlertOctagon, count: critical.length },
+    { id: 'critical',     label: 'Critical',     icon: AlertOctagon,   count: critical.length },
+    // Workflow 2 refinement — paginated history of completed work.
+    // Count omitted (0) because the total is paginated server-side
+    // and shown on the panel header. A zero count next to a tab the
+    // tech KNOWS has data is worse than no count at all.
+    { id: 'history',      label: 'History',      icon: HistoryIcon,    count: 0 },
   ];
 
   const list =
     activeTab === 'inbox'        ? inbox :
     activeTab === 'in-progress'  ? inProgress :
     activeTab === 'verification' ? verification :
-                                   critical;
+    activeTab === 'critical'     ? critical :
+                                   [] /* history uses a dedicated panel below */;
 
   return (
     <div className="min-h-full">
@@ -264,6 +328,30 @@ export function LabOrdersView() {
           ))}
         </div>
 
+        {/* History panel — Workflow 2 refinement. Lives in the same
+            tab strip but renders a different shape (search +
+            filters + paginated table) so the tech can audit and
+            re-look-up completed work without scrolling a card list. */}
+        {activeTab === 'history' ? (
+          <HistoryPanel
+            rows={historyRows}
+            loading={historyLoading}
+            status={historyStatus}
+            setStatus={(s) => { setHistoryStatus(s); setHistoryPage(0); }}
+            query={historyQuery}
+            setQuery={(q) => { setHistoryQuery(q); setHistoryPage(0); }}
+            page={historyPage}
+            setPage={setHistoryPage}
+            totalPages={historyTotalPages}
+            total={historyTotal}
+            onRefresh={loadHistory}
+            glassCard={glassCard}
+            glassInner={glassInner}
+            text={text}
+            isDark={isDark}
+          />
+        ) : (
+        <>
         {/* List */}
         {loading && list.length === 0 ? (
           <div className="flex items-center justify-center py-12">
@@ -303,6 +391,8 @@ export function LabOrdersView() {
               />
             ))}
           </div>
+        )}
+        </>
         )}
       </div>
 
@@ -567,6 +657,165 @@ function LabOrderCard({
           >
             <Phone className="w-3 h-3" /> Acknowledge with read-back
           </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   HistoryPanel — Workflow 2 refinement.
+
+   Paginated server-side search across completed orders (RESULTED /
+   REJECTED / CANCELLED by default; "All completed" widens to every
+   state). Search box hits the backend with a debounce, so typing
+   doesn't spam the network. Sorted newest first.
+   ════════════════════════════════════════════════════════════════════ */
+function HistoryPanel({
+  rows, loading, status, setStatus, query, setQuery, page, setPage,
+  totalPages, total, onRefresh, glassCard, glassInner, text, isDark,
+}: {
+  rows: LabOrder[];
+  loading: boolean;
+  status: LabOrderStatus | '';
+  setStatus: (s: LabOrderStatus | '') => void;
+  query: string;
+  setQuery: (q: string) => void;
+  page: number;
+  setPage: (p: number) => void;
+  totalPages: number;
+  total: number;
+  onRefresh: () => void;
+  glassCard: React.CSSProperties;
+  glassInner: React.CSSProperties;
+  text: { heading: string; muted: string; body: string; accent: string; label: string };
+  isDark: boolean;
+}) {
+  return (
+    <div className="space-y-3 animate-fade-up">
+      {/* Filter bar */}
+      <div className="rounded-2xl p-3 flex flex-col md:flex-row md:items-center gap-2" style={glassCard}>
+        <div className="relative flex-1 min-w-0">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search order number, test name, or accession…"
+            className={`w-full pl-8 pr-3 py-2 text-sm rounded-lg outline-none ${
+              isDark ? 'bg-white/5 text-white placeholder-slate-500' : 'bg-white text-slate-900 placeholder-slate-400'
+            }`}
+            style={glassInner}
+          />
+        </div>
+        <select
+          value={status}
+          onChange={(e) => setStatus(e.target.value as LabOrderStatus | '')}
+          className={`px-3 py-2 text-xs font-bold rounded-lg outline-none ${
+            isDark ? 'bg-white/5 text-white' : 'bg-white text-slate-900'
+          }`}
+          style={glassInner}
+        >
+          {HISTORY_STATUS_OPTIONS.map((opt) => (
+            <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg bg-violet-500/15 text-violet-500 hover:bg-violet-500/25 transition-colors disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          Refresh
+        </button>
+      </div>
+
+      {/* Result table */}
+      <div className="rounded-2xl overflow-hidden" style={glassCard}>
+        <div className={`flex items-center justify-between px-4 py-2.5 border-b ${
+          isDark ? 'border-white/10' : 'border-slate-200/60'
+        }`}>
+          <span className={`text-[11px] font-bold uppercase tracking-wider ${text.muted}`}>
+            {total === 0 ? 'No matches' : `${total} order${total === 1 ? '' : 's'}`}
+          </span>
+          <span className={`text-[11px] ${text.muted}`}>
+            Newest first
+          </span>
+        </div>
+        {loading && rows.length === 0 ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="px-4 py-10 text-center">
+            <Beaker className="w-8 h-8 mx-auto mb-2 text-slate-400" />
+            <p className={`text-sm font-bold ${text.heading}`}>No matching history</p>
+            <p className={`text-xs ${text.muted}`}>Try widening the status filter or clearing the search box.</p>
+          </div>
+        ) : (
+          <ul>
+            {rows.map((r) => {
+              const sc = statusChip(r.status);
+              const pc = priorityColor(r.priority);
+              return (
+                <li key={r.id} className={`px-4 py-3 border-b last:border-0 ${
+                  isDark ? 'border-white/5 hover:bg-white/5' : 'border-slate-100 hover:bg-slate-50'
+                }`}>
+                  <div className="flex items-start gap-3 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`font-mono text-[11px] ${text.accent}`}>{r.orderNumber}</span>
+                        <span className={`text-sm font-bold ${text.heading}`}>{r.testName}</span>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${pc.chip}`}>{r.priority}</span>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${sc.className}`}>{sc.label}</span>
+                        {r.isCritical && (
+                          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-red-600 text-white">Critical</span>
+                        )}
+                        {!r.isCritical && r.isAbnormal && (
+                          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-200 text-amber-900">Abnormal</span>
+                        )}
+                      </div>
+                      <div className={`text-[11px] mt-0.5 ${text.muted} flex items-center gap-3 flex-wrap`}>
+                        {r.accessionNumber && <span>Acc <span className={`font-mono ${text.body}`}>{r.accessionNumber}</span></span>}
+                        <span>Ordered {formatDistanceToNow(new Date(r.orderedAt), { addSuffix: true })}</span>
+                        {r.resultedAt && <span>Resulted {formatDistanceToNow(new Date(r.resultedAt), { addSuffix: true })}</span>}
+                        {r.turnaroundMinutes != null && <span>TAT {r.turnaroundMinutes} min</span>}
+                      </div>
+                      {r.resultValue && (
+                        <div className={`mt-1 text-[12px] ${text.body} truncate`}>
+                          Result: <span className="font-medium">{r.resultValue}</span>
+                          {r.resultUnit && <span className="text-slate-500"> {r.resultUnit}</span>}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className={`flex items-center justify-between px-4 py-2 border-t ${
+            isDark ? 'border-white/10' : 'border-slate-200/60'
+          }`}>
+            <button
+              onClick={() => setPage(Math.max(0, page - 1))}
+              disabled={page === 0 || loading}
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded hover:bg-slate-100 disabled:opacity-40"
+            >
+              <ChevronLeft className="w-3 h-3" /> Prev
+            </button>
+            <span className={`text-[11px] ${text.muted}`}>
+              Page {page + 1} of {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
+              disabled={page >= totalPages - 1 || loading}
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded hover:bg-slate-100 disabled:opacity-40"
+            >
+              Next <ChevronRight className="w-3 h-3" />
+            </button>
+          </div>
         )}
       </div>
     </div>

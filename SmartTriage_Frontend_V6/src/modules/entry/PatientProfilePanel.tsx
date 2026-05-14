@@ -33,6 +33,7 @@ import { patientApi } from '@/api/patients';
 import type { PatientResponse } from '@/api/types';
 import { useTheme } from '@/hooks/useTheme';
 import { PatientAllergiesPanel } from '@/modules/patient/PatientAllergiesPanel';
+import { PatientChronicConditionsPanel } from '@/modules/patient/PatientChronicConditionsPanel';
 
 interface Props {
   /** Provide either patientId (panel fetches) … */
@@ -295,21 +296,13 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
               }`}>
                 Allergies
               </div>
-              {editable && (
-                <EditableMedicalRow
-                  label="Allergies"
-                  value={patient.knownAllergies}
-                  onSave={async (next) => {
-                    const updated = await patientApi.updateAllergies(patient.id, next);
-                    setPatient(updated);
-                  }}
-                  isDark={isDark}
-                  subtleTextCls={subtleTextCls}
-                  headerTextCls={headerTextCls}
-                  emptyText="e.g. Penicillin (rash), latex"
-                  accentColorClass={isDark ? 'text-red-300 bg-red-500/10' : 'text-red-700 bg-red-100'}
-                />
-              )}
+              {/* Workflow 2 refinement — the legacy free-text "Edit"
+                  pencil was removed once the structured PatientAllergiesPanel
+                  (Add / Refute) became the single capture surface.
+                  Legacy free-text is now read-only; clinicians migrate
+                  bad data by recording a fresh structured entry below
+                  (the safety engine prefers structured rows over the
+                  free-text fallback). */}
             </div>
             <div className={`text-sm ${
               allergiesEmpty ? subtleTextCls : 'text-red-900 font-semibold'
@@ -349,21 +342,10 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
               }`}>
                 Chronic conditions
               </div>
-              {editable && (
-                <EditableMedicalRow
-                  label="Chronic conditions"
-                  value={patient.chronicConditions}
-                  onSave={async (next) => {
-                    const updated = await patientApi.updateChronicConditions(patient.id, next);
-                    setPatient(updated);
-                  }}
-                  isDark={isDark}
-                  subtleTextCls={subtleTextCls}
-                  headerTextCls={headerTextCls}
-                  emptyText="e.g. Hypertension, type 2 diabetes"
-                  accentColorClass={isDark ? 'text-amber-300 bg-amber-500/10' : 'text-amber-700 bg-amber-100'}
-                />
-              )}
+              {/* Workflow 2 refinement — legacy free-text Edit pencil
+                  removed; the structured PatientChronicConditionsPanel
+                  below is the single capture surface. Free-text stays
+                  read-only as a fallback for un-migrated patients. */}
             </div>
             <div className={`text-sm ${
               conditionsEmpty ? subtleTextCls : 'text-amber-900 font-semibold'
@@ -371,6 +353,22 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
               {conditionsEmpty
                 ? 'None on record'
                 : patient.chronicConditions}
+            </div>
+            {!conditionsEmpty && (
+              <p className={`mt-1 text-[10px] ${subtleTextCls} italic`}>
+                Legacy free-text — captured before structured chronic
+                conditions were introduced. Record a structured entry
+                below so the safety engine can read it by code (CKD,
+                T2DM, HTN, …).
+              </p>
+            )}
+
+            {/* Structured chronic-conditions panel (V61 / Workflow 2
+                refinement). Searchable curated catalog + status chips
+                + notes; the safety engine reads structured rows
+                first, falls back to free-text only when none exist. */}
+            <div className="mt-2 pt-2 border-t border-amber-200/60">
+              <PatientChronicConditionsPanel patientId={patient.id} editable={editable} />
             </div>
           </div>
         </div>

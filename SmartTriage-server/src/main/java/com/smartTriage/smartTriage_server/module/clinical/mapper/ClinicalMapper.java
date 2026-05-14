@@ -31,11 +31,30 @@ public final class ClinicalMapper {
     }
 
     public static InvestigationResponse toResponse(Investigation investigation) {
+        // Hydrate visit context for the doctor's aggregate "My Investigations"
+        // view so it can render the visit number + patient name without
+        // a second round-trip per row. Defensive nulls — Visit/Patient
+        // shouldn't be null in practice but never NPE the mapper.
+        String visitNumber = null;
+        String patientName = null;
+        if (investigation.getVisit() != null) {
+            visitNumber = investigation.getVisit().getVisitNumber();
+            if (investigation.getVisit().getPatient() != null) {
+                String fn = investigation.getVisit().getPatient().getFirstName();
+                String ln = investigation.getVisit().getPatient().getLastName();
+                String composed = ((fn != null ? fn : "") + " " + (ln != null ? ln : "")).trim();
+                patientName = composed.isEmpty() ? null : composed;
+            }
+        }
         return InvestigationResponse.builder()
                 .id(investigation.getId())
                 .visitId(investigation.getVisit().getId())
+                .visitNumber(visitNumber)
+                .patientName(patientName)
                 .investigationType(investigation.getInvestigationType())
                 .testName(investigation.getTestName())
+                .orderedById(investigation.getOrderedBy() != null
+                        ? investigation.getOrderedBy().getId() : null)
                 .orderedByName(investigation.getOrderedByName())
                 .orderedAt(investigation.getOrderedAt())
                 .specimenCollectedAt(investigation.getSpecimenCollectedAt())

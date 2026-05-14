@@ -687,6 +687,23 @@ public class LabOrderService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Workflow 2 refinement — paginated history view for the lab
+     * tech. Returns RESULTED / CANCELLED / REJECTED orders (and
+     * other completed states) so the tech can audit + re-look-up
+     * previously processed work. Optional status filter; optional
+     * free-text query against order number / test name / accession.
+     * Sorted newest first.
+     */
+    public Page<LabOrderResponse> getHistoryForHospital(
+            UUID hospitalId, LabOrderStatus status, String query, Pageable pageable) {
+        String normalised = query != null ? query.trim() : "";
+        if (normalised.isEmpty()) normalised = null;
+        return labOrderRepository
+                .searchHistory(hospitalId, status, normalised, pageable)
+                .map(LabOrderMapper::toResponse);
+    }
+
     // ====================================================================
     // INTERNAL HELPERS
     // ====================================================================

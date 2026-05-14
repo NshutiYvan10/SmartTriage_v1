@@ -959,9 +959,15 @@ export interface RecordInvestigationResultRequest {
 export interface InvestigationResponse {
   id: string;
   visitId: string;
+  /** Workflow 2 refinement — visit number + patient name hydrated
+   *  server-side so the doctor's aggregate view can render visit
+   *  context without a second round-trip per row. */
+  visitNumber: string | null;
+  patientName: string | null;
   investigationType: InvestigationType;
   testName: string;
-  orderedById: string;
+  /** V62 — doctor User FK. Null on legacy rows. */
+  orderedById: string | null;
   orderedByName: string;
   priority: string;
   status: InvestigationStatus;
@@ -1685,4 +1691,67 @@ export interface RecordAllergyRequest {
 export interface RefuteAllergyRequest {
   reason: string;
   refutedByName?: string;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// PATIENT CHRONIC CONDITIONS (Workflow 2 refinement — V61)
+// ══════════════════════════════════════════════════════════════════
+//
+// Mirrors the patient-allergy structured model. The legacy free-text
+// Patient.chronicConditions column stays as a fallback; new entries
+// go through these typed endpoints so the safety engine reads
+// reliably and the chart shows structured cards instead of a
+// paragraph.
+
+export type ChronicConditionStatus =
+  | 'ACTIVE'
+  | 'CONTROLLED'
+  | 'IN_REMISSION'
+  | 'RESOLVED';
+
+/** Display metadata for the four condition statuses. */
+export const CHRONIC_CONDITION_STATUSES: Array<{
+  value: ChronicConditionStatus;
+  label: string;
+  description: string;
+  /** Tailwind tint for the chip in the chart panel. */
+  tint: string;
+  /** True when the status still drives the safety engine. */
+  affectsSafety: boolean;
+}> = [
+  { value: 'ACTIVE',       label: 'Active',       description: 'Currently in treatment or symptomatic',         tint: 'bg-amber-100 text-amber-800 border-amber-300',        affectsSafety: true },
+  { value: 'CONTROLLED',   label: 'Controlled',   description: 'Diagnosed and well-managed on therapy',          tint: 'bg-emerald-100 text-emerald-800 border-emerald-300',  affectsSafety: true },
+  { value: 'IN_REMISSION', label: 'In remission', description: 'Disease quiescent — no active treatment',         tint: 'bg-slate-100 text-slate-700 border-slate-300',        affectsSafety: false },
+  { value: 'RESOLVED',     label: 'Resolved',     description: 'Fully resolved — kept for history',              tint: 'bg-slate-200 text-slate-600 border-slate-400',        affectsSafety: false },
+];
+
+export interface PatientChronicConditionResponse {
+  id: string;
+  patientId: string;
+  /** Curated short code from the frontend catalog, e.g. HTN, T2DM. Null = free-text entry. */
+  conditionCode: string | null;
+  conditionName: string;
+  status: ChronicConditionStatus;
+  statusLabel: string;
+  notes: string | null;
+  onsetDate: string | null;
+  recordedByName: string | null;
+  recordedAt: string | null;
+  resolvedByName: string | null;
+  resolvedAt: string | null;
+  resolveReason: string | null;
+}
+
+export interface RecordChronicConditionRequest {
+  conditionName: string;
+  conditionCode?: string;
+  status?: ChronicConditionStatus;
+  notes?: string;
+  onsetDate?: string;
+  recordedByName?: string;
+}
+
+export interface ResolveChronicConditionRequest {
+  reason: string;
+  resolvedByName?: string;
 }

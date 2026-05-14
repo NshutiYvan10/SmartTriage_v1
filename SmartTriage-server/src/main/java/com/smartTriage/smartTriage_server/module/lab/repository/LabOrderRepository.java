@@ -128,6 +128,32 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
             @Param("hospitalId") UUID hospitalId,
             @Param("status") LabOrderStatus status);
 
+    /**
+     * Lab-tech history view (Workflow 2 refinement) — paginated
+     * search across orders matching:
+     *   • the hospital,
+     *   • optional status filter (when null, no status filter is applied),
+     *   • optional free-text query matched against orderNumber,
+     *     testName, accessionNumber (case-insensitive substring).
+     *
+     * Used by the lab dashboard's "History" tab so the tech can
+     * audit / re-look-up previously processed orders without the
+     * page being limited to live work. Sorted newest first.
+     */
+    @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+            "AND o.isActive = true " +
+            "AND (:status IS NULL OR o.status = :status) " +
+            "AND ( :q IS NULL OR :q = '' " +
+            "      OR LOWER(o.orderNumber)     LIKE LOWER(CONCAT('%', :q, '%')) " +
+            "      OR LOWER(o.testName)        LIKE LOWER(CONCAT('%', :q, '%')) " +
+            "      OR LOWER(o.accessionNumber) LIKE LOWER(CONCAT('%', :q, '%')) ) " +
+            "ORDER BY o.orderedAt DESC")
+    org.springframework.data.domain.Page<LabOrder> searchHistory(
+            @Param("hospitalId") UUID hospitalId,
+            @Param("status") LabOrderStatus status,
+            @Param("q") String query,
+            org.springframework.data.domain.Pageable pageable);
+
     // ── Phase 2 — verification queue ──
 
     /**

@@ -230,6 +230,24 @@ public class LabOrderController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    /**
+     * Lab-tech History view (Workflow 2 refinement) — paginated
+     * search across RESULTED / CANCELLED / REJECTED orders (and any
+     * other state) for audit + re-look-up. Optional ?status= and
+     * ?q= query parameters. Sorted newest first.
+     */
+    @GetMapping("/hospital/{hospitalId}/history")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    public ResponseEntity<ApiResponse<Page<LabOrderResponse>>> getHistory(
+            @PathVariable UUID hospitalId,
+            @RequestParam(required = false) com.smartTriage.smartTriage_server.common.enums.LabOrderStatus status,
+            @RequestParam(required = false) String q,
+            @PageableDefault(size = 50) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.success(
+                labOrderService.getHistoryForHospital(hospitalId, status, q, pageable)));
+    }
+
     @GetMapping("/hospital/{hospitalId}/critical")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN') "
             + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")

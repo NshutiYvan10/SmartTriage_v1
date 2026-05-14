@@ -3,6 +3,7 @@ package com.smartTriage.smartTriage_server.module.clinical.entity;
 import com.smartTriage.smartTriage_server.common.entity.BaseEntity;
 import com.smartTriage.smartTriage_server.common.enums.InvestigationStatus;
 import com.smartTriage.smartTriage_server.common.enums.InvestigationType;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import jakarta.persistence.*;
 import lombok.*;
@@ -51,6 +52,18 @@ public class Investigation extends BaseEntity {
     /** Name of the clinician who ordered this investigation */
     @Column(name = "ordered_by_name", length = 255)
     private String orderedByName;
+
+    /**
+     * V62 — Doctor User FK. Service stamps it on create from the
+     * SecurityContext so the doctor's aggregate "my investigations"
+     * view filters by FK (reliable) instead of name match (typo-
+     * prone). Nullable for backward compat with pre-V62 rows; the
+     * doctor query falls back to a case-insensitive name match
+     * when this is null.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ordered_by_id")
+    private User orderedBy;
 
     /** Time the investigation was ordered */
     @Column(name = "ordered_at", nullable = false)

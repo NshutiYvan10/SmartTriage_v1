@@ -21,8 +21,19 @@ public class InvestigationResponse {
 
     private UUID id;
     private UUID visitId;
+    /**
+     * Workflow 2 refinement — visit number + patient label hydrated
+     * server-side so the doctor's aggregate "My Investigations" view
+     * can render visit context without a second round-trip per row.
+     * Null when the relationship isn't loaded (defensive — shouldn't
+     * happen in practice).
+     */
+    private String visitNumber;
+    private String patientName;
     private InvestigationType investigationType;
     private String testName;
+    /** V62 — doctor User FK so the aggregate query can filter reliably. */
+    private UUID orderedById;
     private String orderedByName;
     private Instant orderedAt;
     private Instant specimenCollectedAt;

@@ -137,6 +137,11 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
       label: 'Lab & Docs',
       items: [
         { id: 'lab', label: 'Lab Orders', icon: FlaskConical, pageId: 'lab' as AppPage },
+        // Workflow 2 refinement — doctor-only aggregate view of every
+        // investigation they've ordered. Read-only (tech drives the
+        // status transitions on /lab). RoleGuard hides it from non-
+        // DOCTORs via canAccessPage.
+        { id: 'investigations', label: 'Investigations', icon: FlaskConical, pageId: 'investigations' as AppPage },
         { id: 'med-queue', label: 'Med Queue', icon: Pill, pageId: 'med-queue' as AppPage },
         { id: 'ems', label: 'Siren', icon: Siren, pageId: 'ems' as AppPage },
         { id: 'documentation', label: 'Documentation', icon: FileText, pageId: 'documentation' as AppPage },

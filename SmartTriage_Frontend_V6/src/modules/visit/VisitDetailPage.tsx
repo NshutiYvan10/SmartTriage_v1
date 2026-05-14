@@ -42,7 +42,8 @@ import {
   type AllergyMatch,
 } from '@/utils/allergyCheck';
 import { patientAllergyApi } from '@/api/patientAllergies';
-import type { PatientAllergyResponse } from '@/api/types';
+import { patientChronicConditionApi } from '@/api/patientChronicConditions';
+import type { PatientAllergyResponse, PatientChronicConditionResponse } from '@/api/types';
 import {
   checkInteractions, formatInteractionMatches,
   checkDuplicateTherapy, formatDuplicateMatches,
@@ -220,6 +221,13 @@ export function VisitDetailPage() {
   // alert calibration. Empty array when none on file; we then fall
   // back to the legacy free-text match.
   const [structuredAllergies, setStructuredAllergies] = useState<PatientAllergyResponse[]>([]);
+  // Workflow 2 refinement — structured chronic conditions (V61).
+  // The safety engine prefers these (catalog-driven, code-keyed) over
+  // the legacy free-text column. Empty array when none on file; in
+  // that case the renal/teratogen checks fall back to the free-text
+  // path so un-migrated patients still get safety dialogs.
+  const [structuredChronicConditions, setStructuredChronicConditions] =
+    useState<PatientChronicConditionResponse[]>([]);
   // Phase 2 zone routing — current pending transfer (if any) for this
   // visit. Drives the inter-zone handover banner. Re-fetched on every
   // loadData so accept/decline reflects immediately.
@@ -308,6 +316,11 @@ export function VisitDetailPage() {
     patientAllergyApi
       .list(visit.patientId)
       .then((rows) => { if (!cancelled) setStructuredAllergies(Array.isArray(rows) ? rows : []); })
+      .catch(() => { /* swallow — non-critical, legacy fallback covers */ });
+    // Workflow 2 refinement — structured chronic conditions (V61).
+    patientChronicConditionApi
+      .list(visit.patientId)
+      .then((rows) => { if (!cancelled) setStructuredChronicConditions(Array.isArray(rows) ? rows : []); })
       .catch(() => { /* swallow — non-critical, legacy fallback covers */ });
     return () => { cancelled = true; };
   }, [visit?.patientId]);
@@ -511,6 +524,10 @@ export function VisitDetailPage() {
       data.drugName,
       patient?.chronicConditions,
       latestVitals,
+      // Workflow 2 refinement — structured chronic conditions take
+      // precedence. The check consults the CKD/ESRD catalog codes
+      // first, falls back to free-text scanning when none match.
+      structuredChronicConditions,
     );
     // Teratogen check (Phase 13) — fires only when chronicConditions
     // explicitly records pregnancy or breastfeeding. We deliberately

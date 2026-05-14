@@ -35,6 +35,10 @@ export type AppPage =
   | 'med-safety'
   | 'med-safety-overrides'
   | 'lab'
+  /** Doctor-side aggregate "Investigations I ordered" view (Workflow 2
+   *  refinement). Read-only — doctors track their orders but don't
+   *  manage the lab queue. */
+  | 'investigations'
   | 'med-queue'
   | 'ems'
   | 'pathways'
@@ -192,14 +196,21 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   ],
 
   // ── Full clinical access ──
+  // Workflow 2 refinement: doctors no longer manage the Lab inbox
+  // (that's a tech surface). They get a read-only aggregate
+  // "Investigations" view of every order they placed, grouped by
+  // status. The visit-detail Investigations tab continues to work
+  // for per-patient ordering + drill-down.
   DOCTOR: [
     'dashboard', 'patients', 'triage', 'monitoring', 'alerts', 'beds',
     'notifications', 'profile',
     // Clinical tools
     'sepsis', 'fast-track', 'hypoglycemia', 'isolation',
     'pathways', 'med-safety', 'med-safety-overrides', 'icu',
-    // Documentation & handover
-    'documentation', 'handover', 'lab', 'ems',
+    // Documentation & handover (Lab inbox removed — see 'investigations').
+    'documentation', 'handover', 'ems',
+    // Aggregate "my investigations" view (Workflow 2 refinement).
+    'investigations',
     // Medication administration queue (Workflow 3) — doctors can see
     // the queue too because they often need to verify a colleague's
     // STAT order landed and is being acted on. The separation-of-

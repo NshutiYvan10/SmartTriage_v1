@@ -172,6 +172,28 @@ export const labApi = {
   getCritical: (hospitalId: string) =>
     get<LabOrder[]>(`/lab/hospital/${hospitalId}/critical`),
 
+  /**
+   * Workflow 2 refinement — lab-tech History view. Paginated search
+   * across orders (any status by default; optional `status` filter
+   * narrows to a single state). `q` is matched case-insensitively
+   * against orderNumber / testName / accessionNumber. Sorted newest
+   * first. Used by the dashboard's History tab for audit + re-look-up
+   * of previously processed work.
+   */
+  getHistory: (
+    hospitalId: string,
+    opts: { status?: string; q?: string; page?: number; size?: number } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (opts.status) params.set('status', opts.status);
+    if (opts.q && opts.q.trim()) params.set('q', opts.q.trim());
+    params.set('page', String(opts.page ?? 0));
+    params.set('size', String(opts.size ?? 50));
+    return get<{ content: LabOrder[]; totalElements: number; totalPages: number; number: number }>(
+      `/lab/hospital/${hospitalId}/history?${params.toString()}`,
+    );
+  },
+
   getStat: (hospitalId: string) =>
     get<LabOrder[]>(`/lab/hospital/${hospitalId}/stat`),
 
