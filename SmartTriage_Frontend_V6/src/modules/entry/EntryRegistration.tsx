@@ -189,6 +189,10 @@ export function EntryRegistration() {
   const [formData, setFormData] = useState<FormData>(INITIAL_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showSuccess, setShowSuccess] = useState(false);
+  // Re-entrancy guard for the Confirm button — prevents duplicate
+  // patient/visit creation from rapid multi-tapping while the
+  // registration API call is in flight.
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   /**
    * Federated-lookup mode flag.
@@ -422,6 +426,10 @@ export function EntryRegistration() {
 
   /* ── Submit ── */
   const handleSubmit = async () => {
+    // Re-entrancy guard: a rapid double-tap must not fire two
+    // registration calls (which would create duplicate patients/visits).
+    if (isSubmitting) return;
+
     if (!validateStep(4)) {
       setStep(4);
       return;
@@ -433,6 +441,8 @@ export function EntryRegistration() {
       setStep(3);
       return;
     }
+
+    setIsSubmitting(true);
 
     // ── Persist to backend API (single source of truth) ──
     const hospitalId = authUser?.hospitalId || 'a0000000-0000-0000-0000-000000000001';
@@ -457,6 +467,7 @@ export function EntryRegistration() {
         });
       } catch (err: any) {
         setErrors({ assignedNurseId: err?.message ?? 'Failed to create visit for this patient.' });
+        setIsSubmitting(false);
         return;
       }
       patientId = existingPatientId;
@@ -531,6 +542,7 @@ export function EntryRegistration() {
 
       if (!patient) {
         setErrors({ assignedNurseId: 'Failed to register patient. Please try again.' });
+        setIsSubmitting(false);
         return;
       }
       patientId = patient.id;
@@ -1559,15 +1571,24 @@ export function EntryRegistration() {
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={!formData.assignedNurseId}
+                disabled={!formData.assignedNurseId || isSubmitting || showSuccess}
                 className={`inline-flex items-center gap-2 px-10 py-3 rounded-xl text-sm font-bold transition-all duration-300 shadow-lg ${
-                  formData.assignedNurseId
+                  formData.assignedNurseId && !isSubmitting && !showSuccess
                     ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white shadow-cyan-500/25 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/30'
                     : 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
                 }`}
               >
-                <Check className="w-4 h-4" />
-                Confirm Registration
+                {isSubmitting ? (
+                  <>
+                    <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                    Registering…
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Confirm Registration
+                  </>
+                )}
               </button>
             )}
           </div>

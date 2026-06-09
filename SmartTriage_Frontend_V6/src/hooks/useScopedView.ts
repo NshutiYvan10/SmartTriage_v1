@@ -46,8 +46,10 @@ export function useScopedView(): ScopedView {
     return { mode: 'HOSPITAL_WIDE', zone: null, isLoading };
   }
 
-  // Charge Nurse designation → full hospital view regardless of badge.
-  if (user?.designation === 'CHARGE_NURSE') {
+  // Charge Nurse (NURSE role + CHARGE_NURSE designation) → full hospital
+  // view regardless of badge. Mirrors backend ClinicalAuthz, which requires
+  // BOTH role==NURSE AND designation==CHARGE_NURSE.
+  if (user?.role === 'NURSE' && user?.designation === 'CHARGE_NURSE') {
     return { mode: 'HOSPITAL_WIDE', zone: null, isLoading };
   }
 

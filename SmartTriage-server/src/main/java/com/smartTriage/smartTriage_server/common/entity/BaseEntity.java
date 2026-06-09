@@ -59,4 +59,12 @@ public abstract class BaseEntity {
     public void softDelete() {
         this.isActive = false;
     }
+
+    /**
+     * Reverse a soft delete — used by admin reactivation flows
+     * (e.g. restoring a user account that was deactivated by mistake).
+     */
+    public void restore() {
+        this.isActive = true;
+    }
 }

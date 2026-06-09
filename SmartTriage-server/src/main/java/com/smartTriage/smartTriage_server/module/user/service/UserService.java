@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.user.service;
 
+import com.smartTriage.smartTriage_server.common.enums.AccountStatus;
 import com.smartTriage.smartTriage_server.common.enums.Designation;
 import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
@@ -83,9 +84,15 @@ public class UserService implements UserDetailsService {
         return UserMapper.toResponse(user);
     }
 
-    public Page<UserResponse> getUsersByHospital(UUID hospitalId, Pageable pageable) {
-        return userRepository.findByHospitalIdAndIsActiveTrue(hospitalId, pageable)
-                .map(UserMapper::toResponse);
+    public Page<UserResponse> getUsersByHospital(UUID hospitalId, boolean includeInactive, Pageable pageable) {
+        // includeInactive is opt-in (admin User Management list) so deactivated
+        // users surface with their "Deactivated" badge. All other callers
+        // (shift planner staff pool, triage-nurse picker, …) keep the default
+        // active-only view so deactivated staff are never assignable.
+        Page<User> users = includeInactive
+                ? userRepository.findByHospitalId(hospitalId, pageable)
+                : userRepository.findByHospitalIdAndIsActiveTrue(hospitalId, pageable);
+        return users.map(UserMapper::toResponse);
     }
 
     @Transactional
@@ -99,9 +106,26 @@ public class UserService implements UserDetailsService {
                 && user.getHospital() != null) {
             assertNotLastChargeNurse(user, "deactivate");
         }
+        user.setAccountStatus(AccountStatus.DEACTIVATED);
         user.softDelete();
         userRepository.save(user);
         log.info("User deactivated: {}", user.getEmail());
+    }
+
+    /**
+     * Reactivate a previously-deactivated user — restores login access and
+     * flips accountStatus back to ACTIVE. Uses an unfiltered lookup because a
+     * deactivated user is isActive=false and is invisible to the active-only
+     * finder.
+     */
+    @Transactional
+    public void reactivateUser(UUID id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+        user.restore();
+        user.setAccountStatus(AccountStatus.ACTIVE);
+        userRepository.save(user);
+        log.info("User reactivated: {}", user.getEmail());
     }
 
     /**

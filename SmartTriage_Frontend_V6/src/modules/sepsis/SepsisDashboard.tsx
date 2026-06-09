@@ -158,6 +158,18 @@ export function SepsisDashboard() {
   // restriction card with a clear "pick up a shift" hint. On-shift
   // clinicians fall through and see their zone's cases; admins / CN /
   // shift-lead see the full hospital view.
+  // Don't render the restriction panel until the shift fetch resolves —
+  // useMyShift starts isLoading=true with no assignment, which would
+  // otherwise flash the "you're off shift" card for every user (incl.
+  // admins/CN) on first paint.
+  if (scope.isLoading) {
+    return (
+      <div className="min-h-full flex items-center justify-center p-10">
+        <div className="w-8 h-8 rounded-full border-2 border-slate-400/40 border-t-slate-500 animate-spin" />
+      </div>
+    );
+  }
+
   if (scope.mode === 'RESTRICTED') {
     return (
       <CrossZoneRestrictedPanel

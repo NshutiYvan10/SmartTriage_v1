@@ -29,11 +29,15 @@ export const userApi = {
   getById: (id: string) =>
     get<UserResponse>(`/users/${id}`),
 
-  getByHospital: (hospitalId: string, page = 0, size = 20) =>
-    get<Page<UserResponse>>(`/users/hospital/${hospitalId}?page=${page}&size=${size}`),
+  getByHospital: (hospitalId: string, page = 0, size = 20, includeInactive = false) =>
+    get<Page<UserResponse>>(`/users/hospital/${hospitalId}?page=${page}&size=${size}${includeInactive ? '&includeInactive=true' : ''}`),
 
   delete: (id: string) =>
     del<void>(`/users/${id}`),
+
+  /** Reactivate a previously-deactivated user (restores login + ACTIVE status) */
+  reactivate: (id: string) =>
+    post<void>(`/users/${id}/reactivate`, {}),
 
   /** Update only the designation of a user (admin only) */
   updateDesignation: (id: string, designation: Designation) =>

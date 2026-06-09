@@ -23,8 +23,10 @@ import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.common.enums.VisitStatus;
 import com.smartTriage.smartTriage_server.module.visit.repository.VisitRepository;
 import com.smartTriage.smartTriage_server.module.visit.service.VisitService;
+import com.smartTriage.smartTriage_server.security.ClinicalAuthz;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -68,6 +70,7 @@ public class EmsRunService {
     private final UserRepository userRepository;
     private final ClinicalAlertRepository clinicalAlertRepository;
     private final RealTimeEventPublisher realTimeEventPublisher;
+    private final ClinicalAuthz clinicalAuthz;
 
     // ====================================================================
     // CREATE / UPDATE
@@ -375,8 +378,44 @@ public class EmsRunService {
     // ====================================================================
 
     private EmsRun findOrThrow(UUID runId) {
-        return emsRunRepository.findByIdAndIsActiveTrue(runId)
+        EmsRun run = emsRunRepository.findByIdAndIsActiveTrue(runId)
                 .orElseThrow(() -> new ResourceNotFoundException("EmsRun", "id", runId));
+        assertCallerMayAccess(run);
+        return run;
+    }
+
+    /**
+     * Tenant scope for by-id run access (read + every mutation routes through
+     * findOrThrow). Closes the IDOR where any authenticated user could reach
+     * another hospital's run by guessing its id. Rules:
+     * <ul>
+     *   <li>SUPER_ADMIN — any run.</li>
+     *   <li>PARAMEDIC — only runs they own (run.paramedic == caller),
+     *       regardless of destination hospital (a crew may transport across
+     *       facilities, so we scope by ownership, not hospital).</li>
+     *   <li>everyone else (NURSE / DOCTOR / HOSPITAL_ADMIN / READ_ONLY) —
+     *       only runs destined for their own hospital.</li>
+     * </ul>
+     */
+    private void assertCallerMayAccess(EmsRun run) {
+        User caller = currentUser().orElse(null);
+        if (caller == null) {
+            throw new AccessDeniedException("Not authenticated");
+        }
+        if (caller.getRole() == Role.SUPER_ADMIN) {
+            return;
+        }
+        if (caller.getRole() == Role.PARAMEDIC) {
+            if (run.getParamedic() != null && caller.getId().equals(run.getParamedic().getId())) {
+                return;
+            }
+            throw new AccessDeniedException("Paramedics may only access their own EMS runs");
+        }
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        UUID runHospitalId = run.getHospital() != null ? run.getHospital().getId() : null;
+        if (runHospitalId == null || !clinicalAuthz.canAccessHospital(auth, runHospitalId)) {
+            throw new AccessDeniedException("EMS run belongs to a different hospital");
+        }
     }
 
     private void ensureMutable(EmsRun run, String action) {

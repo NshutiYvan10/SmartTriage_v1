@@ -33,7 +33,6 @@ public class RegisterDeviceRequest {
 
     private String firmwareVersion;
     private String macAddress;
-    private String location;
     private Integer heartbeatTimeoutSeconds;
     private Integer dataIntervalSeconds;
     private String notes;

@@ -36,6 +36,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Page<User> findByHospitalIdAndIsActiveTrue(UUID hospitalId, Pageable pageable);
 
+    /** Includes deactivated (isActive=false) users — admin User Management list only. */
+    Page<User> findByHospitalId(UUID hospitalId, Pageable pageable);
+
     Page<User> findByHospitalIdAndRoleAndIsActiveTrue(UUID hospitalId, Role role, Pageable pageable);
 
     /**

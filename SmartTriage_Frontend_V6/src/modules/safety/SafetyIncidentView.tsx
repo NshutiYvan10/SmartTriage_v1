@@ -211,6 +211,16 @@ export function SafetyIncidentView() {
   // ── Helpers ──
   const totalPages = Math.ceil(totalElements / 20);
 
+  // Don't render the restriction panel until the shift fetch resolves —
+  // otherwise the "lead/admin only" card flashes for every user on first paint.
+  if (access.isLoading) {
+    return (
+      <div className="min-h-full flex items-center justify-center p-10">
+        <div className="w-8 h-8 rounded-full border-2 border-slate-400/40 border-t-slate-500 animate-spin" />
+      </div>
+    );
+  }
+
   if (!access.canSeeAllZones) {
     return (
       <CrossZoneRestrictedPanel

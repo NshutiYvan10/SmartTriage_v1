@@ -30,6 +30,7 @@ export function HospitalManagement() {
 
   const emptyForm = {
     name: '', hospitalCode: '', address: '',
+    city: '', country: '',
     phoneNumber: '', email: '', tier: 'DISTRICT',
     bedCapacity: '' as string,
     edCapacity: '' as string,
@@ -70,6 +71,8 @@ export function HospitalManagement() {
       const payload: any = {
         name: form.name,
         address: form.address || undefined,
+        city: form.city || undefined,
+        country: form.country || undefined,
         phoneNumber: form.phoneNumber || undefined,
         email: form.email || undefined,
         tier: form.tier,
@@ -138,6 +141,8 @@ export function HospitalManagement() {
       name: h.name || '',
       hospitalCode: h.hospitalCode || '',
       address: h.address || '',
+      city: h.city || '',
+      country: h.country || '',
       phoneNumber: h.phoneNumber || '',
       email: h.email || '',
       tier: h.tier || 'DISTRICT',
@@ -212,6 +217,8 @@ export function HospitalManagement() {
               {([
                 { label: 'Hospital Name', key: 'name', placeholder: 'e.g., King Faisal Hospital' },
                 { label: 'Address', key: 'address', placeholder: 'Kigali, Rwanda' },
+                { label: 'City', key: 'city', placeholder: 'e.g., Kigali' },
+                { label: 'Country', key: 'country', placeholder: 'e.g., Rwanda' },
                 { label: 'Phone', key: 'phoneNumber', placeholder: '+250 788 000 000' },
                 { label: 'Email', key: 'email', placeholder: 'info@hospital.rw' },
               ] as const).map(({ label, key, placeholder }) => (

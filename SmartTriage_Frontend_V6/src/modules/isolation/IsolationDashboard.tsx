@@ -127,6 +127,16 @@ export function IsolationDashboard() {
     );
   };
 
+  // Don't render the restriction panel until the shift fetch resolves —
+  // otherwise the "you're off shift" card flashes for every user on first paint.
+  if (scope.isLoading) {
+    return (
+      <div className="min-h-full flex items-center justify-center p-10">
+        <div className="w-8 h-8 rounded-full border-2 border-slate-400/40 border-t-slate-500 animate-spin" />
+      </div>
+    );
+  }
+
   if (scope.mode === 'RESTRICTED') {
     return (
       <CrossZoneRestrictedPanel

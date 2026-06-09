@@ -10,8 +10,9 @@
  *   - SUPER_ADMIN       — system role, always.
  *   - HOSPITAL_ADMIN    — own hospital.
  *   - shift-lead badge  — current acting shift-lead at their hospital.
- *   - CHARGE_NURSE      — designation grants cross-zone read regardless
- *                         of badge state, matching the backend.
+ *   - CHARGE_NURSE      — NURSE role + CHARGE_NURSE designation grants
+ *                         cross-zone read regardless of badge, matching
+ *                         the backend (which requires BOTH).
  *
  * Used by clinical dashboards that load hospital-wide patient lists
  * (Sepsis, Fast-Track, Isolation, ICU, Referrals, Handover, Safety
@@ -44,30 +45,40 @@ export interface CanSeeAllZonesInfo {
    * for context.
    */
   zone: ReturnType<typeof useMyShift>['zone'];
+  /**
+   * True while the shift fetch is still in flight. Consumers MUST guard on
+   * this before rendering the restriction panel — otherwise every user
+   * (including admins/CN once resolved) sees a "you're off shift" flash on
+   * first render until /shifts/me/current resolves.
+   */
+  isLoading: boolean;
 }
 
 export function useCanSeeAllZones(): CanSeeAllZonesInfo {
   const user = useAuthStore((s) => s.user);
-  const { zone, isShiftLead, isOnShift } = useMyShift();
+  const { zone, isShiftLead, isOnShift, isLoading } = useMyShift();
 
   // Admin roles — always allowed.
   if (user?.role === 'SUPER_ADMIN' || user?.role === 'HOSPITAL_ADMIN') {
-    return { canSeeAllZones: true, reason: 'ALLOWED', zone };
+    return { canSeeAllZones: true, reason: 'ALLOWED', zone, isLoading };
   }
 
   // Active shift-lead badge — current acting CN. Mirrors backend.
   if (isShiftLead) {
-    return { canSeeAllZones: true, reason: 'ALLOWED', zone };
+    return { canSeeAllZones: true, reason: 'ALLOWED', zone, isLoading };
   }
 
-  // Charge Nurse designation — cross-zone read regardless of badge.
-  if (user?.designation === 'CHARGE_NURSE') {
-    return { canSeeAllZones: true, reason: 'ALLOWED', zone };
+  // Charge Nurse (NURSE role + CHARGE_NURSE designation) — cross-zone read
+  // regardless of badge. Mirrors backend ClinicalAuthz, which requires BOTH
+  // role==NURSE AND designation==CHARGE_NURSE.
+  if (user?.role === 'NURSE' && user?.designation === 'CHARGE_NURSE') {
+    return { canSeeAllZones: true, reason: 'ALLOWED', zone, isLoading };
   }
 
   return {
     canSeeAllZones: false,
     reason: isOnShift ? 'ZONE_SCOPED' : 'OFF_SHIFT',
     zone,
+    isLoading,
   };
 }

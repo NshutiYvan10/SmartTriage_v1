@@ -105,7 +105,6 @@ public class DeviceService {
                 .status(DeviceStatus.REGISTERED)
                 .firmwareVersion(request.getFirmwareVersion())
                 .macAddress(request.getMacAddress())
-                .location(request.getLocation())
                 .heartbeatTimeoutSeconds(
                         request.getHeartbeatTimeoutSeconds() != null
                                 ? request.getHeartbeatTimeoutSeconds()

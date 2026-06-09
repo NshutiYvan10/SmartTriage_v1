@@ -30,7 +30,7 @@ import type {
   UpdateBedRequest,
 } from '@/api/types';
 
-const ZONES: EdZone[] = ['RESUS', 'ACUTE', 'GENERAL', 'TRIAGE', 'OBSERVATION', 'ISOLATION', 'PEDIATRIC'];
+const ZONES: EdZone[] = ['RESUS', 'ACUTE', 'GENERAL', 'TRIAGE', 'OBSERVATION', 'ISOLATION', 'PEDIATRIC', 'NEONATAL', 'AMBULATORY'];
 
 const STATUS_STYLES: Record<BedStatus, { color: string; bg: string; label: string }> = {
   AVAILABLE:      { color: 'text-emerald-600', bg: 'bg-emerald-500/10', label: 'Available' },

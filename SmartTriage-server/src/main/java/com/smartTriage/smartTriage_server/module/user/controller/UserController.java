@@ -51,8 +51,9 @@ public class UserController {
     @GetMapping("/hospital/{hospitalId}")
     public ResponseEntity<ApiResponse<Page<UserResponse>>> getUsersByHospital(
             @PathVariable UUID hospitalId,
+            @RequestParam(defaultValue = "false") boolean includeInactive,
             @PageableDefault(size = 20) Pageable pageable) {
-        Page<UserResponse> response = userService.getUsersByHospital(hospitalId, pageable);
+        Page<UserResponse> response = userService.getUsersByHospital(hospitalId, includeInactive, pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -61,6 +62,13 @@ public class UserController {
     public ResponseEntity<ApiResponse<Void>> deactivateUser(@PathVariable UUID id) {
         userService.deactivateUser(id);
         return ResponseEntity.ok(ApiResponse.success("User deactivated", null));
+    }
+
+    @PostMapping("/{id}/reactivate")
+    @PreAuthorize("@userAdminAuthz.canManageUser(authentication, #id)")
+    public ResponseEntity<ApiResponse<Void>> reactivateUser(@PathVariable UUID id) {
+        userService.reactivateUser(id);
+        return ResponseEntity.ok(ApiResponse.success("User reactivated", null));
     }
 
     /**

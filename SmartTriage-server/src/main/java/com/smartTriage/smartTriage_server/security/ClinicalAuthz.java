@@ -236,6 +236,33 @@ public class ClinicalAuthz {
     }
 
     /**
+     * Alert-center read gate. Identical cross-zone visibility to
+     * {@link #canSeeAllZonesAtHospital(Authentication, UUID)} EXCEPT that
+     * HOSPITAL_ADMIN is denied: the clinical alert queue is a clinician
+     * surface and product policy keeps hospital administrators out of it.
+     * The UI already hides the Alerts page from HA; this closes the
+     * matching API hole (a HA token could otherwise GET the hospital-wide
+     * alert endpoints directly and read every clinical alert).
+     */
+    @Transactional(readOnly = true)
+    public boolean canReadHospitalAlerts(Authentication authentication, UUID hospitalId) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null) {
+                return false;
+            }
+            if (user.getRole() == Role.HOSPITAL_ADMIN) {
+                return false;
+            }
+            return canSeeAllZonesAtHospital(authentication, hospitalId);
+        } catch (Exception e) {
+            log.error("canReadHospitalAlerts error for hospital {}: {}",
+                    hospitalId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
      * RBAC fix (Critical) — does the caller hold today's TRIAGE_NURSE shift
      * function? Returns true only for a clinician who:
      * <ul>

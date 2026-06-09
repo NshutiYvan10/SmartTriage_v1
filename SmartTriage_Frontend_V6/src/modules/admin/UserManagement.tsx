@@ -118,6 +118,10 @@ export function UserManagement() {
   const [editId, setEditId] = useState<string | null>(null);
   const [formLoading, setFormLoading] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  // In-app confirmation dialog (replaces native window.confirm) for the
+  // destructive row actions: cancel-invite and deactivate-user.
+  const [confirmDialog, setConfirmDialog] = useState<{ kind: 'cancel-invite' | 'deactivate'; user: UserResponse } | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
   /* ── Feedback toast ── */
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -174,7 +178,7 @@ export function UserManagement() {
   const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await userApi.getByHospital(hospitalId, 0, 100);
+      const data = await userApi.getByHospital(hospitalId, 0, 100, true);
       setUsers(data.content || []);
     } catch (err) {
       console.error('Failed to load users:', err);
@@ -253,27 +257,46 @@ export function UserManagement() {
     }
   };
 
-  /* ── Cancel pending invitation ── */
-  const handleCancelInvite = async (u: UserResponse) => {
-    if (!confirm(`Cancel the invitation to ${u.email}? The activation link will stop working immediately. You can re-invite later.`)) return;
+  /* ── Cancel pending invitation (opens in-app confirm dialog) ── */
+  const handleCancelInvite = (u: UserResponse) => {
+    setConfirmDialog({ kind: 'cancel-invite', user: u });
+  };
+
+  /* ── Deactivate active user (opens in-app confirm dialog) ── */
+  const handleDeactivate = (u: UserResponse) => {
+    setConfirmDialog({ kind: 'deactivate', user: u });
+  };
+
+  /* ── Reactivate a deactivated user (non-destructive → no confirm dialog) ── */
+  const handleReactivate = async (u: UserResponse) => {
     try {
-      await userApi.cancelInvite(u.id);
-      flash('success', 'Invitation cancelled');
+      await userApi.reactivate(u.id);
+      flash('success', `${u.firstName} ${u.lastName} reactivated`);
       loadUsers();
     } catch (err: any) {
-      flash('error', err?.message || 'Failed to cancel invitation');
+      flash('error', err?.message || 'Failed to reactivate user');
     }
   };
 
-  /* ── Deactivate active user ── */
-  const handleDeactivate = async (u: UserResponse) => {
-    if (!confirm(`Deactivate ${u.firstName} ${u.lastName}? They will no longer be able to log in. Their clinical history is preserved.`)) return;
+  /* ── Execute the pending confirm action ── */
+  const runConfirm = async () => {
+    if (!confirmDialog || confirmLoading) return;
+    const { kind, user: u } = confirmDialog;
+    setConfirmLoading(true);
     try {
-      await userApi.delete(u.id);
-      flash('success', `${u.firstName} ${u.lastName} deactivated`);
+      if (kind === 'cancel-invite') {
+        await userApi.cancelInvite(u.id);
+        flash('success', 'Invitation cancelled');
+      } else {
+        await userApi.delete(u.id);
+        flash('success', `${u.firstName} ${u.lastName} deactivated`);
+      }
+      setConfirmDialog(null);
       loadUsers();
     } catch (err: any) {
-      flash('error', err?.message || 'Failed to deactivate user');
+      flash('error', err?.message || (kind === 'cancel-invite' ? 'Failed to cancel invitation' : 'Failed to deactivate user'));
+    } finally {
+      setConfirmLoading(false);
     }
   };
 
@@ -662,6 +685,16 @@ export function UserManagement() {
                                 )}
                               </>
                             )}
+                            {!isPending && u.accountStatus === 'DEACTIVATED' && u.role !== 'SUPER_ADMIN'
+                             && (u.role !== 'HOSPITAL_ADMIN' || authUser?.role === 'SUPER_ADMIN') && (
+                              <button
+                                onClick={() => handleReactivate(u)}
+                                title="Reactivate user"
+                                className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-emerald-500/15' : 'hover:bg-emerald-50'} transition-colors`}
+                              >
+                                <RotateCw className="w-3.5 h-3.5 text-emerald-500" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -673,6 +706,54 @@ export function UserManagement() {
           </div>
         )}
       </div>
+
+      {/* In-app confirmation dialog for destructive row actions (replaces window.confirm) */}
+      {confirmDialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
+          onClick={() => !confirmLoading && setConfirmDialog(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl p-5 animate-fade-up"
+            style={glassCard}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${confirmDialog.kind === 'deactivate' ? 'bg-rose-500/15' : 'bg-amber-500/15'}`}>
+                <AlertTriangle className={`w-5 h-5 ${confirmDialog.kind === 'deactivate' ? 'text-rose-500' : 'text-amber-500'}`} />
+              </div>
+              <div className="flex-1">
+                <h4 className={`text-sm font-bold ${text.heading}`}>
+                  {confirmDialog.kind === 'cancel-invite' ? 'Cancel invitation?' : 'Deactivate user?'}
+                </h4>
+                <p className={`text-xs mt-1.5 leading-relaxed ${text.muted}`}>
+                  {confirmDialog.kind === 'cancel-invite'
+                    ? <>The activation link sent to <span className="font-semibold">{confirmDialog.user.email}</span> will stop working immediately. You can re-invite later.</>
+                    : <><span className="font-semibold">{confirmDialog.user.firstName} {confirmDialog.user.lastName}</span> will no longer be able to log in. Their clinical history is preserved.</>}
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                disabled={confirmLoading}
+                className={`px-4 py-2 rounded-xl text-xs font-bold ${text.muted} hover:bg-white/5 disabled:opacity-50`}
+              >
+                Keep
+              </button>
+              <button
+                onClick={runConfirm}
+                disabled={confirmLoading}
+                className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold text-white shadow-lg disabled:opacity-50 ${confirmDialog.kind === 'deactivate' ? 'bg-gradient-to-r from-rose-500 to-rose-600' : 'bg-gradient-to-r from-amber-500 to-amber-600'}`}
+              >
+                {confirmLoading && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+                {confirmDialog.kind === 'cancel-invite' ? 'Cancel invitation' : 'Deactivate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
