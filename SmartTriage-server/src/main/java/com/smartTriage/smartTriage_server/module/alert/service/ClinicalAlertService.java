@@ -89,12 +89,18 @@ public class ClinicalAlertService {
     }
 
     @Transactional
-    public ClinicalAlert acknowledgeAlert(UUID alertId) {
+    public ClinicalAlert acknowledgeAlert(UUID alertId, String note) {
         ClinicalAlert alert = clinicalAlertRepository.findByIdAndIsActiveTrue(alertId)
                 .orElseThrow(() -> new ResourceNotFoundException("ClinicalAlert", "id", alertId));
 
         alert.setAcknowledged(true);
         alert.setAcknowledgedAt(Instant.now());
+        // B5 — persist the acknowledge/dismiss comment (previously dropped).
+        // Capped to the column length defensively.
+        if (note != null && !note.isBlank()) {
+            String trimmed = note.trim();
+            alert.setAcknowledgmentNote(trimmed.length() > 1000 ? trimmed.substring(0, 1000) : trimmed);
+        }
 
         // Resolve acknowledging user
         try {

@@ -40,7 +40,12 @@ public class PatientController {
     private final PatientLookupService patientLookupService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR')")
+    // B9 — exclude the on-shift TRIAGE_NURSE from registration: their job is
+    // triage, not reception. Non-triage nurses and registrars may still
+    // register. Exclusion is by TODAY'S shift function, not permanent
+    // designation, so a nurse not rostered to triage today is unaffected.
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR') "
+            + "and !@clinicalAuthz.callerIsTodaysTriageNurse(authentication)")
     public ResponseEntity<ApiResponse<PatientResponse>> createPatient(
             @Valid @RequestBody CreatePatientRequest request) {
         PatientResponse response = patientService.createPatient(request);
@@ -53,7 +58,9 @@ public class PatientController {
      * Prevents the issue where a patient record exists but no matching visit.
      */
     @PostMapping("/register")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR')")
+    // B9 — exclude the on-shift TRIAGE_NURSE from registration (see createPatient).
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR') "
+            + "and !@clinicalAuthz.callerIsTodaysTriageNurse(authentication)")
     public ResponseEntity<ApiResponse<RegisterPatientResponse>> registerPatient(
             @Valid @RequestBody RegisterPatientRequest request) {
         RegisterPatientResponse response = patientService.registerPatientWithVisit(request);

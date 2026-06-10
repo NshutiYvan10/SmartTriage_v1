@@ -163,7 +163,16 @@ export function AlertsView() {
     if (!dialogAlertId) return;
     setDialogSubmitting(true);
     try {
-      await alertApi.acknowledge(dialogAlertId);
+      // B5 — send the comment (previously dropped). A dialog "dismiss" is
+      // prefixed [Dismissed] so the persisted note records the action taken;
+      // both modes acknowledge on the backend today (a fully distinct dismiss
+      // workflow is a separate product decision).
+      const note = dialogComment.trim();
+      const payloadNote =
+        dialogMode === 'dismiss'
+          ? `[Dismissed]${note ? ` ${note}` : ''}`
+          : note || undefined;
+      await alertApi.acknowledge(dialogAlertId, payloadNote);
       setDialogOpen(false);
       loadAlerts();
     } catch (err) {

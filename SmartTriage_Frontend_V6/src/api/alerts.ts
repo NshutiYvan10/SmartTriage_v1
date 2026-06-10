@@ -40,6 +40,15 @@ export const alertApi = {
       `/alerts/hospital/${hospitalId}/safety-overrides?range=${range}&page=${page}&size=${size}`,
     ),
 
-  acknowledge: (alertId: string) =>
-    patch<ClinicalAlertResponse>(`/alerts/${alertId}/acknowledge`),
+  /**
+   * Acknowledge an alert. B5 — an optional free-text note (the
+   * acknowledge/dismiss comment) is now sent and persisted server-side;
+   * it was previously dropped.
+   */
+  acknowledge: (alertId: string, note?: string) =>
+    patch<ClinicalAlertResponse>(
+      `/alerts/${alertId}/acknowledge${
+        note && note.trim() ? `?note=${encodeURIComponent(note.trim())}` : ''
+      }`,
+    ),
 };

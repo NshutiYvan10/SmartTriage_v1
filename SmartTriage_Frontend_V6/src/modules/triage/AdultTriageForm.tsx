@@ -598,6 +598,9 @@ export function AdultTriageForm() {
       try {
         const triageResponse = await triageApi.perform({
           visitId: targetPatientId,
+          // B10 — persist the phone field (previously dropped: no DTO slot).
+          // Sent only when the nurse entered/edited a value.
+          phoneNumber: phoneNumber.trim() || undefined,
           // Emergency signs
           hasAirwayCompromise: !!checkedSigns['obstruction_stridor'],
           hasBreathingDistress: !!checkedSigns['increased_wob'] || !!checkedSigns['accessory_muscles'],

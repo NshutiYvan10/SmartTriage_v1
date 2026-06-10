@@ -3,15 +3,20 @@ package com.smartTriage.smartTriage_server.module.iot.scheduler;
 import com.smartTriage.smartTriage_server.common.enums.AlertSeverity;
 import com.smartTriage.smartTriage_server.common.enums.AlertType;
 import com.smartTriage.smartTriage_server.common.enums.DeviceStatus;
+import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.MonitoringState;
 import com.smartTriage.smartTriage_server.common.enums.SignalQuality;
+import com.smartTriage.smartTriage_server.common.enums.TriageCategory;
+import com.smartTriage.smartTriage_server.module.alert.dto.ClinicalAlertResponse;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
+import com.smartTriage.smartTriage_server.module.alert.mapper.ClinicalAlertMapper;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
 import com.smartTriage.smartTriage_server.module.iot.entity.DeviceSession;
 import com.smartTriage.smartTriage_server.module.iot.entity.IoTDevice;
 import com.smartTriage.smartTriage_server.module.iot.entity.VitalStream;
 import com.smartTriage.smartTriage_server.module.iot.repository.DeviceSessionRepository;
 import com.smartTriage.smartTriage_server.module.iot.repository.VitalStreamRepository;
+import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -22,6 +27,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * MonitoringStateWatcher — periodic background task that keeps each
@@ -64,6 +70,12 @@ public class MonitoringStateWatcher {
     private final DeviceSessionRepository sessionRepository;
     private final VitalStreamRepository streamRepository;
     private final ClinicalAlertRepository clinicalAlertRepository;
+    /**
+     * S4 — push IoT alerts (disconnect / stall / degraded / low-battery) to
+     * the dashboards in real time. Previously these were persisted but never
+     * broadcast, so clinicians only saw a monitor drop off on a page refresh.
+     */
+    private final RealTimeEventPublisher eventPublisher;
 
     /** No-reading window before a session goes STALLED. */
     private static final int STALL_AFTER_SECONDS = 30;
@@ -250,6 +262,30 @@ public class MonitoringStateWatcher {
                 .build();
         clinicalAlertRepository.save(alert);
         session.incrementAlerts();
+        broadcastAlert(session, alert);
+    }
+
+    /**
+     * S4 — push a freshly-raised IoT alert to the hospital + zone alert
+     * topics so dashboards update without a refresh. Runs inside the
+     * watcher's @Transactional tick, so the lazy visit/patient/hospital
+     * graph loads here safely. Best-effort: a STOMP failure must not abort
+     * the tick or roll back the persisted alert.
+     */
+    private void broadcastAlert(DeviceSession session, ClinicalAlert alert) {
+        try {
+            if (session.getVisit() == null) return;
+            UUID hospitalId = session.getVisit().getPatient().getHospital().getId();
+            ClinicalAlertResponse response = ClinicalAlertMapper.toResponse(alert);
+            eventPublisher.publishHospitalAlert(hospitalId, response);
+            TriageCategory cat = session.getVisit().getCurrentTriageCategory();
+            if (cat != null) {
+                eventPublisher.publishZoneAlert(hospitalId, EdZone.fromTriageCategory(cat), response);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to broadcast IoT alert for session {}: {}",
+                    session.getId(), e.getMessage());
+        }
     }
 
     private String deviceLostMessage(DeviceSession session) {

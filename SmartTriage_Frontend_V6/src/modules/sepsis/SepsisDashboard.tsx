@@ -127,15 +127,32 @@ export function SepsisDashboard() {
     }
   };
 
-  /* ── Toggle bundle item ── */
+  /* ── Complete a bundle item (B7) ──
+   * The backend completes an item (one-way: marks done) at
+   * PUT /sepsis/bundle/{id}/item/{item}; there is no "un-complete". Sepsis
+   * bundle actions are one-way clinically (you can't un-obtain a blood
+   * culture), so a click on an already-done item is a no-op. */
   const handleToggleBundleItem = async (screening: SepsisScreening, key: keyof SepsisScreening) => {
     const current = screening[key] as boolean;
+    if (current) return; // already complete — backend has no un-complete
+    // Map the SepsisScreening field key → the SepsisBundleItem enum value
+    // the backend expects on the path.
+    const itemEnum: Partial<Record<keyof SepsisScreening, string>> = {
+      bloodCultureObtained: 'BLOOD_CULTURE_OBTAINED',
+      broadSpectrumAntibiotics: 'BROAD_SPECTRUM_ANTIBIOTICS',
+      ivCrystalloidBolus: 'IV_CRYSTALLOID_BOLUS',
+      lactateMeasured: 'LACTATE_MEASURED',
+      vasopressorsIfNeeded: 'VASOPRESSORS_IF_NEEDED',
+      repeatLactateIfElevated: 'REPEAT_LACTATE_IF_ELEVATED',
+    };
+    const item = itemEnum[key];
+    if (!item) return;
     setActionLoading(`${screening.id}-${key}`);
     try {
-      await sepsisApi.updateBundle(screening.id, { [key]: !current });
+      await sepsisApi.completeBundleItem(screening.id, item);
       await loadScreenings();
     } catch (err) {
-      console.error('Failed to update bundle item:', err);
+      console.error('Failed to complete bundle item:', err);
     } finally {
       setActionLoading(null);
     }

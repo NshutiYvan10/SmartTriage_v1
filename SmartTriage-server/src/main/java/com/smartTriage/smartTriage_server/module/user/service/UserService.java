@@ -185,6 +185,7 @@ public class UserService implements UserDetailsService {
         boolean changesPersonalInfo =
                 differs(request.getFirstName(),         user.getFirstName())
              || differs(request.getLastName(),          user.getLastName())
+             || differs(request.getEmail(),             user.getEmail())
              || differs(request.getPhoneNumber(),       user.getPhoneNumber())
              || differs(request.getEmployeeNumber(),    user.getEmployeeNumber())
              || differs(request.getProfessionalLicense(), user.getProfessionalLicense());
@@ -195,6 +196,17 @@ public class UserService implements UserDetailsService {
                             + "A super-admin can change role / designation / status, but personal-info "
                             + "edits (name, phone, license) are reserved to the user themselves and "
                             + "their hospital admin. Ask the user to update their profile.");
+        }
+
+        // P6 — email is editable. The DTO carried it and the edit form exposed
+        // an editable field, but updateUser never applied it, so email edits
+        // were silently dropped. Email is the login identifier, so a change
+        // must remain unique across users.
+        if (differs(request.getEmail(), user.getEmail())) {
+            if (userRepository.existsByEmail(request.getEmail())) {
+                throw new DuplicateResourceException("User", "email", request.getEmail());
+            }
+            user.setEmail(request.getEmail());
         }
 
         user.setFirstName(request.getFirstName());

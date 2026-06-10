@@ -623,6 +623,8 @@ export interface VitalSignsResponse {
 
 export interface PerformTriageRequest {
   visitId: string;
+  /** B10 — phone captured/corrected on the triage form (was dropped). */
+  phoneNumber?: string;
   // Emergency Signs
   hasAirwayCompromise?: boolean;
   hasBreathingDistress?: boolean;

@@ -39,6 +39,16 @@ public class PerformTriageRequest {
     @NotNull(message = "Visit ID is required")
     private UUID visitId;
 
+    /**
+     * B10 — phone captured/corrected on the triage form's "Phone Number"
+     * field, which was previously dropped (no DTO slot). The form seeds that
+     * field from the patient's emergency-contact phone, so on submit it is
+     * persisted back to {@code Patient.emergencyContactPhone} (round-trip
+     * consistent). Nullable; only written when non-blank — it never blanks
+     * out an existing number.
+     */
+    private String phoneNumber;
+
     // ====================================================================
     // SECTION 1: EMERGENCY SIGNS — "Emergency Signs? CHECK THE COMPLAINT"
     // Any YES → RED (Immediate Resuscitation / ALARM)

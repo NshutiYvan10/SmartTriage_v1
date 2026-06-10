@@ -109,8 +109,6 @@ public class ShiftAssignmentAuthz {
             // the temporary CN-equivalents (shift-lead badge, grace window,
             // formal delegation).
 
-            boolean sameHospital = belongsToHospital(user, hospitalId);
-
             // V44+ off-duty guard: a clinician (DOCTOR / NURSE / etc.) on
             // approved leave covering today is not on the floor. Their
             // role-based authority — including CHARGE_NURSE designation,
@@ -119,48 +117,19 @@ public class ShiftAssignmentAuthz {
             // own leave is APPROVED could still rubber-stamp swap/leave
             // approvals from home, defeating the approval path's intent.
             //
-            // Admins (SUPER_ADMIN / HOSPITAL_ADMIN) above this point are
-            // already returned; they're not affected by this guard.
+            // IMPORTANT (SHIFT-403): this guard gates MUTATION only.
+            // canViewShift must NOT inherit it — an on-leave manager may
+            // still READ the roster. Admins (SUPER_ADMIN / HOSPITAL_ADMIN)
+            // are handled separately and aren't affected by this guard.
             if (isOnApprovedLeaveToday(user.getId())) {
                 log.debug("canAssign denied for {} — user is on approved leave today",
                         user.getEmail());
                 return false;
             }
 
-            // Charge nurses manage the unit in Rwandan EDs — they own zone
-            // and shift assignment as part of day-to-day operations.
-            //
-            // Defence-in-depth: also require role = NURSE. The user-create
-            // path validates role/designation pairs, but checking role here
-            // means a stale or otherwise corrupted DOCTOR-with-CHARGE_NURSE
-            // record can never grant nurse-management authority.
-            if (user.getRole() == Role.NURSE
-                    && user.getDesignation() == Designation.CHARGE_NURSE
-                    && sameHospital) {
-                return true;
-            }
-
-            // The current shift-lead badge holder.
-            if (shiftAssignmentService.isUserCurrentShiftLead(user.getId(), hospitalId)) {
-                return true;
-            }
-
-            // Previous shift-lead, still inside the grace window.
-            if (shiftAssignmentService.isUserWithinShiftLeadGrace(user.getId(), hospitalId)) {
-                return true;
-            }
-
-            // Acting Charge Nurse — a CN has formally delegated authority
-            // to this user for a defined window (see ChargeNurseDelegation
-            // and V41). Active rows here grant canAssign authority just
-            // like the CN designation would; only NURSE-role users with
-            // sameHospital are eligible (defence-in-depth: prevents a
-            // stale row pointing at a non-nurse from leaking authority).
-            if (sameHospital
-                    && user.getRole() == Role.NURSE
-                    && chargeNurseDelegationRepository
-                            .findActiveDelegationForDelegate(hospitalId, user.getId(), Instant.now())
-                            .isPresent()) {
+            // On-floor shift-management authority (CN designation, current
+            // shift-lead badge, grace window, or an active delegation).
+            if (isShiftManager(user, hospitalId)) {
                 return true;
             }
 
@@ -271,13 +240,17 @@ public class ShiftAssignmentAuthz {
             if (user == null || hospitalId == null) {
                 return false;
             }
-            // HOSPITAL_ADMIN read-only.
+            // HOSPITAL_ADMIN read-only governance access.
             if (user.getRole() == Role.HOSPITAL_ADMIN
                     && belongsToHospital(user, hospitalId)) {
                 return true;
             }
-            // Anything that grants mutate authority also grants view.
-            return canAssign(authentication, hospitalId);
+            // SHIFT-403 — managers can always VIEW the roster, INCLUDING while
+            // on approved leave. The off-duty guard in canAssign suspends
+            // MUTATION only; it must not block read access. So we check the
+            // role-based manager set directly rather than delegating to
+            // canAssign (which would deny an on-leave manager a 403 on view).
+            return isShiftManager(user, hospitalId);
         } catch (Exception e) {
             log.error("canViewShift evaluation error for hospital {}: {}",
                     hospitalId, e.getMessage(), e);
@@ -286,6 +259,48 @@ public class ShiftAssignmentAuthz {
     }
 
     /* ─────────────────────────── helpers ─────────────────────────── */
+
+    /**
+     * Role-based shift-management authority for a hospital, WITHOUT the
+     * off-duty leave guard. This is the set of actors who own the roster:
+     * the Charge Nurse (NURSE + CHARGE_NURSE designation), the current
+     * shift-lead badge holder, the previous holder still inside the grace
+     * window, and an acting CN with a live delegation.
+     *
+     * <p>{@link #canAssign} layers the leave guard on top (mutation is
+     * suspended while on approved leave); {@link #canViewShift} uses this
+     * directly so an on-leave manager can still READ the roster (SHIFT-403).
+     *
+     * <p>Defence-in-depth: the CN and delegation branches also require
+     * role = NURSE so a stale or corrupted DOCTOR-with-CHARGE_NURSE record
+     * can never grant nurse-management authority.
+     */
+    private boolean isShiftManager(User user, UUID hospitalId) {
+        if (user == null || hospitalId == null) {
+            return false;
+        }
+        boolean sameHospital = belongsToHospital(user, hospitalId);
+
+        if (user.getRole() == Role.NURSE
+                && user.getDesignation() == Designation.CHARGE_NURSE
+                && sameHospital) {
+            return true;
+        }
+        if (shiftAssignmentService.isUserCurrentShiftLead(user.getId(), hospitalId)) {
+            return true;
+        }
+        if (shiftAssignmentService.isUserWithinShiftLeadGrace(user.getId(), hospitalId)) {
+            return true;
+        }
+        if (sameHospital
+                && user.getRole() == Role.NURSE
+                && chargeNurseDelegationRepository
+                        .findActiveDelegationForDelegate(hospitalId, user.getId(), Instant.now())
+                        .isPresent()) {
+            return true;
+        }
+        return false;
+    }
 
     private User currentUser(Authentication authentication) {
         if (authentication == null) {

@@ -94,8 +94,12 @@ public class ClinicalAlertController {
 
     @PatchMapping("/{alertId}/acknowledge")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
-    public ResponseEntity<ApiResponse<ClinicalAlertResponse>> acknowledgeAlert(@PathVariable UUID alertId) {
-        ClinicalAlert alert = clinicalAlertService.acknowledgeAlert(alertId);
+    public ResponseEntity<ApiResponse<ClinicalAlertResponse>> acknowledgeAlert(
+            @PathVariable UUID alertId,
+            // B5 — optional acknowledge/dismiss comment. Previously the
+            // dialog captured this but it was never sent or stored.
+            @RequestParam(required = false) String note) {
+        ClinicalAlert alert = clinicalAlertService.acknowledgeAlert(alertId, note);
         return ResponseEntity.ok(ApiResponse.success("Alert acknowledged", ClinicalAlertMapper.toResponse(alert)));
     }
 

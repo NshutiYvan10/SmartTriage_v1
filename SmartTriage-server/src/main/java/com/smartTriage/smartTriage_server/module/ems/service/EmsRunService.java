@@ -297,6 +297,13 @@ public class EmsRunService {
         Visit v = run.getVisit();
         v.setArrivalConfirmedAt(now);
         v.setEdRetriageDueAt(now.plus(ED_RETRIAGE_WINDOW));
+        // B11 — advance REGISTERED → AWAITING_TRIAGE on physical arrival so the
+        // triage queue/board reflects "arrived, awaiting triage" rather than the
+        // pre-arrival REGISTERED state. Guarded to REGISTERED so a visit that has
+        // already been triaged (or progressed further) is never moved backward.
+        if (v.getStatus() == VisitStatus.REGISTERED) {
+            v.setStatus(VisitStatus.AWAITING_TRIAGE);
+        }
         visitRepository.save(v);
 
         run = emsRunRepository.save(run);

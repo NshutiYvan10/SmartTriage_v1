@@ -69,6 +69,9 @@ public class TriageService {
     private final TriageRecordRepository triageRecordRepository;
     private final VisitService visitService;
     private final VisitRepository visitRepository;
+    /** B10 — persists a phone captured/edited on the triage form back onto
+     *  the patient so the nurse's correction isn't dropped. */
+    private final com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository patientRepository;
     private final VitalSignsRepository vitalSignsRepository;
     private final UserRepository userRepository;
     private final ClinicalAlertRepository clinicalAlertRepository;
@@ -98,6 +101,20 @@ public class TriageService {
     @Transactional
     public TriageRecordResponse performTriage(PerformTriageRequest request) {
         Visit visit = visitService.findVisitOrThrow(request.getVisitId());
+
+        // B10 — persist a phone captured/edited on the triage form's "Phone
+        // Number" field so the nurse's correction isn't dropped (it previously
+        // had no DTO slot). That field round-trips the patient's
+        // emergency-contact phone; only write a non-blank value so we never
+        // blank out an existing number.
+        if (request.getPhoneNumber() != null && !request.getPhoneNumber().isBlank()) {
+            var triagePatient = visit.getPatient();
+            if (triagePatient != null) {
+                triagePatient.setEmergencyContactPhone(request.getPhoneNumber().trim());
+                patientRepository.save(triagePatient);
+            }
+        }
+
         User currentUser = resolveCurrentUser();
         boolean isPediatric = visit.isPediatric();
 
