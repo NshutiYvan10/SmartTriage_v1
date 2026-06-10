@@ -48,6 +48,9 @@ public class PatientResponse {
     private String knownAllergies;
     private String chronicConditions;
 
+    /** S8 — body weight (kg), if recorded at registration. Additive only. */
+    private java.math.BigDecimal weightKg;
+
     /**
      * Phase 13b — structured pregnancy status. Drives the teratogen
      * safety check at prescribe time. NULL means "never recorded";

@@ -127,6 +127,8 @@ interface PatientState {
     bloodType?: string;
     knownAllergies?: string;
     chronicConditions?: string;
+    /** S8 — optional body weight in kg, captured at registration. */
+    weightKg?: number;
     guardianName?: string;
     guardianPhone?: string;
     guardianRelationship?: string;
@@ -244,6 +246,7 @@ export const usePatientStore = create<PatientState>((set, get) => ({
         bloodType: data.bloodType,
         knownAllergies: data.knownAllergies,
         chronicConditions: data.chronicConditions,
+        weightKg: data.weightKg,
         guardianName: data.guardianName,
         guardianPhone: data.guardianPhone,
         guardianRelationship: data.guardianRelationship,

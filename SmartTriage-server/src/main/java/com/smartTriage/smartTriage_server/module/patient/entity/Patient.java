@@ -138,6 +138,20 @@ public class Patient extends BaseEntity {
     private String chronicConditions;
 
     /**
+     * S8 — patient body weight in kilograms, optionally captured at
+     * registration. Provides a durable weight datum earlier than triage
+     * (vital_signs.weight_kg / triage_records.child_weight_kg).
+     *
+     * <p>Scope note: this is additive data capture. It is intentionally
+     * NOT consumed by the automatic medication dose-range check, which
+     * uses the per-visit triage weight on purpose — a dose warning that
+     * hinges on a stale registration weight is worse than none. Surface
+     * it for display and let a clinician confirm it before any dosing use.
+     */
+    @Column(name = "weight_kg", precision = 5, scale = 2)
+    private java.math.BigDecimal weightKg;
+
+    /**
      * Phase 13b — structured pregnancy / lactation status. Drives the
      * teratogen safety check at prescribe time. NULL means "never
      * recorded" and the safety check falls back to a free-text scan

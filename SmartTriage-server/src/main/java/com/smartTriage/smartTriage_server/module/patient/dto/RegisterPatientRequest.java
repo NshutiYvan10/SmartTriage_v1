@@ -56,6 +56,15 @@ public class RegisterPatientRequest {
     private String knownAllergies;
     private String chronicConditions;
 
+    /**
+     * S8 — optional body weight in kg, captured at registration. Used as a
+     * durable weight datum (display / reference). NOT consumed by automatic
+     * dose validation — see Patient.weightKg.
+     */
+    @jakarta.validation.constraints.DecimalMin(value = "0.0", inclusive = false, message = "Weight must be positive")
+    @jakarta.validation.constraints.DecimalMax(value = "999.99", message = "Weight is implausibly high")
+    private java.math.BigDecimal weightKg;
+
     // ── Structured location (Rwanda admin hierarchy) ──
     // V46+ — optional. Frontend's RwandaLocationPicker submits the IDs
     // for whichever levels the user picked; the service resolves and

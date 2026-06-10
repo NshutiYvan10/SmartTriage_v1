@@ -57,6 +57,28 @@ public class DrugFormulary extends BaseEntity {
     // DOSING
     // ====================================================================
 
+    /**
+     * Unit the numeric dose bounds below are expressed in (DB column
+     * {@code dose_unit}, added by V31). Despite the {@code *_mg} /
+     * {@code *_mg_per_kg} column names, the stored numbers are
+     * interpreted in THIS unit. Allowed values: MG, MCG, G, UNITS, IU,
+     * ML, SACHETS, TABLETS, PUFFS, DROPS.
+     *
+     * <p>S2: the {@code MedicationSafetyEngine} only runs its mg-based
+     * numeric dose-range comparison when this is {@code MG} (the default
+     * for the overwhelming majority of REML drugs). For any other unit
+     * the stored bounds are not mg-comparable — and in at least one case
+     * (Magnesium Sulfate, set to {@code G} in V31 while its values stayed
+     * in mg) the column and the values disagree — so a cross-unit numeric
+     * comparison would produce false over/under-dose findings. The engine
+     * therefore SKIPS the numeric dose-range check for non-MG units
+     * (allergy / interaction / duplicate checks still run), matching the
+     * documented design intent in V31's header.
+     */
+    @Column(name = "dose_unit", length = 20, nullable = false)
+    @Builder.Default
+    private String doseUnit = "MG";
+
     /** Adult minimum single dose in milligrams */
     @Column(name = "adult_min_dose_mg")
     private Double adultMinDoseMg;

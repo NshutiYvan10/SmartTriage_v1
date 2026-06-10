@@ -17,6 +17,8 @@ import com.smartTriage.smartTriage_server.module.medication.dto.PrescribeMedicat
 import com.smartTriage.smartTriage_server.module.medication.entity.MedicationAdministration;
 import com.smartTriage.smartTriage_server.module.medication.mapper.MedicationMapper;
 import com.smartTriage.smartTriage_server.module.medication.repository.MedicationAdministrationRepository;
+import com.smartTriage.smartTriage_server.module.medsafety.engine.MedicationSafetyEngine;
+import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.visit.service.VisitService;
@@ -68,6 +70,14 @@ public class MedicationService {
      * polling.
      */
     private final RealTimeEventPublisher realTimeEventPublisher;
+    /**
+     * S1 — authoritative server-side medication safety detection. We use
+     * only its focused {@code assessAllergyForPrescription} entry point on
+     * the prescribe path to ENFORCE the allergy block that the frontend
+     * dialog can otherwise bypass. The engine depends only on repositories
+     * (no back-edge to this service), so there is no circular bean wiring.
+     */
+    private final MedicationSafetyEngine medicationSafetyEngine;
 
     // ====================================================================
     // PRESCRIBE
@@ -91,6 +101,37 @@ public class MedicationService {
         boolean interactionOverride = Boolean.TRUE.equals(request.getPrescribedDespiteInteraction());
         Instant interactionOverrideAt = interactionOverride ? Instant.now() : null;
         String interactionMatches = interactionOverride ? request.getInteractionOverrideMatches() : null;
+
+        // ── S1: server-side allergy ENFORCEMENT (defense-in-depth) ──
+        // The frontend PrescribeSafetyDialog is the first line of defence,
+        // but it can be bypassed: a direct API call, a buggy/old client, or
+        // a client-side allergy check that diverges from the server's. Re-run
+        // the AUTHORITATIVE allergy detection server-side (the same engine
+        // backing /med-safety/validate) and HARD-BLOCK a blocking (non-MILD)
+        // match unless the prescriber has explicitly acknowledged the
+        // override (prescribedDespiteAllergy=true). This closes the gap where
+        // an anaphylaxis-triggering drug could be prescribed with the flag
+        // false/absent and produce no alert at all.
+        //
+        // Only the ALLERGY blocker is enforced here. Dose-range blocks are
+        // intentionally NOT enforced on this path: the formulary's non-mg
+        // dose units (see S2 / DrugFormulary.doseUnit) make a server-side
+        // dose block unsafe (it could reject a correct magnesium/insulin
+        // order). Allergy detection is dose-unit-independent.
+        Patient patient = visit.getPatient();
+        MedicationSafetyEngine.AllergyAssessment allergyAssessment =
+                medicationSafetyEngine.assessAllergyForPrescription(
+                        patient, visit, request.getDrugName());
+        if (allergyAssessment.isBlocking() && !allergyOverride) {
+            log.warn("PRESCRIBE BLOCKED (allergy) — visit:{} drug:{} severity:{} detail:{}",
+                    visit.getVisitNumber(), request.getDrugName(),
+                    allergyAssessment.severity(), allergyAssessment.message());
+            throw new ClinicalBusinessException(
+                    "Prescription blocked by the allergy safety check. "
+                            + allergyAssessment.message()
+                            + " The prescriber must explicitly acknowledge and override "
+                            + "this allergy warning before the medication can be prescribed.");
+        }
 
         // Workflow 3 — resolve the authenticated user so we can stamp
         // the prescribed_by_id FK. Without it the separation-of-duties

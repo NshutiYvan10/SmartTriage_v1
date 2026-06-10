@@ -136,6 +136,7 @@ public class PatientService {
                 .bloodType(request.getBloodType())
                 .knownAllergies(request.getKnownAllergies())
                 .chronicConditions(request.getChronicConditions())
+                .weightKg(request.getWeightKg())
                 .guardianNationalId(blankToNull(request.getGuardianNationalId()))
                 .guardianPhone(blankToNull(request.getGuardianPhone()))
                 .guardianName(blankToNull(request.getGuardianName()))

@@ -265,6 +265,8 @@ export interface CreatePatientRequest {
   bloodType?: string;
   knownAllergies?: string;
   chronicConditions?: string;
+  /** S8 — optional body weight in kg, captured at registration. */
+  weightKg?: number;
   // ── Guardian (pediatric) ──
   guardianNationalId?: string;
   guardianPhone?: string;
@@ -312,6 +314,8 @@ export interface PatientResponse {
   bloodType: string;
   knownAllergies: string;
   chronicConditions: string;
+  /** S8 — body weight in kg, if recorded at registration. */
+  weightKg?: number | null;
   /**
    * Phase 13b — structured pregnancy / lactation status. Drives the
    * teratogen safety check at prescribe time. NULL means "never

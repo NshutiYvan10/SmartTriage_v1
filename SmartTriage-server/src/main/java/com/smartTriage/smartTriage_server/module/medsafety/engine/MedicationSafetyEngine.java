@@ -129,6 +129,66 @@ public class MedicationSafetyEngine {
     }
 
     // ====================================================================
+    // PUBLIC — focused allergy assessment for prescribe-time ENFORCEMENT (S1)
+    // ====================================================================
+
+    /**
+     * Public, side-effect-free allergy assessment used by
+     * {@code MedicationService.prescribe} to ENFORCE an allergy block
+     * server-side (S1 — defense-in-depth).
+     *
+     * <p>Reuses the EXACT same detection logic as the full
+     * {@link #validatePrescription} run — structured {@link PatientAllergy}
+     * rows, legacy free-text fallback, formulary allergen-group match, and
+     * the curated {@link #CROSS_ALLERGENICITY} expansion — but returns only
+     * the allergy outcome. It runs no dose / interaction / duplicate checks
+     * and persists nothing, so it is cheap and safe to call inline on the
+     * prescribe path.
+     *
+     * @return an {@link AllergyAssessment}; {@link AllergyAssessment#isBlocking()}
+     *         is true when a non-MILD allergy matched and the prescription
+     *         must therefore not proceed without an explicit override.
+     */
+    public AllergyAssessment assessAllergyForPrescription(Patient patient, Visit visit, String drugName) {
+        if (patient == null || visit == null || drugName == null || drugName.isBlank()) {
+            return AllergyAssessment.none();
+        }
+        Optional<DrugFormulary> formularyOpt = findFormularyEntry(drugName, visit);
+        AllergyCheckOutcome outcome = checkAllergies(patient, formularyOpt.orElse(null), drugName);
+        boolean matched = !outcome.checkResult().passed();
+        return new AllergyAssessment(
+                matched,
+                outcome.matchedSeverity(),
+                outcome.matchedAllergenName(),
+                outcome.matchedReaction(),
+                outcome.checkResult().message());
+    }
+
+    /**
+     * Public result of {@link #assessAllergyForPrescription}.
+     *
+     * <p>{@link #isBlocking()} is true when a non-MILD allergy matched.
+     * MILD matches set {@code matched=true} but are NOT blocking — they
+     * remain a soft warning, preserving the existing graded-severity
+     * behaviour (anti-alert-fatigue).
+     */
+    public record AllergyAssessment(
+            boolean matched,
+            AllergySeverity severity,
+            String allergenName,
+            String reaction,
+            String message
+    ) {
+        public static AllergyAssessment none() {
+            return new AllergyAssessment(false, null, null, null, null);
+        }
+
+        public boolean isBlocking() {
+            return matched && severity != null && severity.isBlocking();
+        }
+    }
+
+    // ====================================================================
     // ALLERGY CHECK
     // ====================================================================
 
@@ -363,6 +423,21 @@ public class MedicationSafetyEngine {
             return MedicationSafetyResult.CheckResult.ok();
         }
 
+        // S2 — unit-aware guard. The formulary's numeric bounds are
+        // interpreted in formulary.doseUnit (see DrugFormulary.doseUnit).
+        // prescribedDoseMg is parsed as milligrams. A numeric comparison
+        // is only valid when the formulary bounds are themselves in mg.
+        // For UNITS/IU/G/MCG/ML/SACHETS/… the stored bounds are not
+        // mg-comparable (and for magnesium sulfate the V31 unit/value pair
+        // is internally inconsistent), so comparing would yield false
+        // over/under-dose findings. Skip the numeric range check for those;
+        // allergy / interaction / duplicate checks already ran upstream.
+        if (!isMgDosed(formulary)) {
+            log.debug("Dose-range check skipped for '{}' — non-mg unit '{}' is not mg-comparable",
+                    formulary.getGenericName(), formulary.getDoseUnit());
+            return MedicationSafetyResult.CheckResult.ok();
+        }
+
         boolean isPediatric = patient.isPediatric();
 
         if (isPediatric) {
@@ -370,6 +445,17 @@ public class MedicationSafetyEngine {
         } else {
             return checkAdultDose(formulary, prescribedDoseMg);
         }
+    }
+
+    /**
+     * True when the formulary's numeric dose bounds are expressed in
+     * milligrams and are therefore directly comparable to the parsed-mg
+     * prescribed dose. Null / blank dose_unit is treated as MG (the column
+     * default) so legacy rows keep their existing behaviour.
+     */
+    private boolean isMgDosed(DrugFormulary formulary) {
+        String unit = formulary.getDoseUnit();
+        return unit == null || unit.isBlank() || "MG".equalsIgnoreCase(unit.trim());
     }
 
     private MedicationSafetyResult.CheckResult checkPediatricDose(

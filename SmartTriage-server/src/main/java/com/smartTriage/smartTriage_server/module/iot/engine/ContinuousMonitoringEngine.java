@@ -324,6 +324,134 @@ public class ContinuousMonitoringEngine {
     }
 
     // ====================================================================
+    // MANUAL VITALS — deterioration check (S3)
+    // ====================================================================
+
+    /**
+     * Evaluate a single MANUALLY-recorded {@link VitalSigns} reading for
+     * critical deterioration and raise a clinical alert if warranted (S3).
+     *
+     * <p>The IoT path ({@link #analyseAndRespond}) only ever sees
+     * high-frequency {@code VitalStream} data from a {@link DeviceSession}.
+     * Vitals a clinician types into {@code POST /vitals} never reached any
+     * deterioration logic, so a critically abnormal manual reading produced
+     * no alert at all. This method closes that gap.
+     *
+     * <p>Scope is deliberately narrow and conservative:
+     * <ul>
+     *   <li>Only per-reading CRITICAL findings fire — SpO2 &lt; 92 (Rwanda
+     *       protocol) or any single vital in the RED critical band. A single
+     *       manual reading carries no trend, so the multi-reading trend /
+     *       rapid-decline branches do not apply.</li>
+     *   <li>Alerts are de-duplicated against any already-open
+     *       DETERIORATION_DETECTED alert for the visit — shared with the IoT
+     *       path, so a monitored patient is never double-alerted.</li>
+     *   <li>No auto-retriage is performed here: a clinician is actively at
+     *       the bedside entering the reading and can retriage. Silent
+     *       category changes from manual entry are out of scope for S3.</li>
+     * </ul>
+     *
+     * <p>Best-effort: this method never throws. The caller's vitals write
+     * must succeed even if alerting fails.
+     */
+    public void evaluateManualVitals(Visit visit, VitalSigns vitals) {
+        try {
+            if (visit == null || vitals == null) return;
+
+            List<String> findings = new ArrayList<>();
+            DeteriorationPattern pattern = DeteriorationPattern.NONE;
+
+            // SpO2 override first — highest-regret single vital (Rwanda protocol).
+            if (vitals.getSpo2() != null && vitals.getSpo2() < CRITICAL_SPO2) {
+                pattern = DeteriorationPattern.SPO2_OVERRIDE;
+                findings.add("SpO2 critically low: " + vitals.getSpo2() + "% (< " + CRITICAL_SPO2 + "%)");
+            } else {
+                String singleCritical = checkSingleVitalCriticalFromVitals(vitals);
+                if (singleCritical != null) {
+                    pattern = DeteriorationPattern.SINGLE_VITAL_CRITICAL;
+                    findings.add(singleCritical);
+                }
+            }
+
+            if (findings.isEmpty()) {
+                return; // nothing critical in this manual reading
+            }
+
+            String description = "Manually-recorded vitals — " + String.join("; ", findings);
+            log.warn("DETERIORATION (manual vitals) — Visit {} | Pattern: {} | {}",
+                    visit.getVisitNumber(), pattern, description);
+
+            // Dedup against any already-open deterioration alert (shared with
+            // the IoT engine) so a monitored patient is not double-alerted.
+            boolean alreadyOpen = clinicalAlertRepository
+                    .existsByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(
+                            visit.getId(), AlertType.DETERIORATION_DETECTED);
+            if (alreadyOpen) {
+                log.debug("Deterioration alert already open for visit {}, skipping manual-vitals duplicate",
+                        visit.getVisitNumber());
+                return;
+            }
+
+            ClinicalAlert saved = generateDeteriorationAlert(visit, pattern, description);
+            try {
+                ClinicalAlertResponse response = ClinicalAlertMapper.toResponse(saved);
+                UUID hospitalId = visit.getPatient().getHospital().getId();
+                eventPublisher.publishHospitalAlert(hospitalId, response);
+                TriageCategory currentCat = visit.getCurrentTriageCategory();
+                if (currentCat != null) {
+                    eventPublisher.publishZoneAlert(hospitalId,
+                            EdZone.fromTriageCategory(currentCat), response);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to publish manual-vitals deterioration alert for visit {}: {}",
+                        visit.getVisitNumber(), e.getMessage());
+            }
+        } catch (Exception e) {
+            // Best-effort: a deterioration-eval failure must never break the
+            // clinician's vitals write.
+            log.error("evaluateManualVitals failed for visit {}: {}",
+                    visit != null ? visit.getId() : null, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * VitalSigns analogue of {@link #checkSingleVitalCritical(VitalStream)}
+     * — identical RED critical-band thresholds, applied to a clinical
+     * {@link VitalSigns} snapshot. SpO2 is handled separately by the caller
+     * (per-reading protocol override).
+     */
+    private String checkSingleVitalCriticalFromVitals(VitalSigns reading) {
+        if (reading.getHeartRate() != null) {
+            if (reading.getHeartRate() > CRITICAL_HR_HIGH) {
+                return "Heart rate critically high: " + reading.getHeartRate() + " bpm";
+            }
+            if (reading.getHeartRate() < CRITICAL_HR_LOW) {
+                return "Heart rate critically low: " + reading.getHeartRate() + " bpm";
+            }
+        }
+        if (reading.getRespiratoryRate() != null && reading.getRespiratoryRate() > CRITICAL_RR_HIGH) {
+            return "Respiratory rate critically high: " + reading.getRespiratoryRate() + " /min";
+        }
+        if (reading.getSystolicBp() != null) {
+            if (reading.getSystolicBp() < CRITICAL_SBP_LOW) {
+                return "Systolic BP critically low: " + reading.getSystolicBp() + " mmHg";
+            }
+            if (reading.getSystolicBp() > CRITICAL_SBP_HIGH) {
+                return "Systolic BP critically high: " + reading.getSystolicBp() + " mmHg";
+            }
+        }
+        if (reading.getTemperature() != null) {
+            if (reading.getTemperature() > CRITICAL_TEMP_HIGH) {
+                return "Temperature critically high: " + reading.getTemperature() + "°C";
+            }
+            if (reading.getTemperature() < CRITICAL_TEMP_LOW) {
+                return "Temperature critically low: " + reading.getTemperature() + "°C";
+            }
+        }
+        return null;
+    }
+
+    // ====================================================================
     // TREND CLASSIFICATION — authoritative, hysteresis-backed
     // ====================================================================
 

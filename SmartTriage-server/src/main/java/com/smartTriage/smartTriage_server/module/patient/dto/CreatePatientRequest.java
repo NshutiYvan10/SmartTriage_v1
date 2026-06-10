@@ -48,6 +48,11 @@ public class CreatePatientRequest {
     private String knownAllergies;
     private String chronicConditions;
 
+    /** S8 — optional body weight in kg. See Patient.weightKg (additive only). */
+    @jakarta.validation.constraints.DecimalMin(value = "0.0", inclusive = false, message = "Weight must be positive")
+    @jakarta.validation.constraints.DecimalMax(value = "999.99", message = "Weight is implausibly high")
+    private java.math.BigDecimal weightKg;
+
     // ── Guardian fields (pediatric) ──
     @Size(max = 30) private String guardianNationalId;
     @Size(max = 20) private String guardianPhone;

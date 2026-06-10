@@ -521,6 +521,12 @@ export function EntryRegistration() {
         bloodType: formData.bloodType || undefined,
         knownAllergies: allergiesText,
         chronicConditions: conditionsText,
+        // S8 — weight is collected on the form (mandatory for paediatric
+        // patients) but was previously dropped at submit; now persisted on
+        // the patient. Only send a positive parsed value, else leave it null.
+        weightKg: formData.weight && Number(formData.weight) > 0
+          ? Number(formData.weight)
+          : undefined,
         guardianName: formData.guardianName || undefined,
         guardianPhone: formData.guardianPhone || undefined,
         guardianRelationship: formData.guardianRelationship || undefined,
