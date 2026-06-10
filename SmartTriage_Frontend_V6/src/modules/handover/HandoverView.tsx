@@ -83,16 +83,17 @@ export function HandoverView() {
     if (!hospitalId || !access.canSeeAllZones) return;
     setLoading(true);
     try {
-      const res = await handoverApi.getForHospital(hospitalId, page);
-      setReports(res.content || []);
-      setTotalElements(res.totalElements || 0);
+      // B6 — /shift returns an array of this shift's reports (not a Page).
+      const res = await handoverApi.getForHospital(hospitalId);
+      setReports(res || []);
+      setTotalElements((res || []).length);
     } catch (err) {
       console.error('[HandoverView] Load failed:', err);
       setReports([]);
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, page, access.canSeeAllZones]);
+  }, [hospitalId, access.canSeeAllZones]);
 
   useEffect(() => { loadReports(); }, [loadReports]);
 

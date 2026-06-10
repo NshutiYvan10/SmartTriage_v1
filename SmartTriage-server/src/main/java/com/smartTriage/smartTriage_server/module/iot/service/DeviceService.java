@@ -815,9 +815,25 @@ public class DeviceService {
     }
 
     public List<DeviceSessionResponse> getActiveSessions(UUID hospitalId) {
+        return getActiveSessions(hospitalId, null);
+    }
+
+    /**
+     * B8 — active monitoring sessions for a hospital, optionally zone-scoped.
+     * When {@code zone} is non-null only sessions whose visit's
+     * {@code currentEdZone} matches are returned, so a zone-scoped clinician
+     * never receives other zones' monitored-patient (or trend) data. A null
+     * {@code zone} returns the full hospital list — used only for callers with
+     * cross-zone authority, enforced at the controller.
+     */
+    public List<DeviceSessionResponse> getActiveSessions(
+            UUID hospitalId,
+            com.smartTriage.smartTriage_server.common.enums.EdZone zone) {
         return sessionRepository
                 .findByDeviceHospitalIdAndSessionActiveTrueAndIsActiveTrue(hospitalId)
                 .stream()
+                .filter(s -> zone == null
+                        || (s.getVisit() != null && s.getVisit().getCurrentEdZone() == zone))
                 .map(IoTMapper::toResponse)
                 .toList();
     }

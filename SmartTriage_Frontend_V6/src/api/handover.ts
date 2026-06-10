@@ -25,9 +25,20 @@ export interface HandoverReport {
 }
 
 export const handoverApi = {
-  generate: (visitId: string, reportType: string) => post<HandoverReport>('/handover/generate', { visitId, reportType }),
-  acknowledge: (id: string, receivedByName: string) => put<HandoverReport>(`/handover/${id}/acknowledge`, { receivedByName }),
+  // B6 — backend is POST /handover/generate/{visitId} with body
+  // { reportType, generatedByName?, notes? }. The old POST /handover/generate
+  // with { visitId, reportType } was a 404.
+  generate: (visitId: string, reportType: string) =>
+    post<HandoverReport>(`/handover/generate/${visitId}`, { reportType }),
+  // B6 — backend DTO field is `receiverName`; sending `receivedByName` failed
+  // its @NotBlank validation (400).
+  acknowledge: (id: string, receiverName: string) =>
+    put<HandoverReport>(`/handover/${id}/acknowledge`, { receiverName }),
   getForVisit: (visitId: string) => get<HandoverReport[]>(`/handover/visit/${visitId}`),
-  getForHospital: (hospitalId: string, page = 0) => get<{ content: HandoverReport[]; totalElements: number }>(`/handover/hospital/${hospitalId}?page=${page}&size=20`),
+  // B6 — backend is GET /handover/hospital/{id}/shift, returning an ARRAY of
+  // this shift's reports (last 12h), not a paginated Page. The old
+  // /handover/hospital/{id}?page= was a 404 + shape mismatch.
+  getForHospital: (hospitalId: string) =>
+    get<HandoverReport[]>(`/handover/hospital/${hospitalId}/shift`),
   get: (id: string) => get<HandoverReport>(`/handover/${id}`),
 };

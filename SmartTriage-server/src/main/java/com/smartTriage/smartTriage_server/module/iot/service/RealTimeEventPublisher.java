@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Map;
 import java.util.UUID;
@@ -197,5 +199,47 @@ public class RealTimeEventPublisher {
         String topic = "/topic/ems/" + hospitalId;
         messagingTemplate.convertAndSend(topic, emsRunResponse);
         log.debug("Published EMS run event to {}", topic);
+    }
+
+    // ====================================================================
+    // VISIT / ADMISSION TOPICS (B4)
+    // ====================================================================
+
+    /**
+     * Push a visit/admission event to the hospital's visits topic. Fired when
+     * a new visit is created (registration or a returning-patient admission)
+     * so dashboards refresh the active-patient list live instead of only when
+     * it happens to be empty.
+     */
+    public void publishVisitEvent(UUID hospitalId, Object payload) {
+        String topic = "/topic/visits/" + hospitalId;
+        messagingTemplate.convertAndSend(topic, payload);
+        log.debug("Published visit event to {}", topic);
+    }
+
+    /**
+     * Publish a visit event AFTER the current transaction commits, so a
+     * subscriber that reacts by re-fetching sees the committed visit row
+     * (avoids the read-before-commit race). Falls back to an immediate publish
+     * when there is no active transaction (tests / async callers). Best-effort:
+     * a STOMP failure never propagates into the caller's transaction.
+     */
+    public void publishVisitEventAfterCommit(UUID hospitalId, Object payload) {
+        Runnable fire = () -> {
+            try {
+                publishVisitEvent(hospitalId, payload);
+            } catch (Exception e) {
+                log.warn("Failed to publish visit event for hospital {}: {}",
+                        hospitalId, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override public void afterCommit() { fire.run(); }
+                    });
+        } else {
+            fire.run();
+        }
     }
 }

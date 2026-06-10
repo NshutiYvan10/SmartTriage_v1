@@ -1,9 +1,11 @@
 package com.smartTriage.smartTriage_server.module.iot.controller;
 
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
+import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.module.iot.dto.*;
 import com.smartTriage.smartTriage_server.module.iot.service.DeviceService;
 import com.smartTriage.smartTriage_server.module.iot.service.VitalStreamService;
+import com.smartTriage.smartTriage_server.security.ClinicalAuthz;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -11,6 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -46,6 +49,8 @@ public class IoTDeviceController {
 
     private final DeviceService deviceService;
     private final VitalStreamService vitalStreamService;
+    /** B8 — used to zone-scope the Constant Monitoring sessions list server-side. */
+    private final ClinicalAuthz clinicalAuthz;
 
     // ====================================================================
     // DEVICE MANAGEMENT
@@ -222,8 +227,25 @@ public class IoTDeviceController {
     @GetMapping("/monitoring/active/{hospitalId}")
     @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<DeviceSessionResponse>>> getActiveSessions(
-            @PathVariable UUID hospitalId) {
-        return ResponseEntity.ok(ApiResponse.success(deviceService.getActiveSessions(hospitalId)));
+            @PathVariable UUID hospitalId,
+            Authentication authentication) {
+        // B8 — zone-scope the Constant Monitoring sessions list server-side.
+        // Cross-zone authorities (admin / charge nurse / shift-lead) see every
+        // monitored patient; a zone-scoped clinician sees only their current
+        // zone's, and a caller with no current zone sees none. Filtering here
+        // means other zones' monitored-patient / trend data never reaches the
+        // client. NB: the displayed patient list is already zone-scoped via
+        // the visit store (/visits/.../active/mine); this closes the parallel
+        // leak on the sessions/trend endpoint.
+        if (clinicalAuthz.canSeeAllZonesAtHospital(authentication, hospitalId)) {
+            return ResponseEntity.ok(ApiResponse.success(deviceService.getActiveSessions(hospitalId)));
+        }
+        EdZone callerZone = clinicalAuthz.callerCurrentZone(authentication);
+        if (callerZone == null) {
+            return ResponseEntity.ok(ApiResponse.success(List.<DeviceSessionResponse>of()));
+        }
+        return ResponseEntity.ok(ApiResponse.success(
+                deviceService.getActiveSessions(hospitalId, callerZone)));
     }
 
     @GetMapping("/monitoring/session/{sessionId}")

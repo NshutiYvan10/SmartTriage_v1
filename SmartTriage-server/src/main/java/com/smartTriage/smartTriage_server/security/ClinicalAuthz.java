@@ -291,6 +291,27 @@ public class ClinicalAuthz {
     }
 
     /**
+     * The caller's current ED zone, taken from their active shift assignment —
+     * or {@code null} when they have no current shift or it carries no zone.
+     * Used to scope zone-restricted list endpoints server-side (e.g. the
+     * Constant Monitoring sessions list, B8). Cross-zone authority must be
+     * checked separately via {@link #canSeeAllZonesAtHospital}.
+     */
+    @Transactional(readOnly = true)
+    public EdZone callerCurrentZone(Authentication authentication) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null) return null;
+            return shiftAssignmentService.getCurrentShiftForUser(user.getId())
+                    .map(sa -> sa.getZone())
+                    .orElse(null);
+        } catch (Exception e) {
+            log.error("callerCurrentZone error: {}", e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
      * Whether the caller may perform a triage write right now.
      *
      * <p>Authority follows the <strong>daily shift assignment</strong>, not

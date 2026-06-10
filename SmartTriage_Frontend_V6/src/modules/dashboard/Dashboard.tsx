@@ -24,6 +24,7 @@ import { useMyShift, getZoneForCategory } from '@/hooks/useMyShift';
 import { ShiftStartBanner } from '@/components/ShiftStartBanner';
 import { CriticalLabBanner } from '@/modules/lab/CriticalLabBanner';
 import { InboundEmsBoard } from '@/modules/ems/InboundEmsBoard';
+import { subscribeToVisits } from '@/api/websocket';
 
 export function Dashboard() {
   const { glassCard, glassInner, isDark, text } = useTheme();
@@ -95,6 +96,19 @@ export function Dashboard() {
     // useDataInit + the WebSocket subscriptions are for.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.hospitalId]);
+
+  // B4 — refresh the active-patient list live when a new admission is
+  // registered anywhere in this hospital. The self-heal effect above only
+  // fetches when the list is empty, so without this a new admission while the
+  // list is non-empty never appears until a manual reload.
+  useEffect(() => {
+    const hid = user?.hospitalId;
+    if (!hid) return;
+    const unsub = subscribeToVisits(hid, () => {
+      void fetchActiveVisits(hid);
+    });
+    return () => unsub();
+  }, [user?.hospitalId, fetchActiveVisits]);
 
   // Zone-aware filter: DOCTOR/NURSE see only their zone's patients;
   // SUPER_ADMIN/HOSPITAL_ADMIN see all patients.

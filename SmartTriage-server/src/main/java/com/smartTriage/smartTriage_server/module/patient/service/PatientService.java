@@ -46,6 +46,9 @@ public class PatientService {
     private final PatientRepository patientRepository;
     private final VisitRepository visitRepository;
     private final HospitalService hospitalService;
+    /** B4 — pushes a visit event after commit so dashboards refresh live when a
+     *  new patient is admitted. */
+    private final com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher realTimeEventPublisher;
     private final com.smartTriage.smartTriage_server.module.location.repository.RwProvinceRepository rwProvinceRepository;
     private final com.smartTriage.smartTriage_server.module.location.repository.RwDistrictRepository rwDistrictRepository;
     private final com.smartTriage.smartTriage_server.module.location.repository.RwSectorRepository rwSectorRepository;
@@ -167,6 +170,15 @@ public class PatientService {
                 patient.getFirstName(), patient.getLastName(),
                 patient.getMedicalRecordNumber(), visit.getVisitNumber(),
                 hospital.getHospitalCode());
+
+        // B4 — notify dashboards of the new admission so they refresh live (the
+        // dashboard self-heal only re-fetches when its patient list is empty).
+        realTimeEventPublisher.publishVisitEventAfterCommit(
+                hospital.getId(),
+                java.util.Map.of(
+                        "type", "CREATED",
+                        "visitId", visit.getId().toString(),
+                        "hospitalId", hospital.getId().toString()));
 
         return RegisterPatientResponse.builder()
                 .patient(PatientMapper.toResponse(patient))

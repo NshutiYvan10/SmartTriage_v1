@@ -178,6 +178,18 @@ export function subscribeToEmsRuns(
   return subscribeToTopic(`/topic/ems/${hospitalId}`, callback);
 }
 
+/**
+ * B4 — subscribe to visit/admission events for a hospital. Payload is a
+ * lightweight { type, visitId, hospitalId }; subscribers re-fetch the
+ * active-visit list so a new admission appears live.
+ */
+export function subscribeToVisits(
+  hospitalId: string,
+  callback: (event: any) => void
+): () => void {
+  return subscribeToTopic(`/topic/visits/${hospitalId}`, callback);
+}
+
 /** Subscribe to lab-order events for a hospital. Payload is LabOrder. */
 export function subscribeToLabOrders(
   hospitalId: string,

@@ -55,6 +55,9 @@ public class VisitService {
     private final com.smartTriage.smartTriage_server.module.medication.repository.MedicationAdministrationRepository medicationAdministrationRepository;
     private final com.smartTriage.smartTriage_server.module.clinical.repository.InvestigationRepository investigationRepository;
     private final com.smartTriage.smartTriage_server.module.icu.repository.IcuEscalationRepository icuEscalationRepository;
+    /** B4 — pushes a visit event after commit so dashboards refresh live when a
+     *  returning patient is admitted to a new visit. */
+    private final com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher realTimeEventPublisher;
 
     private static final AtomicLong visitCounter = new AtomicLong(0);
 
@@ -81,6 +84,14 @@ public class VisitService {
                 visit.getVisitNumber(),
                 patient.getMedicalRecordNumber(),
                 hospital.getHospitalCode());
+
+        // B4 — notify dashboards of the new admission so they refresh live.
+        realTimeEventPublisher.publishVisitEventAfterCommit(
+                hospital.getId(),
+                java.util.Map.of(
+                        "type", "CREATED",
+                        "visitId", visit.getId().toString(),
+                        "hospitalId", hospital.getId().toString()));
 
         return VisitMapper.toResponse(visit);
     }
