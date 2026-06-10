@@ -1,11 +1,6 @@
 package com.smartTriage.smartTriage_server.module.iot.scheduler;
 
-import com.smartTriage.smartTriage_server.common.enums.AlertSeverity;
-import com.smartTriage.smartTriage_server.common.enums.AlertType;
 import com.smartTriage.smartTriage_server.common.enums.DeviceStatus;
-import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
-import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
-import com.smartTriage.smartTriage_server.module.iot.entity.DeviceSession;
 import com.smartTriage.smartTriage_server.module.iot.entity.IoTDevice;
 import com.smartTriage.smartTriage_server.module.iot.service.DeviceService;
 import lombok.RequiredArgsConstructor;
@@ -24,11 +19,18 @@ import java.util.List;
  * Runs every 15 seconds to check for devices that have missed their heartbeat
  * deadline. When a device is detected as stale:
  *   1. Device status is set to OFFLINE
- *   2. If device was MONITORING a patient, a CRITICAL alert is generated
- *   3. The monitoring session is closed with reason "Device disconnected"
+ *   2. If device was MONITORING a patient, the disconnect is handled in a
+ *      transaction by {@link DeviceService#handleMonitoringDeviceDisconnect}
+ *      (CRITICAL alert + last-reading snapshot + session → DISCONNECTED).
  *
  * This is a fail-safe mechanism: even if the network drops, the system
  * detects the absence of data and alerts clinical staff.
+ *
+ * NB: the monitored-disconnect handling MUST run in a service-layer
+ * transaction. This scheduler runs with no open JPA session
+ * (spring.jpa.open-in-view=false), so resolving the lazy visit/patient graph
+ * here directly would throw LazyInitializationException — which previously
+ * silently skipped the alert, the snapshot, and the DISCONNECTED transition.
  */
 @Slf4j
 @Component
@@ -36,7 +38,6 @@ import java.util.List;
 public class DeviceHeartbeatScheduler {
 
     private final DeviceService deviceService;
-    private final ClinicalAlertRepository clinicalAlertRepository;
 
     /**
      * Check for stale devices every 15 seconds.
@@ -67,66 +68,18 @@ public class DeviceHeartbeatScheduler {
             }
 
             if (wasMonitoring) {
-                // This is critical — a monitored patient has lost their device
-                handleMonitoringDeviceDisconnect(device);
+                // A monitored patient has lost their device. Delegate to a
+                // @Transactional service method so the lazy visit/patient graph
+                // resolves correctly (this scheduler has no open session — see
+                // class note). Wrapped so one device's failure can't abort the
+                // whole tick; the MonitoringStateWatcher also backstops.
+                try {
+                    deviceService.handleMonitoringDeviceDisconnect(device.getId());
+                } catch (Exception e) {
+                    log.warn("Failed to handle monitoring disconnect for device {}: {}",
+                            device.getSerialNumber(), e.getMessage());
+                }
             }
-        }
-    }
-
-    private void handleMonitoringDeviceDisconnect(IoTDevice device) {
-        DeviceSession session = deviceService.findActiveSessionForDevice(device.getId());
-
-        if (session != null) {
-            // Categorise correctly: monitoring failed, patient may be
-            // fine. Using DETERIORATION_DETECTED (CRITICAL) here was the
-            // old failure mode that trained clinicians to ignore the
-            // deterioration channel. Severity HIGH (not CRITICAL)
-            // because the failure is a monitoring loss, not a confirmed
-            // patient decline.
-            boolean alreadyOpen = clinicalAlertRepository
-                    .existsByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(
-                            session.getVisit().getId(), AlertType.IOT_DEVICE_DISCONNECTED);
-            if (!alreadyOpen) {
-                ClinicalAlert alert = ClinicalAlert.builder()
-                        .visit(session.getVisit())
-                        .alertType(AlertType.IOT_DEVICE_DISCONNECTED)
-                        .severity(AlertSeverity.HIGH)
-                        .title("Monitor offline — patient unmonitored")
-                        .message(String.format(
-                                "Monitor '%s' (Serial: %s) for patient %s %s (Visit: %s) " +
-                                "has lost its heartbeat (last seen: %s). The patient is no longer " +
-                                "being continuously monitored. Check the device, power it back on, " +
-                                "or pair a replacement.",
-                                device.getDeviceName(),
-                                device.getSerialNumber(),
-                                session.getVisit().getPatient().getFirstName(),
-                                session.getVisit().getPatient().getLastName(),
-                                session.getVisit().getVisitNumber(),
-                                device.getLastHeartbeatAt()))
-                        .autoGenerated(true)
-                        .build();
-                clinicalAlertRepository.save(alert);
-                session.incrementAlerts();
-            }
-
-            // Freeze the last live reading into VitalSigns before
-            // moving the session to DISCONNECTED so a page reload
-            // shows the last-known values rather than the older
-            // periodic snapshot.
-            deviceService.snapshotLatestStreamForSession(session.getId());
-
-            // Session is NOT closed — transition to DISCONNECTED so that
-            // when the device reconnects (or a replacement is paired)
-            // the timeline stays one continuous record. Closing here
-            // fragmented the clinical chart across every flaky network
-            // moment, which is the wrong default for a clinical-safety
-            // system.
-            deviceService.transitionSessionState(session.getId(),
-                    com.smartTriage.smartTriage_server.common.enums.MonitoringState.DISCONNECTED);
-
-            log.warn("Monitor {} disconnected during active session for Visit {}. " +
-                      "State transitioned to DISCONNECTED.",
-                    device.getSerialNumber(), session.getVisit().getVisitNumber());
         }
     }
 }
