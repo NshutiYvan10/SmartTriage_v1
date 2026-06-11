@@ -18,6 +18,7 @@ import com.smartTriage.smartTriage_server.module.medication.entity.MedicationAdm
 import com.smartTriage.smartTriage_server.module.medication.mapper.MedicationMapper;
 import com.smartTriage.smartTriage_server.module.medication.repository.MedicationAdministrationRepository;
 import com.smartTriage.smartTriage_server.module.medsafety.engine.MedicationSafetyEngine;
+import com.smartTriage.smartTriage_server.module.medsafety.repository.MedicationSafetyCheckRepository;
 import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
@@ -78,6 +79,14 @@ public class MedicationService {
      * (no back-edge to this service), so there is no circular bean wiring.
      */
     private final MedicationSafetyEngine medicationSafetyEngine;
+    /**
+     * Enforce an un-overridden medication-safety BLOCK at administration time.
+     * The {@code /med-safety/validate} flow persists a MedicationSafetyCheck per
+     * medication; this lets administer() honour an unresolved CRITICAL block
+     * (making the documented "BLOCKS administration until overridden" true).
+     * Repository, not the service, to avoid a circular bean dependency.
+     */
+    private final MedicationSafetyCheckRepository medicationSafetyCheckRepository;
 
     // ====================================================================
     // PRESCRIBE
@@ -442,6 +451,24 @@ public class MedicationService {
             throw new ClinicalBusinessException(
                     "Cannot administer medication in status: " + med.getStatus()
                             + ". Only PRESCRIBED medications can be administered.");
+        }
+
+        // Enforce an un-overridden medication safety BLOCK before administration.
+        // The /med-safety/validate flow persists a MedicationSafetyCheck per med;
+        // if the latest one for THIS medication is a CRITICAL block (overallSafe
+        // = false) that no clinician has overridden, administration must not
+        // proceed — making the system's documented "BLOCKS administration until
+        // overridden" actually true. (No check recorded → no gate; the routine
+        // prescribe path is already guarded server-side by the S1 allergy block.)
+        boolean unresolvedSafetyBlock = medicationSafetyCheckRepository
+                .findByMedicationIdAndIsActiveTrueOrderByCheckedAtDesc(medicationId)
+                .filter(check -> !check.isOverallSafe() && check.getOverriddenBy() == null)
+                .isPresent();
+        if (unresolvedSafetyBlock) {
+            throw new ClinicalBusinessException(
+                    "Administration blocked: an unresolved medication safety check exists for '"
+                            + med.getDrugName() + "'. A clinician must override the safety "
+                            + "check (with a documented reason) before it can be administered.");
         }
 
         // Workflow 3 — separation of duties. The clinician who prescribed
