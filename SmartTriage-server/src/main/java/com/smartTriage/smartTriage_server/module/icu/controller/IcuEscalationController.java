@@ -38,6 +38,9 @@ public class IcuEscalationController {
      * Request a new ICU escalation for a visit.
      */
     @PostMapping("/request")
+    // Authz sweep — clinical action on a visit: clinical roles + visit scope.
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #request.visitId)")
     public ResponseEntity<ApiResponse<IcuEscalationResponse>> requestEscalation(
             @Valid @RequestBody IcuEscalationRequest request) {
         IcuEscalation escalation = icuEscalationService.requestEscalation(request);
@@ -48,6 +51,8 @@ public class IcuEscalationController {
      * Manually trigger auto-evaluation for a specific visit.
      */
     @PostMapping("/auto-evaluate/{visitId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<IcuEscalationResponse>> autoEvaluate(@PathVariable UUID visitId) {
         Optional<IcuEscalation> escalation = icuEscalationService.autoEvaluate(visitId);
         if (escalation.isPresent()) {
@@ -61,6 +66,7 @@ public class IcuEscalationController {
      * Notify the ICU team about an escalation.
      */
     @PutMapping("/{id}/notify-team")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<IcuEscalationResponse>> notifyIcuTeam(@PathVariable UUID id) {
         IcuEscalation escalation = icuEscalationService.notifyIcuTeam(id);
         return ResponseEntity.ok(ApiResponse.success("ICU team notified", IcuEscalationMapper.toResponse(escalation)));
@@ -70,6 +76,7 @@ public class IcuEscalationController {
      * Record the ICU team's response (accept or decline).
      */
     @PutMapping("/{id}/response")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<IcuEscalationResponse>> recordResponse(
             @PathVariable UUID id,
             @RequestBody IcuResponseRequest request) {
@@ -84,6 +91,7 @@ public class IcuEscalationController {
      * Assign an ICU bed to the escalation.
      */
     @PutMapping("/{id}/assign-bed")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<IcuEscalationResponse>> assignBed(
             @PathVariable UUID id,
             @RequestParam String bedNumber) {
@@ -95,6 +103,7 @@ public class IcuEscalationController {
      * Mark the patient as transferred to ICU.
      */
     @PutMapping("/{id}/transfer")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<IcuEscalationResponse>> transferToIcu(@PathVariable UUID id) {
         IcuEscalation escalation = icuEscalationService.transferToIcu(id);
         return ResponseEntity.ok(ApiResponse.success("Patient transferred to ICU", IcuEscalationMapper.toResponse(escalation)));
@@ -104,6 +113,7 @@ public class IcuEscalationController {
      * Cancel an ICU escalation with a reason.
      */
     @PutMapping("/{id}/cancel")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<IcuEscalationResponse>> cancelEscalation(
             @PathVariable UUID id,
             @RequestParam String reason) {

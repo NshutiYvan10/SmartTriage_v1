@@ -37,6 +37,9 @@ public class HandoverReportController {
      * Generate a handover report for a specific visit.
      */
     @PostMapping("/generate/{visitId}")
+    // Authz sweep — a handover report IS the patient summary: visit scope.
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'PARAMEDIC') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<HandoverReportResponse>> generateReport(
             @PathVariable UUID visitId,
             @Valid @RequestBody GenerateHandoverRequest request) {
@@ -54,6 +57,8 @@ public class HandoverReportController {
      * Generate handover reports for ALL active patients at a hospital (bulk shift handover).
      */
     @PostMapping("/generate-bulk/{hospitalId}")
+    // Bulk shift handover = every active patient's summary → cross-zone authority.
+    @PreAuthorize("@clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<HandoverReportResponse>>> generateBulkShiftHandover(
             @PathVariable UUID hospitalId,
             @Valid @RequestBody GenerateShiftHandoverRequest request) {
@@ -69,6 +74,7 @@ public class HandoverReportController {
      * Acknowledge receipt of a handover report.
      */
     @PutMapping("/{id}/acknowledge")
+    @PreAuthorize("@clinicalAuthz.canAccessHandoverReport(authentication, #id)")
     public ResponseEntity<ApiResponse<HandoverReportResponse>> acknowledgeHandover(
             @PathVariable UUID id,
             @Valid @RequestBody AcknowledgeHandoverRequest request) {

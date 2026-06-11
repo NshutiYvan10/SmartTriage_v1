@@ -109,6 +109,7 @@ public class StaffLeaveController {
 
     /** Coverage feed for the calendar view. */
     @GetMapping("/hospital/{hospitalId}/overlapping")
+    @PreAuthorize("@shiftAssignmentAuthz.canViewShift(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<StaffLeaveDtos.Response>>> listOverlapping(
             @PathVariable UUID hospitalId,
             @RequestParam("from") LocalDate from,

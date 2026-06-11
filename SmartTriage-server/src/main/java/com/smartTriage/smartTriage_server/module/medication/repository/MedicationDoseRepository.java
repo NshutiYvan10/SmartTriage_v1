@@ -49,6 +49,22 @@ public interface MedicationDoseRepository extends JpaRepository<MedicationDose, 
             UUID medicationId, Collection<DoseKind> kinds);
 
     /**
+     * Every GIVEN dose of one DRUG across the whole visit in a trailing
+     * window — across ALL orders of that drug, not just one (two
+     * separate paracetamol orders still share one daily maximum).
+     * Drives the cumulative daily-dose cap at administration time.
+     */
+    @Query("SELECT d FROM MedicationDose d JOIN d.medication m "
+            + "WHERE d.visit.id = :visitId AND d.isActive = true "
+            + "AND d.status = com.smartTriage.smartTriage_server.common.enums.DoseStatus.GIVEN "
+            + "AND d.givenAt > :since "
+            + "AND LOWER(m.drugName) = LOWER(:drugName)")
+    List<MedicationDose> findGivenForVisitAndDrugSince(
+            @Param("visitId") UUID visitId,
+            @Param("drugName") String drugName,
+            @Param("since") Instant since);
+
+    /**
      * Zone medication board — every open DUE dose for a hospital with
      * its order + visit + patient eagerly fetched (one query, no N+1;
      * the controller maps it straight to the board DTO). The service

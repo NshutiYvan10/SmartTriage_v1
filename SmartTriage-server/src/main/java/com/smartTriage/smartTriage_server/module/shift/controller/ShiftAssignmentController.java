@@ -56,6 +56,7 @@ public class ShiftAssignmentController {
      * Get all assignments for the current shift.
      */
     @GetMapping("/hospital/{hospitalId}/current")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<ShiftAssignmentResponse>>> getCurrentShift(
             @PathVariable UUID hospitalId) {
         List<ShiftAssignmentResponse> assignments = shiftAssignmentService.getCurrentShiftAssignments(hospitalId);
@@ -66,6 +67,7 @@ public class ShiftAssignmentController {
      * Get assignments for a specific zone.
      */
     @GetMapping("/hospital/{hospitalId}/zone/{zone}")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<ShiftAssignmentResponse>>> getZoneAssignments(
             @PathVariable UUID hospitalId,
             @PathVariable EdZone zone) {
@@ -171,6 +173,7 @@ public class ShiftAssignmentController {
      * Get assignments for a specific date (all shift periods).
      */
     @GetMapping("/hospital/{hospitalId}/date/{date}")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<ShiftAssignmentResponse>>> getShiftByDate(
             @PathVariable UUID hospitalId,
             @PathVariable LocalDate date) {
@@ -215,6 +218,7 @@ public class ShiftAssignmentController {
      * badge yet).
      */
     @GetMapping("/hospital/{hospitalId}/shift-lead")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<ShiftAssignmentResponse>> getCurrentShiftLead(
             @PathVariable UUID hospitalId) {
         return shiftAssignmentService.getCurrentShiftLead(hospitalId)

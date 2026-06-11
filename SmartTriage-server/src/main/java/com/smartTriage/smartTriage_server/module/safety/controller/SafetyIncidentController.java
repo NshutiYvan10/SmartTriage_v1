@@ -33,6 +33,9 @@ public class SafetyIncidentController {
     private final SafetyIncidentService safetyIncidentService;
 
     @PostMapping
+    // Authz sweep — DELIBERATELY any authenticated staff member: incident
+    // reporting must be frictionless (blameless reporting culture).
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> reportIncident(
             @Valid @RequestBody ReportIncidentRequest request) {
         SafetyIncidentResponse response = SafetyIncidentMapper.toResponse(
@@ -42,6 +45,7 @@ public class SafetyIncidentController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> updateIncident(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateIncidentRequest request) {
@@ -51,6 +55,7 @@ public class SafetyIncidentController {
     }
 
     @PutMapping("/{id}/investigate")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> startInvestigation(
             @PathVariable UUID id,
             @RequestParam String investigatorName) {
@@ -60,6 +65,7 @@ public class SafetyIncidentController {
     }
 
     @PutMapping("/{id}/root-cause")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> recordRootCause(
             @PathVariable UUID id,
             @Valid @RequestBody RootCauseRequest request) {
@@ -69,6 +75,7 @@ public class SafetyIncidentController {
     }
 
     @PutMapping("/{id}/corrective-action")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> planCorrectiveAction(
             @PathVariable UUID id,
             @Valid @RequestBody CorrectiveActionRequest request) {
@@ -78,6 +85,7 @@ public class SafetyIncidentController {
     }
 
     @PutMapping("/{id}/complete-action")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> completeCorrectiveAction(
             @PathVariable UUID id) {
         SafetyIncidentResponse response = SafetyIncidentMapper.toResponse(
@@ -86,6 +94,7 @@ public class SafetyIncidentController {
     }
 
     @PutMapping("/{id}/close")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> closeIncident(
             @PathVariable UUID id,
             @Valid @RequestBody CloseIncidentRequest request) {

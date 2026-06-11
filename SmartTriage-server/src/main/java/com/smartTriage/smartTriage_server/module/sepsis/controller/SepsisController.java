@@ -37,6 +37,9 @@ public class SepsisController {
      * Trigger a sepsis screening for a visit using the latest vital signs.
      */
     @PostMapping("/screen/{visitId}")
+    // Authz sweep — clinical action on a visit: clinical roles + visit scope.
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<SepsisScreeningResponse>> screenPatient(
             @PathVariable UUID visitId,
             @RequestBody(required = false) SepsisScreeningRequest request) {
@@ -74,6 +77,7 @@ public class SepsisController {
      * Start the 1-hour sepsis bundle timer for a screening.
      */
     @PutMapping("/bundle/{screeningId}/start")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<SepsisBundleStatusResponse>> startBundle(
             @PathVariable UUID screeningId) {
         SepsisScreening screening = sepsisService.startBundle(screeningId);
@@ -85,6 +89,7 @@ public class SepsisController {
      * Complete a specific bundle item.
      */
     @PutMapping("/bundle/{screeningId}/item/{item}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<SepsisBundleStatusResponse>> completeBundleItem(
             @PathVariable UUID screeningId,
             @PathVariable SepsisBundleItem item) {

@@ -32,7 +32,9 @@ import com.smartTriage.smartTriage_server.module.medication.mapper.MedicationMap
 import com.smartTriage.smartTriage_server.module.medication.repository.MedicationAdministrationRepository;
 import com.smartTriage.smartTriage_server.module.medication.repository.MedicationDoseRepository;
 import com.smartTriage.smartTriage_server.module.medsafety.engine.MedicationSafetyEngine;
+import com.smartTriage.smartTriage_server.module.medsafety.entity.DrugFormulary;
 import com.smartTriage.smartTriage_server.module.medsafety.repository.MedicationSafetyCheckRepository;
+import com.smartTriage.smartTriage_server.module.triage.repository.TriageRecordRepository;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.vital.entity.VitalSigns;
@@ -89,6 +91,8 @@ public class MedicationScheduleService {
     private final MedicationSafetyEngine medicationSafetyEngine;
     private final RealTimeEventPublisher realTimeEventPublisher;
     private final MedicationService medicationService;
+    /** Pediatric daily-cap weight source: latest triage childWeightKg. */
+    private final TriageRecordRepository triageRecordRepository;
 
     private static final DateTimeFormatter TIME_FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.of("Africa/Kigali"));
@@ -123,6 +127,20 @@ public class MedicationScheduleService {
         BigDecimal verifiedValue = verifyDose(
                 order, request.getDoseValue(), request.getDoseUnit(), override, justification);
 
+        // Cumulative daily-dose cap — the classic accumulation harm
+        // (e.g. paracetamol totals) is checked against ALL doses of this
+        // drug across the visit in the trailing 24 h, not just this order.
+        String capFinding = evaluateDailyDoseCap(order,
+                verifiedValue != null ? verifiedValue : order.getDoseValue(),
+                request.getDoseUnit() != null ? request.getDoseUnit() : order.getDoseUnit());
+        if (capFinding != null && !override) {
+            throw new ClinicalBusinessException("Administration blocked: " + capFinding
+                    + ". A clinician may override with documented justification.");
+        }
+        if (capFinding != null) {
+            requireJustification(justification);
+        }
+
         Instant now = Instant.now();
         dose.setStatus(DoseStatus.GIVEN);
         dose.setGivenAt(now);
@@ -138,6 +156,7 @@ public class MedicationScheduleService {
             raiseAdministrationOverrideAlert(order, dose, justification);
         }
         if (allergyNote != null) dose.appendStatusReason(allergyNote);
+        if (capFinding != null) dose.appendStatusReason("Overridden daily-cap gate: " + capFinding);
         if (request.getNotes() != null && !request.getNotes().isBlank()) {
             dose.appendStatusReason("Note: " + request.getNotes().trim());
         }
@@ -314,6 +333,14 @@ public class MedicationScheduleService {
                 if (!passed) gateFindings.add(gateEvaluation);
             }
         }
+
+        // 4. Cumulative daily-dose cap — same-drug 24h total across the
+        //    visit (catches PRN accumulation toward e.g. the paracetamol
+        //    daily maximum even when each single dose is in range).
+        String dailyCapFinding = evaluateDailyDoseCap(order,
+                request.getDoseValue() != null ? request.getDoseValue() : order.getDoseValue(),
+                request.getDoseUnit() != null ? request.getDoseUnit() : order.getDoseUnit());
+        if (dailyCapFinding != null) gateFindings.add(dailyCapFinding);
 
         if (!gateFindings.isEmpty() && !override) {
             throw new ClinicalBusinessException(
@@ -1007,6 +1034,101 @@ public class MedicationScheduleService {
         clinicalAlertRepository.save(alert);
         log.warn("ADMINISTRATION OVERRIDE — order:{} drug:{} by:{} justification:{}",
                 order.getId(), order.getDrugName(), dose.getGivenByName(), justification);
+    }
+
+    /**
+     * Cumulative daily-dose cap (hardening sprint). Evaluates whether
+     * giving {@code doseValue doseUnit} of this order's drug NOW would
+     * push the visit's same-drug 24-hour total past the formulary's
+     * daily maximum — across ALL orders of that drug, because two
+     * separate paracetamol orders still share one daily limit.
+     *
+     * <p>Adults use {@code adult_max_daily_dose_mg}; pediatric visits
+     * use {@code pediatric_max_daily_dose_mg_per_kg} × the latest
+     * triage weight (no weight on record → skipped; the prescribe-time
+     * engine already warns about missing pediatric weight).
+     *
+     * <p>Consistent with the S2 unit rule: only evaluated when the
+     * formulary's dose_unit is MG and the dose values normalise to a
+     * mg-family unit (mg / g / mcg) — cross-unit arithmetic on
+     * UNITS/IU/sachets would produce nonsense.
+     *
+     * @return a human-readable finding when the cap would be exceeded,
+     *         null when within the cap or the check is not applicable
+     */
+    private String evaluateDailyDoseCap(
+            MedicationAdministration order, BigDecimal doseValue, String doseUnit) {
+        Double incomingMg = toMilligrams(doseValue, doseUnit);
+        if (incomingMg == null || incomingMg <= 0) return null;
+
+        DrugFormulary formulary = medicationSafetyEngine
+                .lookupFormulary(order.getDrugName(), order.getVisit()).orElse(null);
+        if (formulary == null) return null;
+        String formularyUnit = formulary.getDoseUnit();
+        boolean mgDosed = formularyUnit == null || formularyUnit.isBlank()
+                || "MG".equalsIgnoreCase(formularyUnit.trim());
+        if (!mgDosed) return null;
+
+        double capMg;
+        String capLabel;
+        if (order.getVisit().isPediatric()) {
+            Double perKg = formulary.getPediatricMaxDailyDoseMgPerKg();
+            if (perKg == null || perKg <= 0) return null;
+            Double weightKg = triageRecordRepository
+                    .findFirstByVisitIdAndIsActiveTrueOrderByTriageTimeDesc(
+                            order.getVisit().getId())
+                    .map(com.smartTriage.smartTriage_server.module.triage.entity.TriageRecord::getChildWeightKg)
+                    .orElse(null);
+            if (weightKg == null || weightKg <= 0) {
+                log.warn("Daily-cap check skipped for '{}' — pediatric visit {} has no triage weight",
+                        order.getDrugName(), order.getVisit().getVisitNumber());
+                return null;
+            }
+            capMg = perKg * weightKg;
+            capLabel = String.format("%.0f mg/24h (%.1f mg/kg/day × %.1f kg)",
+                    capMg, perKg, weightKg);
+        } else {
+            Double adultCap = formulary.getAdultMaxDailyDoseMg();
+            if (adultCap == null || adultCap <= 0) return null;
+            capMg = adultCap;
+            capLabel = String.format("%.0f mg/24h", capMg);
+        }
+
+        double priorMg = doseRepository
+                .findGivenForVisitAndDrugSince(order.getVisit().getId(), order.getDrugName(),
+                        Instant.now().minus(Duration.ofHours(24)))
+                .stream()
+                .map(d -> toMilligrams(d.getDoseValue(), d.getDoseUnit()))
+                .filter(java.util.Objects::nonNull)
+                .mapToDouble(Double::doubleValue)
+                .sum();
+
+        double totalMg = priorMg + incomingMg;
+        if (totalMg > capMg + 0.001) {
+            return String.format(
+                    "Daily maximum exceeded — %.0f mg of %s already given in the last 24 h; "
+                            + "this dose (%.0f mg) would bring the total to %.0f mg, over the "
+                            + "maximum of %s",
+                    priorMg, order.getDrugName(), incomingMg, totalMg, capLabel);
+        }
+        return null;
+    }
+
+    /**
+     * Normalise a dose to milligrams. Null/blank unit is treated as mg
+     * (the frontend's structured-dose default). Non-mg-family units
+     * (UNITS, IU, mL, sachets, …) return null — the caller skips the
+     * cap rather than doing cross-unit arithmetic.
+     */
+    private Double toMilligrams(BigDecimal value, String unit) {
+        if (value == null) return null;
+        String u = unit == null || unit.isBlank() ? "mg" : unit.trim().toLowerCase();
+        return switch (u) {
+            case "mg" -> value.doubleValue();
+            case "g" -> value.doubleValue() * 1000.0;
+            case "mcg", "ug", "µg" -> value.doubleValue() / 1000.0;
+            default -> null;
+        };
     }
 
     private Double extractGateValue(VitalSigns vitals, MedicationAdministration order) {

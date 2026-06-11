@@ -32,6 +32,9 @@ public class InfectionIsolationController {
     private final InfectionIsolationService isolationService;
 
     @PostMapping("/screen/{visitId}")
+    // Authz sweep — clinical roles + visit scope.
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<InfectionScreeningResponse>> screenPatient(
             @PathVariable UUID visitId,
             @Valid @RequestBody InfectionScreeningRequest request) {
@@ -71,6 +74,7 @@ public class InfectionIsolationController {
     }
 
     @PutMapping("/{screeningId}/assign-room")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<InfectionScreeningResponse>> assignIsolationRoom(
             @PathVariable UUID screeningId,
             @Valid @RequestBody AssignRoomRequest request) {
@@ -80,6 +84,7 @@ public class InfectionIsolationController {
     }
 
     @PutMapping("/{screeningId}/end")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<InfectionScreeningResponse>> endIsolation(
             @PathVariable UUID screeningId) {
         InfectionScreeningResponse response = InfectionScreeningMapper.toResponse(
@@ -88,6 +93,7 @@ public class InfectionIsolationController {
     }
 
     @PutMapping("/{screeningId}/notify-public-health")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<InfectionScreeningResponse>> notifyPublicHealth(
             @PathVariable UUID screeningId,
             @RequestBody(required = false) PublicHealthNotificationRequest request) {

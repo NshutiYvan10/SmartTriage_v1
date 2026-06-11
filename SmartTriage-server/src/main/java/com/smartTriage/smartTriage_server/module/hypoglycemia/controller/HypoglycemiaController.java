@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,6 +27,9 @@ public class HypoglycemiaController {
     private final HypoglycemiaService hypoglycemiaService;
 
     @PostMapping("/check/{visitId}")
+    // Authz sweep — clinical roles + visit scope.
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<HypoglycemiaCheckResponse>> checkAndEnforce(
             @PathVariable UUID visitId) {
         HypoglycemiaCheckResponse response = hypoglycemiaService.checkAndEnforce(visitId);
@@ -33,6 +37,7 @@ public class HypoglycemiaController {
     }
 
     @PutMapping("/{eventId}/treatment")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<HypoglycemiaEventResponse>> recordTreatment(
             @PathVariable UUID eventId,
             @Valid @RequestBody RecordTreatmentRequest request) {
@@ -42,6 +47,7 @@ public class HypoglycemiaController {
     }
 
     @PutMapping("/{eventId}/repeat-glucose")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<HypoglycemiaEventResponse>> recordRepeatGlucose(
             @PathVariable UUID eventId,
             @Valid @RequestBody RepeatGlucoseRequest request) {
@@ -51,6 +57,7 @@ public class HypoglycemiaController {
     }
 
     @PutMapping("/{eventId}/resolve")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<HypoglycemiaEventResponse>> resolveEvent(
             @PathVariable UUID eventId) {
         HypoglycemiaEventResponse response = HypoglycemiaEventMapper.toResponse(
@@ -59,6 +66,7 @@ public class HypoglycemiaController {
     }
 
     @GetMapping("/visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<HypoglycemiaEventResponse>>> getEventsForVisit(
             @PathVariable UUID visitId) {
         List<HypoglycemiaEventResponse> responses = hypoglycemiaService.getEventsForVisit(visitId)
@@ -69,6 +77,7 @@ public class HypoglycemiaController {
     }
 
     @GetMapping("/hospital/{hospitalId}/active")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<HypoglycemiaEventResponse>>> getActiveEvents(
             @PathVariable UUID hospitalId) {
         List<HypoglycemiaEventResponse> responses = hypoglycemiaService.getActiveEvents(hospitalId)

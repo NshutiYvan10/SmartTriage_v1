@@ -49,6 +49,10 @@ public class UserController {
     }
 
     @GetMapping("/hospital/{hospitalId}")
+    // Authz sweep — staff directory is hospital-scoped. Same-hospital staff
+    // (any role) keep access: the shift planner staff pool and triage-nurse
+    // pickers depend on it. Cross-hospital PII reads are now denied.
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<UserResponse>>> getUsersByHospital(
             @PathVariable UUID hospitalId,
             @RequestParam(defaultValue = "false") boolean includeInactive,

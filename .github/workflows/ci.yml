@@ -1,0 +1,90 @@
+# ═══════════════════════════════════════════════════════════════════
+# SmartTriage CI (hardening sprint)
+#
+# Life-critical system — every push to main and every PR must prove:
+#   backend:  full Maven verify, including the Testcontainers
+#             integration suite (real PostgreSQL, Flyway migrated from
+#             scratch, end-to-end medication workflow). Ubuntu runners
+#             provide Docker, so the tests that skip on Docker-less dev
+#             machines execute here for real.
+#   frontend: dependency install, production build, and a typecheck
+#             RATCHET — tsc errors must not exceed the committed
+#             baseline (tsc-error-baseline.txt), so new type errors
+#             fail CI even though the legacy baseline is nonzero.
+#             Lower the baseline file as legacy errors get fixed.
+# ═══════════════════════════════════════════════════════════════════
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend — tests + integration (Testcontainers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Maven verify (unit + integration tests)
+        working-directory: SmartTriage-server
+        run: mvn -B --no-transfer-progress verify
+
+      - name: Fail if integration tests were skipped
+        # The Testcontainers suite is disabledWithoutDocker so dev
+        # machines stay green — but in CI a skip means Docker broke and
+        # the real-database coverage silently vanished. Make that loud.
+        working-directory: SmartTriage-server
+        run: |
+          if grep -rl 'skipped="[1-9]' target/surefire-reports/*.xml | grep -qE 'IntegrationTest|ApplicationTests'; then
+            echo "::error::Integration tests were SKIPPED in CI — Docker/Testcontainers is broken on the runner."
+            exit 1
+          fi
+          echo "Integration tests executed (not skipped)."
+
+  frontend:
+    name: Frontend — build + typecheck ratchet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: SmartTriage_Frontend_V6/package-lock.json
+
+      - name: Install dependencies
+        working-directory: SmartTriage_Frontend_V6
+        run: npm ci
+
+      - name: Production build
+        working-directory: SmartTriage_Frontend_V6
+        run: npm run build
+
+      - name: Typecheck ratchet (no NEW tsc errors vs baseline)
+        working-directory: SmartTriage_Frontend_V6
+        run: |
+          set +e
+          ERRORS=$(npx tsc --noEmit 2>&1 | grep -c "error TS")
+          set -e
+          BASELINE=$(tr -d '[:space:]' < tsc-error-baseline.txt)
+          echo "tsc errors: ${ERRORS} (baseline: ${BASELINE})"
+          if [ "${ERRORS}" -gt "${BASELINE}" ]; then
+            echo "::error::tsc error count rose from ${BASELINE} to ${ERRORS} — new type errors were introduced."
+            npx tsc --noEmit 2>&1 | grep "error TS" | head -40
+            exit 1
+          fi
+          if [ "${ERRORS}" -lt "${BASELINE}" ]; then
+            echo "::notice::tsc errors dropped to ${ERRORS} — consider lowering tsc-error-baseline.txt to ratchet the gain."
+          fi

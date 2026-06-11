@@ -24,8 +24,11 @@ import com.smartTriage.smartTriage_server.module.medication.entity.MedicationDos
 import com.smartTriage.smartTriage_server.module.medication.repository.MedicationAdministrationRepository;
 import com.smartTriage.smartTriage_server.module.medication.repository.MedicationDoseRepository;
 import com.smartTriage.smartTriage_server.module.medsafety.engine.MedicationSafetyEngine;
+import com.smartTriage.smartTriage_server.module.medsafety.entity.DrugFormulary;
 import com.smartTriage.smartTriage_server.module.medsafety.repository.MedicationSafetyCheckRepository;
 import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
+import com.smartTriage.smartTriage_server.module.triage.entity.TriageRecord;
+import com.smartTriage.smartTriage_server.module.triage.repository.TriageRecordRepository;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.vital.entity.VitalSigns;
@@ -80,6 +83,7 @@ class MedicationScheduleServiceTest {
     @Mock private MedicationSafetyEngine medicationSafetyEngine;
     @Mock private RealTimeEventPublisher realTimeEventPublisher;
     @Mock private MedicationService medicationService;
+    @Mock private TriageRecordRepository triageRecordRepository;
 
     @InjectMocks private MedicationScheduleService service;
 
@@ -116,6 +120,11 @@ class MedicationScheduleServiceTest {
                 .findByMedicationIdAndIsActiveTrueOrderByCheckedAtDesc(any()))
                 .thenReturn(Optional.empty());
         when(doseRepository.countByMedicationIdAndIsActiveTrue(any())).thenReturn(1L);
+        // Daily-cap defaults: no formulary match → cap not applicable.
+        when(medicationSafetyEngine.lookupFormulary(anyString(), any()))
+                .thenReturn(Optional.empty());
+        when(doseRepository.findGivenForVisitAndDrugSince(any(), anyString(), any()))
+                .thenReturn(List.of());
     }
 
     @AfterEach
@@ -536,6 +545,171 @@ class MedicationScheduleServiceTest {
         ClinicalBusinessException ex = assertThrows(ClinicalBusinessException.class,
                 () -> service.approveOrder(med.getId(), new ApproveOrderRequest()));
         assertTrue(ex.getMessage().contains("charge nurse"));
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Cumulative daily-dose cap
+    // ════════════════════════════════════════════════════════════════
+
+    private DrugFormulary mgFormulary(Double adultDailyCapMg, Double pedsDailyPerKg) {
+        DrugFormulary f = DrugFormulary.builder()
+                .genericName("Paracetamol")
+                .doseUnit("MG")
+                .adultMaxDailyDoseMg(adultDailyCapMg)
+                .pediatricMaxDailyDoseMgPerKg(pedsDailyPerKg)
+                .build();
+        when(medicationSafetyEngine.lookupFormulary(anyString(), any()))
+                .thenReturn(Optional.of(f));
+        return f;
+    }
+
+    private MedicationDose givenDoseRow(BigDecimal value, String unit) {
+        return MedicationDose.builder()
+                .visit(visit)
+                .kind(DoseKind.SCHEDULED_DOSE)
+                .status(DoseStatus.GIVEN)
+                .givenAt(Instant.now().minus(Duration.ofHours(4)))
+                .doseValue(value)
+                .doseUnit(unit)
+                .build();
+    }
+
+    @Test
+    void dailyCap_blocksDoseThatWouldExceedAdultMaximum() {
+        mgFormulary(4000.0, null); // paracetamol: 4 g/day
+        MedicationAdministration med = order(PrescriptionType.SCHEDULED);
+        med.setDrugName("Paracetamol");
+        med.setIntervalHours(6.0);
+        med.setDoseValue(new BigDecimal("1500"));
+        med.setDoseUnit("mg");
+        // 3 × 1000 mg already given in the last 24 h → 1500 more = 4500 > 4000.
+        when(doseRepository.findGivenForVisitAndDrugSince(any(), anyString(), any()))
+                .thenReturn(List.of(
+                        givenDoseRow(new BigDecimal("1000"), "mg"),
+                        givenDoseRow(new BigDecimal("1000"), "mg"),
+                        givenDoseRow(new BigDecimal("1000"), "mg")));
+        MedicationDose dose = dueDose(med, Instant.now(), 4);
+
+        ClinicalBusinessException ex = assertThrows(ClinicalBusinessException.class,
+                () -> service.administerDose(dose.getId(), new AdministerDoseRequest()));
+        assertTrue(ex.getMessage().contains("Daily maximum exceeded"));
+        assertEquals(DoseStatus.DUE, dose.getStatus());
+    }
+
+    @Test
+    void dailyCap_overridableWithJustification_andAuditNote() {
+        mgFormulary(4000.0, null);
+        MedicationAdministration med = order(PrescriptionType.SCHEDULED);
+        med.setDrugName("Paracetamol");
+        med.setIntervalHours(6.0);
+        med.setDoseValue(new BigDecimal("1500"));
+        med.setDoseUnit("mg");
+        when(doseRepository.findGivenForVisitAndDrugSince(any(), anyString(), any()))
+                .thenReturn(List.of(
+                        givenDoseRow(new BigDecimal("3000"), "mg")));
+        MedicationDose dose = dueDose(med, Instant.now(), 2);
+
+        AdministerDoseRequest req = AdministerDoseRequest.builder()
+                .override(true)
+                .overrideJustification("Consultant accepted exceeding the cap — severe refractory pain")
+                .build();
+        service.administerDose(dose.getId(), req);
+
+        assertEquals(DoseStatus.GIVEN, dose.getStatus());
+        assertTrue(dose.isOverride());
+        assertNotNull(dose.getStatusReason());
+        assertTrue(dose.getStatusReason().contains("daily-cap"));
+        verify(clinicalAlertRepository, atLeastOnce()).save(any(ClinicalAlert.class));
+    }
+
+    @Test
+    void dailyCap_normalisesGramsToMilligrams() {
+        mgFormulary(4000.0, null);
+        MedicationAdministration med = order(PrescriptionType.SCHEDULED);
+        med.setDrugName("Paracetamol");
+        med.setIntervalHours(6.0);
+        med.setDoseValue(new BigDecimal("1500"));
+        med.setDoseUnit("mg");
+        // Prior dose recorded as "3 g" = 3000 mg → 1500 more exceeds 4000.
+        when(doseRepository.findGivenForVisitAndDrugSince(any(), anyString(), any()))
+                .thenReturn(List.of(givenDoseRow(new BigDecimal("3"), "g")));
+        MedicationDose dose = dueDose(med, Instant.now(), 2);
+
+        ClinicalBusinessException ex = assertThrows(ClinicalBusinessException.class,
+                () -> service.administerDose(dose.getId(), new AdministerDoseRequest()));
+        assertTrue(ex.getMessage().contains("Daily maximum exceeded"));
+    }
+
+    @Test
+    void dailyCap_skippedForNonMgFormularyUnits() {
+        // S2 rule: a UNITS-dosed drug (insulin) must not be compared in mg.
+        DrugFormulary f = DrugFormulary.builder()
+                .genericName("Insulin Regular (Soluble)")
+                .doseUnit("UNITS")
+                .adultMaxDailyDoseMg(100.0)
+                .build();
+        when(medicationSafetyEngine.lookupFormulary(anyString(), any()))
+                .thenReturn(Optional.of(f));
+        MedicationAdministration med = order(PrescriptionType.SCHEDULED);
+        med.setIntervalHours(6.0);
+        med.setDoseValue(new BigDecimal("80"));
+        med.setDoseUnit("mg"); // even mg-looking values must not hit a UNITS cap
+        when(doseRepository.findGivenForVisitAndDrugSince(any(), anyString(), any()))
+                .thenReturn(List.of(givenDoseRow(new BigDecimal("80"), "mg")));
+        MedicationDose dose = dueDose(med, Instant.now(), 2);
+
+        service.administerDose(dose.getId(), new AdministerDoseRequest());
+        assertEquals(DoseStatus.GIVEN, dose.getStatus());
+    }
+
+    @Test
+    void dailyCap_pediatric_usesPerKgTimesTriageWeight() {
+        mgFormulary(null, 75.0); // 75 mg/kg/day
+        visit.setPediatric(true);
+        TriageRecord triage = TriageRecord.builder()
+                .visit(visit)
+                .triageTime(Instant.now().minus(Duration.ofHours(2)))
+                .childWeightKg(10.0) // cap = 750 mg/day
+                .build();
+        when(triageRecordRepository
+                .findFirstByVisitIdAndIsActiveTrueOrderByTriageTimeDesc(visit.getId()))
+                .thenReturn(Optional.of(triage));
+        MedicationAdministration med = order(PrescriptionType.SCHEDULED);
+        med.setDrugName("Paracetamol");
+        med.setIntervalHours(6.0);
+        med.setDoseValue(new BigDecimal("300"));
+        med.setDoseUnit("mg");
+        when(doseRepository.findGivenForVisitAndDrugSince(any(), anyString(), any()))
+                .thenReturn(List.of(givenDoseRow(new BigDecimal("500"), "mg"))); // 500 + 300 > 750
+        MedicationDose dose = dueDose(med, Instant.now(), 2);
+
+        ClinicalBusinessException ex = assertThrows(ClinicalBusinessException.class,
+                () -> service.administerDose(dose.getId(), new AdministerDoseRequest()));
+        assertTrue(ex.getMessage().contains("Daily maximum exceeded"));
+        assertTrue(ex.getMessage().contains("mg/kg"));
+    }
+
+    @Test
+    void dailyCap_alsoGatesPrnDoses() {
+        mgFormulary(4000.0, null);
+        MedicationAdministration med = prnOrder();
+        med.setDrugName("Paracetamol");
+        med.setPrnMinIntervalHours(null);
+        med.setPrnMaxDosesPerDay(null);
+        med.setDoseValue(new BigDecimal("1000"));
+        med.setDoseUnit("mg");
+        when(doseRepository.findFirstByMedicationIdAndStatusAndIsActiveTrueOrderByGivenAtDesc(
+                med.getId(), DoseStatus.GIVEN)).thenReturn(Optional.empty());
+        when(doseRepository.countByMedicationIdAndStatusAndGivenAtAfterAndIsActiveTrue(
+                any(), any(), any())).thenReturn(0L);
+        when(doseRepository.findGivenForVisitAndDrugSince(any(), anyString(), any()))
+                .thenReturn(List.of(
+                        givenDoseRow(new BigDecimal("2000"), "mg"),
+                        givenDoseRow(new BigDecimal("1500"), "mg"))); // 3500 + 1000 > 4000
+
+        ClinicalBusinessException ex = assertThrows(ClinicalBusinessException.class,
+                () -> service.recordPrnDose(med.getId(), prnRequest()));
+        assertTrue(ex.getMessage().contains("Daily maximum exceeded"));
     }
 
     // ════════════════════════════════════════════════════════════════

@@ -60,6 +60,7 @@ public class ChargeNurseDelegationController {
 
     /** All delegations currently in effect at a hospital. */
     @GetMapping("/hospital/{hospitalId}/active")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<ChargeNurseDelegationDtos.Response>>> listActive(
             @PathVariable UUID hospitalId) {
         return ResponseEntity.ok(ApiResponse.success(delegationService.listActive(hospitalId)));

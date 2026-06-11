@@ -32,6 +32,11 @@ public class FastTrackController {
     private final FastTrackService fastTrackService;
 
     @PostMapping("/activate")
+    // Authz sweep — was open to ANY authenticated user (any role, any
+    // hospital). Activating a stroke/STEMI pathway is a clinical action
+    // on a specific visit: clinical roles + visit scope.
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #request.visitId)")
     public ResponseEntity<ApiResponse<FastTrackResponse>> activateFastTrack(
             @Valid @RequestBody FastTrackActivationRequest request) {
         FastTrackResponse response = FastTrackMapper.toResponse(
@@ -68,6 +73,7 @@ public class FastTrackController {
     }
 
     @PutMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<FastTrackResponse>> updateStatus(
             @PathVariable UUID id,
             @RequestParam FastTrackStatus status) {
@@ -77,6 +83,7 @@ public class FastTrackController {
     }
 
     @PutMapping("/{id}/ecg")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<FastTrackResponse>> recordEcg(
             @PathVariable UUID id,
             @Valid @RequestBody EcgResultRequest request) {
@@ -86,6 +93,7 @@ public class FastTrackController {
     }
 
     @PutMapping("/{id}/ct")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<FastTrackResponse>> recordCt(
             @PathVariable UUID id,
             @Valid @RequestBody CtResultRequest request) {

@@ -13,6 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -29,6 +30,7 @@ public class SystemHealthController {
     private final SystemHealthService systemHealthService;
 
     @PostMapping("/check")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #request.hospitalId)")
     public ResponseEntity<ApiResponse<SystemHealthResponse>> recordHealthCheck(
             @Valid @RequestBody HealthCheckRequest request) {
         SystemHealthResponse response = SystemHealthMapper.toResponse(
@@ -38,6 +40,7 @@ public class SystemHealthController {
     }
 
     @GetMapping("/{hospitalId}/latest")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<SystemHealthResponse>> getLatestHealth(
             @PathVariable UUID hospitalId) {
         SystemHealthResponse response = SystemHealthMapper.toResponse(
@@ -46,6 +49,7 @@ public class SystemHealthController {
     }
 
     @GetMapping("/{hospitalId}/history")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<SystemHealthResponse>>> getHealthHistory(
             @PathVariable UUID hospitalId,
             @PageableDefault(size = 20) Pageable pageable) {

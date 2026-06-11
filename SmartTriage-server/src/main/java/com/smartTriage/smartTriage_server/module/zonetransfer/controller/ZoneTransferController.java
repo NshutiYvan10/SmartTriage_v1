@@ -83,6 +83,8 @@ public class ZoneTransferController {
 
     /** All pending transfers across the hospital — for charge nurse. */
     @GetMapping("/hospital/{hospitalId}/pending")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<ZoneTransferResponse>>> pendingForHospital(
             @PathVariable UUID hospitalId) {
         return ResponseEntity.ok(ApiResponse.success(
@@ -91,6 +93,8 @@ public class ZoneTransferController {
 
     /** Pending transfers into a specific zone. */
     @GetMapping("/hospital/{hospitalId}/pending/zone/{zone}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<ZoneTransferResponse>>> pendingIntoZone(
             @PathVariable UUID hospitalId,
             @PathVariable EdZone zone) {
@@ -100,6 +104,7 @@ public class ZoneTransferController {
 
     /** Visit-scoped pending transfer lookup (one-shot). */
     @GetMapping("/visit/{visitId}/pending")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<ZoneTransferResponse>> pendingForVisit(
             @PathVariable UUID visitId) {
         return zoneTransferService.findPendingForVisit(visitId)
@@ -109,6 +114,7 @@ public class ZoneTransferController {
 
     /** Visit-scoped history of all transfers (audit log). */
     @GetMapping("/visit/{visitId}/history")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<ZoneTransferResponse>>> historyForVisit(
             @PathVariable UUID visitId) {
         return ResponseEntity.ok(ApiResponse.success(
