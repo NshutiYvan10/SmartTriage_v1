@@ -200,12 +200,28 @@ export function subscribeToLabOrders(
 
 /** Subscribe to medication events for a hospital (Workflow 3).
  *  Payload is a MedicationResponse — emitted on prescribe and every
- *  workflow transition (administer/countersign/hold/refuse/cancel). */
+ *  workflow transition (administer/countersign/hold/refuse/cancel).
+ *  V67 additionally emits small {eventType: ...} maps on dose-level
+ *  transitions; consumers should detect the shape and refetch. */
 export function subscribeToMedications(
   hospitalId: string,
   callback: (med: any) => void
 ): () => void {
   return subscribeToTopic(`/topic/medications/${hospitalId}`, callback);
+}
+
+/**
+ * V67 — zone-scoped medication events (dose due/overdue/missed/given,
+ * order created/approved/discontinued, infusion events). The zone
+ * nurse's medication board subscribes to its own zone; charge /
+ * cross-zone roles use the hospital-wide topic above instead.
+ */
+export function subscribeToZoneMedications(
+  hospitalId: string,
+  zone: string,
+  callback: (event: any) => void
+): () => void {
+  return subscribeToTopic(`/topic/medications/${hospitalId}/zone/${zone}`, callback);
 }
 
 /** Subscribe to alerts for a specific ED zone */

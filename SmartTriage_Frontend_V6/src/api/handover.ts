@@ -18,6 +18,10 @@ export interface HandoverReport {
   outstandingTasks: string | null;
   planOfCare: string | null;
   edTimeline: string | null;
+  /** V67 — full medication audit trail: every order with schedule and
+   *  remaining doses, every dose with actor/time/witness, misses /
+   *  holds / refusals / discontinuations with reasons. */
+  medicationAudit: string | null;
   receivedByName: string | null;
   isAcknowledged: boolean;
   notes: string | null;

@@ -40,6 +40,9 @@ export type AppPage =
    *  manage the lab queue. */
   | 'investigations'
   | 'med-queue'
+  /** V67 — zone medication board: due/overdue doses, PRN quick-give,
+   *  infusions, high-alert approvals. The nurse's main dose surface. */
+  | 'med-board'
   | 'ems'
   | 'pathways'
   | 'icu'
@@ -217,6 +220,8 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     // duties backend check still prevents them administering their
     // own prescriptions.
     'med-queue',
+    // V67 — dose-level medication board (scheduled/PRN/infusions).
+    'med-board',
     // Reports (own)
     'reports',
     // Self-service shift surface
@@ -236,6 +241,9 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     // surface for the nurse: every PRESCRIBED med across the
     // hospital, STAT first, real-time push.
     'med-queue',
+    // V67 — dose-level medication board (scheduled/PRN/infusions),
+    // zone-scoped with real-time due/overdue push.
+    'med-board',
     // Safety reporting
     'safety-incidents',
     // Self-service shift surfaces only. A regular nurse sees their own

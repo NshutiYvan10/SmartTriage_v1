@@ -29,10 +29,14 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Search, X, Pill, Send, Loader2, CheckCircle2, AlertTriangle, Sparkles, Calculator, ShieldAlert } from 'lucide-react';
+import { Search, X, Pill, Send, Loader2, CheckCircle2, AlertTriangle, Sparkles, Calculator, ShieldAlert, Repeat, Droplet, Zap } from 'lucide-react';
 import { medsafetyApi, type DrugFormulary } from '@/api/medsafety';
-import type { PrescribeMedicationRequest, MedicationRoute, MedicationPriority, PatientResponse, VisitResponse, TriageRecordResponse } from '@/api/types';
-import { MEDICATION_PRIORITIES } from '@/api/types';
+import type {
+  PrescribeMedicationRequest, MedicationRoute, MedicationPriority,
+  PatientResponse, VisitResponse, TriageRecordResponse,
+  PrescriptionType, MedicationProductType, VitalGateParameter, VitalGateComparator,
+} from '@/api/types';
+import { MEDICATION_PRIORITIES, PRESCRIPTION_TYPES, VITAL_GATE_PARAMETERS } from '@/api/types';
 
 const ROUTE_LABELS: Record<string, string> = {
   PO: 'Oral',
@@ -119,6 +123,40 @@ export function MedicationPanel({
   // a 10-min SLA timer.
   const [priority, setPriority] = useState<MedicationPriority>('ROUTINE');
 
+  // ── V67 typed orders ──
+  const [rxType, setRxType] = useState<PrescriptionType>('ONE_TIME');
+  const [productType, setProductType] = useState<MedicationProductType>('DRUG');
+  const [productDetail, setProductDetail] = useState('');
+  // SCHEDULED
+  const [intervalHours, setIntervalHours] = useState('');
+  const [maxDoses, setMaxDoses] = useState('');
+  const [endAt, setEndAt] = useState('');
+  // PRN
+  const [prnIndication, setPrnIndication] = useState('');
+  const [prnMinIntervalHours, setPrnMinIntervalHours] = useState('');
+  const [prnMaxDosesPerDay, setPrnMaxDosesPerDay] = useState('');
+  const [gateParameter, setGateParameter] = useState<VitalGateParameter | ''>('');
+  const [gateComparator, setGateComparator] = useState<VitalGateComparator>('GTE');
+  const [gateThreshold, setGateThreshold] = useState('');
+  // CONTINUOUS
+  const [rateValue, setRateValue] = useState('');
+  const [rateUnit, setRateUnit] = useState('mL/hr');
+  // High-alert emergency override (skips the charge-approval gate)
+  const [emergencyOverride, setEmergencyOverride] = useState(false);
+  const [emergencyJustification, setEmergencyJustification] = useState('');
+
+  /** Parse the free-text dose field into a structured value + unit
+   *  ("500 mg" → 500/"mg") so the backend can verify administrations.
+   *  Unparseable text (e.g. "1 sachet in 1L") sends no structured dose
+   *  — verification is simply skipped for that order. */
+  const structuredDose = useMemo((): { value: number; unit: string } | null => {
+    const m = dose.trim().match(/^([0-9]+(?:\.[0-9]+)?)\s*([a-zA-Zµ/%]+)?$/);
+    if (!m) return null;
+    const value = Number(m[1]);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return { value, unit: (m[2] ?? 'mg').toLowerCase() };
+  }, [dose]);
+
   // Patient weight resolution: latest triage's childWeightKg is the
   // most recently confirmed value (pediatric registration captures it,
   // and re-triage updates it); fall back to nothing if absent.
@@ -193,7 +231,19 @@ export function MedicationPanel({
     return parsed.length > 0 ? parsed : (Object.keys(ROUTE_LABELS) as MedicationRoute[]);
   }, [selected]);
 
-  const canSubmit = !!query.trim() && !!route && !formLoading;
+  // Per-type required fields (mirrors the backend's validation so the
+  // doctor gets instant feedback instead of a 422).
+  const typeFieldsValid = useMemo(() => {
+    if (rxType === 'SCHEDULED') return Number(intervalHours) > 0;
+    if (rxType === 'PRN') return prnIndication.trim().length > 0
+      && (gateParameter === '' || gateThreshold.trim() !== '');
+    if (rxType === 'CONTINUOUS') return Number(rateValue) > 0 && rateUnit.trim().length > 0;
+    return true;
+  }, [rxType, intervalHours, prnIndication, gateParameter, gateThreshold, rateValue, rateUnit]);
+
+  const emergencyValid = !emergencyOverride || emergencyJustification.trim().length >= 10;
+
+  const canSubmit = !!query.trim() && !!route && !formLoading && typeFieldsValid && emergencyValid;
 
   const handleApplyRecommended = useCallback(() => {
     if (recommendedPediatricDoseMg != null) setDose(`${recommendedPediatricDoseMg} mg`);
@@ -209,8 +259,40 @@ export function MedicationPanel({
       frequency: frequency.trim() || undefined,
       priority,
       notes: notes.trim() || undefined,
+      // ── V67 typed order ──
+      prescriptionType: rxType,
+      productType,
+      productDetail: productType !== 'DRUG' && productDetail.trim() ? productDetail.trim() : undefined,
+      doseValue: structuredDose?.value,
+      doseUnit: structuredDose?.unit,
+      ...(rxType === 'SCHEDULED' ? {
+        intervalHours: Number(intervalHours),
+        maxDoses: maxDoses ? Number(maxDoses) : undefined,
+        endAt: endAt ? new Date(endAt).toISOString() : undefined,
+      } : {}),
+      ...(rxType === 'PRN' ? {
+        prnIndication: prnIndication.trim(),
+        prnMinIntervalHours: prnMinIntervalHours ? Number(prnMinIntervalHours) : undefined,
+        prnMaxDosesPerDay: prnMaxDosesPerDay ? Number(prnMaxDosesPerDay) : undefined,
+        ...(gateParameter !== '' && gateThreshold ? {
+          gateParameter,
+          gateComparator,
+          gateThreshold: Number(gateThreshold),
+        } : {}),
+      } : {}),
+      ...(rxType === 'CONTINUOUS' ? {
+        rateValue: Number(rateValue),
+        rateUnit: rateUnit.trim(),
+      } : {}),
+      ...(emergencyOverride ? {
+        emergencyOverride: true,
+        emergencyJustification: emergencyJustification.trim(),
+      } : {}),
     });
-  }, [canSubmit, onSubmit, visit.id, selected, query, dose, route, frequency, priority, notes]);
+  }, [canSubmit, onSubmit, visit.id, selected, query, dose, route, frequency, priority, notes,
+      rxType, productType, productDetail, structuredDose, intervalHours, maxDoses, endAt,
+      prnIndication, prnMinIntervalHours, prnMaxDosesPerDay, gateParameter, gateComparator,
+      gateThreshold, rateValue, rateUnit, emergencyOverride, emergencyJustification]);
 
   return (
     <div className="rounded-2xl p-5 animate-fade-up space-y-4" style={glassCard}>
@@ -394,6 +476,215 @@ export function MedicationPanel({
           })}
         </div>
       </div>
+
+      {/* ── V67: prescription type ── */}
+      <div>
+        <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
+          Prescription type
+        </label>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {PRESCRIPTION_TYPES.map((t) => {
+            const active = rxType === t.value;
+            const Icon = t.value === 'SCHEDULED' ? Repeat
+              : t.value === 'CONTINUOUS' ? Droplet
+              : t.value === 'PRN' ? Zap : Pill;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setRxType(t.value)}
+                title={t.description}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border text-left ${
+                  active
+                    ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/40'
+                    : 'bg-slate-500/10 text-slate-500 border-transparent hover:bg-slate-500/20'
+                }`}
+              >
+                <div className="flex items-center gap-1.5"><Icon className="w-3.5 h-3.5" />{t.label}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── V67: per-type parameters ── */}
+      {rxType === 'SCHEDULED' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 rounded-xl p-3" style={glassInner}>
+          <div>
+            <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
+              Every (hours) <span className="text-red-500">*</span>
+            </label>
+            <input type="number" min="0.5" step="0.5" value={intervalHours}
+              onChange={(e) => setIntervalHours(e.target.value)} placeholder="e.g. 8"
+              className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+          </div>
+          <div>
+            <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
+              Total doses <span className={`font-normal normal-case ${text.muted}`}>(optional)</span>
+            </label>
+            <input type="number" min="1" value={maxDoses}
+              onChange={(e) => setMaxDoses(e.target.value)} placeholder="until discontinued"
+              className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+          </div>
+          <div>
+            <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
+              Stop at <span className={`font-normal normal-case ${text.muted}`}>(optional)</span>
+            </label>
+            <input type="datetime-local" value={endAt}
+              onChange={(e) => setEndAt(e.target.value)}
+              className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+          </div>
+          <p className={`md:col-span-3 text-[10px] ${text.muted}`}>
+            The first dose is due immediately; each administration schedules the next.
+            Nurses are re-notified at every interval, with overdue and missed-dose escalation.
+          </p>
+        </div>
+      )}
+
+      {rxType === 'PRN' && (
+        <div className="space-y-3 rounded-xl p-3" style={glassInner}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
+                Indication <span className="text-red-500">*</span>
+              </label>
+              <input value={prnIndication} onChange={(e) => setPrnIndication(e.target.value)}
+                placeholder="e.g. pain, nausea"
+                className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+            </div>
+            <div>
+              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
+                Min hours between doses
+              </label>
+              <input type="number" min="0.5" step="0.5" value={prnMinIntervalHours}
+                onChange={(e) => setPrnMinIntervalHours(e.target.value)} placeholder="e.g. 6"
+                className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+            </div>
+            <div>
+              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
+                Max doses / 24h
+              </label>
+              <input type="number" min="1" value={prnMaxDosesPerDay}
+                onChange={(e) => setPrnMaxDosesPerDay(e.target.value)} placeholder="e.g. 4"
+                className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+            </div>
+          </div>
+          <div>
+            <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
+              Vitals gate <span className={`font-normal normal-case ${text.muted}`}>(optional — "administer only if …")</span>
+            </label>
+            <div className="flex items-center gap-2 flex-wrap">
+              <select value={gateParameter}
+                onChange={(e) => setGateParameter(e.target.value as VitalGateParameter | '')}
+                className={`px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-slate-800' : 'text-slate-800 bg-white'}`}>
+                <option value="">No gate</option>
+                {VITAL_GATE_PARAMETERS.map((p) => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </select>
+              {gateParameter !== '' && (
+                <>
+                  <select value={gateComparator}
+                    onChange={(e) => setGateComparator(e.target.value as VitalGateComparator)}
+                    className={`px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-slate-800' : 'text-slate-800 bg-white'}`}>
+                    <option value="GTE">≥</option>
+                    <option value="LTE">≤</option>
+                  </select>
+                  <input type="number" value={gateThreshold}
+                    onChange={(e) => setGateThreshold(e.target.value)}
+                    placeholder="threshold"
+                    className={`w-28 px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+                  <span className={`text-[11px] ${text.muted}`}>
+                    {VITAL_GATE_PARAMETERS.find((p) => p.value === gateParameter)?.unit}
+                    {' '}— checked against the latest vitals at administration; blocked if unmet (override requires justification).
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rxType === 'CONTINUOUS' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-xl p-3" style={glassInner}>
+          <div>
+            <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
+              Rate <span className="text-red-500">*</span>
+            </label>
+            <input type="number" min="0.1" step="0.1" value={rateValue}
+              onChange={(e) => setRateValue(e.target.value)} placeholder="e.g. 100"
+              className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+          </div>
+          <div>
+            <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
+              Rate unit <span className="text-red-500">*</span>
+            </label>
+            <input value={rateUnit} onChange={(e) => setRateUnit(e.target.value)}
+              placeholder="mL/hr, units/hr, mcg/kg/min"
+              className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+          </div>
+          <p className={`md:col-span-2 text-[10px] ${text.muted}`}>
+            The nurse confirms initiation at the bedside; rate changes and the stop are each audited events.
+          </p>
+        </div>
+      )}
+
+      {/* ── V67: product type (special administrations) ── */}
+      <div>
+        <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
+          Product
+        </label>
+        <div className="flex items-center gap-2 flex-wrap">
+          {([['DRUG', 'Medication'], ['BLOOD_PRODUCT', 'Blood product'], ['IV_FLUID', 'IV fluid'], ['OTHER', 'Other']] as Array<[MedicationProductType, string]>).map(([value, label]) => {
+            const active = productType === value;
+            return (
+              <button key={value} type="button" onClick={() => setProductType(value)}
+                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
+                  active
+                    ? value === 'BLOOD_PRODUCT'
+                      ? 'bg-rose-600 text-white shadow-md'
+                      : 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-md'
+                    : isDark ? 'bg-white/5 text-slate-300 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}>
+                {label}
+              </button>
+            );
+          })}
+          {productType !== 'DRUG' && (
+            <input value={productDetail} onChange={(e) => setProductDetail(e.target.value)}
+              placeholder={productType === 'BLOOD_PRODUCT' ? 'e.g. PRBC 2 units, FFP 4 units' : 'detail'}
+              className={`flex-1 min-w-[180px] px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+          )}
+        </div>
+        {productType === 'BLOOD_PRODUCT' && (
+          <p className="mt-1 text-[10px] text-rose-500 font-semibold">
+            Blood products always require a second-clinician witness at administration.
+          </p>
+        )}
+      </div>
+
+      {/* ── V67: high-alert approval notice + emergency override ── */}
+      {selected?.isHighAlert && (
+        <div className="rounded-xl p-3 border border-red-400/40 bg-red-500/5 space-y-2">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-red-500" />
+            <span className={`text-[11px] font-bold ${text.heading}`}>
+              High-alert drug — requires charge-nurse approval before administration.
+            </span>
+          </div>
+          <label className={`flex items-center gap-2 text-[11px] font-semibold ${text.body}`}>
+            <input type="checkbox" checked={emergencyOverride}
+              onChange={(e) => setEmergencyOverride(e.target.checked)} />
+            Emergency — skip the approval gate (justification required, department-visible)
+          </label>
+          {emergencyOverride && (
+            <textarea rows={2} value={emergencyJustification}
+              onChange={(e) => setEmergencyJustification(e.target.value)}
+              placeholder="Why this cannot wait for approval (min 10 characters)…"
+              className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-red-300 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+          )}
+        </div>
+      )}
 
       {/* Dose, route, frequency, notes */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

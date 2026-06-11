@@ -43,6 +43,9 @@ const REPORT_SECTIONS: { key: keyof HandoverReport; label: string; icon: typeof 
   { key: 'investigationsResults', label: 'Investigations & Results', icon: FlaskConical },
   { key: 'diagnosisSummary', label: 'Diagnosis Summary', icon: ClipboardList },
   { key: 'treatmentSummary', label: 'Treatment Summary', icon: Pill },
+  // V67 — the full dose-by-dose medication audit (orders, schedules,
+  // every administration with actor/witness, misses with reasons).
+  { key: 'medicationAudit', label: 'Medication Audit Trail', icon: Pill },
   { key: 'activeClinicalAlerts', label: 'Active Clinical Alerts', icon: AlertTriangle },
   { key: 'outstandingTasks', label: 'Outstanding Tasks', icon: ListTodo },
   { key: 'planOfCare', label: 'Plan of Care', icon: ClipboardCheck },

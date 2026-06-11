@@ -77,6 +77,7 @@ import type {
   OrderInvestigationRequest, PrescribeMedicationRequest,
   NoteType, DiagnosisType, InvestigationType, MedicationRoute,
   AvpuScore, TriageCategory, DispositionType,
+  MedicationOrderAudit, MedicationDoseResponse,
 } from '@/api/types';
 import { format } from 'date-fns';
 import { RecentActivityBanner } from './RecentActivityBanner';
@@ -184,11 +185,14 @@ const INVESTIGATION_STATUS_COLORS: Record<string, string> = {
 };
 
 const MEDICATION_STATUS_COLORS: Record<string, string> = {
+  PENDING_APPROVAL: 'text-red-600 bg-red-500/10',
   PRESCRIBED: 'text-blue-500 bg-blue-500/10',
   ADMINISTERED: 'text-emerald-500 bg-emerald-500/10',
   HELD: 'text-amber-500 bg-amber-500/10',
   REFUSED: 'text-red-500 bg-red-500/10',
   CANCELLED: 'text-slate-500 bg-slate-500/10',
+  COMPLETED: 'text-emerald-600 bg-emerald-500/10',
+  DISCONTINUED: 'text-slate-500 bg-slate-500/10',
 };
 
 export function VisitDetailPage() {
@@ -1595,6 +1599,35 @@ function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, on
 
 // ═══════ MEDICATIONS TAB ═══════
 function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction, formLoading, patient, visit, latestTriage, glassCard, glassInner, isDark, text }: any) {
+  // ── V67: dose-level audit per order (typed orders only) ──
+  // Loaded tab-locally so the parent's data flow stays untouched; the
+  // audit endpoint returns every order with its complete dose timeline.
+  const [audit, setAudit] = useState<Record<string, MedicationOrderAudit>>({});
+  const loadAudit = useCallback(async () => {
+    if (!visit?.id) return;
+    try {
+      const entries = await medicationApi.getVisitAudit(visit.id);
+      const map: Record<string, MedicationOrderAudit> = {};
+      for (const e of entries) map[e.order.id] = e;
+      setAudit(map);
+    } catch (err) { console.error('Failed to load medication audit:', err); }
+  }, [visit?.id]);
+  useEffect(() => { void loadAudit(); }, [loadAudit, medications]);
+
+  /** Run a V67 dose/order action; surface backend gate messages; then
+   *  refresh both the audit and the parent's medication list ('refresh'
+   *  hits no endpoint in handleMedicationAction — it just reloads). */
+  const runDoseAction = useCallback(async (medId: string, fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+    } catch (err) {
+      // eslint-disable-next-line no-alert
+      window.alert(err instanceof Error ? err.message : 'Action failed');
+    }
+    await loadAudit();
+    await onAction(medId, 'refresh');
+  }, [loadAudit, onAction]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -1760,6 +1793,10 @@ function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction
               )}
             </p>
             {med.frequency && <p className={`text-xs ${text.body}`}>{med.frequency}</p>}
+            {/* ── V67: typed-order summary + dose timeline ── */}
+            {med.prescriptionType && (
+              <TypedOrderDetails med={med} entry={audit[med.id]} text={text} />
+            )}
             {med.prescribedDespiteAllergy && med.allergyOverrideMatches && (
               <p className="text-[10px] text-red-600 mt-1.5 font-medium break-words">
                 Allergy: {med.allergyOverrideMatches}
@@ -1807,7 +1844,54 @@ function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction
             {med.countersignedByName && <p className={`text-[10px] text-violet-500`}>Countersigned by: {med.countersignedByName}</p>}
             {/* Actions */}
             <div className="flex items-center gap-2 mt-3 flex-wrap">
-              {med.status === 'PRESCRIBED' && (
+              {/* V67 — high-alert approval gate */}
+              {med.status === 'PENDING_APPROVAL' && (
+                <button
+                  onClick={() => runDoseAction(med.id, () => medicationApi.approve(med.id, {}))}
+                  className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors"
+                  title="Charge nurse / doctor approval — the prescriber cannot approve their own order"
+                >
+                  <CheckCircle2 className="w-3 h-3 inline mr-1" /> Approve (charge)
+                </button>
+              )}
+              {/* V67 — typed dose workflow (scheduled/PRN/continuous, or
+                  witness-required one-time). Plain one-time orders keep
+                  the legacy buttons below. */}
+              {med.status === 'PRESCRIBED' && med.prescriptionType
+                && (med.prescriptionType !== 'ONE_TIME' || med.requiresWitness) && (
+                <TypedOrderActions
+                  med={med}
+                  entry={audit[med.id]}
+                  runDoseAction={runDoseAction}
+                />
+              )}
+              {med.status === 'HELD' && med.prescriptionType && (
+                <button
+                  onClick={() => runDoseAction(med.id, () => medicationApi.resume(med.id))}
+                  className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-colors"
+                >
+                  Resume
+                </button>
+              )}
+              {(med.status === 'PRESCRIBED' || med.status === 'PENDING_APPROVAL' || med.status === 'HELD')
+                && med.prescriptionType && (
+                <button
+                  onClick={() => {
+                    // eslint-disable-next-line no-alert
+                    const reason = window.prompt('Discontinue reason (required)');
+                    if (reason && reason.trim().length >= 3) {
+                      void runDoseAction(med.id, () =>
+                        medicationApi.discontinue(med.id, { reason: reason.trim() }));
+                    }
+                  }}
+                  className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-slate-500/10 text-slate-500 hover:bg-slate-500/20 transition-colors"
+                  title="Doctor stops this order — reason is recorded in the audit trail"
+                >
+                  Discontinue
+                </button>
+              )}
+              {med.status === 'PRESCRIBED'
+                && !(med.prescriptionType && (med.prescriptionType !== 'ONE_TIME' || med.requiresWitness)) && (
                 <>
                   <button onClick={() => onAction(med.id, 'administer')} className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors">
                     <CheckCircle2 className="w-3 h-3 inline mr-1" /> Administer
@@ -1857,6 +1941,257 @@ function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction
         })}
       </div>
     </div>
+  );
+}
+
+// ═══════ V67: TYPED-ORDER DETAILS (schedule summary + dose timeline) ═══════
+function TypedOrderDetails({ med, entry, text }: {
+  med: MedicationResponse; entry?: MedicationOrderAudit; text: any;
+}) {
+  const doses: MedicationDoseResponse[] = entry?.doses ?? [];
+  const given = doses.filter((d) => d.status === 'GIVEN' && !d.kind.startsWith('INFUSION')).length;
+  const nextDue = doses.find((d) => d.status === 'DUE');
+  const typeLabel = med.prescriptionType === 'SCHEDULED'
+    ? `Scheduled — every ${med.intervalHours} h${med.maxDoses ? ` × ${med.maxDoses} doses` : ''}`
+    : med.prescriptionType === 'PRN'
+      ? `PRN — ${med.prnIndication}${med.prnMinIntervalHours ? ` · min ${med.prnMinIntervalHours} h apart` : ''}${med.prnMaxDosesPerDay ? ` · max ${med.prnMaxDosesPerDay}/24h` : ''}`
+      : med.prescriptionType === 'CONTINUOUS'
+        ? `Continuous — ${med.rateValue} ${med.rateUnit}`
+        : 'One-time';
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-cyan-500/10 text-cyan-600 border border-cyan-500/30">
+          {typeLabel}
+        </span>
+        {med.productType && med.productType !== 'DRUG' && (
+          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-rose-500/10 text-rose-600 border border-rose-500/30">
+            {med.productType.replace('_', ' ')}{med.productDetail ? ` — ${med.productDetail}` : ''}
+          </span>
+        )}
+        {med.requiresWitness && (
+          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-700 border border-amber-500/30">
+            Witness required
+          </span>
+        )}
+        {med.gateParameter && (
+          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-sky-500/10 text-sky-600 border border-sky-500/30">
+            Only if {med.gateParameter.replace('_', ' ')} {med.gateComparator === 'GTE' ? '≥' : '≤'} {med.gateThreshold}
+          </span>
+        )}
+        {med.emergencyOverride && (
+          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-red-500/10 text-red-600 border border-red-500/40"
+            title={med.emergencyJustification ?? ''}>
+            Emergency override
+          </span>
+        )}
+        {med.approvedByName && (
+          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 border border-emerald-500/30">
+            Approved by {med.approvedByName}
+          </span>
+        )}
+      </div>
+      <p className={`text-[11px] ${text.body}`}>
+        {med.prescriptionType !== 'CONTINUOUS' && <>{given} dose{given === 1 ? '' : 's'} given</>}
+        {med.maxDoses != null && <> of {med.maxDoses}</>}
+        {nextDue?.dueAt && <> · next due {format(new Date(nextDue.dueAt), 'dd MMM HH:mm')}</>}
+        {med.status === 'DISCONTINUED' && med.discontinueReason && (
+          <> · discontinued: {med.discontinueReason} ({med.discontinuedByName})</>
+        )}
+        {med.supersededById && <> · modified (superseded by a replacement order)</>}
+        {med.supersedesId && <> · replaces an earlier order</>}
+      </p>
+      {doses.length > 0 && (
+        <details className="text-[11px]">
+          <summary className={`cursor-pointer font-semibold ${text.muted}`}>
+            Dose log ({doses.length})
+          </summary>
+          <ul className={`mt-1 space-y-0.5 pl-3 border-l border-slate-300/30 ${text.body}`}>
+            {doses.map((d) => (
+              <li key={d.id}>
+                <span className="font-semibold">
+                  {d.sequenceNumber != null ? `#${d.sequenceNumber} ` : ''}
+                  {d.kind.replace(/_/g, ' ').toLowerCase()}
+                </span>
+                {' — '}
+                <span className={
+                  d.status === 'GIVEN' ? 'text-emerald-600'
+                    : d.status === 'MISSED' ? 'text-red-600 font-bold'
+                    : d.status === 'REFUSED' ? 'text-rose-600'
+                    : d.status === 'DUE' ? 'text-amber-600'
+                    : ''
+                }>{d.status}</span>
+                {d.dueAt && d.status === 'DUE' && <> · due {format(new Date(d.dueAt), 'dd MMM HH:mm')}{d.delayCount > 0 && ` (delayed ×${d.delayCount})`}</>}
+                {d.givenAt && <> · {format(new Date(d.givenAt), 'dd MMM HH:mm')} by {d.givenByName}</>}
+                {d.witnessName && <> · witness {d.witnessName}</>}
+                {d.rateValue != null && <> · {d.rateValue} {d.rateUnit}</>}
+                {d.prnReason && <> · for {d.prnReason}</>}
+                {d.gateEvaluation && <> · {d.gateEvaluation}</>}
+                {d.isOverride && <span className="text-red-600 font-semibold"> · OVERRIDE: {d.overrideJustification}</span>}
+                {d.statusReason && <> · {d.statusReason}</>}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+// ═══════ V67: TYPED-ORDER ACTIONS (dose-level workflow) ═══════
+function TypedOrderActions({ med, entry, runDoseAction }: {
+  med: MedicationResponse;
+  entry?: MedicationOrderAudit;
+  runDoseAction: (medId: string, fn: () => Promise<unknown>) => Promise<void>;
+}) {
+  const doses = entry?.doses ?? [];
+  const nextDue = doses.find((d) => d.status === 'DUE');
+  const infusionEvents = doses.filter((d) => d.kind.startsWith('INFUSION'));
+  const lastInfusion = infusionEvents[infusionEvents.length - 1];
+  const infusionRunning = !!lastInfusion && lastInfusion.kind !== 'INFUSION_STOP';
+
+  /** Witness prompt shared by every administering action. */
+  const promptWitness = (): string | null | undefined => {
+    if (!med.requiresWitness) return undefined;
+    // eslint-disable-next-line no-alert
+    const w = window.prompt(
+      med.productType === 'BLOOD_PRODUCT'
+        ? 'Blood product — witness (second clinician) full name, REQUIRED:'
+        : 'Witness (second clinician) full name, REQUIRED:');
+    return w && w.trim() ? w.trim() : null; // null = abort
+  };
+
+  return (
+    <>
+      {(med.prescriptionType === 'SCHEDULED' || med.prescriptionType === 'ONE_TIME') && nextDue && (
+        <>
+          <button
+            onClick={() => {
+              const witness = promptWitness();
+              if (witness === null) return;
+              void runDoseAction(med.id, () => medicationApi.administerDose(nextDue.id, {
+                witnessName: witness,
+              }));
+            }}
+            className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors"
+            title={`Give dose #${nextDue.sequenceNumber ?? ''} now (verification + gates run server-side)`}
+          >
+            <CheckCircle2 className="w-3 h-3 inline mr-1" /> Give dose{nextDue.sequenceNumber != null ? ` #${nextDue.sequenceNumber}` : ''}
+          </button>
+          <button
+            onClick={() => {
+              // eslint-disable-next-line no-alert
+              const mins = window.prompt('Delay by how many minutes? (15–720)', '60');
+              if (!mins) return;
+              // eslint-disable-next-line no-alert
+              const reason = window.prompt('Delay reason (required)');
+              if (!reason || reason.trim().length < 3) return;
+              void runDoseAction(med.id, () => medicationApi.delayDose(nextDue.id, {
+                delayMinutes: Number(mins), reason: reason.trim(),
+              }));
+            }}
+            className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 transition-colors"
+          >
+            Delay dose
+          </button>
+          <button
+            onClick={() => {
+              // eslint-disable-next-line no-alert
+              const reason = window.prompt('Refusal reason — the order stays active for the next dose:');
+              if (!reason || reason.trim().length < 3) return;
+              void runDoseAction(med.id, () => medicationApi.refuseDose(nextDue.id, {
+                reason: reason.trim(),
+              }));
+            }}
+            className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors"
+          >
+            Dose refused
+          </button>
+        </>
+      )}
+
+      {med.prescriptionType === 'PRN' && (
+        <button
+          onClick={() => {
+            // eslint-disable-next-line no-alert
+            const indication = window.prompt(
+              `PRN indication (what triggered this dose)? Order is for: ${med.prnIndication ?? ''}`);
+            if (!indication || !indication.trim()) return;
+            const witness = promptWitness();
+            if (witness === null) return;
+            void runDoseAction(med.id, () => medicationApi.recordPrnDose(med.id, {
+              prnReason: indication.trim(), witnessName: witness,
+            }));
+          }}
+          className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-violet-500/10 text-violet-600 hover:bg-violet-500/20 transition-colors"
+          title="Interval, daily cap and vitals gate are enforced server-side"
+        >
+          Give PRN dose
+        </button>
+      )}
+
+      {med.prescriptionType === 'CONTINUOUS' && !infusionRunning && (
+        <button
+          onClick={() => {
+            const witness = promptWitness();
+            if (witness === null) return;
+            void runDoseAction(med.id, () => medicationApi.startInfusion(med.id, {
+              witnessName: witness,
+            }));
+          }}
+          className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 transition-colors"
+        >
+          {lastInfusion ? 'Restart infusion' : 'Start infusion'}
+        </button>
+      )}
+      {med.prescriptionType === 'CONTINUOUS' && infusionRunning && (
+        <>
+          <button
+            onClick={() => {
+              // eslint-disable-next-line no-alert
+              const rate = window.prompt(`New rate (${med.rateUnit ?? 'mL/hr'})?`,
+                String(lastInfusion?.rateValue ?? med.rateValue ?? ''));
+              if (!rate || !Number(rate)) return;
+              void runDoseAction(med.id, () => medicationApi.changeInfusionRate(med.id, {
+                rateValue: Number(rate),
+              }));
+            }}
+            className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-sky-500/10 text-sky-600 hover:bg-sky-500/20 transition-colors"
+          >
+            Change rate
+          </button>
+          <button
+            onClick={() => {
+              // eslint-disable-next-line no-alert
+              const reason = window.prompt('Stop infusion — reason (required):');
+              if (!reason || reason.trim().length < 3) return;
+              void runDoseAction(med.id, () => medicationApi.stopInfusion(med.id, {
+                reason: reason.trim(),
+              }));
+            }}
+            className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 transition-colors"
+          >
+            Stop infusion
+          </button>
+        </>
+      )}
+
+      {/* Hold works for every live typed order (open doses are
+          cancelled; Resume re-creates a due dose). */}
+      <button
+        onClick={() => {
+          // eslint-disable-next-line no-alert
+          const reason = window.prompt('Hold reason (e.g. NPO before procedure)');
+          if (reason && reason.trim().length >= 3) {
+            void runDoseAction(med.id, () => medicationApi.hold(med.id, reason.trim()));
+          }
+        }}
+        className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 transition-colors"
+      >
+        Hold
+      </button>
+    </>
   );
 }
 

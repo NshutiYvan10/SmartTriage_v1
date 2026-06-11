@@ -61,7 +61,56 @@ export type DiagnosisType = 'PROVISIONAL' | 'CONFIRMED' | 'DIFFERENTIAL' | 'WORK
 export type InvestigationType = 'LABORATORY' | 'RADIOLOGY' | 'ECG' | 'ULTRASOUND' | 'CT_SCAN' | 'MRI' | 'XRAY' | 'BLOOD_GAS' | 'URINALYSIS' | 'RAPID_TEST' | 'POINT_OF_CARE' | 'OTHER';
 export type InvestigationStatus = 'ORDERED' | 'SPECIMEN_COLLECTED' | 'IN_PROGRESS' | 'RESULTED' | 'CANCELLED';
 export type MedicationRoute = 'PO' | 'IV' | 'IM' | 'SC' | 'SL' | 'PR' | 'INH' | 'NEB' | 'TOP' | 'NASAL' | 'OPHTHALMIC' | 'OTIC' | 'ETT' | 'IO' | 'OTHER';
-export type MedicationStatus = 'PRESCRIBED' | 'ADMINISTERED' | 'HELD' | 'REFUSED' | 'CANCELLED';
+export type MedicationStatus =
+  | 'PENDING_APPROVAL'
+  | 'PRESCRIBED'
+  | 'ADMINISTERED'
+  | 'HELD'
+  | 'REFUSED'
+  | 'CANCELLED'
+  | 'COMPLETED'
+  | 'DISCONTINUED';
+
+// ── Medication Management (V67) — typed orders & dose events ──
+
+export type PrescriptionType = 'ONE_TIME' | 'SCHEDULED' | 'PRN' | 'CONTINUOUS';
+export type MedicationProductType = 'DRUG' | 'BLOOD_PRODUCT' | 'IV_FLUID' | 'OTHER';
+export type DoseStatus = 'DUE' | 'GIVEN' | 'REFUSED' | 'MISSED' | 'CANCELLED';
+export type DoseKind =
+  | 'ONE_TIME_DOSE'
+  | 'SCHEDULED_DOSE'
+  | 'PRN_DOSE'
+  | 'INFUSION_START'
+  | 'INFUSION_RATE_CHANGE'
+  | 'INFUSION_STOP';
+export type VitalGateParameter =
+  | 'SYSTOLIC_BP'
+  | 'HEART_RATE'
+  | 'RESPIRATORY_RATE'
+  | 'SPO2'
+  | 'TEMPERATURE'
+  | 'PAIN_SCORE';
+export type VitalGateComparator = 'GTE' | 'LTE';
+
+export const PRESCRIPTION_TYPES: Array<{
+  value: PrescriptionType; label: string; description: string;
+}> = [
+  { value: 'ONE_TIME', label: 'One-time', description: 'Single dose, given once (e.g. Morphine 4 mg IV once)' },
+  { value: 'SCHEDULED', label: 'Scheduled', description: 'Recurring at a fixed interval (e.g. Ceftriaxone 1 g IV q24h)' },
+  { value: 'PRN', label: 'PRN', description: 'As needed when a condition occurs (e.g. Paracetamol q6h PRN pain)' },
+  { value: 'CONTINUOUS', label: 'Continuous', description: 'Uninterrupted infusion at a rate (e.g. NS 100 mL/hr)' },
+];
+
+export const VITAL_GATE_PARAMETERS: Array<{
+  value: VitalGateParameter; label: string; unit: string;
+}> = [
+  { value: 'SYSTOLIC_BP', label: 'Systolic BP', unit: 'mmHg' },
+  { value: 'HEART_RATE', label: 'Heart rate', unit: 'bpm' },
+  { value: 'RESPIRATORY_RATE', label: 'Resp. rate', unit: '/min' },
+  { value: 'SPO2', label: 'SpO2', unit: '%' },
+  { value: 'TEMPERATURE', label: 'Temperature', unit: '°C' },
+  { value: 'PAIN_SCORE', label: 'Pain score', unit: '/10' },
+];
 
 /**
  * Workflow 3 — structured urgency tier for a medication order.
@@ -1025,6 +1074,84 @@ export interface PrescribeMedicationRequest {
   /** Free-text snapshot of the interaction conflicts at decision time,
    *  formatted by formatInteractionMatches() in utils/interactionCheck. */
   interactionOverrideMatches?: string;
+
+  // ── Typed orders (V67). Omit prescriptionType for the legacy
+  //    single-shot flow — old behaviour is preserved byte-for-byte. ──
+  prescriptionType?: PrescriptionType;
+  productType?: MedicationProductType;
+  productDetail?: string;
+  doseValue?: number;
+  doseUnit?: string;
+  startAt?: string;
+  intervalHours?: number;
+  endAt?: string;
+  maxDoses?: number;
+  prnIndication?: string;
+  prnMinIntervalHours?: number;
+  prnMaxDosesPerDay?: number;
+  gateParameter?: VitalGateParameter;
+  gateComparator?: VitalGateComparator;
+  gateThreshold?: number;
+  rateValue?: number;
+  rateUnit?: string;
+  /** Skip the high-alert approval gate as an emergency (justification mandatory). */
+  emergencyOverride?: boolean;
+  emergencyJustification?: string;
+}
+
+/** One dose event (V67) with denormalised order/patient context. */
+export interface MedicationDoseResponse {
+  id: string;
+  medicationId: string;
+  visitId: string;
+  kind: DoseKind;
+  status: DoseStatus;
+  sequenceNumber: number | null;
+  dueAt: string | null;
+  givenAt: string | null;
+  givenById: string | null;
+  givenByName: string | null;
+  witnessName: string | null;
+  doseValue: number | null;
+  doseUnit: string | null;
+  rateValue: number | null;
+  rateUnit: string | null;
+  prnReason: string | null;
+  gateEvaluation: string | null;
+  isOverride: boolean;
+  overrideJustification: string | null;
+  statusReason: string | null;
+  delayCount: number;
+  // Denormalised order context
+  drugName: string;
+  orderDose: string | null;
+  route: MedicationRoute | null;
+  priority: MedicationPriority | null;
+  prescriptionType: PrescriptionType | null;
+  productType: MedicationProductType | null;
+  productDetail: string | null;
+  requiresWitness: boolean;
+  prescribedByName: string | null;
+  // Denormalised patient context
+  patientName: string | null;
+  visitNumber: string | null;
+  zone: EdZone | null;
+  createdAt: string;
+}
+
+/** One order plus its full dose timeline (V67 audit trail). */
+export interface MedicationOrderAudit {
+  order: MedicationResponse;
+  doses: MedicationDoseResponse[];
+}
+
+/** Zone medication board payload (V67). */
+export interface ZoneMedicationBoard {
+  dueDoses: MedicationDoseResponse[];
+  recentlyGiven: MedicationDoseResponse[];
+  prnOrders: MedicationOrderAudit[];
+  activeInfusions: MedicationOrderAudit[];
+  pendingApproval: MedicationResponse[];
 }
 
 export interface AdministerMedicationRequest {
@@ -1081,6 +1208,42 @@ export interface MedicationResponse {
   interactionOverrideMatches?: string | null;
   /** Server timestamp of the interaction override acknowledgement. */
   interactionOverrideAcknowledgedAt?: string | null;
+
+  // ── Typed orders (V67). Null/absent = legacy single-shot row. ──
+  prescriptionType?: PrescriptionType | null;
+  productType?: MedicationProductType | null;
+  productDetail?: string | null;
+  doseValue?: number | null;
+  doseUnit?: string | null;
+  startAt?: string | null;
+  intervalHours?: number | null;
+  endAt?: string | null;
+  maxDoses?: number | null;
+  prnIndication?: string | null;
+  prnMinIntervalHours?: number | null;
+  prnMaxDosesPerDay?: number | null;
+  gateParameter?: VitalGateParameter | null;
+  gateComparator?: VitalGateComparator | null;
+  gateThreshold?: number | null;
+  rateValue?: number | null;
+  rateUnit?: string | null;
+  approvalRequired?: boolean;
+  approvedByName?: string | null;
+  approvedAt?: string | null;
+  approvalNote?: string | null;
+  emergencyOverride?: boolean;
+  emergencyJustification?: string | null;
+  requiresWitness?: boolean;
+  discontinuedAt?: string | null;
+  discontinuedByName?: string | null;
+  discontinueReason?: string | null;
+  completedAt?: string | null;
+  supersedesId?: string | null;
+  supersededById?: string | null;
+  /** Doses GIVEN so far (enriched on audit/board responses). */
+  givenDoseCount?: number | null;
+  /** Next open DUE time, if any (enriched on audit/board responses). */
+  nextDueAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
