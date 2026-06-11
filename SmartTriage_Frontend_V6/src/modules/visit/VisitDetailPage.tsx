@@ -477,7 +477,19 @@ export function VisitDetailPage() {
       setShowMedicationForm(false);
       setPendingPrescribe(null);
       loadData();
-    } catch (err) { console.error(err); } finally { setFormLoading(false); }
+    } catch (err) {
+      // Surface a blocked/failed prescription to the prescriber — most
+      // importantly the server-side allergy safety BLOCK (S1), which can
+      // fire even when the client-side dialog didn't (e.g. a direct path or
+      // a divergent client check). Without this the form/dialog just stopped
+      // loading with no explanation. Matches handleMedicationAction's pattern
+      // (window.alert for a backend ClinicalBusinessException); the form and
+      // safety dialog stay open so the prescriber can adjust or cancel.
+      const message = err instanceof Error ? err.message : 'Failed to prescribe medication';
+      // eslint-disable-next-line no-alert
+      window.alert(message);
+      console.error(err);
+    } finally { setFormLoading(false); }
   };
 
   const handlePrescribeMedication = async (data: Partial<PrescribeMedicationRequest>) => {
