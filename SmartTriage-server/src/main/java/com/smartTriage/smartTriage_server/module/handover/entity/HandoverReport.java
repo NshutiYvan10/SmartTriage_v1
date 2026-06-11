@@ -87,6 +87,16 @@ public class HandoverReport extends BaseEntity {
     @Column(name = "ed_timeline", columnDefinition = "TEXT")
     private String edTimeline;
 
+    /**
+     * V67 — full medication audit trail at generation time: active
+     * orders with schedule + remaining doses, every dose given (by
+     * whom, when, witness), missed / held / refused / discontinued
+     * with reasons, and the modification chain. The incoming doctor
+     * must have zero ambiguity about the medication history.
+     */
+    @Column(name = "medication_audit", columnDefinition = "TEXT")
+    private String medicationAudit;
+
     // ====================================================================
     // ACKNOWLEDGMENT
     // ====================================================================

@@ -41,6 +41,31 @@ public enum AlertType {
      */
     URGENT_MEDICATION_OVERDUE,
 
+    // Medication Management (V67) — dose-level workflow
+    /**
+     * A scheduled dose is past its due time + grace window but has
+     * not been given, refused, or held. Severity HIGH; re-notifies
+     * the zone so the nurse can act before it becomes MISSED.
+     */
+    MEDICATION_DOSE_OVERDUE,
+    /**
+     * A scheduled dose was never administered within the missed
+     * threshold. Severity CRITICAL; escalated to the charge nurse —
+     * a missed antibiotic/anticonvulsant dose is direct patient harm.
+     */
+    MEDICATION_DOSE_MISSED,
+    /**
+     * A high-alert medication order is awaiting charge-nurse approval
+     * before it can be administered (V67 approval gate).
+     */
+    MEDICATION_APPROVAL_REQUIRED,
+    /**
+     * A clinician used the emergency override path — skipping the
+     * approval gate or a failed PRN vitals gate — with documented
+     * justification. Department-visible by design.
+     */
+    MEDICATION_EMERGENCY_OVERRIDE,
+
     // Lab turnaround alert types
     STAT_LAB_OVERDUE,
     URGENT_LAB_OVERDUE,

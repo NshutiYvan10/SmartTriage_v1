@@ -60,17 +60,71 @@ public interface MedicationAdministrationRepository extends JpaRepository<Medica
      * Sorted by priority tier (STAT first, then URGENT, then
      * ROUTINE) and within each tier oldest first so the most
      * overdue STAT bubbles to the top of the screen.
+     *
+     * <p>V67: typed SCHEDULED / PRN / CONTINUOUS orders are excluded —
+     * they stay PRESCRIBED for their whole life and belong on the
+     * dose-level zone board, not this single-shot queue. Legacy
+     * (NULL-typed) and typed ONE_TIME orders keep appearing here.
      */
     @Query("SELECT m FROM MedicationAdministration m " +
            "WHERE m.visit.hospital.id = :hospitalId AND m.isActive = true " +
            "AND m.status = com.smartTriage.smartTriage_server.common.enums.MedicationStatus.PRESCRIBED " +
            "AND m.administeredAt IS NULL " +
+           "AND (m.prescriptionType IS NULL " +
+           "     OR m.prescriptionType = com.smartTriage.smartTriage_server.common.enums.PrescriptionType.ONE_TIME) " +
            "ORDER BY CASE m.priority " +
            "    WHEN com.smartTriage.smartTriage_server.common.enums.MedicationPriority.STAT THEN 0 " +
            "    WHEN com.smartTriage.smartTriage_server.common.enums.MedicationPriority.URGENT THEN 1 " +
            "    ELSE 2 END, " +
            "m.prescribedAt ASC")
     List<MedicationAdministration> findPendingForHospital(@Param("hospitalId") UUID hospitalId);
+
+    // ====================================================================
+    // Medication Management (V67)
+    // ====================================================================
+
+    /**
+     * Live typed orders of one type across a hospital, with visit +
+     * patient fetched — drives the zone board's PRN / infusion /
+     * pending-approval lanes (zone filter applied in-service from
+     * {@code visit.currentEdZone} so mid-prescription transfers are
+     * honoured live).
+     */
+    @Query("SELECT m FROM MedicationAdministration m " +
+           "JOIN FETCH m.visit v JOIN FETCH v.patient " +
+           "WHERE v.hospital.id = :hospitalId AND m.isActive = true " +
+           "AND m.status = :status " +
+           "AND m.prescriptionType = :type " +
+           "ORDER BY m.prescribedAt ASC")
+    List<MedicationAdministration> findByHospitalAndStatusAndType(
+            @Param("hospitalId") UUID hospitalId,
+            @Param("status") com.smartTriage.smartTriage_server.common.enums.MedicationStatus status,
+            @Param("type") com.smartTriage.smartTriage_server.common.enums.PrescriptionType type);
+
+    /**
+     * Typed orders in one status across a hospital regardless of type
+     * — drives the board's pending-approval lane.
+     */
+    @Query("SELECT m FROM MedicationAdministration m " +
+           "JOIN FETCH m.visit v JOIN FETCH v.patient " +
+           "WHERE v.hospital.id = :hospitalId AND m.isActive = true " +
+           "AND m.status = :status AND m.prescriptionType IS NOT NULL " +
+           "ORDER BY m.prescribedAt ASC")
+    List<MedicationAdministration> findTypedByHospitalAndStatus(
+            @Param("hospitalId") UUID hospitalId,
+            @Param("status") com.smartTriage.smartTriage_server.common.enums.MedicationStatus status);
+
+    /**
+     * Completion sweep — live recurring/continuous orders whose endAt
+     * has passed. Visit + hospital fetched for alert/broadcast use.
+     */
+    @Query("SELECT m FROM MedicationAdministration m " +
+           "JOIN FETCH m.visit v JOIN FETCH v.hospital " +
+           "WHERE m.isActive = true " +
+           "AND m.status = com.smartTriage.smartTriage_server.common.enums.MedicationStatus.PRESCRIBED " +
+           "AND m.prescriptionType IS NOT NULL " +
+           "AND m.endAt IS NOT NULL AND m.endAt < :now")
+    List<MedicationAdministration> findLiveTypedOrdersPastEnd(@Param("now") java.time.Instant now);
 
     /**
      * STAT-monitor query — PRESCRIBED meds older than the given

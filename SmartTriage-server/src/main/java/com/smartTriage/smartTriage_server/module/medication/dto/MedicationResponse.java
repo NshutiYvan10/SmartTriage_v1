@@ -1,13 +1,18 @@
 package com.smartTriage.smartTriage_server.module.medication.dto;
 
 import com.smartTriage.smartTriage_server.common.enums.MedicationPriority;
+import com.smartTriage.smartTriage_server.common.enums.MedicationProductType;
 import com.smartTriage.smartTriage_server.common.enums.MedicationRoute;
 import com.smartTriage.smartTriage_server.common.enums.MedicationStatus;
+import com.smartTriage.smartTriage_server.common.enums.PrescriptionType;
+import com.smartTriage.smartTriage_server.common.enums.VitalGateComparator;
+import com.smartTriage.smartTriage_server.common.enums.VitalGateParameter;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -68,6 +73,44 @@ public class MedicationResponse {
     private Boolean prescribedDespiteInteraction;
     private String interactionOverrideMatches;
     private Instant interactionOverrideAcknowledgedAt;
+
+    // ── Typed orders (V67 — Medication Management) ──
+    /** Null = legacy single-shot row (treated as ONE_TIME). */
+    private PrescriptionType prescriptionType;
+    private MedicationProductType productType;
+    private String productDetail;
+    private BigDecimal doseValue;
+    private String doseUnit;
+    private Instant startAt;
+    private Double intervalHours;
+    private Instant endAt;
+    private Integer maxDoses;
+    private String prnIndication;
+    private Double prnMinIntervalHours;
+    private Integer prnMaxDosesPerDay;
+    private VitalGateParameter gateParameter;
+    private VitalGateComparator gateComparator;
+    private Double gateThreshold;
+    private Double rateValue;
+    private String rateUnit;
+    private boolean approvalRequired;
+    private String approvedByName;
+    private Instant approvedAt;
+    private String approvalNote;
+    private boolean emergencyOverride;
+    private String emergencyJustification;
+    private boolean requiresWitness;
+    private Instant discontinuedAt;
+    private String discontinuedByName;
+    private String discontinueReason;
+    private Instant completedAt;
+    private UUID supersedesId;
+    private UUID supersededById;
+
+    /** Doses GIVEN so far (service-enriched; null when not computed). */
+    private Long givenDoseCount;
+    /** Next open DUE time, if any (service-enriched). */
+    private Instant nextDueAt;
 
     // Audit
     private Instant createdAt;

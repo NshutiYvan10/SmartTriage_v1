@@ -2,14 +2,20 @@ package com.smartTriage.smartTriage_server.module.medication.entity;
 
 import com.smartTriage.smartTriage_server.common.entity.BaseEntity;
 import com.smartTriage.smartTriage_server.common.enums.MedicationPriority;
+import com.smartTriage.smartTriage_server.common.enums.MedicationProductType;
 import com.smartTriage.smartTriage_server.common.enums.MedicationRoute;
 import com.smartTriage.smartTriage_server.common.enums.MedicationStatus;
+import com.smartTriage.smartTriage_server.common.enums.PrescriptionType;
+import com.smartTriage.smartTriage_server.common.enums.VitalGateComparator;
+import com.smartTriage.smartTriage_server.common.enums.VitalGateParameter;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * MedicationAdministration — the structured medication log from the triage form.
@@ -193,4 +199,172 @@ public class MedicationAdministration extends BaseEntity {
     /** Server timestamp when the interaction override was confirmed. */
     @Column(name = "interaction_override_acknowledged_at")
     private Instant interactionOverrideAcknowledgedAt;
+
+    // ====================================================================
+    // TYPED ORDERS — Medication Management module (V67)
+    // ====================================================================
+    // This entity is the ORDER; individual administration events live in
+    // MedicationDose (one order → many doses for SCHEDULED / PRN /
+    // CONTINUOUS). prescriptionType is NULLABLE on purpose: legacy rows
+    // and old API clients that don't send a type keep the exact pre-V67
+    // single-shot behaviour (treated as ONE_TIME, legacy administer flow).
+
+    /** Administration pattern. NULL = legacy single-shot row. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "prescription_type", length = 20)
+    private PrescriptionType prescriptionType;
+
+    /** What is administered. Blood products & fluids ride the same workflow. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "product_type", nullable = false, length = 20)
+    @Builder.Default
+    private MedicationProductType productType = MedicationProductType.DRUG;
+
+    /** Free-text detail for non-drug products ("PRBC 2 units", "FFP 4 units"). */
+    @Column(name = "product_detail", length = 255)
+    private String productDetail;
+
+    /** Structured dose value (legacy free-text {@code dose} stays for display). */
+    @Column(name = "dose_value", precision = 10, scale = 3)
+    private BigDecimal doseValue;
+
+    /** Unit of {@link #doseValue} — mg, g, mcg, units, mL, … */
+    @Column(name = "dose_unit", length = 20)
+    private String doseUnit;
+
+    // ── Schedule (SCHEDULED) ──
+
+    /** When the first dose is due. NULL → prescribedAt. */
+    @Column(name = "start_at")
+    private Instant startAt;
+
+    /** Interval between doses in hours (supports 0.5 = 30 min). */
+    @Column(name = "interval_hours")
+    private Double intervalHours;
+
+    /** Hard end of the schedule; the order COMPLETEs when reached. */
+    @Column(name = "end_at")
+    private Instant endAt;
+
+    /** Alternative stop condition: complete after N GIVEN doses. */
+    @Column(name = "max_doses")
+    private Integer maxDoses;
+
+    // ── PRN controls ──
+
+    /** Clinical indication that justifies a PRN dose ("pain", "nausea"). */
+    @Column(name = "prn_indication", length = 255)
+    private String prnIndication;
+
+    /** Minimum hours between PRN doses (the "q6h" in "q6h PRN pain"). */
+    @Column(name = "prn_min_interval_hours")
+    private Double prnMinIntervalHours;
+
+    /** Optional cap on PRN doses in any trailing 24-hour window. */
+    @Column(name = "prn_max_doses_per_day")
+    private Integer prnMaxDosesPerDay;
+
+    // ── PRN vitals gate ("administer only if SBP ≥ 180") ──
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gate_parameter", length = 20)
+    private VitalGateParameter gateParameter;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gate_comparator", length = 3)
+    private VitalGateComparator gateComparator;
+
+    @Column(name = "gate_threshold")
+    private Double gateThreshold;
+
+    // ── Continuous infusion ──
+
+    /** Prescribed rate ("100" in "100 mL/hr"). */
+    @Column(name = "rate_value")
+    private Double rateValue;
+
+    /** Rate unit ("mL/hr", "units/hr", "mcg/kg/min"). */
+    @Column(name = "rate_unit", length = 20)
+    private String rateUnit;
+
+    // ── High-alert approval gate ──
+
+    /** TRUE when this order required charge-nurse approval at creation. */
+    @Column(name = "approval_required", nullable = false)
+    @Builder.Default
+    private boolean approvalRequired = false;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "approved_by_id")
+    private User approvedBy;
+
+    @Column(name = "approved_by_name", length = 255)
+    private String approvedByName;
+
+    @Column(name = "approved_at")
+    private Instant approvedAt;
+
+    @Column(name = "approval_note", length = 500)
+    private String approvalNote;
+
+    /** TRUE when the prescriber skipped the approval gate as an emergency. */
+    @Column(name = "emergency_override", nullable = false)
+    @Builder.Default
+    private boolean emergencyOverride = false;
+
+    /** Mandatory justification when {@link #emergencyOverride} is true. */
+    @Column(name = "emergency_justification", columnDefinition = "TEXT")
+    private String emergencyJustification;
+
+    /**
+     * TRUE when administrations of this order need a bedside witness
+     * (blood products always; formulary requiresDoubleCheck drugs).
+     */
+    @Column(name = "requires_witness", nullable = false)
+    @Builder.Default
+    private boolean requiresWitness = false;
+
+    // ── Discontinue workflow ──
+
+    @Column(name = "discontinued_at")
+    private Instant discontinuedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "discontinued_by_id")
+    private User discontinuedBy;
+
+    @Column(name = "discontinued_by_name", length = 255)
+    private String discontinuedByName;
+
+    @Column(name = "discontinue_reason", length = 500)
+    private String discontinueReason;
+
+    /** Set when the order reached its planned end (duration / max doses). */
+    @Column(name = "completed_at")
+    private Instant completedAt;
+
+    // ── Modification chain (orders are replaced, never edited) ──
+
+    /** Order this one replaced via the modify workflow. */
+    @Column(name = "supersedes_id", columnDefinition = "uuid")
+    private UUID supersedesId;
+
+    /** Order that replaced this one. */
+    @Column(name = "superseded_by_id", columnDefinition = "uuid")
+    private UUID supersededById;
+
+    /**
+     * Effective administration pattern: legacy NULL-typed rows behave
+     * as ONE_TIME everywhere the type is consulted.
+     */
+    @Transient
+    public PrescriptionType effectiveType() {
+        return prescriptionType != null ? prescriptionType : PrescriptionType.ONE_TIME;
+    }
+
+    /** First-dose anchor: explicit startAt, else the prescribe time. */
+    @Transient
+    public Instant effectiveStartAt() {
+        return startAt != null ? startAt : prescribedAt;
+    }
 }

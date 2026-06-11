@@ -185,6 +185,33 @@ public class RealTimeEventPublisher {
         log.debug("Published medication event to {}", topic);
     }
 
+    /**
+     * Medication Management (V67) — dose-workflow event, targeted at
+     * the nurses who must act on it.
+     *
+     * <p>Always lands on the hospital-wide medications topic (charge
+     * nurse / cross-zone roles + the legacy queue page) AND, when the
+     * patient's current zone is known, on the zone-scoped topic
+     * {@code /topic/medications/{hospitalId}/zone/{ZONE}} that the
+     * zone nurse's medication board subscribes to. Topic-based
+     * targeting mirrors the existing zone-alert pattern: clients
+     * subscribe to their own zone, charge subscribes hospital-wide.
+     *
+     * <p>The payload is a small map with an {@code eventType}
+     * (ORDER_CREATED, DOSE_DUE, DOSE_GIVEN, DOSE_OVERDUE, DOSE_MISSED,
+     * ORDER_DISCONTINUED, INFUSION_EVENT, APPROVAL_REQUIRED, …) —
+     * boards refetch on any event, so payload shape stays minimal.
+     */
+    public void publishMedicationEvent(UUID hospitalId, EdZone zone, Map<String, Object> payload) {
+        messagingTemplate.convertAndSend("/topic/medications/" + hospitalId, (Object) payload);
+        if (zone != null) {
+            messagingTemplate.convertAndSend(
+                    "/topic/medications/" + hospitalId + "/zone/" + zone.name(), (Object) payload);
+        }
+        log.debug("Published medication {} event for hospital {} zone {}",
+                payload.get("eventType"), hospitalId, zone);
+    }
+
     // ====================================================================
     // EMS / PARAMEDIC TOPICS
     // ====================================================================

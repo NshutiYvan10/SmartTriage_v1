@@ -639,6 +639,20 @@ public class MedicationSafetyEngine {
     // ====================================================================
 
     /**
+     * Public formulary lookup (V67) — same hospital-specific-then-
+     * system-wide resolution the engine uses internally. Lets the
+     * prescribe path read high-alert / double-check flags to drive the
+     * approval gate and witness requirement without duplicating the
+     * resolution logic.
+     */
+    public Optional<DrugFormulary> lookupFormulary(String drugName, Visit visit) {
+        if (drugName == null || drugName.isBlank() || visit == null) {
+            return Optional.empty();
+        }
+        return findFormularyEntry(drugName, visit);
+    }
+
+    /**
      * Find formulary entry by drug name, checking hospital-specific first, then system-wide.
      */
     private Optional<DrugFormulary> findFormularyEntry(String drugName, Visit visit) {

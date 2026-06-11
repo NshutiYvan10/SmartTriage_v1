@@ -37,6 +37,8 @@ public class HandoverReportResponse {
     private String outstandingTasks;
     private String planOfCare;
     private String edTimeline;
+    /** V67 — full medication audit trail (orders, doses, misses, reasons). */
+    private String medicationAudit;
 
     // Acknowledgment
     private String receivedByName;

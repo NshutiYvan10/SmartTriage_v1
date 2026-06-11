@@ -25,6 +25,7 @@ public final class HandoverReportMapper {
                 .outstandingTasks(report.getOutstandingTasks())
                 .planOfCare(report.getPlanOfCare())
                 .edTimeline(report.getEdTimeline())
+                .medicationAudit(report.getMedicationAudit())
                 .receivedByName(report.getReceivedByName())
                 .receivedAt(report.getReceivedAt())
                 .acknowledgedAt(report.getAcknowledgedAt())

@@ -3,8 +3,12 @@ package com.smartTriage.smartTriage_server.module.medication.service;
 import com.smartTriage.smartTriage_server.common.enums.AlertSeverity;
 import com.smartTriage.smartTriage_server.common.enums.AlertType;
 import com.smartTriage.smartTriage_server.common.enums.AllergySeverity;
+import com.smartTriage.smartTriage_server.common.enums.DoseKind;
+import com.smartTriage.smartTriage_server.common.enums.DoseStatus;
 import com.smartTriage.smartTriage_server.common.enums.MedicationPriority;
+import com.smartTriage.smartTriage_server.common.enums.MedicationProductType;
 import com.smartTriage.smartTriage_server.common.enums.MedicationStatus;
+import com.smartTriage.smartTriage_server.common.enums.PrescriptionType;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
@@ -13,11 +17,15 @@ import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublis
 import com.smartTriage.smartTriage_server.module.medication.dto.AdministerMedicationRequest;
 import com.smartTriage.smartTriage_server.module.medication.dto.CountersignMedicationRequest;
 import com.smartTriage.smartTriage_server.module.medication.dto.MedicationResponse;
+import com.smartTriage.smartTriage_server.module.medication.dto.ModifyOrderRequest;
 import com.smartTriage.smartTriage_server.module.medication.dto.PrescribeMedicationRequest;
 import com.smartTriage.smartTriage_server.module.medication.entity.MedicationAdministration;
+import com.smartTriage.smartTriage_server.module.medication.entity.MedicationDose;
 import com.smartTriage.smartTriage_server.module.medication.mapper.MedicationMapper;
 import com.smartTriage.smartTriage_server.module.medication.repository.MedicationAdministrationRepository;
+import com.smartTriage.smartTriage_server.module.medication.repository.MedicationDoseRepository;
 import com.smartTriage.smartTriage_server.module.medsafety.engine.MedicationSafetyEngine;
+import com.smartTriage.smartTriage_server.module.medsafety.entity.DrugFormulary;
 import com.smartTriage.smartTriage_server.module.medsafety.repository.MedicationSafetyCheckRepository;
 import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
@@ -87,6 +95,12 @@ public class MedicationService {
      * Repository, not the service, to avoid a circular bean dependency.
      */
     private final MedicationSafetyCheckRepository medicationSafetyCheckRepository;
+    /**
+     * V67 — dose-event persistence for typed orders. The prescribe
+     * path seeds the first DUE dose; the legacy administer path keeps
+     * typed ONE_TIME orders' dose rows in sync.
+     */
+    private final MedicationDoseRepository medicationDoseRepository;
 
     // ====================================================================
     // PRESCRIBE
@@ -173,6 +187,15 @@ public class MedicationService {
                 .interactionOverrideAcknowledgedAt(interactionOverrideAt)
                 .build();
 
+        // V67 — typed orders: validate the type-specific parameters,
+        // copy them onto the entity, and apply the high-alert approval
+        // gate + witness requirement. A request without a
+        // prescriptionType is a legacy client and skips ALL of this —
+        // pre-V67 behaviour byte-for-byte.
+        if (request.getPrescriptionType() != null) {
+            applyTypedOrderFields(med, request, visit);
+        }
+
         med = medicationRepository.save(med);
 
         // WARN, not INFO — these are the lines a clinical safety
@@ -217,9 +240,278 @@ public class MedicationService {
                     med.getRoute(), med.getFrequency(), med.getPriority());
         }
 
+        // V67 — typed-order post-creation workflow: seed the first DUE
+        // dose, raise approval / emergency-override alerts, and push the
+        // zone-targeted event so the right nurses are notified the
+        // moment the doctor prescribes.
+        if (med.getPrescriptionType() != null) {
+            if (med.getStatus() == MedicationStatus.PENDING_APPROVAL) {
+                ClinicalAlert approvalAlert = ClinicalAlert.builder()
+                        .visit(visit)
+                        .alertType(AlertType.MEDICATION_APPROVAL_REQUIRED)
+                        .severity(AlertSeverity.HIGH)
+                        .title("Approval required: " + med.getDrugName())
+                        .message(String.format(
+                                "High-alert medication '%s'%s for visit %s requires charge-nurse "
+                                        + "approval before it can be administered. Prescribed by %s.",
+                                med.getDrugName(),
+                                med.getDose() != null ? " " + med.getDose() : "",
+                                visit.getVisitNumber(),
+                                med.getPrescribedByName()))
+                        .autoGenerated(true)
+                        .build();
+                clinicalAlertRepository.save(approvalAlert);
+                log.warn("HIGH-ALERT ORDER PENDING APPROVAL — visit:{} drug:{} prescriber:{}",
+                        visit.getVisitNumber(), med.getDrugName(), med.getPrescribedByName());
+            } else {
+                createInitialDoseIfNeeded(med, visit);
+            }
+
+            if (med.isEmergencyOverride()) {
+                ClinicalAlert overrideAlert = ClinicalAlert.builder()
+                        .visit(visit)
+                        .alertType(AlertType.MEDICATION_EMERGENCY_OVERRIDE)
+                        .severity(AlertSeverity.CRITICAL)
+                        .title("Emergency override: " + med.getDrugName())
+                        .message(String.format(
+                                "%s skipped the high-alert approval gate for '%s' (visit %s) as an "
+                                        + "emergency. Justification: %s",
+                                med.getPrescribedByName(), med.getDrugName(),
+                                visit.getVisitNumber(), med.getEmergencyJustification()))
+                        .autoGenerated(true)
+                        .build();
+                clinicalAlertRepository.save(overrideAlert);
+                log.warn("EMERGENCY OVERRIDE (approval gate) — visit:{} drug:{} prescriber:{} justification:{}",
+                        visit.getVisitNumber(), med.getDrugName(),
+                        med.getPrescribedByName(), med.getEmergencyJustification());
+            }
+
+            publishOrderEvent(med,
+                    med.getStatus() == MedicationStatus.PENDING_APPROVAL
+                            ? "APPROVAL_REQUIRED" : "ORDER_CREATED");
+        }
+
         MedicationResponse response = MedicationMapper.toResponse(med);
         broadcastMedication(med, response);
         return response;
+    }
+
+    // ====================================================================
+    // TYPED ORDERS (V67) — prescribe-time helpers
+    // ====================================================================
+
+    /**
+     * Validate and copy the type-specific parameters onto the order,
+     * and decide the approval / witness posture from the formulary.
+     */
+    private void applyTypedOrderFields(
+            MedicationAdministration med, PrescribeMedicationRequest request, Visit visit) {
+
+        PrescriptionType type = request.getPrescriptionType();
+        med.setPrescriptionType(type);
+        med.setProductType(request.getProductType() != null
+                ? request.getProductType() : MedicationProductType.DRUG);
+        med.setProductDetail(request.getProductDetail());
+        med.setDoseValue(request.getDoseValue());
+        med.setDoseUnit(request.getDoseUnit());
+        med.setStartAt(request.getStartAt());
+        med.setEndAt(request.getEndAt());
+
+        switch (type) {
+            case SCHEDULED -> {
+                if (request.getIntervalHours() == null || request.getIntervalHours() <= 0) {
+                    throw new ClinicalBusinessException(
+                            "A scheduled medication needs a positive interval (hours between doses).");
+                }
+                med.setIntervalHours(request.getIntervalHours());
+                med.setMaxDoses(request.getMaxDoses());
+                if (request.getEndAt() != null && request.getEndAt().isBefore(Instant.now())) {
+                    throw new ClinicalBusinessException(
+                            "The schedule end time is already in the past.");
+                }
+            }
+            case PRN -> {
+                if (request.getPrnIndication() == null || request.getPrnIndication().isBlank()) {
+                    throw new ClinicalBusinessException(
+                            "A PRN medication needs the indication that justifies a dose "
+                                    + "(e.g. 'pain', 'nausea').");
+                }
+                med.setPrnIndication(request.getPrnIndication().trim());
+                med.setPrnMinIntervalHours(request.getPrnMinIntervalHours());
+                med.setPrnMaxDosesPerDay(request.getPrnMaxDosesPerDay());
+                boolean anyGate = request.getGateParameter() != null
+                        || request.getGateComparator() != null
+                        || request.getGateThreshold() != null;
+                boolean fullGate = request.getGateParameter() != null
+                        && request.getGateComparator() != null
+                        && request.getGateThreshold() != null;
+                if (anyGate && !fullGate) {
+                    throw new ClinicalBusinessException(
+                            "A vitals gate needs all three of parameter, comparator and threshold "
+                                    + "(e.g. SYSTOLIC_BP GTE 100).");
+                }
+                med.setGateParameter(request.getGateParameter());
+                med.setGateComparator(request.getGateComparator());
+                med.setGateThreshold(request.getGateThreshold());
+            }
+            case CONTINUOUS -> {
+                if (request.getRateValue() == null || request.getRateUnit() == null
+                        || request.getRateUnit().isBlank()) {
+                    throw new ClinicalBusinessException(
+                            "A continuous infusion needs a rate and rate unit (e.g. 100 mL/hr).");
+                }
+                med.setRateValue(request.getRateValue());
+                med.setRateUnit(request.getRateUnit().trim());
+            }
+            case ONE_TIME -> { /* no extra parameters */ }
+        }
+
+        // Formulary posture: high-alert drugs need charge-nurse approval;
+        // requires-double-check drugs and ALL blood products need a
+        // bedside witness at administration time.
+        DrugFormulary formulary = medicationSafetyEngine
+                .lookupFormulary(med.getDrugName(), visit).orElse(null);
+        boolean highAlert = formulary != null && formulary.isHighAlert();
+        boolean doubleCheck = formulary != null && formulary.isRequiresDoubleCheck();
+        med.setRequiresWitness(doubleCheck || med.getProductType().isAlwaysRequiresWitness());
+
+        if (highAlert) {
+            boolean emergency = Boolean.TRUE.equals(request.getEmergencyOverride());
+            if (emergency) {
+                String justification = request.getEmergencyJustification();
+                if (justification == null || justification.trim().length() < 10) {
+                    throw new ClinicalBusinessException(
+                            "Emergency override of the high-alert approval gate requires a "
+                                    + "documented justification (at least 10 characters).");
+                }
+                med.setEmergencyOverride(true);
+                med.setEmergencyJustification(justification.trim());
+                med.setApprovalRequired(false);
+            } else {
+                med.setApprovalRequired(true);
+                med.setStatus(MedicationStatus.PENDING_APPROVAL);
+            }
+        }
+    }
+
+    /**
+     * Seed the first DUE dose for a newly administrable typed order.
+     * ONE_TIME / SCHEDULED get dose #1 at the start anchor; PRN and
+     * CONTINUOUS have no pre-created doses (the nurse initiates).
+     * Also called when a PENDING_APPROVAL order is approved.
+     */
+    void createInitialDoseIfNeeded(MedicationAdministration med, Visit visit) {
+        PrescriptionType type = med.effectiveType();
+        if (type != PrescriptionType.ONE_TIME && type != PrescriptionType.SCHEDULED) {
+            return;
+        }
+        Instant firstDue = med.effectiveStartAt() != null ? med.effectiveStartAt() : Instant.now();
+        MedicationDose first = MedicationDose.builder()
+                .medication(med)
+                .visit(visit)
+                .kind(type == PrescriptionType.SCHEDULED
+                        ? DoseKind.SCHEDULED_DOSE : DoseKind.ONE_TIME_DOSE)
+                .status(DoseStatus.DUE)
+                .sequenceNumber(1)
+                .dueAt(firstDue)
+                .build();
+        medicationDoseRepository.save(first);
+        log.info("Dose #1 created for order {} ({}), due {}",
+                med.getId(), med.getDrugName(), firstDue);
+    }
+
+    /**
+     * Zone-targeted medication event (V67). Resolves the patient's
+     * CURRENT zone at publish time so notifications follow the patient
+     * through mid-prescription zone transfers. Best-effort — a STOMP
+     * failure never rolls back the transaction.
+     */
+    void publishOrderEvent(MedicationAdministration med, String eventType) {
+        try {
+            Visit visit = med.getVisit();
+            if (visit == null || visit.getHospital() == null) return;
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("eventType", eventType);
+            payload.put("medicationId", med.getId().toString());
+            payload.put("visitId", visit.getId().toString());
+            payload.put("drugName", med.getDrugName());
+            payload.put("prescriptionType", med.effectiveType().name());
+            payload.put("priority", med.getPriority() != null ? med.getPriority().name() : null);
+            payload.put("timestamp", Instant.now().toString());
+            realTimeEventPublisher.publishMedicationEvent(
+                    visit.getHospital().getId(), visit.getCurrentEdZone(), payload);
+        } catch (Exception e) {
+            log.warn("Failed to publish medication {} event for {}: {}",
+                    eventType, med.getId(), e.getMessage());
+        }
+    }
+
+    /**
+     * Prescription modification (V67): the original order is
+     * DISCONTINUED with "Modified: reason" (open doses cancelled, a
+     * running infusion stopped) and the replacement is created through
+     * the FULL prescribe path — every safety check re-runs. The two
+     * orders are linked supersedes/superseded-by; the chain is the
+     * modification history.
+     */
+    @Transactional
+    public MedicationResponse modifyOrder(UUID orderId, ModifyOrderRequest request) {
+        MedicationAdministration old = findMedicationOrThrow(orderId);
+        if (old.getStatus() != MedicationStatus.PRESCRIBED
+                && old.getStatus() != MedicationStatus.PENDING_APPROVAL
+                && old.getStatus() != MedicationStatus.HELD) {
+            throw new ClinicalBusinessException(
+                    "Only live orders can be modified. Current status: " + old.getStatus());
+        }
+        if (request.getNewOrder().getVisitId() == null
+                || !request.getNewOrder().getVisitId().equals(old.getVisit().getId())) {
+            throw new ClinicalBusinessException(
+                    "The replacement order must target the same visit as the original.");
+        }
+
+        // 1. Stop the old order, cancelling whatever was still open.
+        User actor = resolveCurrentUser();
+        cancelOpenDosesFor(old, "Order modified: " + request.getReason());
+        old.setStatus(MedicationStatus.DISCONTINUED);
+        old.setDiscontinuedAt(Instant.now());
+        old.setDiscontinuedBy(actor);
+        old.setDiscontinuedByName(formatUserName(actor));
+        old.setDiscontinueReason("Modified: " + request.getReason());
+
+        // 2. Create the replacement through the full prescribe path.
+        MedicationResponse replacement = prescribe(request.getNewOrder());
+
+        // 3. Link the chain.
+        MedicationAdministration newOrder = findMedicationOrThrow(replacement.getId());
+        newOrder.setSupersedesId(old.getId());
+        old.setSupersededById(newOrder.getId());
+        medicationRepository.save(newOrder);
+        medicationRepository.save(old);
+
+        log.info("Order {} modified → superseded by {} (reason: {})",
+                old.getId(), newOrder.getId(), request.getReason());
+        publishOrderEvent(old, "ORDER_MODIFIED");
+        broadcastMedication(old, MedicationMapper.toResponse(old));
+        return MedicationMapper.toResponse(newOrder);
+    }
+
+    /**
+     * Cancel every open DUE dose of an order (discontinue / hold /
+     * modify paths) so nothing administrable is left dangling.
+     */
+    void cancelOpenDosesFor(MedicationAdministration med, String reason) {
+        if (med.getPrescriptionType() == null) return;
+        var openDoses = medicationDoseRepository
+                .findByMedicationIdAndStatusAndIsActiveTrue(med.getId(), DoseStatus.DUE);
+        for (MedicationDose dose : openDoses) {
+            dose.setStatus(DoseStatus.CANCELLED);
+            dose.appendStatusReason(reason);
+            medicationDoseRepository.save(dose);
+        }
+        if (!openDoses.isEmpty()) {
+            log.info("Cancelled {} open dose(s) for order {} — {}",
+                    openDoses.size(), med.getId(), reason);
+        }
     }
 
     /**
@@ -453,6 +745,25 @@ public class MedicationService {
                             + ". Only PRESCRIBED medications can be administered.");
         }
 
+        // V67 — typed orders whose safeguards live at the dose level must
+        // go through the dose endpoints (verification, witness, vitals
+        // gate, schedule roll-forward). Plain typed ONE_TIME orders
+        // without a witness requirement may still use this legacy path
+        // (the old nurse queue) — their dose row is synced below.
+        if (med.getPrescriptionType() != null) {
+            if (med.getPrescriptionType() != PrescriptionType.ONE_TIME) {
+                throw new ClinicalBusinessException(
+                        "This is a " + med.getPrescriptionType().getLabel()
+                                + " order — record administrations through its dose workflow, "
+                                + "not the single-shot administer action.");
+            }
+            if (med.isRequiresWitness()) {
+                throw new ClinicalBusinessException(
+                        "This order requires a second-clinician witness — administer it through "
+                                + "the dose workflow, which records the witness.");
+            }
+        }
+
         // Enforce an un-overridden medication safety BLOCK before administration.
         // The /med-safety/validate flow persists a MedicationSafetyCheck per med;
         // if the latest one for THIS medication is a CRITICAL block (overallSafe
@@ -503,9 +814,31 @@ public class MedicationService {
 
         med = medicationRepository.save(med);
 
+        // V67 — keep the typed ONE_TIME order's dose row in sync when the
+        // legacy administer path was used (old nurse queue): mark the open
+        // DUE dose GIVEN with the same actor and timestamp so the dose
+        // audit trail and the order agree.
+        if (med.getPrescriptionType() == PrescriptionType.ONE_TIME) {
+            var openDoses = medicationDoseRepository
+                    .findByMedicationIdAndStatusAndIsActiveTrue(med.getId(), DoseStatus.DUE);
+            for (MedicationDose dose : openDoses) {
+                dose.setStatus(DoseStatus.GIVEN);
+                dose.setGivenAt(med.getAdministeredAt());
+                dose.setGivenBy(med.getAdministeredBy());
+                dose.setGivenByName(med.getAdministeredByName());
+                dose.setDoseValue(med.getDoseValue());
+                dose.setDoseUnit(med.getDoseUnit());
+                medicationDoseRepository.save(dose);
+            }
+        }
+
         log.info("Medication administered — id:{} drug:{} visit:{} by:{}",
                 med.getId(), med.getDrugName(), med.getVisit().getVisitNumber(),
                 med.getAdministeredByName());
+
+        if (med.getPrescriptionType() != null) {
+            publishOrderEvent(med, "DOSE_GIVEN");
+        }
 
         MedicationResponse response = MedicationMapper.toResponse(med);
         broadcastMedication(med, response);
@@ -589,9 +922,12 @@ public class MedicationService {
             String existingNotes = med.getNotes() != null ? med.getNotes() + " | " : "";
             med.setNotes(existingNotes + "HELD: " + reason);
         }
+        // V67 — a held typed order must leave nothing administrable open.
+        cancelOpenDosesFor(med, "Order held" + (reason != null && !reason.isBlank() ? ": " + reason : ""));
 
         med = medicationRepository.save(med);
         log.info("Medication held — id:{} drug:{} reason:{}", med.getId(), med.getDrugName(), reason);
+        if (med.getPrescriptionType() != null) publishOrderEvent(med, "ORDER_HELD");
         MedicationResponse response = MedicationMapper.toResponse(med);
         broadcastMedication(med, response);
         return response;
@@ -606,9 +942,12 @@ public class MedicationService {
             String existingNotes = med.getNotes() != null ? med.getNotes() + " | " : "";
             med.setNotes(existingNotes + "CANCELLED: " + reason);
         }
+        // V67 — cancel anything still administrable on a typed order.
+        cancelOpenDosesFor(med, "Order cancelled" + (reason != null && !reason.isBlank() ? ": " + reason : ""));
 
         med = medicationRepository.save(med);
         log.info("Medication cancelled — id:{} drug:{} reason:{}", med.getId(), med.getDrugName(), reason);
+        if (med.getPrescriptionType() != null) publishOrderEvent(med, "ORDER_CANCELLED");
         MedicationResponse response = MedicationMapper.toResponse(med);
         broadcastMedication(med, response);
         return response;
@@ -628,9 +967,13 @@ public class MedicationService {
             String existingNotes = med.getNotes() != null ? med.getNotes() + " | " : "";
             med.setNotes(existingNotes + "REFUSED: " + reason);
         }
+        // V67 — whole-order refusal closes any open dose too.
+        cancelOpenDosesFor(med, "Order refused by patient"
+                + (reason != null && !reason.isBlank() ? ": " + reason : ""));
 
         med = medicationRepository.save(med);
         log.info("Medication refused — id:{} drug:{} reason:{}", med.getId(), med.getDrugName(), reason);
+        if (med.getPrescriptionType() != null) publishOrderEvent(med, "ORDER_REFUSED");
         MedicationResponse response = MedicationMapper.toResponse(med);
         broadcastMedication(med, response);
         return response;

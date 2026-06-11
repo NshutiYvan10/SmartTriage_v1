@@ -64,6 +64,12 @@ public class HandoverReportService {
     private final MedicationAdministrationRepository medicationAdministrationRepository;
     private final ClinicalAlertRepository clinicalAlertRepository;
     private final ClinicalNoteRepository clinicalNoteRepository;
+    /**
+     * V67 — builds the dedicated medication-audit section (typed orders,
+     * dose-by-dose log with actors/witnesses/reasons, PRN usage,
+     * infusion state, modification chain).
+     */
+    private final com.smartTriage.smartTriage_server.module.medication.service.MedicationScheduleService medicationScheduleService;
 
     private static final DateTimeFormatter TIME_FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.of("Africa/Kigali"));
@@ -98,6 +104,7 @@ public class HandoverReportService {
                 .outstandingTasks(buildOutstandingTasks(visit))
                 .planOfCare(buildPlanOfCare(visit))
                 .edTimeline(buildEdTimeline(visit))
+                .medicationAudit(medicationScheduleService.buildMedicationAuditText(visit))
                 .build();
 
         report = handoverReportRepository.save(report);
