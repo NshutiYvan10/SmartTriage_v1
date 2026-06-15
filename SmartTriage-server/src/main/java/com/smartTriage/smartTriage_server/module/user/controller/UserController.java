@@ -3,6 +3,7 @@ package com.smartTriage.smartTriage_server.module.user.controller;
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.common.enums.Designation;
 import com.smartTriage.smartTriage_server.common.enums.Role;
+import com.smartTriage.smartTriage_server.module.user.dto.ChangePasswordRequest;
 import com.smartTriage.smartTriage_server.module.user.dto.CreateUserRequest;
 import com.smartTriage.smartTriage_server.module.user.dto.UpdateProfileRequest;
 import com.smartTriage.smartTriage_server.module.user.dto.UpdateUserRequest;
@@ -118,6 +119,20 @@ public class UserController {
             @Valid @RequestBody UpdateProfileRequest request) {
         UserResponse response = userService.updateMyProfile(principal.getId(), request);
         return ResponseEntity.ok(ApiResponse.success("Profile updated", response));
+    }
+
+    /**
+     * Self-service password change — the signed-in user changes THEIR OWN
+     * password (Security tab). Always the authenticated principal; requires the
+     * correct current password.
+     */
+    @PutMapping("/me/password")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<Void>> changeMyPassword(
+            @AuthenticationPrincipal User principal,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        userService.changeMyPassword(principal.getId(), request);
+        return ResponseEntity.ok(ApiResponse.success("Password changed", null));
     }
 
     /**

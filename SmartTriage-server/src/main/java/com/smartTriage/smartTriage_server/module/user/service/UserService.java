@@ -9,6 +9,7 @@ import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundExcep
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import com.smartTriage.smartTriage_server.module.hospital.service.HospitalService;
 import com.smartTriage.smartTriage_server.module.user.dto.CreateUserRequest;
+import com.smartTriage.smartTriage_server.module.user.dto.ChangePasswordRequest;
 import com.smartTriage.smartTriage_server.module.user.dto.UpdateProfileRequest;
 import com.smartTriage.smartTriage_server.module.user.dto.UpdateUserRequest;
 import com.smartTriage.smartTriage_server.module.user.dto.UserResponse;
@@ -250,6 +251,26 @@ public class UserService implements UserDetailsService {
         user = userRepository.save(user);
         log.info("User {} updated their own profile (name/phone)", user.getEmail());
         return UserMapper.toResponse(user);
+    }
+
+    /**
+     * Self-service password change — the authenticated user changes THEIR OWN
+     * password. Requires the correct current password and a new one that
+     * differs from it. {@code userId} is the principal's own id (controller),
+     * so this can never reset another account.
+     */
+    @Transactional
+    public void changeMyPassword(UUID userId, ChangePasswordRequest request) {
+        User user = findUserOrThrow(userId);
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new ClinicalBusinessException("Current password is incorrect");
+        }
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
+            throw new ClinicalBusinessException("New password must be different from the current password");
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+        log.info("User {} changed their own password", user.getEmail());
     }
 
     private void assertNotLastChargeNurse(User user, String actionVerb) {

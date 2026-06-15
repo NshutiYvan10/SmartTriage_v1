@@ -34,6 +34,10 @@ export const userApi = {
   updateMyProfile: (data: { firstName: string; lastName: string; phoneNumber?: string }) =>
     put<UserResponse>('/users/me/profile', data),
 
+  /** Self-service password change (Security tab) — requires the current password. */
+  changeMyPassword: (data: { currentPassword: string; newPassword: string }) =>
+    put<void>('/users/me/password', data),
+
   getById: (id: string) =>
     get<UserResponse>(`/users/${id}`),
 

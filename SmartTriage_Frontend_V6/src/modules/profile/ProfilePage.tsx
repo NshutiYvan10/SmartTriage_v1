@@ -157,6 +157,34 @@ export function ProfilePage() {
     setIsEditing(false);
   };
 
+  // ── Change-password (Security tab) ──
+  const [pwCurrent, setPwCurrent] = useState('');
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSuccess, setPwSuccess] = useState(false);
+
+  const handleChangePassword = async () => {
+    setPwError(null);
+    setPwSuccess(false);
+    if (!pwCurrent) { setPwError('Enter your current password.'); return; }
+    if (pwNew.length < 8) { setPwError('New password must be at least 8 characters.'); return; }
+    if (pwNew !== pwConfirm) { setPwError('New password and confirmation do not match.'); return; }
+    setPwSaving(true);
+    try {
+      await userApi.changeMyPassword({ currentPassword: pwCurrent, newPassword: pwNew });
+      setPwSuccess(true);
+      setPwCurrent('');
+      setPwNew('');
+      setPwConfirm('');
+    } catch (e) {
+      setPwError(e instanceof Error ? e.message : 'Failed to change password. Please try again.');
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
   const tabs = [
     { id: 'overview' as const, label: 'Overview', icon: User, description: 'Personal information' },
     { id: 'settings' as const, label: 'Preferences', icon: Bell, description: 'Notification & display' },
@@ -555,6 +583,9 @@ export function ProfilePage() {
                   <input
                     type="password"
                     placeholder="Enter current password"
+                    value={pwCurrent}
+                    onChange={(e) => setPwCurrent(e.target.value)}
+                    autoComplete="current-password"
                     className="w-full px-4 py-3 text-sm bg-white/80 backdrop-blur-sm border border-gray-200/60 rounded-2xl focus:outline-none focus:ring-4 focus:ring-cyan-500/10 focus:border-cyan-500 transition-all duration-300 shadow-sm font-medium"
                   />
                 </div>
@@ -562,7 +593,10 @@ export function ProfilePage() {
                   <label className="text-xs font-semibold text-gray-500 mb-2 block uppercase tracking-wider">New Password</label>
                   <input
                     type="password"
-                    placeholder="Enter new password"
+                    placeholder="Enter new password (min 8 characters)"
+                    value={pwNew}
+                    onChange={(e) => setPwNew(e.target.value)}
+                    autoComplete="new-password"
                     className="w-full px-4 py-3 text-sm bg-white/80 backdrop-blur-sm border border-gray-200/60 rounded-2xl focus:outline-none focus:ring-4 focus:ring-cyan-500/10 focus:border-cyan-500 transition-all duration-300 shadow-sm font-medium"
                   />
                 </div>
@@ -571,11 +605,31 @@ export function ProfilePage() {
                   <input
                     type="password"
                     placeholder="Confirm new password"
+                    value={pwConfirm}
+                    onChange={(e) => setPwConfirm(e.target.value)}
+                    autoComplete="new-password"
                     className="w-full px-4 py-3 text-sm bg-white/80 backdrop-blur-sm border border-gray-200/60 rounded-2xl focus:outline-none focus:ring-4 focus:ring-cyan-500/10 focus:border-cyan-500 transition-all duration-300 shadow-sm font-medium"
                   />
                 </div>
-                <button className="w-full py-3 text-xs font-bold text-white bg-gradient-to-r from-slate-800 to-slate-700 rounded-2xl transition-all duration-300 shadow-lg shadow-slate-800/20 hover:shadow-xl hover:-translate-y-0.5">
-                  Update Password
+                {pwError && (
+                  <div className="flex items-center gap-2 text-xs font-semibold text-red-600">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    {pwError}
+                  </div>
+                )}
+                {pwSuccess && (
+                  <div className="flex items-center gap-2 text-xs font-semibold text-emerald-600">
+                    <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    Password changed successfully.
+                  </div>
+                )}
+                <button
+                  onClick={handleChangePassword}
+                  disabled={pwSaving}
+                  className="w-full py-3 text-xs font-bold text-white bg-gradient-to-r from-slate-800 to-slate-700 rounded-2xl transition-all duration-300 shadow-lg shadow-slate-800/20 hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+                >
+                  {pwSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {pwSaving ? 'Updating…' : 'Update Password'}
                 </button>
               </div>
             </div>
