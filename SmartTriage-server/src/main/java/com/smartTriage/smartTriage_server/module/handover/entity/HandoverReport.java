@@ -88,6 +88,29 @@ public class HandoverReport extends BaseEntity {
     private String edTimeline;
 
     /**
+     * V73 — pre-hospital / EMS run snapshot: MIST handover, field triage +
+     * vitals, lights, and pre-hospital interventions given. Null if the patient
+     * did not arrive by ambulance.
+     */
+    @Column(name = "prehospital_summary", columnDefinition = "TEXT")
+    private String prehospitalSummary;
+
+    /**
+     * V73 — active time-critical protocols and acute events: fast-track
+     * (stroke/STEMI), sepsis screening + 1-hour bundle, ICU escalation,
+     * hypoglycaemia events, red-flag clinical-sign trajectory, care pathways.
+     */
+    @Column(name = "acute_protocols", columnDefinition = "TEXT")
+    private String acuteProtocols;
+
+    /**
+     * V73 — formal clinical documents on the visit: procedure / operative /
+     * consultation-referral / consent / AMA / nursing-assessment notes.
+     */
+    @Column(name = "procedures_documents", columnDefinition = "TEXT")
+    private String proceduresDocuments;
+
+    /**
      * V67 — full medication audit trail at generation time: active
      * orders with schedule + remaining doses, every dose given (by
      * whom, when, witness), missed / held / refused / discontinued

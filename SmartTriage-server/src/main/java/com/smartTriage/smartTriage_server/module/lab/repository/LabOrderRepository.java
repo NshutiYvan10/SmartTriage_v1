@@ -26,6 +26,15 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
             UUID visitId, Pageable pageable);
 
     /**
+     * Standalone lab orders for a visit — those NOT linked to an
+     * {@code Investigation} row (investigation_id IS NULL). Used by the
+     * handover report so an outstanding/critical standalone order is surfaced
+     * without double-counting tests already rendered in the investigations
+     * section (which come from the Investigation entity).
+     */
+    List<LabOrder> findByVisitIdAndInvestigationIsNullAndIsActiveTrueOrderByOrderedAtDesc(UUID visitId);
+
+    /**
      * Pending (not yet resulted and not cancelled) lab orders for a hospital.
      */
     @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +

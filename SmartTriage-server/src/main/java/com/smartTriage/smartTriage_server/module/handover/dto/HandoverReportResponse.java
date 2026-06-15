@@ -37,6 +37,12 @@ public class HandoverReportResponse {
     private String outstandingTasks;
     private String planOfCare;
     private String edTimeline;
+    /** V73 — pre-hospital / EMS run snapshot (MIST, field triage, interventions). */
+    private String prehospitalSummary;
+    /** V73 — active acute protocols + events (fast-track, sepsis, ICU, hypo, signs, pathways). */
+    private String acuteProtocols;
+    /** V73 — formal clinical documents (procedure / operative / consult / consent / AMA). */
+    private String proceduresDocuments;
     /** V67 — full medication audit trail (orders, doses, misses, reasons). */
     private String medicationAudit;
 

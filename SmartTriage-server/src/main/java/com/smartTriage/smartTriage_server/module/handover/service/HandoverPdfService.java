@@ -173,13 +173,16 @@ public class HandoverPdfService {
     private void renderSections(Document doc, HandoverReport r) throws Exception {
         // Order mirrors the on-screen report exactly — nothing summarised away.
         addSection(doc, "Patient Summary", r::getPatientSummary);
+        addSection(doc, "Pre-Hospital / EMS", r::getPrehospitalSummary);
         addSection(doc, "Presenting Complaint", r::getPresentingComplaint);
         addSection(doc, "Triage Summary", r::getTriageSummary);
         addSection(doc, "Vital Signs Trend", r::getVitalSignsTrend);
         addSection(doc, "Investigations & Results", r::getInvestigationsResults);
         addSection(doc, "Diagnosis Summary", r::getDiagnosisSummary);
+        addSection(doc, "Acute Protocols & Critical Events", r::getAcuteProtocols);
         addSection(doc, "Treatment Summary", r::getTreatmentSummary);
         addSection(doc, "Medication Audit Trail", r::getMedicationAudit);
+        addSection(doc, "Procedures & Documents", r::getProceduresDocuments);
         addSection(doc, "Active Clinical Alerts", r::getActiveClinicalAlerts);
         addSection(doc, "Outstanding Tasks & Disposition", r::getOutstandingTasks);
         addSection(doc, "Assessment & Plan", r::getPlanOfCare);

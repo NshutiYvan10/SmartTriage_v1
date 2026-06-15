@@ -58,4 +58,11 @@ public interface ZoneTransferRepository extends JpaRepository<ZoneTransfer, UUID
     @Query("SELECT t FROM ZoneTransfer t WHERE t.visit.id = :visitId " +
             "AND t.isActive = true ORDER BY t.initiatedAt DESC")
     List<ZoneTransfer> findHistoryForVisit(@Param("visitId") UUID visitId);
+
+    /**
+     * Movement history for a visit, oldest first — drives the handover
+     * report's ED-timeline zone-transfer trail (chronological is the right
+     * order for a timeline, unlike {@link #findHistoryForVisit} which is DESC).
+     */
+    List<ZoneTransfer> findByVisitIdAndIsActiveTrueOrderByInitiatedAtAsc(UUID visitId);
 }

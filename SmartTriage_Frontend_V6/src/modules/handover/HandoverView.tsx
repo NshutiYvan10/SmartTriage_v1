@@ -9,7 +9,7 @@ import {
   Loader2, RefreshCw, X, Plus, Printer, UserCheck, Download,
   FileText, Activity, AlertTriangle, Stethoscope,
   HeartPulse, FlaskConical, Pill, ListTodo, ClipboardList,
-  MessageSquare, Timer,
+  MessageSquare, Timer, Siren, Zap, Files,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { handoverApi } from '@/api/handover';
@@ -38,15 +38,21 @@ function formatLabel(s: string) { return s.replace(/_/g, ' '); }
 // ── Report section config ──
 const REPORT_SECTIONS: { key: keyof HandoverReport; label: string; icon: typeof FileText }[] = [
   { key: 'patientSummary', label: 'Patient Summary', icon: FileText },
+  // V73 — pre-hospital / EMS run snapshot (omitted when not an ambulance arrival).
+  { key: 'prehospitalSummary', label: 'Pre-Hospital / EMS', icon: Siren },
   { key: 'presentingComplaint', label: 'Presenting Complaint', icon: Stethoscope },
   { key: 'triageSummary', label: 'Triage Summary', icon: Activity },
   { key: 'vitalSignsTrend', label: 'Vitals Trend', icon: HeartPulse },
   { key: 'investigationsResults', label: 'Investigations & Results', icon: FlaskConical },
   { key: 'diagnosisSummary', label: 'Diagnosis Summary', icon: ClipboardList },
+  // V73 — active time-critical protocols + acute events.
+  { key: 'acuteProtocols', label: 'Acute Protocols & Critical Events', icon: Zap },
   { key: 'treatmentSummary', label: 'Treatment Summary', icon: Pill },
   // V67 — the full dose-by-dose medication audit (orders, schedules,
   // every administration with actor/witness, misses with reasons).
   { key: 'medicationAudit', label: 'Medication Audit Trail', icon: Pill },
+  // V73 — formal clinical documents (procedure / operative / consult / consent / AMA).
+  { key: 'proceduresDocuments', label: 'Procedures & Documents', icon: Files },
   { key: 'activeClinicalAlerts', label: 'Active Clinical Alerts', icon: AlertTriangle },
   { key: 'outstandingTasks', label: 'Outstanding Tasks & Disposition', icon: ListTodo },
   { key: 'planOfCare', label: 'Assessment & Plan', icon: ClipboardCheck },

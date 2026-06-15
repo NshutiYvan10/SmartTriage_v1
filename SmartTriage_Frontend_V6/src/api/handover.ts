@@ -18,6 +18,12 @@ export interface HandoverReport {
   outstandingTasks: string | null;
   planOfCare: string | null;
   edTimeline: string | null;
+  /** V73 — pre-hospital / EMS run snapshot (MIST, field triage, interventions). */
+  prehospitalSummary: string | null;
+  /** V73 — active acute protocols + events (fast-track, sepsis, ICU, hypo, signs, pathways). */
+  acuteProtocols: string | null;
+  /** V73 — formal clinical documents (procedure / operative / consult / consent / AMA). */
+  proceduresDocuments: string | null;
   /** V67 — full medication audit trail: every order with schedule and
    *  remaining doses, every dose with actor/time/witness, misses /
    *  holds / refusals / discontinuations with reasons. */

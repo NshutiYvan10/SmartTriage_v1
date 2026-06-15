@@ -718,6 +718,16 @@ public class MedicationScheduleService {
             if (Boolean.TRUE.equals(order.getPrescribedDespiteAllergy())) {
                 sb.append(" | ALLERGY OVERRIDE: ").append(order.getAllergyOverrideMatches());
             }
+            if (Boolean.TRUE.equals(order.getPrescribedDespiteInteraction())) {
+                sb.append(" | INTERACTION OVERRIDE: ").append(order.getInteractionOverrideMatches());
+            }
+            // Second-clinician verification on the order (distinct from the per-dose witness).
+            if (order.getCountersignedByName() != null && !order.getCountersignedByName().isBlank()) {
+                sb.append(" | countersigned by ").append(order.getCountersignedByName());
+                if (order.getCountersignedAt() != null) {
+                    sb.append(" ").append(TIME_FMT.format(order.getCountersignedAt()));
+                }
+            }
             sb.append("\n   Status: ").append(order.getStatus().getDescription());
             if (order.getStatus() == MedicationStatus.DISCONTINUED) {
                 sb.append(" — ").append(order.getDiscontinueReason())
@@ -731,6 +741,11 @@ public class MedicationScheduleService {
             }
             if (order.getSupersedesId() != null) {
                 sb.append(" — replaces an earlier order (modification)");
+            }
+            // Order-level clinical note — carries the reason a dose was HELD and any
+            // recorded adverse reaction; invisible to the incoming team without this.
+            if (order.getNotes() != null && !order.getNotes().isBlank()) {
+                sb.append("\n   Note: ").append(order.getNotes());
             }
 
             // Schedule / remaining-dose summary.
@@ -838,7 +853,6 @@ public class MedicationScheduleService {
         if (d.getGivenAt() != null) {
             sb.append(" ").append(TIME_FMT.format(d.getGivenAt()))
                     .append(" by ").append(d.getGivenByName() != null ? d.getGivenByName() : "?");
-            if (d.getWitnessName() != null) sb.append(" (witness: ").append(d.getWitnessName()).append(")");
             if (d.getDoseValue() != null) {
                 sb.append(" — ").append(d.getDoseValue().stripTrailingZeros().toPlainString())
                         .append(" ").append(d.getDoseUnit() != null ? d.getDoseUnit() : "");
@@ -848,6 +862,9 @@ public class MedicationScheduleService {
                         .append(d.getRateUnit() != null ? d.getRateUnit() : "");
             }
         }
+        // Witness surfaces regardless of given/refused/missed — a controlled-drug
+        // double-check matters most precisely when the dose was NOT given.
+        if (d.getWitnessName() != null) sb.append(" (witness: ").append(d.getWitnessName()).append(")");
         if (d.getPrnReason() != null) sb.append(" | indication: ").append(d.getPrnReason());
         if (d.getGateEvaluation() != null) sb.append(" | gate: ").append(d.getGateEvaluation());
         if (d.isOverride()) sb.append(" | OVERRIDE: ").append(d.getOverrideJustification());
