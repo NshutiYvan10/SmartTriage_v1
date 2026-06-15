@@ -73,7 +73,8 @@ public class PatientIdentityService {
         Instant now = Instant.now();
 
         if (request.getMergeIntoPatientId() != null) {
-            return mergeIntoExistingPatient(placeholder, request.getMergeIntoPatientId(), actor, now);
+            return mergeIntoExistingPatient(placeholder, request.getMergeIntoPatientId(), actor, now,
+                    request.getResolutionNote());
         }
 
         // Rename path
@@ -108,6 +109,7 @@ public class PatientIdentityService {
         placeholder.setUnidentified(false);
         placeholder.setIdentifiedAt(now);
         placeholder.setIdentifiedBy(actor);
+        placeholder.setResolutionNote(request.getResolutionNote());
 
         Patient saved = patientRepository.save(placeholder);
 
@@ -132,7 +134,8 @@ public class PatientIdentityService {
     private Patient mergeIntoExistingPatient(Patient placeholder,
                                              UUID targetPatientId,
                                              User actor,
-                                             Instant now) {
+                                             Instant now,
+                                             String resolutionNote) {
         if (placeholder.getId().equals(targetPatientId)) {
             throw new ClinicalBusinessException("Cannot merge a patient into itself");
         }
@@ -162,6 +165,7 @@ public class PatientIdentityService {
         placeholder.setUnidentified(false);
         placeholder.setIdentifiedAt(now);
         placeholder.setIdentifiedBy(actor);
+        placeholder.setResolutionNote(resolutionNote);
         placeholder.softDelete();
         patientRepository.save(placeholder);
 

@@ -219,6 +219,10 @@ public class Patient extends BaseEntity {
     @JoinColumn(name = "identified_by_user_id")
     private User identifiedBy;
 
+    /** Why/how the placeholder was resolved (typed identity or merge) — audit trail. */
+    @Column(name = "resolution_note", length = 500)
+    private String resolutionNote;
+
     /**
      * Returns true if patient is pediatric (< 13 years old).
      * Pediatric patients require age-adjusted vital thresholds and scoring.

@@ -70,6 +70,7 @@ public final class PatientMapper {
                                                 patient.getIdentifiedBy().getLastName(),
                                                 patient.getIdentifiedBy().getUsername())
                         : null)
+                .resolutionNote(patient.getResolutionNote())
                 .createdAt(patient.getCreatedAt())
                 .updatedAt(patient.getUpdatedAt())
                 .build();

@@ -11,7 +11,7 @@ import {
   FlaskConical, Pill, BellRing, Heart, Thermometer,
   Wind, Droplets, Brain, Clock, User, AlertTriangle, ChevronRight,
   Plus, Send, CheckCircle2, XCircle, Eye, Loader2, RefreshCw, LogOut,
-  TrendingUp, Sparkles, Siren,
+  TrendingUp, Sparkles, Siren, UserCheck,
 } from 'lucide-react';
 import { ClinicalSignsTab } from './ClinicalSignsTab';
 import { PrehospitalTab } from '@/modules/ems/PrehospitalTab';
@@ -21,6 +21,8 @@ import { MedicationPanel } from './MedicationPanel';
 import { useTheme } from '@/hooks/useTheme';
 import { useCanPerformTriage } from '@/hooks/useCanPerformTriage';
 import { useAuthStore } from '@/store/authStore';
+import { UnidentifiedBadge } from '@/modules/admission/UnidentifiedBadge';
+import { IdentityResolutionModal } from '@/modules/admission/IdentityResolutionModal';
 import { visitApi } from '@/api/visits';
 import type { DispositionRequest } from '@/api/visits';
 import { vitalApi } from '@/api/vitals';
@@ -238,6 +240,7 @@ export function VisitDetailPage() {
   const [pendingTransfer, setPendingTransfer] = useState<import('@/api/zoneTransfers').ZoneTransferResponse | null>(null);
 
   // Forms
+  const [showIdentityModal, setShowIdentityModal] = useState(false);
   const [showVitalsForm, setShowVitalsForm] = useState(false);
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [showDiagnosisForm, setShowDiagnosisForm] = useState(false);
@@ -706,6 +709,7 @@ export function VisitDetailPage() {
               <div className="flex-1">
                 <div className="flex items-center gap-3">
                   <h1 className="text-lg font-bold text-white tracking-wide">{visit.patientName}</h1>
+                  {patient?.isUnidentified && <UnidentifiedBadge patient={patient} showLabel showAge />}
                   {category && (
                     <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg ${catColor.bg} ${catColor.text} border ${catColor.border}`}>
                       {category}
@@ -725,6 +729,15 @@ export function VisitDetailPage() {
                   )}
                 </div>
               </div>
+              {patient?.isUnidentified && (
+                <button
+                  onClick={() => setShowIdentityModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-500 text-white text-xs font-bold hover:bg-cyan-400 transition-colors"
+                  title="Set this patient's real identity"
+                >
+                  <UserCheck className="w-4 h-4" /> Set identity
+                </button>
+              )}
               <button onClick={loadData} className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors">
                 <RefreshCw className="w-4 h-4 text-white" />
               </button>
@@ -819,6 +832,20 @@ export function VisitDetailPage() {
             pendingPrescribe.renalEgfrMatches,
             reason,
           )}
+        />
+      )}
+
+      {/* ── Set Patient Identity (unidentified Direct Resus / ambulance arrival) ── */}
+      {showIdentityModal && patient && (
+        <IdentityResolutionModal
+          patient={patient}
+          hospitalId={patient.hospitalId ?? user?.hospitalId ?? ''}
+          onClose={() => setShowIdentityModal(false)}
+          onResolved={(resolved) => {
+            setPatient(resolved);
+            setShowIdentityModal(false);
+            loadData();
+          }}
         />
       )}
     </div>

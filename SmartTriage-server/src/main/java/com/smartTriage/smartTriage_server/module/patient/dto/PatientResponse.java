@@ -94,6 +94,9 @@ public class PatientResponse {
     /** Display name of the clinician who resolved the identity. */
     private String identifiedByName;
 
+    /** Audit note for why/how the identity was resolved. */
+    private String resolutionNote;
+
     private Instant createdAt;
     private Instant updatedAt;
 }
