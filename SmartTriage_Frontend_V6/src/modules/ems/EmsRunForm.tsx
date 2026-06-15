@@ -104,6 +104,21 @@ const URGENT_SIGNS: { key: keyof FieldTriageRequest; label: string }[] = [
   { key: 'urgUnableToDrinkVomits', label: 'Unable to drink / vomits everything' },
 ];
 
+const ALL_SIGN_KEYS: string[] =
+  [...EMERGENCY_SIGNS, ...VERY_URGENT_SIGNS, ...URGENT_SIGNS].map((s) => s.key as string);
+
+/** Parse the persisted field-triage input JSON (null on absence/parse error). */
+function parseFieldInput(run: EmsRun | null): any {
+  try { return run?.fieldTriageInput ? JSON.parse(run.fieldTriageInput) : null; }
+  catch { return null; }
+}
+/** Rebuild the discriminator-flag map from a saved input so a re-open is faithful. */
+function flagsFromInput(input: any): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  if (input) for (const k of ALL_SIGN_KEYS) if (input[k]) out[k] = true;
+  return out;
+}
+
 interface Props {
   run: EmsRun | null;        // null = create new
   hospitalId: string;        // paramedic's default destination
@@ -142,16 +157,21 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
     notes: run?.notes ?? '',
   });
 
-  // Field-triage inputs (engine components + discriminators).
-  const [mobility, setMobility] = useState<MobilityStatus | ''>('');
-  const [avpu, setAvpu] = useState<AvpuScore | ''>('');
-  const [trauma, setTrauma] = useState<TraumaStatus | ''>('');
+  // Field-triage inputs (engine components + discriminators) — rehydrated
+  // from the persisted input so re-opening an en-route run shows the exact
+  // prior assessment (prevents a blank-form re-compute silently downgrading).
+  const savedInput = parseFieldInput(run);
+  const [mobility, setMobility] = useState<MobilityStatus | ''>(savedInput?.mobility ?? '');
+  const [avpu, setAvpu] = useState<AvpuScore | ''>(savedInput?.avpu ?? '');
+  const [trauma, setTrauma] = useState<TraumaStatus | ''>(savedInput?.traumaStatus ?? '');
   const [isChild, setIsChild] = useState<boolean>(
-    run?.fieldTriageIsChild ?? (run?.patientAgeYears != null && run.patientAgeYears < PEDS_AGE_CEILING),
+    run?.fieldTriageIsChild ?? savedInput?.isChild
+      ?? (run?.patientAgeYears != null && run.patientAgeYears < PEDS_AGE_CEILING),
   );
-  const [reason, setReason] = useState(run?.fieldTriageReason ?? '');
-  const [flags, setFlags] = useState<Record<string, boolean>>({});
+  const [reason, setReason] = useState(run?.fieldTriageReason ?? savedInput?.reason ?? '');
+  const [flags, setFlags] = useState<Record<string, boolean>>(flagsFromInput(savedInput));
   const [computing, setComputing] = useState(false);
+  const [pendingDowngrade, setPendingDowngrade] = useState(false);
 
   useEffect(() => { setCurrent(run); }, [run]);
 
@@ -238,8 +258,8 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
     setStep((s) => Math.max(1, s - 1));
   }
 
-  /** Step 3 — run the shared triage engine. */
-  async function computeTriage() {
+  /** Step 3 — run the shared triage engine. `ack` re-confirms a downgrade. */
+  async function computeTriage(ack = false) {
     if (!current) return;
     setComputing(true);
     setError(null);
@@ -258,12 +278,20 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
         traumaStatus: trauma || undefined,
         isChild,
         reason: reason || undefined,
+        acknowledgeDowngrade: ack,
         ...flags,
       };
       const updated = await emsApi.fieldTriage(current.id, body);
       setCurrent(updated);
+      setPendingDowngrade(false);
     } catch (err: any) {
-      setError(err?.message || 'Failed to compute triage');
+      const msg = err?.message || 'Failed to compute triage';
+      // Backend guard: re-compute would LOWER acuity — require explicit confirm.
+      if (/lower acuity|re-confirm to record a downgrade/i.test(msg)) {
+        setPendingDowngrade(true);
+      } else {
+        setError(msg);
+      }
     } finally {
       setComputing(false);
     }
@@ -274,6 +302,12 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
     setSubmitting(true);
     setError(null);
     try {
+      // Persist the handover notes (and any late ETA edit) before the ping so
+      // the receiving team sees them.
+      await emsApi.update(current.id, {
+        notes: draft.notes || undefined,
+        etaMinutes: num(draft.etaMinutes),
+      });
       await emsApi.preregister(current.id, { etaMinutes: num(draft.etaMinutes) as number | undefined });
       onSaved();
     } catch (err: any) {
@@ -331,7 +365,9 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
         {step === 3 && (
           <Step3Triage
             run={current} flags={flags} setFlags={setFlags} isChild={isChild} setIsChild={setIsChild}
-            reason={reason} setReason={setReason} computing={computing} onCompute={computeTriage}
+            reason={reason} setReason={setReason} computing={computing}
+            onCompute={() => computeTriage(false)}
+            pendingDowngrade={pendingDowngrade} onConfirmDowngrade={() => computeTriage(true)}
             text={text} glassInner={glassInner} isDark={isDark} />
         )}
         {step === 4 && current && (
@@ -507,7 +543,7 @@ function Step2Vitals({ draft, setDraft, mobility, setMobility, avpu, setAvpu, tr
 // Step 3 — engine-computed field triage
 // ─────────────────────────────────────────────────────────────────
 
-function Step3Triage({ run, flags, setFlags, isChild, setIsChild, reason, setReason, computing, onCompute, text, glassInner, isDark }: any) {
+function Step3Triage({ run, flags, setFlags, isChild, setIsChild, reason, setReason, computing, onCompute, pendingDowngrade, onConfirmDowngrade, text, glassInner, isDark }: any) {
   const inputClass = `w-full px-3 py-3 rounded-xl text-base outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
   const toggle = (k: string) => setFlags({ ...flags, [k]: !flags[k] });
   const emergency = EMERGENCY_SIGNS.filter((s) => !s.peds || isChild);
@@ -543,6 +579,28 @@ function Step3Triage({ run, flags, setFlags, isChild, setIsChild, reason, setRea
         {computing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Calculator className="w-5 h-5" />}
         Compute field triage
       </button>
+
+      {pendingDowngrade && (
+        <div className="rounded-2xl p-4 ring-2 ring-amber-500/50 bg-amber-500/10">
+          <div className="flex items-start gap-2">
+            <AlertOctagon className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
+            <div className="space-y-2">
+              <p className={`text-sm font-bold ${text.heading}`}>
+                This re-computes to a LOWER acuity than the current {run?.fieldTriageCategory}.
+              </p>
+              <p className={`text-sm ${text.muted}`}>
+                The ED relies on the field call. Only confirm if the patient genuinely improved and you have
+                re-assessed every sign. Otherwise go back and re-check what's ticked.
+              </p>
+              <button onClick={onConfirmDowngrade} disabled={computing}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50">
+                {computing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                Confirm downgrade to lower acuity
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {style && (
         <div className={`rounded-2xl p-4 ring-2 ${style.ring}`} style={glassInner}>
@@ -750,6 +808,14 @@ function Step5Send({ draft, setDraft, text, glassInner, isDark, run, onToggleLig
       <div>
         <Label text={text}>ETA (minutes)</Label>
         <input type="number" inputMode="numeric" value={draft.etaMinutes} onChange={(e) => setDraft({ ...draft, etaMinutes: e.target.value })} placeholder="8" className={inputClass} style={glassInner} />
+      </div>
+
+      <div>
+        <Label text={text}>Handover notes for ED (MIST / SBAR)</Label>
+        <textarea rows={3} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+          placeholder="Free-text context for the receiving team: pre-arrival situation, response to treatment, family/next-of-kin, anything the MIST fields don't capture."
+          className={`${inputClass} resize-none`} style={glassInner} />
+        <p className={`text-xs mt-1 ${text.muted}`}>Sent with the pre-arrival and shown to the charge nurse + at handover.</p>
       </div>
 
       <div className="rounded-xl p-3 bg-amber-500/10 ring-1 ring-amber-500/20 flex items-start gap-2">

@@ -47,6 +47,7 @@ public class EmsRunResponse {
     private Integer fieldTewsScore;
     private String fieldTriageDecisionPath;
     private Boolean fieldTriageIsChild;
+    private String fieldTriageInput;
 
     private Integer fieldGcs;
     private Integer fieldRespRate;

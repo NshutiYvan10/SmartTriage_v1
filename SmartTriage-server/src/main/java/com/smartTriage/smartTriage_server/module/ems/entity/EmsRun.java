@@ -129,6 +129,10 @@ public class EmsRun extends BaseEntity {
     @Column(name = "field_triage_is_child")
     private Boolean fieldTriageIsChild;
 
+    /** JSON of the last FieldTriageRequest — lets the form rehydrate the exact assessment on re-open. */
+    @Column(name = "field_triage_input", columnDefinition = "TEXT")
+    private String fieldTriageInput;
+
     // ── Field vitals snapshot
 
     @Column(name = "field_gcs")

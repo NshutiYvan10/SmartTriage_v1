@@ -53,6 +53,13 @@ public class FieldTriageRequest {
     /** Paramedic's free-text rationale (stored as fieldTriageReason). */
     private String reason;
 
+    /**
+     * Must be true to record a re-compute that LOWERS the field acuity below
+     * a previously computed category. Guards against a silent downgrade when
+     * an en-route run is re-triaged. Ignored on the first computation.
+     */
+    private boolean acknowledgeDowngrade;
+
     // ── Emergency signs (any → RED) — shared adult/peds ─────────────
     private boolean hasAirwayCompromise;
     private boolean hasSevereRespiratoryDistress;

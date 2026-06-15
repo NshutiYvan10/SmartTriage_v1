@@ -172,8 +172,11 @@ export function ParamedicDashboard() {
                     catch (e: any) { flash('err', e?.message || 'Failed'); }
                   }}
                   onToggleLights={async () => {
-                    try { await emsApi.setLights(run.id, !run.lightsActive); load(); }
-                    catch (e: any) { flash('err', e?.message || 'Failed'); }
+                    try {
+                      const updated = await emsApi.setLights(run.id, !run.lightsActive);
+                      flash('ok', updated.lightsActive ? 'Lights activated — priority transport' : 'Lights cleared');
+                      load();
+                    } catch (e: any) { flash('err', e?.message || 'Failed'); }
                   }}
                 />
               ))}

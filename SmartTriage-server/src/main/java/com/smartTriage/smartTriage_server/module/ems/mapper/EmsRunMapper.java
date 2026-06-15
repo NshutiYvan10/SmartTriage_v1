@@ -43,6 +43,7 @@ public final class EmsRunMapper {
                 .fieldTewsScore(r.getFieldTewsScore())
                 .fieldTriageDecisionPath(r.getFieldTriageDecisionPath())
                 .fieldTriageIsChild(r.getFieldTriageIsChild())
+                .fieldTriageInput(r.getFieldTriageInput())
                 .fieldGcs(r.getFieldGcs())
                 .fieldRespRate(r.getFieldRespRate())
                 .fieldHr(r.getFieldHr())

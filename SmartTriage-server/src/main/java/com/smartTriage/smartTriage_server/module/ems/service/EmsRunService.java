@@ -96,6 +96,10 @@ public class EmsRunService {
     /** Patients younger than this use the KFH pediatric form/engine. */
     private static final int PEDIATRIC_AGE_CEILING_YEARS = 13;
 
+    /** Local mapper for persisting the field-triage input as JSON (mirrors OfflineSyncService's pattern). */
+    private static final com.fasterxml.jackson.databind.ObjectMapper FIELD_TRIAGE_MAPPER =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
     // ====================================================================
     // CREATE / UPDATE
     // ====================================================================
@@ -146,7 +150,10 @@ public class EmsRunService {
         if (req.getMechanism() != null)           run.setMechanism(req.getMechanism());
         if (req.getHistorySummary() != null)      run.setHistorySummary(req.getHistorySummary());
         if (req.getInjuriesObserved() != null)    run.setInjuriesObserved(req.getInjuriesObserved());
-        if (req.getFieldTriageCategory() != null) run.setFieldTriageCategory(req.getFieldTriageCategory());
+        // NOTE: fieldTriageCategory is intentionally NOT settable here — the
+        // field category is ALWAYS engine-computed via computeFieldTriage so it
+        // carries a TEWS + decision-path audit trail and is concordant with the
+        // ED. A free-text category set via this PATCH would bypass that.
         if (req.getFieldTriageReason() != null)   run.setFieldTriageReason(req.getFieldTriageReason());
         if (req.getFieldGcs() != null)            run.setFieldGcs(req.getFieldGcs());
         if (req.getFieldRespRate() != null)       run.setFieldRespRate(req.getFieldRespRate());
@@ -160,14 +167,8 @@ public class EmsRunService {
         if (req.getNotes() != null)               run.setNotes(req.getNotes());
 
         run = emsRunRepository.save(run);
-
-        // Mirror the field-triage call onto the visit if one is linked,
-        // so dashboards can colour-code immediately.
-        if (run.getVisit() != null && req.getFieldTriageCategory() != null) {
-            run.getVisit().setFieldTriageCategory(req.getFieldTriageCategory());
-            visitRepository.save(run.getVisit());
-        }
-
+        // The field category/visit-mirror is handled only by computeFieldTriage
+        // (engine-computed), so updateRun no longer touches it.
         return broadcastAndMap(run, false);
     }
 
@@ -276,6 +277,24 @@ public class EmsRunService {
             decisionPath = d.decisionPath();
         }
 
+        // Silent-downgrade guard: a re-compute must not LOWER acuity below a
+        // previously computed category unless the paramedic explicitly
+        // acknowledges it. Protects against re-opening an en-route run and
+        // recomputing a falsely-lower category.
+        String previousCategory = run.getFieldTriageCategory();
+        if (previousCategory != null && !req.isAcknowledgeDowngrade()) {
+            try {
+                TriageCategory prev = TriageCategory.valueOf(previousCategory);
+                if (category.getSeverity() < prev.getSeverity()) {
+                    throw new ClinicalBusinessException(
+                            "Re-computed field triage " + category + " is LOWER acuity than the current "
+                                    + prev + " for run " + runId + ". Re-confirm to record a downgrade.");
+                }
+            } catch (IllegalArgumentException ignore) {
+                // previous was a legacy free-text value — no severity to compare.
+            }
+        }
+
         // Persist the field vitals snapshot (null-guarded — a partial submit
         // never blanks a value already on file).
         if (req.getRespiratoryRate() != null) run.setFieldRespRate(req.getRespiratoryRate());
@@ -293,6 +312,12 @@ public class EmsRunService {
         run.setFieldTriageIsChild(isChild);
         if (req.getReason() != null && !req.getReason().isBlank()) {
             run.setFieldTriageReason(req.getReason());
+        }
+        // Persist the raw inputs so a re-open rehydrates the exact assessment.
+        try {
+            run.setFieldTriageInput(FIELD_TRIAGE_MAPPER.writeValueAsString(req));
+        } catch (Exception e) {
+            log.warn("[ems] Could not serialise field-triage input for run {}: {}", runId, e.getMessage());
         }
         run = emsRunRepository.save(run);
 
@@ -759,7 +784,14 @@ public class EmsRunService {
             if (critical) {
                 realTimeEventPublisher.publishZoneAlert(hospitalId, EdZone.RESUS, resp);
             }
-            for (User cn : shiftAssignmentService.getChargeNurse(hospitalId)) {
+            List<User> chargeNurses = shiftAssignmentService.getChargeNurse(hospitalId);
+            if (chargeNurses.isEmpty()) {
+                // The hospital-wide + RESUS-zone alerts still reach on-duty staff,
+                // but the intended primary recipient is missing — make it visible.
+                log.warn("[ems] No on-shift charge nurse at hospital {} to receive the inbound pre-arrival "
+                        + "for run {} — relying on hospital-wide + zone broadcast.", hospitalId, run.getId());
+            }
+            for (User cn : chargeNurses) {
                 if (cn != null && cn.getId() != null) {
                     realTimeEventPublisher.publishUserAlert(cn.getId(), resp);
                 }

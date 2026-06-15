@@ -123,6 +123,16 @@ export function PrehospitalTab({ visitId, edTriageCategory }: Props) {
         </div>
       </div>
 
+      {/* Pre-hospital narrative — history / injuries / handover notes */}
+      {(run.historySummary || run.injuriesObserved || run.notes) && (
+        <div className="rounded-2xl p-4" style={glassCard}>
+          <div className={`text-[10px] uppercase font-bold mb-2 ${text.label}`}>Pre-hospital narrative</div>
+          {run.historySummary && <p className={`text-xs ${text.body}`}><b>History on scene:</b> {run.historySummary}</p>}
+          {run.injuriesObserved && <p className={`text-xs ${text.body} mt-1.5`}><b>Injuries observed:</b> {run.injuriesObserved}</p>}
+          {run.notes && <p className={`text-xs ${text.body} mt-1.5`}><b>Handover notes:</b> {run.notes}</p>}
+        </div>
+      )}
+
       {/* Interventions */}
       {run.interventions && run.interventions.length > 0 && (
         <div className="rounded-2xl p-4" style={glassCard}>

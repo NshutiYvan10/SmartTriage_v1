@@ -5,6 +5,7 @@ import com.smartTriage.smartTriage_server.common.enums.EmsRunStatus;
 import com.smartTriage.smartTriage_server.common.enums.MobilityStatus;
 import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.common.enums.TraumaStatus;
+import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
 import com.smartTriage.smartTriage_server.module.ems.dto.EmsRunResponse;
 import com.smartTriage.smartTriage_server.module.ems.dto.FieldTriageRequest;
@@ -40,6 +41,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -201,6 +203,31 @@ class EmsRunServiceFieldTriageTest {
         assertEquals(80, run.getFieldHr());
         assertEquals(95, run.getFieldSbp());
         assertEquals("hypotensive, suspected bleed", run.getFieldTriageReason());
+    }
+
+    @Test
+    void recompute_toLowerAcuity_blockedWithoutAck_allowedWithAck() {
+        // First compute → RED (cardiac arrest).
+        FieldTriageRequest red = wellAdult();
+        red.setHasCardiacArrest(true);
+        assertEquals("RED", service.computeFieldTriage(RUN_ID, red).getFieldTriageCategory());
+
+        // Re-compute to GREEN (well, no signs) WITHOUT ack → blocked (silent-downgrade guard).
+        assertThrows(ClinicalBusinessException.class,
+                () -> service.computeFieldTriage(RUN_ID, wellAdult()));
+        assertEquals("RED", run.getFieldTriageCategory()); // unchanged
+
+        // With explicit acknowledgement → the downgrade is recorded.
+        FieldTriageRequest green = wellAdult();
+        green.setAcknowledgeDowngrade(true);
+        assertEquals("GREEN", service.computeFieldTriage(RUN_ID, green).getFieldTriageCategory());
+    }
+
+    @Test
+    void persistsFieldTriageInputJson() {
+        service.computeFieldTriage(RUN_ID, wellAdult());
+        assertNotNull(run.getFieldTriageInput());
+        assertTrue(run.getFieldTriageInput().contains("mobility"));
     }
 
     @Test

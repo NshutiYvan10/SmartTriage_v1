@@ -9,6 +9,7 @@ import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.EmsRunStatus;
 import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.common.enums.VisitStatus;
+import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
 import com.smartTriage.smartTriage_server.module.ems.dto.CreateEmsRunRequest;
@@ -42,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -214,5 +216,24 @@ class EmsWorkflowIntegrationTest extends AbstractIntegrationTest {
 
         Visit newVisit = visitRepository.findById(rerouted.getVisitId()).orElseThrow();
         assertEquals(other.getId(), newVisit.getHospital().getId());
+    }
+
+    @Test
+    void reroute_identifiedPreRegisteredPatient_isBlocked() {
+        Hospital other = newHospital("IT EMS Dest2", "EMS-D2-" + UUID.randomUUID().toString().substring(0, 6));
+        Patient known = new Patient();
+        known.setFirstName("Aline");
+        known.setLastName("Mukamana");
+        known.setHospital(hospital);
+        known = patientRepository.save(known);
+
+        actAs(paramedic);
+        EmsRunResponse run = newRun(hospital);
+        emsRunService.preregister(run.getId(),
+                PreregisterRequest.builder().patientId(known.getId()).build());
+
+        // Patient row is hospital-scoped — a silent cross-hospital move is refused.
+        assertThrows(ClinicalBusinessException.class, () ->
+                emsRunService.reroute(run.getId(), RerouteRequest.builder().hospitalId(other.getId()).build()));
     }
 }

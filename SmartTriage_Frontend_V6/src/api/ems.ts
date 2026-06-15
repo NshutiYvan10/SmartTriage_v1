@@ -58,6 +58,7 @@ export interface EmsRun {
   fieldTewsScore: number | null;
   fieldTriageDecisionPath: string | null;
   fieldTriageIsChild: boolean | null;
+  fieldTriageInput: string | null;
 
   fieldGcs: number | null;
   fieldRespRate: number | null;
@@ -164,6 +165,8 @@ export interface FieldTriageRequest {
 
   isChild?: boolean;
   reason?: string;
+  /** Must be true to record a re-compute that LOWERS acuity below a prior computed category. */
+  acknowledgeDowngrade?: boolean;
 
   // Emergency signs (any → RED)
   hasAirwayCompromise?: boolean;

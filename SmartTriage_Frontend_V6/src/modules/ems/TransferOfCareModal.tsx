@@ -65,6 +65,16 @@ export function TransferOfCareModal({ run, receivedByName, onClose, onSaved }: P
           </div>
         </div>
 
+        {/* Pre-hospital narrative — history / injuries / handover notes */}
+        {(run.historySummary || run.injuriesObserved || run.notes) && (
+          <div className="rounded-xl p-3 mb-3" style={glassInner}>
+            <div className={`text-[10px] uppercase font-bold mb-1 ${text.label}`}>Pre-hospital narrative</div>
+            {run.historySummary && <p className={`text-xs ${text.body}`}><b>History:</b> {run.historySummary}</p>}
+            {run.injuriesObserved && <p className={`text-xs ${text.body} mt-1`}><b>Injuries:</b> {run.injuriesObserved}</p>}
+            {run.notes && <p className={`text-xs ${text.body} mt-1`}><b>Handover:</b> {run.notes}</p>}
+          </div>
+        )}
+
         {/* Vitals */}
         <div className="rounded-xl p-3 mb-3" style={glassInner}>
           <div className={`text-[10px] uppercase font-bold mb-1 ${text.label}`}>Field vitals</div>
