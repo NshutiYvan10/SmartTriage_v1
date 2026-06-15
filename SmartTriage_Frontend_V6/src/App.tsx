@@ -210,7 +210,11 @@ function AppContent() {
             <Route path="/isolation" element={<RoleGuard page="isolation"><IsolationDashboard /></RoleGuard>} />
             <Route path="/pathways" element={<RoleGuard page="pathways"><ClinicalPathwaysView /></RoleGuard>} />
             <Route path="/med-safety" element={<RoleGuard page="med-safety"><MedicationSafetyView /></RoleGuard>} />
-            <Route path="/med-safety/overrides" element={<RoleGuard page="med-safety-overrides" allowDesignations={['SUPERVISOR', 'SAFETY_OFFICER']}><MedicationSafetyOverridesView /></RoleGuard>} />
+            {/* CHARGE_NURSE is a real Designation and grants floor-oversight access here;
+                the previous SUPERVISOR/SAFETY_OFFICER values are not in the Designation enum
+                (the safety-officer persona is the READ_ONLY role, which has the page) so they
+                were dead no-ops. Backend canAuditSafetyOverrides mirrors this audience. */}
+            <Route path="/med-safety/overrides" element={<RoleGuard page="med-safety-overrides" allowDesignations={['CHARGE_NURSE']}><MedicationSafetyOverridesView /></RoleGuard>} />
             <Route path="/icu" element={<RoleGuard page="icu"><IcuEscalationView /></RoleGuard>} />
             {/* Documentation & Handover */}
             <Route path="/documentation" element={<RoleGuard page="documentation"><ClinicalDocumentation /></RoleGuard>} />

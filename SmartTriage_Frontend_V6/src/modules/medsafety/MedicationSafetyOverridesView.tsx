@@ -40,7 +40,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ShieldAlert, RefreshCw, Loader2, Pill, AlertTriangle,
   Baby, Droplet, Layers, Scale, Activity, Search,
-  ChevronRight, Users, Clock, Check, Download, UserMinus,
+  ChevronRight, Users, Clock, Check, Download, UserMinus, Zap,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
@@ -59,6 +59,7 @@ type OverrideClass =
   | 'renal'
   | 'duplicate'
   | 'geriatric'
+  | 'emergency'
   | 'other';
 
 interface ClassMeta {
@@ -79,11 +80,12 @@ const CLASS_META: Record<OverrideClass, ClassMeta> = {
   renal:       { label: 'Renal',       Icon: Droplet,       color: 'text-violet-300',  bg: 'bg-violet-500/10',  ring: 'border-violet-500/30',  bar: 'bg-violet-500' },
   duplicate:   { label: 'Duplicate',   Icon: Layers,        color: 'text-amber-300',   bg: 'bg-amber-500/10',   ring: 'border-amber-500/30',   bar: 'bg-amber-500' },
   geriatric:   { label: 'Geriatric',   Icon: UserMinus,     color: 'text-fuchsia-300', bg: 'bg-fuchsia-500/10', ring: 'border-fuchsia-500/30', bar: 'bg-fuchsia-500' },
+  emergency:   { label: 'Emergency / administration', Icon: Zap, color: 'text-red-200', bg: 'bg-red-600/15', ring: 'border-red-600/40', bar: 'bg-red-600' },
   other:       { label: 'Other',       Icon: ShieldAlert,   color: 'text-slate-300',   bg: 'bg-slate-500/10',   ring: 'border-slate-500/30',   bar: 'bg-slate-500' },
 };
 
 const CLASS_ORDER: OverrideClass[] = [
-  'allergy', 'pregnancy', 'overdose', 'interaction', 'renal', 'geriatric', 'duplicate', 'underdose', 'other',
+  'emergency', 'allergy', 'pregnancy', 'overdose', 'interaction', 'renal', 'geriatric', 'duplicate', 'underdose', 'other',
 ];
 
 /** Classify a MEDICATION_SAFETY_WARNING alert by its title prefix.
@@ -91,6 +93,10 @@ const CLASS_ORDER: OverrideClass[] = [
  *  sync with createOverrideAlert / createInteractionScopedAlerts. */
 function categorise(title: string | null): OverrideClass {
   const t = (title || '').toLowerCase();
+  // High-alert approval-gate skip + administration-time gate bypass — these are
+  // MEDICATION_EMERGENCY_OVERRIDE alerts (emitted by MedicationService /
+  // MedicationScheduleService), surfaced here alongside prescribe-time overrides.
+  if (t.startsWith('emergency override') || t.startsWith('administration override')) return 'emergency';
   if (t.startsWith('allergy override')) return 'allergy';
   if (t.startsWith('pregnancy override') || t.startsWith('pregnancy/lactation')) return 'pregnancy';
   if (t.startsWith('overdose override')) return 'overdose';
@@ -118,20 +124,29 @@ function categorise(title: string | null): OverrideClass {
   return 'other';
 }
 
-/** Best-effort drug-name parse from an alert message of the shape
- *  "Dr. Smith prescribed <Drug> <dose> <route> for visit V123…".
- *  Falls back to the empty string when the regex doesn't match — the
- *  raw message is always shown anyway, so this is purely for the
- *  group-by-drug aggregation in the KPI tile. */
+/** Best-effort drug-name parse. Handles every override-alert message shape the
+ *  backend actually emits:
+ *   - prescribe-time:  "Prescriber: X. Drug: <Drug> <dose> <route>. Acknowledged…"
+ *   - emergency/admin: "X skipped/overrode … for '<Drug>' (visit V…)"
+ *   - legacy:          "X prescribed <Drug> <dose> …"
+ *  Falls back to '' on miss — the raw message is always shown, so this only
+ *  feeds the group-by-drug aggregation. */
 function parseDrug(message: string): string {
-  const m = /prescribed\s+([A-Za-z][A-Za-z0-9\-/ ]*?)\s+\d/.exec(message);
+  let m = /Drug:\s*([A-Za-z][A-Za-z0-9\-/ ]*?)(?:\s+\d|\.\s|\.$|$)/.exec(message);
+  if (m) return m[1].trim();
+  m = /\bfor\s+'([^']+)'/.exec(message);
+  if (m) return m[1].trim();
+  m = /prescribed\s+([A-Za-z][A-Za-z0-9\-/ ]*?)\s+\d/.exec(message);
   return m ? m[1].trim() : '';
 }
 
-/** Same shape — pulls the prescriber name out of "Dr. Smith
- *  prescribed …". Best-effort; empty string on miss. */
+/** Best-effort prescriber/actor parse for the same message shapes. */
 function parsePrescriber(message: string): string {
-  const m = /^([A-Z][A-Za-z.\- ]{1,40}?)\s+prescribed/.exec(message);
+  let m = /^Prescriber:\s*([^.]+?)\.(?:\s|$)/.exec(message);
+  if (m) return m[1].trim() === 'null' ? '' : m[1].trim();
+  m = /^(.+?)\s+(?:skipped|overrode)\b/.exec(message);
+  if (m) return m[1].trim();
+  m = /^([A-Z][A-Za-z.\- ]{1,40}?)\s+prescribed/.exec(message);
   return m ? m[1].trim() : '';
 }
 
@@ -221,7 +236,10 @@ export function MedicationSafetyOverridesView() {
       a.id === alertId ? { ...a, acknowledged: true } : a,
     ));
     try {
-      const updated = await alertApi.acknowledge(alertId);
+      // Override-specific ack endpoint — works for the full governance
+      // audience (admin, safety officer, doctor, charge nurse), unlike the
+      // clinical-only generic acknowledge.
+      const updated = await alertApi.acknowledgeSafetyOverride(alertId);
       setAlerts((prev) => prev.map((a) => (a.id === alertId ? updated : a)));
     } catch (err) {
       console.error('Failed to acknowledge override', err);
@@ -258,7 +276,7 @@ export function MedicationSafetyOverridesView() {
   const stats = useMemo(() => {
     const byClass: Record<OverrideClass, number> = {
       allergy: 0, pregnancy: 0, overdose: 0, underdose: 0,
-      interaction: 0, renal: 0, duplicate: 0, geriatric: 0, other: 0,
+      interaction: 0, renal: 0, duplicate: 0, geriatric: 0, emergency: 0, other: 0,
     };
     const bySeverity: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
     const prescribers = new Set<string>();
@@ -380,7 +398,8 @@ export function MedicationSafetyOverridesView() {
                 <div>
                   <h1 className="text-lg font-bold text-white tracking-wide">Medication Safety Overrides</h1>
                   <p className="text-white/50 text-xs">
-                    Forensic audit of every prescription written despite a safety warning — {RANGE_LABEL[range]}
+                    Forensic audit of every medication override — prescribe-time safety warnings plus
+                    administration-time &amp; emergency approval-gate bypasses — {RANGE_LABEL[range]}
                   </p>
                 </div>
               </div>

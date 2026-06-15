@@ -51,4 +51,19 @@ export const alertApi = {
         note && note.trim() ? `?note=${encodeURIComponent(note.trim())}` : ''
       }`,
     ),
+
+  /**
+   * Acknowledge a medication-safety OVERRIDE from the Override Audit page.
+   * Distinct endpoint so the governance audience (admin, safety officer,
+   * doctor, charge nurse) can sign off an override — the generic acknowledge
+   * is clinical-only (SUPER_ADMIN/DOCTOR/NURSE) and would 403 a safety officer
+   * or hospital admin. The server gates this to override rows + the audit
+   * audience.
+   */
+  acknowledgeSafetyOverride: (alertId: string, note?: string) =>
+    patch<ClinicalAlertResponse>(
+      `/alerts/${alertId}/safety-override/acknowledge${
+        note && note.trim() ? `?note=${encodeURIComponent(note.trim())}` : ''
+      }`,
+    ),
 };

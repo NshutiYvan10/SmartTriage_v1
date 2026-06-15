@@ -81,7 +81,11 @@ public class ClinicalAlertController {
      *              down.
      */
     @GetMapping("/hospital/{hospitalId}/safety-overrides")
-    @PreAuthorize("@clinicalAuthz.canReadHospitalAlerts(authentication, #hospitalId)")
+    // The Override Audit is a governance/forensic surface — gate it with the
+    // dedicated audit authority, NOT the operational canReadHospitalAlerts
+    // (which denies HOSPITAL_ADMIN and required a clinical shift badge, so the
+    // page rendered blank for its own intended audience).
+    @PreAuthorize("@clinicalAuthz.canAuditSafetyOverrides(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<ClinicalAlertResponse>>> getSafetyOverrides(
             @PathVariable UUID hospitalId,
             @RequestParam(required = false, defaultValue = "all") String range,
@@ -101,6 +105,23 @@ public class ClinicalAlertController {
             @RequestParam(required = false) String note) {
         ClinicalAlert alert = clinicalAlertService.acknowledgeAlert(alertId, note);
         return ResponseEntity.ok(ApiResponse.success("Alert acknowledged", ClinicalAlertMapper.toResponse(alert)));
+    }
+
+    /**
+     * Acknowledge / sign off a medication-safety OVERRIDE alert from the
+     * Override Audit dashboard. Separate from the generic acknowledge so the
+     * governance audience (admin, safety officer, doctor, charge nurse) can mark
+     * an override reviewed — the authz loads the alert, confirms it is an
+     * override row, and applies canAuditSafetyOverrides for its hospital, so it
+     * can never be used to acknowledge an operational clinical alert.
+     */
+    @PatchMapping("/{alertId}/safety-override/acknowledge")
+    @PreAuthorize("@clinicalAuthz.canAcknowledgeSafetyOverride(authentication, #alertId)")
+    public ResponseEntity<ApiResponse<ClinicalAlertResponse>> acknowledgeSafetyOverride(
+            @PathVariable UUID alertId,
+            @RequestParam(required = false) String note) {
+        ClinicalAlert alert = clinicalAlertService.acknowledgeAlert(alertId, note);
+        return ResponseEntity.ok(ApiResponse.success("Override acknowledged", ClinicalAlertMapper.toResponse(alert)));
     }
 
     // ====================================================================

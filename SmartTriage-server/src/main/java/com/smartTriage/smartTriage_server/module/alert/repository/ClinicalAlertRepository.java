@@ -165,7 +165,13 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
          */
         @Query("SELECT a FROM ClinicalAlert a JOIN a.visit v WHERE v.hospital.id = :hospitalId " +
                         "AND a.isActive = true " +
-                        "AND a.alertType = com.smartTriage.smartTriage_server.common.enums.AlertType.MEDICATION_SAFETY_WARNING " +
+                        // Both prescribe-time overrides (MEDICATION_SAFETY_WARNING) AND the
+                        // administration-time / high-alert-approval-gate bypasses
+                        // (MEDICATION_EMERGENCY_OVERRIDE) are overrides the forensic audit must
+                        // see — administration time is precisely where patient harm occurs.
+                        "AND a.alertType IN (" +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.MEDICATION_SAFETY_WARNING, " +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.MEDICATION_EMERGENCY_OVERRIDE) " +
                         "AND (:from IS NULL OR a.createdAt >= :from) " +
                         "AND (:to IS NULL OR a.createdAt <= :to) " +
                         "ORDER BY a.createdAt DESC")

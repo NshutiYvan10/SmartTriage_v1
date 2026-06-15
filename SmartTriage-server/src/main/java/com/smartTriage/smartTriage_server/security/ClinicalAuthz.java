@@ -1,9 +1,11 @@
 package com.smartTriage.smartTriage_server.security;
 
+import com.smartTriage.smartTriage_server.common.enums.AlertType;
 import com.smartTriage.smartTriage_server.common.enums.Designation;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.common.enums.ShiftFunction;
+import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
 import com.smartTriage.smartTriage_server.module.clinical.repository.ClinicalNoteRepository;
 import com.smartTriage.smartTriage_server.module.clinical.repository.DiagnosisRepository;
 import com.smartTriage.smartTriage_server.module.clinical.repository.InvestigationRepository;
@@ -94,6 +96,7 @@ public class ClinicalAuthz {
     private final DiagnosisRepository diagnosisRepository;
     private final InvestigationRepository investigationRepository;
     private final HandoverReportRepository handoverReportRepository;
+    private final ClinicalAlertRepository clinicalAlertRepository;
 
     /**
      * @return true if the authenticated user is attached to {@code hospitalId}.
@@ -258,6 +261,76 @@ public class ClinicalAuthz {
         } catch (Exception e) {
             log.error("canReadHospitalAlerts error for hospital {}: {}",
                     hospitalId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * May this user view the FORENSIC medication-safety override audit?
+     *
+     * <p>This is a governance / quality surface (hospital safety officer,
+     * clinical lead, M&amp;M committee, administrator) — deliberately distinct
+     * from {@link #canReadHospitalAlerts}, which gates the OPERATIONAL alert
+     * stream to cross-zone clinical floor leads and denies HOSPITAL_ADMIN. The
+     * override audit is retrospective, scoped to medication-safety override
+     * rows, and its intended readers do not hold a clinical shift badge — so it
+     * needs its own, broader-but-still-bounded authority:
+     * <ul>
+     *   <li>SUPER_ADMIN — always;</li>
+     *   <li>at the SAME hospital: HOSPITAL_ADMIN (governance), READ_ONLY (the
+     *       safety-officer / auditor persona), DOCTOR (peer review), and a
+     *       Charge Nurse / current shift-lead nurse (floor oversight).</li>
+     * </ul>
+     * These are exactly the roles the frontend surfaces the Override Audit page
+     * to, so "can see the page" now implies "can load it" — closing the blank-
+     * page gap without loosening the operational alert stream.
+     */
+    @Transactional(readOnly = true)
+    public boolean canAuditSafetyOverrides(Authentication authentication, UUID hospitalId) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null || hospitalId == null) {
+                return false;
+            }
+            if (user.getRole() == Role.SUPER_ADMIN) {
+                return true;
+            }
+            if (!belongsToHospital(user, hospitalId)) {
+                return false;
+            }
+            return switch (user.getRole()) {
+                case HOSPITAL_ADMIN, READ_ONLY, DOCTOR -> true;
+                case NURSE -> user.getDesignation() == Designation.CHARGE_NURSE
+                        || shiftAssignmentService.isUserCurrentShiftLead(user.getId(), hospitalId);
+                default -> false;
+            };
+        } catch (Exception e) {
+            log.error("canAuditSafetyOverrides error for hospital {}: {}",
+                    hospitalId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * May this user ACKNOWLEDGE / sign off a specific medication-safety override
+     * alert? Loads the alert, confirms it is an override row (not an operational
+     * clinical alert), and applies {@link #canAuditSafetyOverrides} for that
+     * alert's hospital. This lets the governance audience (admin, safety
+     * officer, doctor, charge nurse) mark an override reviewed WITHOUT being
+     * able to acknowledge operational clinical alerts through the generic path.
+     */
+    @Transactional(readOnly = true)
+    public boolean canAcknowledgeSafetyOverride(Authentication authentication, UUID alertId) {
+        try {
+            if (alertId == null) return false;
+            return clinicalAlertRepository.findByIdAndIsActiveTrue(alertId)
+                    .filter(a -> a.getAlertType() == AlertType.MEDICATION_SAFETY_WARNING
+                            || a.getAlertType() == AlertType.MEDICATION_EMERGENCY_OVERRIDE)
+                    .map(a -> a.getVisit() != null && a.getVisit().getHospital() != null
+                            && canAuditSafetyOverrides(authentication, a.getVisit().getHospital().getId()))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAcknowledgeSafetyOverride error for alert {}: {}", alertId, e.getMessage(), e);
             return false;
         }
     }
