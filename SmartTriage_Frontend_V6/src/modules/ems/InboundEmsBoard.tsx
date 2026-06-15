@@ -98,7 +98,12 @@ export function InboundEmsBoard() {
                       <span className="text-sm font-bold truncate">{run.mechanism ?? 'Patient'}</span>
                       {run.fieldTriageCategory && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/20">
-                          {run.fieldTriageCategory}
+                          {run.fieldTriageCategory}{run.fieldTewsScore != null ? ` · TEWS ${run.fieldTewsScore}` : ''}
+                        </span>
+                      )}
+                      {run.lightsActive && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white text-rose-600 inline-flex items-center gap-1">
+                          <Siren className="w-3 h-3 animate-pulse" /> LIGHTS
                         </span>
                       )}
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${run.status === 'ARRIVED' ? 'bg-rose-500/40' : 'bg-white/15'}`}>

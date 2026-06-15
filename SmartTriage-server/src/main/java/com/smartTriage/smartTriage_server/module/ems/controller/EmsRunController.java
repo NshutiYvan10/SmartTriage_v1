@@ -65,6 +65,38 @@ public class EmsRunController {
                 emsRunService.addIntervention(id, request)));
     }
 
+    /**
+     * Compute the field triage with the shared in-hospital engine (adult or
+     * KFH peds). Returns the run with the computed category, TEWS and
+     * decision-path populated.
+     */
+    @PostMapping("/runs/{id}/field-triage")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PARAMEDIC')")
+    public ResponseEntity<ApiResponse<EmsRunResponse>> fieldTriage(
+            @PathVariable UUID id, @Valid @RequestBody FieldTriageRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Field triage computed",
+                emsRunService.computeFieldTriage(id, request)));
+    }
+
+    /** Toggle blue-light / priority transport. */
+    @PostMapping("/runs/{id}/lights")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PARAMEDIC')")
+    public ResponseEntity<ApiResponse<EmsRunResponse>> lights(
+            @PathVariable UUID id, @RequestParam(defaultValue = "true") boolean active) {
+        return ResponseEntity.ok(ApiResponse.success(
+                active ? "Lights activated" : "Lights cleared",
+                emsRunService.setLights(id, active)));
+    }
+
+    /** Redirect an in-flight run to a different destination hospital. */
+    @PostMapping("/runs/{id}/reroute")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PARAMEDIC')")
+    public ResponseEntity<ApiResponse<EmsRunResponse>> reroute(
+            @PathVariable UUID id, @Valid @RequestBody RerouteRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Run rerouted",
+                emsRunService.reroute(id, request)));
+    }
+
     @PostMapping("/runs/{id}/preregister")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PARAMEDIC')")
     public ResponseEntity<ApiResponse<EmsRunResponse>> preregister(
@@ -129,5 +161,19 @@ public class EmsRunController {
         return emsRunService.getByVisitId(visitId)
                 .map(r -> ResponseEntity.ok(ApiResponse.success(r)))
                 .orElseGet(() -> ResponseEntity.ok(ApiResponse.success(null)));
+    }
+
+    /** Safety-critical patient context (allergies, prior visits) for a linked run. */
+    @GetMapping("/runs/{id}/patient-history")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PARAMEDIC', 'NURSE', 'DOCTOR')")
+    public ResponseEntity<ApiResponse<PatientHistoryResponse>> patientHistory(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(emsRunService.getPatientHistory(id)));
+    }
+
+    /** Active hospitals the paramedic can pick as a destination. */
+    @GetMapping("/destinations")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PARAMEDIC', 'NURSE', 'DOCTOR')")
+    public ResponseEntity<ApiResponse<List<DestinationHospitalResponse>>> destinations() {
+        return ResponseEntity.ok(ApiResponse.success(emsRunService.listDestinations()));
     }
 }

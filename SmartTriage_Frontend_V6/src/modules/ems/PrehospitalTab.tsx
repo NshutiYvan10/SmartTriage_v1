@@ -79,6 +79,11 @@ export function PrehospitalTab({ visitId, edTriageCategory }: Props) {
               {run.fieldTriageCategory}
             </span>
           )}
+          {run.fieldTewsScore != null && (
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${triageChip(null)}`}>
+              TEWS {run.fieldTewsScore}{run.fieldTriageIsChild ? ' · peds' : ''}
+            </span>
+          )}
           {edTriageCategory && (
             <>
               <span className={`text-[10px] ${text.muted}`}>→ ED</span>
@@ -90,6 +95,9 @@ export function PrehospitalTab({ visitId, edTriageCategory }: Props) {
         </div>
         {run.fieldTriageReason && (
           <p className={`text-xs italic mt-2 ${text.body}`}>"{run.fieldTriageReason}"</p>
+        )}
+        {run.fieldTriageDecisionPath && (
+          <p className={`text-[11px] mt-1.5 ${text.muted}`}>Engine: {run.fieldTriageDecisionPath}</p>
         )}
         {discordant && (
           <div className="mt-3 rounded-xl p-2 bg-amber-500/10 ring-1 ring-amber-500/20 flex items-start gap-2">

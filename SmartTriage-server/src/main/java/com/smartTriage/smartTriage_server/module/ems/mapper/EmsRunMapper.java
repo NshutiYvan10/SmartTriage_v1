@@ -40,6 +40,9 @@ public final class EmsRunMapper {
                 .injuriesObserved(r.getInjuriesObserved())
                 .fieldTriageCategory(r.getFieldTriageCategory())
                 .fieldTriageReason(r.getFieldTriageReason())
+                .fieldTewsScore(r.getFieldTewsScore())
+                .fieldTriageDecisionPath(r.getFieldTriageDecisionPath())
+                .fieldTriageIsChild(r.getFieldTriageIsChild())
                 .fieldGcs(r.getFieldGcs())
                 .fieldRespRate(r.getFieldRespRate())
                 .fieldHr(r.getFieldHr())
@@ -54,6 +57,8 @@ public final class EmsRunMapper {
                 .handoverAcknowledgementText(r.getHandoverAcknowledgementText())
                 .etaMinutes(r.getEtaMinutes())
                 .notes(r.getNotes())
+                .lightsActive(r.isLightsActive())
+                .lightsActivatedAt(r.getLightsActivatedAt())
                 .createdAt(r.getCreatedAt())
                 .updatedAt(r.getUpdatedAt())
                 .interventions(interventions == null ? null

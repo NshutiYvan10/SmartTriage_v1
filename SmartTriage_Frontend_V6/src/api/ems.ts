@@ -13,6 +13,10 @@ export type EmsInterventionType =
 
 export type FieldTriageCategory = 'RED' | 'ORANGE' | 'YELLOW' | 'GREEN' | 'BLUE';
 
+export type MobilityStatus = 'WALKING' | 'WITH_HELP' | 'STRETCHER';
+export type AvpuScore = 'ALERT' | 'CONFUSED' | 'VERBAL' | 'PAIN' | 'UNRESPONSIVE';
+export type TraumaStatus = 'NO_TRAUMA' | 'TRAUMA';
+
 export interface EmsIntervention {
   id: string;
   type: EmsInterventionType;
@@ -51,6 +55,9 @@ export interface EmsRun {
 
   fieldTriageCategory: FieldTriageCategory | null;
   fieldTriageReason: string | null;
+  fieldTewsScore: number | null;
+  fieldTriageDecisionPath: string | null;
+  fieldTriageIsChild: boolean | null;
 
   fieldGcs: number | null;
   fieldRespRate: number | null;
@@ -68,6 +75,9 @@ export interface EmsRun {
 
   etaMinutes: number | null;
   notes: string | null;
+
+  lightsActive: boolean;
+  lightsActivatedAt: string | null;
 
   createdAt: string;
   updatedAt: string;
@@ -132,6 +142,87 @@ export interface TransferOfCareRequest {
   acknowledgementText?: string;
 }
 
+/**
+ * Field-triage submission. Vitals + TEWS components + a focused set of
+ * emergency / very-urgent / urgent discriminators. The backend runs the
+ * SAME engine the ED uses and returns the computed category/TEWS.
+ */
+export interface FieldTriageRequest {
+  respiratoryRate?: number;
+  heartRate?: number;
+  systolicBp?: number;
+  diastolicBp?: number;
+  spo2?: number;
+  temperature?: number;
+  bloodGlucose?: number;
+  gcs?: number;
+  painScore?: number;
+
+  mobility?: MobilityStatus;
+  avpu?: AvpuScore;
+  traumaStatus?: TraumaStatus;
+
+  isChild?: boolean;
+  reason?: string;
+
+  // Emergency signs (any → RED)
+  hasAirwayCompromise?: boolean;
+  hasSevereRespiratoryDistress?: boolean;
+  hasCardiacArrest?: boolean;
+  hasUncontrolledHaemorrhage?: boolean;
+  hasStabGunWoundNeckChest?: boolean;
+  hasConvulsions?: boolean;
+  hasComa?: boolean;
+  hasHypoglycaemia?: boolean;
+  hasBurnFaceInhalation?: boolean;
+  childCentralCyanosis?: boolean;
+  childPulseLowOrAbsent?: boolean;
+
+  // Very urgent
+  vuAlteredMentalStatus?: boolean;
+  vuFocalNeurologicDeficit?: boolean;
+  vuChestPain?: boolean;
+  vuShortnessOfBreath?: boolean;
+  vuPoisoningOverdose?: boolean;
+  vuCoughingVomitingBlood?: boolean;
+  vuSevereMechanismOfInjury?: boolean;
+  vuOpenFracture?: boolean;
+  vuThreatenedLimb?: boolean;
+  vuVerySeverePain?: boolean;
+  vuBurnOver20Percent?: boolean;
+
+  // Urgent
+  urgAbdominalPain?: boolean;
+  urgModeratePain?: boolean;
+  urgClosedFracture?: boolean;
+  urgLacerationAbscess?: boolean;
+  urgVeryPale?: boolean;
+  urgUnableToDrinkVomits?: boolean;
+}
+
+export interface RerouteRequest {
+  hospitalId: string;
+  reason?: string;
+}
+
+export interface PatientHistory {
+  known: boolean;
+  displayName: string | null;
+  unidentified: boolean;
+  knownAllergies: string | null;
+  chronicConditions: string | null;
+  bloodType: string | null;
+  priorVisitCount: number;
+  lastVisitAt: string | null;
+}
+
+export interface DestinationHospital {
+  id: string;
+  name: string | null;
+  hospitalCode: string | null;
+  city: string | null;
+}
+
 export const emsApi = {
   create: (body: CreateEmsRunRequest) => post<EmsRun>('/ems/runs', body),
 
@@ -140,6 +231,21 @@ export const emsApi = {
 
   addIntervention: (id: string, body: AddInterventionRequest) =>
     post<EmsRun>(`/ems/runs/${id}/interventions`, body),
+
+  fieldTriage: (id: string, body: FieldTriageRequest) =>
+    post<EmsRun>(`/ems/runs/${id}/field-triage`, body),
+
+  setLights: (id: string, active: boolean) =>
+    post<EmsRun>(`/ems/runs/${id}/lights?active=${active}`, {}),
+
+  reroute: (id: string, body: RerouteRequest) =>
+    post<EmsRun>(`/ems/runs/${id}/reroute`, body),
+
+  patientHistory: (id: string) =>
+    get<PatientHistory>(`/ems/runs/${id}/patient-history`),
+
+  destinations: () =>
+    get<DestinationHospital[]>('/ems/destinations'),
 
   preregister: (id: string, body?: PreregisterRequest) =>
     post<EmsRun>(`/ems/runs/${id}/preregister`, body ?? {}),

@@ -44,6 +44,9 @@ public class EmsRunResponse {
 
     private String fieldTriageCategory;
     private String fieldTriageReason;
+    private Integer fieldTewsScore;
+    private String fieldTriageDecisionPath;
+    private Boolean fieldTriageIsChild;
 
     private Integer fieldGcs;
     private Integer fieldRespRate;
@@ -62,6 +65,9 @@ public class EmsRunResponse {
 
     private Integer etaMinutes;
     private String notes;
+
+    private boolean lightsActive;
+    private Instant lightsActivatedAt;
 
     private Instant createdAt;
     private Instant updatedAt;

@@ -104,12 +104,30 @@ public class EmsRun extends BaseEntity {
     private String injuriesObserved;
 
     // ── Field triage call
+    //
+    // fieldTriageCategory is now the OUTPUT of the shared triage engine
+    // (RwandaTriageDecisionEngine / KFH peds engine) run over the field
+    // vitals + discriminators — the same call the ED makes — not a manual
+    // pick. fieldTriageReason carries the paramedic's free-text rationale;
+    // fieldTriageDecisionPath carries the engine's audit string.
 
     @Column(name = "field_triage_category", length = 20)
     private String fieldTriageCategory;     // RED / ORANGE / YELLOW / GREEN / BLUE
 
     @Column(name = "field_triage_reason", length = 500)
     private String fieldTriageReason;
+
+    /** TEWS computed by the shared engine from the field vitals (0-18). */
+    @Column(name = "field_tews_score")
+    private Integer fieldTewsScore;
+
+    /** Engine decision-path audit string (how the category was reached). */
+    @Column(name = "field_triage_decision_path", columnDefinition = "TEXT")
+    private String fieldTriageDecisionPath;
+
+    /** TRUE when the KFH pediatric form/engine computed the call (age &lt;13). */
+    @Column(name = "field_triage_is_child")
+    private Boolean fieldTriageIsChild;
 
     // ── Field vitals snapshot
 
@@ -161,4 +179,14 @@ public class EmsRun extends BaseEntity {
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
+
+    // ── Lights / priority transport
+
+    /** Blue-light run — drives urgent (audible, RESUS-routed) pre-arrival alerts. */
+    @Column(name = "lights_active", nullable = false)
+    @Builder.Default
+    private boolean lightsActive = false;
+
+    @Column(name = "lights_activated_at")
+    private Instant lightsActivatedAt;
 }

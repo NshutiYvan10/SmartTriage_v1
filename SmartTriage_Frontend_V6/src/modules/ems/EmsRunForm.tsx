@@ -2,43 +2,42 @@
    EmsRunForm — multi-step run capture for paramedics.
 
    Steps:
-     1. Patient & incident
-     2. Field vitals
-     3. Field triage (RED/ORANGE/YELLOW/GREEN/BLUE + reason)
-     4. Treatments (chip picker + free text)
-     5. Send to ED (preregister)
+     1. Patient, incident & destination hospital
+     2. Field vitals + TEWS components (mobility / AVPU / trauma)
+     3. Field triage — emergency / very-urgent / urgent discriminators,
+        computed by the SAME Rwanda/KFH engine the ED uses (not a
+        manual pick). Shows the engine's category + TEWS + decision path.
+     4. Treatments (chip picker + structured dose/route)
+     5. Send to ED — blue-light toggle + ETA + pre-arrival ping
 
-   Save-and-continue at every step so a partially filled run isn't
-   lost. The first save (step 1) creates the run; subsequent steps
-   patch it.
+   Glove-friendly: large tap targets, base-size text, high contrast —
+   usable on a phone in a moving ambulance. Save-and-continue at every
+   step so a partially filled run isn't lost.
    ═══════════════════════════════════════════════════════════════ */
 
 import { useEffect, useState } from 'react';
 import {
   X, ChevronLeft, ChevronRight, Loader2, Send, AlertOctagon,
-  Check, Plus, Trash2, Siren,
+  Check, Plus, Siren, Activity, Calculator, MapPin,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { emsApi } from '@/api/ems';
 import type {
   EmsRun, FieldTriageCategory, EmsService, EmsInterventionType,
+  FieldTriageRequest, MobilityStatus, AvpuScore, TraumaStatus, DestinationHospital,
 } from '@/api/ems';
 
-const TRIAGE_OPTIONS: { v: FieldTriageCategory; label: string; color: string }[] = [
-  { v: 'RED',    label: 'RED — life-threatening',     color: 'bg-rose-500' },
-  { v: 'ORANGE', label: 'ORANGE — very urgent',       color: 'bg-amber-500' },
-  { v: 'YELLOW', label: 'YELLOW — urgent',            color: 'bg-yellow-500' },
-  { v: 'GREEN',  label: 'GREEN — standard',           color: 'bg-emerald-500' },
-  { v: 'BLUE',   label: 'BLUE — non-urgent',          color: 'bg-blue-500' },
-];
+/** Pediatric threshold mirrors the backend (PEDIATRIC_AGE_CEILING_YEARS). */
+const PEDS_AGE_CEILING = 13;
 
-/**
- * Preset interventions. Structured `dose` / `route` fields are filled
- * at preset-pick time so the paramedic can save directly without
- * typing — but the "Refine details" form still appears with the
- * preset values populated, so they can amend (e.g. choose a
- * different IV gauge or change the dose).
- */
+const CATEGORY_STYLE: Record<FieldTriageCategory, { bg: string; ring: string; label: string }> = {
+  RED:    { bg: 'bg-rose-500',    ring: 'ring-rose-500/40',    label: 'RED — Immediate' },
+  ORANGE: { bg: 'bg-amber-500',   ring: 'ring-amber-500/40',   label: 'ORANGE — Very urgent (<10 min)' },
+  YELLOW: { bg: 'bg-yellow-500',  ring: 'ring-yellow-500/40',  label: 'YELLOW — Urgent (<30 min)' },
+  GREEN:  { bg: 'bg-emerald-500', ring: 'ring-emerald-500/40', label: 'GREEN — Routine (<1 hr)' },
+  BLUE:   { bg: 'bg-blue-500',    ring: 'ring-blue-500/40',    label: 'BLUE — Non-urgent' },
+};
+
 interface InterventionPreset {
   type: EmsInterventionType;
   detail: string;
@@ -67,12 +66,47 @@ const COMMON_INTERVENTIONS: InterventionPreset[] = [
   { type: 'DEFIBRILLATION',  detail: 'AED shock',                 dose: '200 J' },
   { type: 'SPLINTING',       detail: 'Splint applied' },
 ];
-
 const ROUTE_OPTIONS = ['IV', 'IM', 'IO', 'PO', 'SC', 'NEB', 'NRB', 'NC', 'BVM', 'TOPICAL', 'OTHER'];
+
+// Discriminator groups for the field-triage step.
+const EMERGENCY_SIGNS: { key: keyof FieldTriageRequest; label: string; peds?: boolean }[] = [
+  { key: 'hasAirwayCompromise',        label: 'Airway compromise / not breathing' },
+  { key: 'hasSevereRespiratoryDistress', label: 'Severe respiratory distress' },
+  { key: 'hasCardiacArrest',           label: 'Cardiac arrest' },
+  { key: 'hasUncontrolledHaemorrhage', label: 'Uncontrolled haemorrhage' },
+  { key: 'hasStabGunWoundNeckChest',   label: 'Stab / gunshot to neck or chest' },
+  { key: 'hasConvulsions',             label: 'Active seizure / post-ictal' },
+  { key: 'hasComa',                    label: 'Unresponsive / responds only to pain' },
+  { key: 'hasHypoglycaemia',           label: 'Hypoglycaemia (< 3 mmol/L)' },
+  { key: 'hasBurnFaceInhalation',      label: 'Burn — face / inhalation' },
+  { key: 'childCentralCyanosis',       label: 'Central cyanosis', peds: true },
+  { key: 'childPulseLowOrAbsent',      label: 'Pulse low or absent', peds: true },
+];
+const VERY_URGENT_SIGNS: { key: keyof FieldTriageRequest; label: string }[] = [
+  { key: 'vuAlteredMentalStatus',    label: 'Altered mental status (acute)' },
+  { key: 'vuFocalNeurologicDeficit', label: 'Focal neuro deficit (acute)' },
+  { key: 'vuChestPain',              label: 'Chest pain' },
+  { key: 'vuShortnessOfBreath',      label: 'Shortness of breath (acute)' },
+  { key: 'vuPoisoningOverdose',      label: 'Poisoning / overdose' },
+  { key: 'vuCoughingVomitingBlood',  label: 'Coughing / vomiting blood' },
+  { key: 'vuSevereMechanismOfInjury', label: 'Severe mechanism (fall > 1 m, RTA)' },
+  { key: 'vuOpenFracture',           label: 'Open fracture' },
+  { key: 'vuThreatenedLimb',         label: 'Threatened limb (no pulse / pale)' },
+  { key: 'vuVerySeverePain',         label: 'Very severe pain (≥ 7)' },
+  { key: 'vuBurnOver20Percent',      label: 'Burn > 20%' },
+];
+const URGENT_SIGNS: { key: keyof FieldTriageRequest; label: string }[] = [
+  { key: 'urgAbdominalPain',       label: 'Abdominal pain' },
+  { key: 'urgModeratePain',        label: 'Moderate pain (5–6)' },
+  { key: 'urgClosedFracture',      label: 'Closed fracture' },
+  { key: 'urgLacerationAbscess',   label: 'Laceration / abscess' },
+  { key: 'urgVeryPale',            label: 'Very pale' },
+  { key: 'urgUnableToDrinkVomits', label: 'Unable to drink / vomits everything' },
+];
 
 interface Props {
   run: EmsRun | null;        // null = create new
-  hospitalId: string;
+  hospitalId: string;        // paramedic's default destination
   onClose: () => void;
   onSaved: () => void;
 }
@@ -84,12 +118,13 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [current, setCurrent] = useState<EmsRun | null>(run);
+  const [destinations, setDestinations] = useState<DestinationHospital[]>([]);
 
-  // Working draft (only the editable fields)
   const [draft, setDraft] = useState({
+    destinationHospitalId: run?.hospitalId ?? hospitalId,
     service: (run?.service ?? 'OTHER') as EmsService,
     unitCallsign: run?.unitCallsign ?? '',
-    patientAgeYears: run?.patientAgeYears ?? '',
+    patientAgeYears: run?.patientAgeYears != null ? String(run.patientAgeYears) : '',
     patientSex: run?.patientSex ?? '',
     incidentLocation: run?.incidentLocation ?? '',
     mechanism: run?.mechanism ?? '',
@@ -103,71 +138,99 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
     fieldSpo2: run?.fieldSpo2 ?? '',
     fieldTemp: run?.fieldTemp ?? '',
     fieldGlucose: run?.fieldGlucose ?? '',
-    fieldTriageCategory: (run?.fieldTriageCategory ?? '') as FieldTriageCategory | '',
-    fieldTriageReason: run?.fieldTriageReason ?? '',
     etaMinutes: run?.etaMinutes ?? '',
     notes: run?.notes ?? '',
   });
 
+  // Field-triage inputs (engine components + discriminators).
+  const [mobility, setMobility] = useState<MobilityStatus | ''>('');
+  const [avpu, setAvpu] = useState<AvpuScore | ''>('');
+  const [trauma, setTrauma] = useState<TraumaStatus | ''>('');
+  const [isChild, setIsChild] = useState<boolean>(
+    run?.fieldTriageIsChild ?? (run?.patientAgeYears != null && run.patientAgeYears < PEDS_AGE_CEILING),
+  );
+  const [reason, setReason] = useState(run?.fieldTriageReason ?? '');
+  const [flags, setFlags] = useState<Record<string, boolean>>({});
+  const [computing, setComputing] = useState(false);
+
+  useEffect(() => { setCurrent(run); }, [run]);
+
+  // Destination list (paramedic-accessible).
   useEffect(() => {
-    setCurrent(run);
-  }, [run]);
+    emsApi.destinations().then(setDestinations).catch(() => setDestinations([]));
+  }, []);
+
+  // Keep the child-form default in step with the entered age (until the
+  // paramedic overrides it manually on the triage step).
+  useEffect(() => {
+    const age = draft.patientAgeYears === '' ? null : Number(draft.patientAgeYears);
+    if (age != null && !Number.isNaN(age) && run?.fieldTriageIsChild == null) {
+      setIsChild(age < PEDS_AGE_CEILING);
+    }
+  }, [draft.patientAgeYears, run?.fieldTriageIsChild]);
 
   const num = (v: any) => (v === '' || v === null || v === undefined ? undefined : Number(v));
 
-  async function saveStep() {
-    setSubmitting(true);
-    setError(null);
-    try {
-      if (!current) {
-        // Step 1 first save → create the run
-        const created = await emsApi.create({
-          hospitalId,
-          service: draft.service || undefined,
-          unitCallsign: draft.unitCallsign || undefined,
-          patientAgeYears: num(draft.patientAgeYears),
-          patientSex: draft.patientSex || undefined,
-          incidentLocation: draft.incidentLocation || undefined,
-          mechanism: draft.mechanism || undefined,
-          historySummary: draft.historySummary || undefined,
-        });
-        setCurrent(created);
-      } else {
-        const updated = await emsApi.update(current.id, {
-          unitCallsign: draft.unitCallsign || undefined,
-          patientAgeYears: num(draft.patientAgeYears),
-          patientSex: draft.patientSex || undefined,
-          incidentLocation: draft.incidentLocation || undefined,
-          mechanism: draft.mechanism || undefined,
-          historySummary: draft.historySummary || undefined,
-          injuriesObserved: draft.injuriesObserved || undefined,
-          fieldGcs: num(draft.fieldGcs),
-          fieldRespRate: num(draft.fieldRespRate),
-          fieldHr: num(draft.fieldHr),
-          fieldSbp: num(draft.fieldSbp),
-          fieldDbp: num(draft.fieldDbp),
-          fieldSpo2: num(draft.fieldSpo2),
-          fieldTemp: num(draft.fieldTemp),
-          fieldGlucose: num(draft.fieldGlucose),
-          fieldTriageCategory: (draft.fieldTriageCategory || undefined) as FieldTriageCategory | undefined,
-          fieldTriageReason: draft.fieldTriageReason || undefined,
-          etaMinutes: num(draft.etaMinutes),
-          notes: draft.notes || undefined,
-        });
-        setCurrent(updated);
-      }
-      return true;
-    } catch (err: any) {
-      setError(err?.message || 'Failed to save');
-      return false;
-    } finally {
-      setSubmitting(false);
+  async function saveStep1() {
+    if (!current) {
+      const created = await emsApi.create({
+        hospitalId: draft.destinationHospitalId || hospitalId,
+        service: draft.service || undefined,
+        unitCallsign: draft.unitCallsign || undefined,
+        patientAgeYears: num(draft.patientAgeYears),
+        patientSex: draft.patientSex || undefined,
+        incidentLocation: draft.incidentLocation || undefined,
+        mechanism: draft.mechanism || undefined,
+        historySummary: draft.historySummary || undefined,
+      });
+      setCurrent(created);
+      return;
     }
+    // Destination changed on an existing run → reroute.
+    if (draft.destinationHospitalId && draft.destinationHospitalId !== current.hospitalId) {
+      const rerouted = await emsApi.reroute(current.id, { hospitalId: draft.destinationHospitalId });
+      setCurrent(rerouted);
+    }
+    const updated = await emsApi.update(current.id, {
+      unitCallsign: draft.unitCallsign || undefined,
+      patientAgeYears: num(draft.patientAgeYears),
+      patientSex: draft.patientSex || undefined,
+      incidentLocation: draft.incidentLocation || undefined,
+      mechanism: draft.mechanism || undefined,
+      historySummary: draft.historySummary || undefined,
+    });
+    setCurrent(updated);
+  }
+
+  async function saveStep2() {
+    if (!current) return;
+    const updated = await emsApi.update(current.id, {
+      injuriesObserved: draft.injuriesObserved || undefined,
+      fieldGcs: num(draft.fieldGcs),
+      fieldRespRate: num(draft.fieldRespRate),
+      fieldHr: num(draft.fieldHr),
+      fieldSbp: num(draft.fieldSbp),
+      fieldDbp: num(draft.fieldDbp),
+      fieldSpo2: num(draft.fieldSpo2),
+      fieldTemp: num(draft.fieldTemp),
+      fieldGlucose: num(draft.fieldGlucose),
+      notes: draft.notes || undefined,
+    });
+    setCurrent(updated);
   }
 
   async function next() {
-    const ok = await saveStep();
-    if (ok) setStep((s) => Math.min(5, s + 1));
+    setSubmitting(true);
+    setError(null);
+    try {
+      if (step === 1) await saveStep1();
+      if (step === 2) await saveStep2();
+      setStep((s) => Math.min(5, s + 1));
+    } catch (err: any) {
+      setError(err?.message || 'Failed to save');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function prev() {
@@ -175,14 +238,43 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
     setStep((s) => Math.max(1, s - 1));
   }
 
+  /** Step 3 — run the shared triage engine. */
+  async function computeTriage() {
+    if (!current) return;
+    setComputing(true);
+    setError(null);
+    try {
+      const body: FieldTriageRequest = {
+        respiratoryRate: num(draft.fieldRespRate),
+        heartRate: num(draft.fieldHr),
+        systolicBp: num(draft.fieldSbp),
+        diastolicBp: num(draft.fieldDbp),
+        spo2: num(draft.fieldSpo2),
+        temperature: num(draft.fieldTemp),
+        bloodGlucose: num(draft.fieldGlucose),
+        gcs: num(draft.fieldGcs),
+        mobility: mobility || undefined,
+        avpu: avpu || undefined,
+        traumaStatus: trauma || undefined,
+        isChild,
+        reason: reason || undefined,
+        ...flags,
+      };
+      const updated = await emsApi.fieldTriage(current.id, body);
+      setCurrent(updated);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to compute triage');
+    } finally {
+      setComputing(false);
+    }
+  }
+
   async function sendToEd() {
     if (!current) return;
     setSubmitting(true);
     setError(null);
     try {
-      await emsApi.preregister(current.id, {
-        etaMinutes: num(draft.etaMinutes) as number | undefined,
-      });
+      await emsApi.preregister(current.id, { etaMinutes: num(draft.etaMinutes) as number | undefined });
       onSaved();
     } catch (err: any) {
       setError(err?.message || 'Failed to send pre-arrival');
@@ -191,83 +283,86 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
     }
   }
 
+  async function toggleLights() {
+    if (!current) return;
+    try {
+      const updated = await emsApi.setLights(current.id, !current.lightsActive);
+      setCurrent(updated);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to toggle lights');
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm">
-      <div className="rounded-2xl p-4 sm:p-6 max-w-2xl w-full max-h-[95vh] overflow-y-auto animate-fade-up" style={glassCard}>
+      <div className="rounded-2xl p-4 sm:p-6 max-w-2xl w-full max-h-[96vh] overflow-y-auto animate-fade-up" style={glassCard}>
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-500/15 flex items-center justify-center">
-              <Siren className="w-5 h-5 text-rose-500" />
+            <div className="w-12 h-12 rounded-xl bg-rose-500/15 flex items-center justify-center">
+              <Siren className="w-6 h-6 text-rose-500" />
             </div>
             <div>
-              <h3 className={`text-base font-bold ${text.heading}`}>
+              <h3 className={`text-lg font-bold ${text.heading}`}>
                 {current ? `Run ${current.id.slice(0, 8)}` : 'New ambulance run'}
               </h3>
-              <p className={`text-xs ${text.muted}`}>Step {step} of 5</p>
+              <p className={`text-sm ${text.muted}`}>Step {step} of 5</p>
             </div>
           </div>
-          <button onClick={onClose} className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}>
-            <X className="w-4 h-4 text-slate-400" />
+          <button onClick={onClose} className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}>
+            <X className="w-5 h-5 text-slate-400" />
           </button>
         </div>
 
         {/* Step indicator */}
-        <div className="flex items-center gap-1 mb-5">
+        <div className="flex items-center gap-1.5 mb-5">
           {[1, 2, 3, 4, 5].map((n) => (
-            <div key={n}
-              className={`h-1.5 flex-1 rounded-full ${n <= step ? 'bg-rose-500' : isDark ? 'bg-white/10' : 'bg-slate-200'}`}
-            />
+            <div key={n} className={`h-2 flex-1 rounded-full ${n <= step ? 'bg-rose-500' : isDark ? 'bg-white/10' : 'bg-slate-200'}`} />
           ))}
         </div>
 
         {step === 1 && (
-          <Step1Patient draft={draft} setDraft={setDraft} text={text} glassInner={glassInner} isDark={isDark} />
+          <Step1Patient draft={draft} setDraft={setDraft} destinations={destinations} text={text} glassInner={glassInner} isDark={isDark} />
         )}
         {step === 2 && (
-          <Step2Vitals draft={draft} setDraft={setDraft} text={text} glassInner={glassInner} isDark={isDark} />
+          <Step2Vitals draft={draft} setDraft={setDraft} mobility={mobility} setMobility={setMobility}
+            avpu={avpu} setAvpu={setAvpu} trauma={trauma} setTrauma={setTrauma} text={text} glassInner={glassInner} isDark={isDark} />
         )}
         {step === 3 && (
-          <Step3Triage draft={draft} setDraft={setDraft} text={text} glassInner={glassInner} isDark={isDark} />
+          <Step3Triage
+            run={current} flags={flags} setFlags={setFlags} isChild={isChild} setIsChild={setIsChild}
+            reason={reason} setReason={setReason} computing={computing} onCompute={computeTriage}
+            text={text} glassInner={glassInner} isDark={isDark} />
         )}
         {step === 4 && current && (
           <Step4Treatments run={current} text={text} glassInner={glassInner} isDark={isDark} onChanged={() => emsApi.getById(current.id).then(setCurrent)} />
         )}
         {step === 5 && (
-          <Step5Send draft={draft} setDraft={setDraft} text={text} glassInner={glassInner} isDark={isDark} run={current} />
+          <Step5Send draft={draft} setDraft={setDraft} text={text} glassInner={glassInner} isDark={isDark} run={current} onToggleLights={toggleLights} />
         )}
 
         {error && (
-          <div className="rounded-xl px-3 py-2 my-3 text-xs font-semibold bg-rose-500/10 text-rose-500">
+          <div className="rounded-xl px-3 py-2.5 my-3 text-sm font-semibold bg-rose-500/10 text-rose-500">
             {error}
           </div>
         )}
 
         {/* Footer */}
         <div className="flex items-center justify-between gap-2 mt-5 pt-4 border-t border-slate-500/10">
-          <button
-            onClick={prev}
-            disabled={step === 1 || submitting}
-            className={`inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold ${text.muted} hover:bg-white/5 disabled:opacity-30`}
-          >
-            <ChevronLeft className="w-3.5 h-3.5" /> Back
+          <button onClick={prev} disabled={step === 1 || submitting}
+            className={`inline-flex items-center gap-1 px-4 py-3 rounded-xl text-sm font-bold ${text.muted} hover:bg-white/5 disabled:opacity-30`}>
+            <ChevronLeft className="w-4 h-4" /> Back
           </button>
           {step < 5 ? (
-            <button
-              onClick={next}
-              disabled={submitting}
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-rose-600 to-rose-500 disabled:opacity-50"
-            >
-              {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-              Save & continue <ChevronRight className="w-3.5 h-3.5" />
+            <button onClick={next} disabled={submitting}
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-rose-600 to-rose-500 disabled:opacity-50">
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              Save &amp; continue <ChevronRight className="w-4 h-4" />
             </button>
           ) : (
-            <button
-              onClick={sendToEd}
-              disabled={submitting || !current}
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-600 to-amber-500 disabled:opacity-50"
-            >
-              {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            <button onClick={sendToEd} disabled={submitting || !current}
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-amber-600 to-amber-500 disabled:opacity-50">
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               Send pre-arrival to ED
             </button>
           )}
@@ -278,18 +373,29 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Step 1 — patient & incident
+// Step 1 — patient, incident & destination
 // ─────────────────────────────────────────────────────────────────
 
-function Step1Patient({ draft, setDraft, text, glassInner, isDark }: any) {
-  const inputClass = `w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
+function Step1Patient({ draft, setDraft, destinations, text, glassInner, isDark }: any) {
+  const inputClass = `w-full px-3 py-3 rounded-xl text-base outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
   return (
-    <div className="space-y-3">
-      <h4 className={`text-sm font-bold ${text.heading}`}>Patient & incident</h4>
+    <div className="space-y-4">
+      <h4 className={`text-base font-bold ${text.heading}`}>Patient, incident &amp; destination</h4>
+
+      <div>
+        <Label text={text}><MapPin className="w-3.5 h-3.5 inline mr-1" /> Destination hospital</Label>
+        <select value={draft.destinationHospitalId} onChange={(e) => setDraft({ ...draft, destinationHospitalId: e.target.value })} className={inputClass} style={glassInner}>
+          {destinations.length === 0 && <option value={draft.destinationHospitalId}>My hospital</option>}
+          {destinations.map((h: DestinationHospital) => (
+            <option key={h.id} value={h.id}>{h.name ?? h.hospitalCode ?? h.id.slice(0, 8)}{h.city ? ` — ${h.city}` : ''}</option>
+          ))}
+        </select>
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label text={text}>Age (years)</Label>
-          <input type="number" value={draft.patientAgeYears} onChange={(e) => setDraft({ ...draft, patientAgeYears: e.target.value })} className={inputClass} style={glassInner} />
+          <input type="number" inputMode="numeric" value={draft.patientAgeYears} onChange={(e) => setDraft({ ...draft, patientAgeYears: e.target.value })} className={inputClass} style={glassInner} />
         </div>
         <div>
           <Label text={text}>Sex</Label>
@@ -330,33 +436,65 @@ function Step1Patient({ draft, setDraft, text, glassInner, isDark }: any) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Step 2 — vitals
+// Step 2 — vitals + TEWS components
 // ─────────────────────────────────────────────────────────────────
 
-function Step2Vitals({ draft, setDraft, text, glassInner, isDark }: any) {
-  const inputClass = `w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
+function Step2Vitals({ draft, setDraft, mobility, setMobility, avpu, setAvpu, trauma, setTrauma, text, glassInner, isDark }: any) {
+  const inputClass = `w-full px-3 py-3 rounded-xl text-base outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
   const numField = (key: string, label: string, ph?: string) => (
     <div>
       <Label text={text}>{label}</Label>
-      <input type="number" step="any" value={(draft as any)[key]} placeholder={ph}
-        onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
-        className={inputClass} style={glassInner} />
+      <input type="number" inputMode="decimal" step="any" value={(draft as any)[key]} placeholder={ph}
+        onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} className={inputClass} style={glassInner} />
     </div>
   );
   return (
-    <div className="space-y-3">
-      <h4 className={`text-sm font-bold ${text.heading}`}>Field vitals</h4>
-      <p className={`text-xs ${text.muted}`}>Snapshot at scene. Serial readings on the way are still useful — log them as you go.</p>
+    <div className="space-y-4">
+      <h4 className={`text-base font-bold ${text.heading}`}>Field vitals</h4>
+      <p className={`text-sm ${text.muted}`}>Snapshot at scene. These drive the computed TEWS on the next step.</p>
       <div className="grid grid-cols-2 gap-3">
-        {numField('fieldGcs', 'GCS (3–15)', '15')}
         {numField('fieldRespRate', 'Resp rate', '16')}
         {numField('fieldHr', 'Heart rate', '80')}
-        {numField('fieldSpo2', 'SpO₂ %', '98')}
         {numField('fieldSbp', 'SBP', '120')}
         {numField('fieldDbp', 'DBP', '80')}
+        {numField('fieldSpo2', 'SpO₂ %', '98')}
         {numField('fieldTemp', 'Temp °C', '37.0')}
+        {numField('fieldGcs', 'GCS (3–15)', '15')}
         {numField('fieldGlucose', 'Glucose mmol/L', '5.5')}
       </div>
+
+      <h4 className={`text-base font-bold ${text.heading} pt-1`}>TEWS components</h4>
+      <div className="grid grid-cols-1 gap-3">
+        <div>
+          <Label text={text}>Mobility</Label>
+          <select value={mobility} onChange={(e) => setMobility(e.target.value)} className={inputClass} style={glassInner}>
+            <option value="">— select —</option>
+            <option value="WALKING">Walking</option>
+            <option value="WITH_HELP">With help / wheelchair</option>
+            <option value="STRETCHER">Stretcher / immobile</option>
+          </select>
+        </div>
+        <div>
+          <Label text={text}>AVPU (consciousness)</Label>
+          <select value={avpu} onChange={(e) => setAvpu(e.target.value)} className={inputClass} style={glassInner}>
+            <option value="">— select —</option>
+            <option value="ALERT">Alert</option>
+            <option value="CONFUSED">Confused</option>
+            <option value="VERBAL">Reacts to voice</option>
+            <option value="PAIN">Reacts to pain</option>
+            <option value="UNRESPONSIVE">Unresponsive</option>
+          </select>
+        </div>
+        <div>
+          <Label text={text}>Trauma</Label>
+          <select value={trauma} onChange={(e) => setTrauma(e.target.value)} className={inputClass} style={glassInner}>
+            <option value="">— select —</option>
+            <option value="NO_TRAUMA">No trauma</option>
+            <option value="TRAUMA">Trauma</option>
+          </select>
+        </div>
+      </div>
+
       <div>
         <Label text={text}>Injuries observed</Label>
         <textarea rows={2} value={draft.injuriesObserved} onChange={(e) => setDraft({ ...draft, injuriesObserved: e.target.value })} placeholder="Open femur fracture, head laceration, etc." className={`${inputClass} resize-none`} style={glassInner} />
@@ -366,39 +504,82 @@ function Step2Vitals({ draft, setDraft, text, glassInner, isDark }: any) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Step 3 — field triage
+// Step 3 — engine-computed field triage
 // ─────────────────────────────────────────────────────────────────
 
-function Step3Triage({ draft, setDraft, text, glassInner, isDark }: any) {
-  const inputClass = `w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
+function Step3Triage({ run, flags, setFlags, isChild, setIsChild, reason, setReason, computing, onCompute, text, glassInner, isDark }: any) {
+  const inputClass = `w-full px-3 py-3 rounded-xl text-base outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
+  const toggle = (k: string) => setFlags({ ...flags, [k]: !flags[k] });
+  const emergency = EMERGENCY_SIGNS.filter((s) => !s.peds || isChild);
+
+  const computed: FieldTriageCategory | null = run?.fieldTriageCategory ?? null;
+  const style = computed ? CATEGORY_STYLE[computed] : null;
+
   return (
-    <div className="space-y-3">
-      <h4 className={`text-sm font-bold ${text.heading}`}>Field triage</h4>
-      <p className={`text-xs ${text.muted}`}>The ED will re-triage on arrival. Your call drives bay prep and pre-arrival severity.</p>
-      <div className="space-y-2">
-        {TRIAGE_OPTIONS.map((opt) => (
-          <label
-            key={opt.v}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer ${draft.fieldTriageCategory === opt.v ? 'ring-2 ring-rose-500/40' : ''}`}
-            style={glassInner}
-          >
-            <input
-              type="radio"
-              name="triage"
-              checked={draft.fieldTriageCategory === opt.v}
-              onChange={() => setDraft({ ...draft, fieldTriageCategory: opt.v })}
-              className="w-4 h-4 accent-rose-500"
-            />
-            <span className={`w-3 h-3 rounded-full ${opt.color}`} />
-            <span className={`text-xs font-semibold ${text.body}`}>{opt.label}</span>
-          </label>
-        ))}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h4 className={`text-base font-bold ${text.heading}`}>Field triage</h4>
+        <label className={`flex items-center gap-2 text-sm font-semibold ${text.body} cursor-pointer`}>
+          <input type="checkbox" checked={isChild} onChange={() => setIsChild(!isChild)} className="w-5 h-5 accent-rose-500" />
+          Pediatric (KFH form, &lt; 13y)
+        </label>
       </div>
+      <p className={`text-sm ${text.muted}`}>
+        Tick what's present, then compute. The same Rwanda{isChild ? '/KFH peds' : ''} engine the ED uses returns the
+        category &amp; TEWS — your call drives bay prep. The ED re-triages on arrival.
+      </p>
+
+      <SignGroup title="Emergency signs (→ RED)" tone="rose" items={emergency} flags={flags} toggle={toggle} text={text} glassInner={glassInner} />
+      <SignGroup title="Very urgent signs" tone="amber" items={VERY_URGENT_SIGNS} flags={flags} toggle={toggle} text={text} glassInner={glassInner} />
+      <SignGroup title="Urgent signs" tone="yellow" items={URGENT_SIGNS} flags={flags} toggle={toggle} text={text} glassInner={glassInner} />
+
       <div>
         <Label text={text}>Reason / one-line rationale</Label>
-        <input value={draft.fieldTriageReason} onChange={(e) => setDraft({ ...draft, fieldTriageReason: e.target.value })}
-          placeholder="GCS 9, hypotensive, suspected internal bleeding"
-          className={inputClass} style={glassInner} />
+        <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="GCS 9, hypotensive, suspected internal bleeding" className={inputClass} style={glassInner} />
+      </div>
+
+      <button onClick={onCompute} disabled={computing}
+        className="w-full inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-base font-bold text-white bg-gradient-to-r from-indigo-600 to-indigo-500 disabled:opacity-50">
+        {computing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Calculator className="w-5 h-5" />}
+        Compute field triage
+      </button>
+
+      {style && (
+        <div className={`rounded-2xl p-4 ring-2 ${style.ring}`} style={glassInner}>
+          <div className="flex items-center gap-3">
+            <span className={`w-4 h-4 rounded-full ${style.bg}`} />
+            <span className={`text-lg font-extrabold ${text.heading}`}>{style.label}</span>
+            {run?.fieldTewsScore != null && (
+              <span className={`ml-auto text-sm font-bold px-2.5 py-1 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-slate-100 text-slate-700'}`}>
+                TEWS {run.fieldTewsScore}
+              </span>
+            )}
+          </div>
+          {run?.fieldTriageDecisionPath && (
+            <p className={`text-sm mt-2 ${text.muted}`}>
+              <Activity className="w-3.5 h-3.5 inline mr-1" />{run.fieldTriageDecisionPath}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SignGroup({ title, tone, items, flags, toggle, text, glassInner }: any) {
+  const dot = tone === 'rose' ? 'bg-rose-500' : tone === 'amber' ? 'bg-amber-500' : 'bg-yellow-500';
+  return (
+    <div>
+      <div className={`flex items-center gap-2 mb-1.5 text-sm font-bold ${text.heading}`}>
+        <span className={`w-2.5 h-2.5 rounded-full ${dot}`} /> {title}
+      </div>
+      <div className="grid grid-cols-1 gap-1.5">
+        {items.map((s: any) => (
+          <label key={s.key} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer ${flags[s.key] ? 'ring-2 ring-rose-500/30' : ''}`} style={glassInner}>
+            <input type="checkbox" checked={!!flags[s.key]} onChange={() => toggle(s.key)} className="w-5 h-5 accent-rose-500" />
+            <span className={`text-sm font-medium ${text.body}`}>{s.label}</span>
+          </label>
+        ))}
       </div>
     </div>
   );
@@ -408,44 +589,21 @@ function Step3Triage({ draft, setDraft, text, glassInner, isDark }: any) {
 // Step 4 — treatments
 // ─────────────────────────────────────────────────────────────────
 
-/**
- * Step 4 — interventions. Each save records structured dose/route/
- * given-by/outcome on the row, not just free-text detail. Tapping a
- * preset pre-fills the staging panel with the preset's values; the
- * paramedic confirms or amends before saving.
- */
 function Step4Treatments({ run, text, glassInner, isDark, onChanged }: any) {
   const [staged, setStaged] = useState<InterventionPreset & { givenByName?: string; outcome?: string; notes?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inputClass = `w-full px-3 py-2 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
-
-  function pickPreset(p: InterventionPreset) {
-    setError(null);
-    setStaged({ ...p });
-  }
-
-  function pickCustom() {
-    setError(null);
-    setStaged({ type: 'OTHER', detail: '' });
-  }
+  const inputClass = `w-full px-3 py-2.5 rounded-xl text-base outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
 
   async function save() {
-    if (!staged || !staged.detail.trim()) {
-      setError('Description is required');
-      return;
-    }
+    if (!staged || !staged.detail.trim()) { setError('Description is required'); return; }
     setBusy(true);
     setError(null);
     try {
       await emsApi.addIntervention(run.id, {
-        type: staged.type,
-        detail: staged.detail,
-        dose: staged.dose || undefined,
-        route: staged.route || undefined,
-        givenByName: staged.givenByName || undefined,
-        outcome: staged.outcome || undefined,
-        notes: staged.notes || undefined,
+        type: staged.type, detail: staged.detail, dose: staged.dose || undefined,
+        route: staged.route || undefined, givenByName: staged.givenByName || undefined,
+        outcome: staged.outcome || undefined, notes: staged.notes || undefined,
       });
       setStaged(null);
       onChanged();
@@ -458,49 +616,34 @@ function Step4Treatments({ run, text, glassInner, isDark, onChanged }: any) {
 
   return (
     <div className="space-y-3">
-      <h4 className={`text-sm font-bold ${text.heading}`}>Treatments given</h4>
-      <p className={`text-xs ${text.muted}`}>
-        Tap a preset to start, then confirm dose / route / given-by before saving. Structured fields make pre-arrival drugs queryable by the doctor at the door.
-      </p>
+      <h4 className={`text-base font-bold ${text.heading}`}>Treatments given</h4>
+      <p className={`text-sm ${text.muted}`}>Tap a preset, then confirm dose / route / given-by before saving.</p>
 
-      {/* Preset chips */}
       {!staged && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {COMMON_INTERVENTIONS.map((it, i) => (
-            <button
-              key={i}
-              onClick={() => pickPreset(it)}
-              disabled={busy}
-              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold ${isDark ? 'bg-white/5 hover:bg-white/10 text-white/80' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'} disabled:opacity-50`}
-            >
-              <Plus className="w-3 h-3" /> {it.detail}
-              {it.dose && <span className="opacity-60">— {it.dose}</span>}
+            <button key={i} onClick={() => { setError(null); setStaged({ ...it }); }} disabled={busy}
+              className={`inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-semibold ${isDark ? 'bg-white/5 hover:bg-white/10 text-white/80' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'} disabled:opacity-50`}>
+              <Plus className="w-3.5 h-3.5" /> {it.detail}{it.dose && <span className="opacity-60">— {it.dose}</span>}
             </button>
           ))}
-          <button
-            onClick={pickCustom}
-            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border-2 border-dashed ${isDark ? 'border-white/20 text-white/70 hover:bg-white/5' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}
-          >
-            <Plus className="w-3 h-3" /> Custom
+          <button onClick={() => { setError(null); setStaged({ type: 'OTHER', detail: '' }); }}
+            className={`inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-semibold border-2 border-dashed ${isDark ? 'border-white/20 text-white/70 hover:bg-white/5' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}>
+            <Plus className="w-3.5 h-3.5" /> Custom
           </button>
         </div>
       )}
 
-      {/* Staging panel — confirm structured fields */}
       {staged && (
         <div className="rounded-xl p-3 space-y-2 ring-1 ring-rose-500/20" style={glassInner}>
           <div className="flex items-center justify-between">
-            <div className={`text-[10px] uppercase font-bold ${text.label}`}>Confirm details</div>
-            <button onClick={() => setStaged(null)} className={`text-[10px] ${text.muted} hover:underline`}>Cancel</button>
+            <div className={`text-sm uppercase font-bold ${text.label}`}>Confirm details</div>
+            <button onClick={() => setStaged(null)} className={`text-sm ${text.muted} hover:underline`}>Cancel</button>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label text={text}>Type</Label>
-              <select
-                value={staged.type}
-                onChange={(e) => setStaged({ ...staged, type: e.target.value as EmsInterventionType })}
-                className={inputClass} style={glassInner}
-              >
+              <select value={staged.type} onChange={(e) => setStaged({ ...staged, type: e.target.value as EmsInterventionType })} className={inputClass} style={glassInner}>
                 {(['OXYGEN','IV_ACCESS','FLUID','MEDICATION','DEFIBRILLATION','AIRWAY','IMMOBILISATION','SPLINTING','TOURNIQUET','CPR','OTHER'] as EmsInterventionType[]).map(t => (
                   <option key={t} value={t}>{t}</option>
                 ))}
@@ -508,126 +651,97 @@ function Step4Treatments({ run, text, glassInner, isDark, onChanged }: any) {
             </div>
             <div>
               <Label text={text}>Description <span className="text-rose-500">*</span></Label>
-              <input
-                value={staged.detail}
-                onChange={(e) => setStaged({ ...staged, detail: e.target.value })}
-                placeholder="Adrenaline / O₂ NRB / IV cannula"
-                className={inputClass} style={glassInner}
-                autoFocus
-              />
+              <input value={staged.detail} onChange={(e) => setStaged({ ...staged, detail: e.target.value })} placeholder="Adrenaline / O₂ NRB / IV cannula" className={inputClass} style={glassInner} autoFocus />
             </div>
             <div>
               <Label text={text}>Dose</Label>
-              <input
-                value={staged.dose ?? ''}
-                onChange={(e) => setStaged({ ...staged, dose: e.target.value })}
-                placeholder="1 mg / 500 ml / 6 L/min"
-                className={inputClass} style={glassInner}
-              />
+              <input value={staged.dose ?? ''} onChange={(e) => setStaged({ ...staged, dose: e.target.value })} placeholder="1 mg / 500 ml / 6 L/min" className={inputClass} style={glassInner} />
             </div>
             <div>
               <Label text={text}>Route</Label>
-              <select
-                value={staged.route ?? ''}
-                onChange={(e) => setStaged({ ...staged, route: e.target.value })}
-                className={inputClass} style={glassInner}
-              >
+              <select value={staged.route ?? ''} onChange={(e) => setStaged({ ...staged, route: e.target.value })} className={inputClass} style={glassInner}>
                 <option value=""></option>
                 {ROUTE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
             <div>
               <Label text={text}>Given by</Label>
-              <input
-                value={staged.givenByName ?? ''}
-                onChange={(e) => setStaged({ ...staged, givenByName: e.target.value })}
-                placeholder="Crew member"
-                className={inputClass} style={glassInner}
-              />
+              <input value={staged.givenByName ?? ''} onChange={(e) => setStaged({ ...staged, givenByName: e.target.value })} placeholder="Crew member" className={inputClass} style={glassInner} />
             </div>
             <div>
               <Label text={text}>Outcome</Label>
-              <input
-                value={staged.outcome ?? ''}
-                onChange={(e) => setStaged({ ...staged, outcome: e.target.value })}
-                placeholder="ROSC at 14:08 / tolerated"
-                className={inputClass} style={glassInner}
-              />
-            </div>
-            <div className="col-span-2">
-              <Label text={text}>Notes (optional)</Label>
-              <input
-                value={staged.notes ?? ''}
-                onChange={(e) => setStaged({ ...staged, notes: e.target.value })}
-                className={inputClass} style={glassInner}
-              />
+              <input value={staged.outcome ?? ''} onChange={(e) => setStaged({ ...staged, outcome: e.target.value })} placeholder="ROSC at 14:08 / tolerated" className={inputClass} style={glassInner} />
             </div>
           </div>
-          <button
-            onClick={save}
-            disabled={busy || !staged.detail.trim()}
-            className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-rose-500 text-white text-xs font-bold hover:bg-rose-600 disabled:opacity-50"
-          >
-            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-            Save intervention
+          <button onClick={save} disabled={busy || !staged.detail.trim()}
+            className="w-full inline-flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-rose-500 text-white text-sm font-bold hover:bg-rose-600 disabled:opacity-50">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Save intervention
           </button>
         </div>
       )}
 
-      {/* Logged interventions — surface structured fields */}
       {run.interventions && run.interventions.length > 0 && (
         <div className="space-y-1.5">
-          <div className={`text-[10px] uppercase font-bold ${text.label}`}>Logged ({run.interventions.length})</div>
+          <div className={`text-sm uppercase font-bold ${text.label}`}>Logged ({run.interventions.length})</div>
           {run.interventions.map((iv: any) => (
-            <div key={iv.id} className="rounded-xl px-3 py-2 text-xs" style={glassInner}>
+            <div key={iv.id} className="rounded-xl px-3 py-2 text-sm" style={glassInner}>
               <div className="flex items-center justify-between gap-2">
                 <span className={text.body}>
-                  <span className={`text-[10px] font-bold mr-1 ${text.label}`}>{iv.type}</span>
+                  <span className={`text-xs font-bold mr-1 ${text.label}`}>{iv.type}</span>
                   {iv.detail || ''}
                   {iv.dose && <span className={`ml-1 ${text.muted}`}>• {iv.dose}</span>}
                   {iv.route && <span className={`ml-1 ${text.muted}`}>• {iv.route}</span>}
                 </span>
-                <span className={`text-[10px] ${text.muted} shrink-0`}>
+                <span className={`text-xs ${text.muted} shrink-0`}>
                   {new Date(iv.givenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
-              {(iv.givenByName || iv.outcome) && (
-                <div className={`text-[10px] mt-0.5 ${text.muted}`}>
-                  {iv.givenByName && <>by {iv.givenByName}</>}
-                  {iv.givenByName && iv.outcome && ' • '}
-                  {iv.outcome && <>outcome: {iv.outcome}</>}
-                </div>
-              )}
             </div>
           ))}
         </div>
       )}
 
-      {error && <div className="rounded-xl px-3 py-2 text-xs font-semibold bg-rose-500/10 text-rose-500">{error}</div>}
+      {error && <div className="rounded-xl px-3 py-2 text-sm font-semibold bg-rose-500/10 text-rose-500">{error}</div>}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Step 5 — send pre-arrival ping
+// Step 5 — lights + send pre-arrival
 // ─────────────────────────────────────────────────────────────────
 
-function Step5Send({ draft, setDraft, text, glassInner, isDark, run }: any) {
-  const inputClass = `w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
+function Step5Send({ draft, setDraft, text, glassInner, isDark, run, onToggleLights }: any) {
+  const inputClass = `w-full px-3 py-3 rounded-xl text-base outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
+  const lights = !!run?.lightsActive;
   return (
-    <div className="space-y-3">
-      <h4 className={`text-sm font-bold ${text.heading}`}>Send pre-arrival to ED</h4>
-      <p className={`text-xs ${text.muted}`}>
-        The receiving hospital's charge nurse will see your run on their inbound board with the field triage,
-        vitals and treatments. Bay prep starts as soon as you tap send.
+    <div className="space-y-4">
+      <h4 className={`text-base font-bold ${text.heading}`}>Send pre-arrival to ED</h4>
+      <p className={`text-sm ${text.muted}`}>
+        The receiving hospital's charge nurse is alerted in real time with your field triage, vitals and treatments.
+        Bay prep starts the moment you send.
       </p>
 
+      {/* Lights toggle */}
+      <button onClick={onToggleLights}
+        className={`w-full flex items-center justify-between gap-3 px-4 py-3.5 rounded-xl border-2 transition-colors ${
+          lights ? 'bg-rose-500/15 border-rose-500/50' : isDark ? 'border-white/10 hover:border-white/20' : 'border-slate-200 hover:border-slate-300'}`}>
+        <span className="flex items-center gap-2">
+          <Siren className={`w-5 h-5 ${lights ? 'text-rose-500 animate-pulse' : text.muted}`} />
+          <span className={`text-base font-bold ${lights ? 'text-rose-500' : text.heading}`}>
+            {lights ? 'Lights ON — priority transport' : 'Activate lights (priority transport)'}
+          </span>
+        </span>
+        <span className={`text-sm font-bold px-3 py-1 rounded-full ${lights ? 'bg-rose-500 text-white' : isDark ? 'bg-white/10 text-white/60' : 'bg-slate-200 text-slate-500'}`}>
+          {lights ? 'ON' : 'OFF'}
+        </span>
+      </button>
+
       <div className="rounded-xl p-3" style={glassInner}>
-        <div className={`text-[10px] uppercase font-bold mb-2 ${text.label}`}>Summary</div>
-        <div className={`text-xs ${text.body} space-y-1`}>
+        <div className={`text-sm uppercase font-bold mb-2 ${text.label}`}>Summary</div>
+        <div className={`text-sm ${text.body} space-y-1`}>
           <div><b>Patient:</b> {run?.patientAgeYears ?? '—'}y {run?.patientSex ?? ''}</div>
           <div><b>Mechanism:</b> {run?.mechanism ?? '—'}</div>
-          <div><b>Field triage:</b> {run?.fieldTriageCategory ?? '—'}</div>
+          <div><b>Field triage:</b> {run?.fieldTriageCategory ?? '— (compute on step 3)'} {run?.fieldTewsScore != null ? `· TEWS ${run.fieldTewsScore}` : ''}</div>
           <div><b>Vitals:</b> GCS {run?.fieldGcs ?? '—'} • HR {run?.fieldHr ?? '—'} • BP {run?.fieldSbp ?? '—'}/{run?.fieldDbp ?? '—'} • SpO₂ {run?.fieldSpo2 ?? '—'}%</div>
           <div><b>Interventions:</b> {run?.interventions?.length ?? 0}</div>
         </div>
@@ -635,15 +749,14 @@ function Step5Send({ draft, setDraft, text, glassInner, isDark, run }: any) {
 
       <div>
         <Label text={text}>ETA (minutes)</Label>
-        <input type="number" value={draft.etaMinutes} onChange={(e) => setDraft({ ...draft, etaMinutes: e.target.value })}
-          placeholder="8" className={inputClass} style={glassInner} />
+        <input type="number" inputMode="numeric" value={draft.etaMinutes} onChange={(e) => setDraft({ ...draft, etaMinutes: e.target.value })} placeholder="8" className={inputClass} style={glassInner} />
       </div>
 
       <div className="rounded-xl p-3 bg-amber-500/10 ring-1 ring-amber-500/20 flex items-start gap-2">
-        <AlertOctagon className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-        <p className={`text-[11px] ${text.body}`}>
-          For RED / cardiac-arrest cases also use the resus call channel. The ED nurse will confirm arrival
-          when you roll in and acknowledge handover after MIST.
+        <AlertOctagon className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
+        <p className={`text-sm ${text.body}`}>
+          For RED / cardiac-arrest cases the charge nurse and resus zone get an urgent audible alert. The ED nurse
+          confirms arrival when you roll in and acknowledges handover after MIST.
         </p>
       </div>
     </div>
@@ -651,5 +764,5 @@ function Step5Send({ draft, setDraft, text, glassInner, isDark, run }: any) {
 }
 
 function Label({ text, children }: any) {
-  return <label className={`text-[10px] font-bold uppercase tracking-wider mb-1 block ${text.label}`}>{children}</label>;
+  return <label className={`text-sm font-bold uppercase tracking-wide mb-1 block ${text.label}`}>{children}</label>;
 }
