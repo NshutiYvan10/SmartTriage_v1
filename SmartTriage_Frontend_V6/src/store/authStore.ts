@@ -12,6 +12,8 @@ export interface AuthUser {
   id: string;
   fullName: string;
   email: string;
+  /** Self-editable contact phone (from the user record; persisted via the Profile page). */
+  phone?: string;
   role: UserRole;
   designation?: string;
   designationLabel?: string;
@@ -110,6 +112,7 @@ function authResponseToUser(auth: AuthResponse): AuthUser {
     id: auth.userId,
     fullName: `${auth.firstName} ${auth.lastName}`,
     email: auth.email,
+    phone: auth.phoneNumber ?? undefined,
     role: mapRole(auth.role),
     designation: auth.designation ?? undefined,
     designationLabel: auth.designationLabel ?? undefined,

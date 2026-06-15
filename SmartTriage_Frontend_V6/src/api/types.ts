@@ -170,6 +170,7 @@ export interface AuthResponse {
   email: string;
   firstName: string;
   lastName: string;
+  phoneNumber?: string;
   role: Role;
   designation: Designation | null;
   designationLabel: string | null;

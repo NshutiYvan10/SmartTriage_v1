@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuthStore } from '../../store/authStore';
+import { userApi } from '../../api/users';
 import { useMyShift } from '../../hooks/useMyShift';
 import { ROLE_META } from '../../types/roles';
 import type { UserRole } from '../../types/roles';
@@ -58,7 +59,7 @@ interface UserProfile {
 
 
 
-function buildProfileFromAuth(user: { fullName: string; email: string; role: UserRole; designationLabel?: string; department?: string; hospital?: string }): UserProfile {
+function buildProfileFromAuth(user: { fullName: string; email: string; role: UserRole; phone?: string; designationLabel?: string; department?: string; hospital?: string }): UserProfile {
   const nameParts = user.fullName.split(' ');
   const firstName = nameParts.slice(0, -1).join(' ') || nameParts[0];
   const lastName = nameParts[nameParts.length - 1];
@@ -68,7 +69,7 @@ function buildProfileFromAuth(user: { fullName: string; email: string; role: Use
     firstName,
     lastName,
     email: user.email,
-    phone: '',
+    phone: user.phone ?? '',
     role: roleMeta.label,
     designation: user.designationLabel || 'Not set',
     department: user.department || 'General',
@@ -85,12 +86,13 @@ function buildProfileFromAuth(user: { fullName: string; email: string; role: Use
 export function ProfilePage() {
   const { isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
   const roleMeta = user ? ROLE_META[user.role] : null;
 
   const activeProfile = useMemo(() => {
     if (!user) return null;
     return buildProfileFromAuth(user);
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, user?.fullName, user?.phone]);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -116,13 +118,42 @@ export function ProfilePage() {
   const [darkMode, setDarkMode] = useState(false);
   const [compactView, setCompactView] = useState(false);
 
-  const handleSave = () => {
-    setProfile(displayEditProfile);
-    setIsEditing(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!displayEditProfile || !user) return;
+    const firstName = displayEditProfile.firstName.trim();
+    const lastName = displayEditProfile.lastName.trim();
+    if (!firstName || !lastName) {
+      setSaveError('First and last name are required.');
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const phoneNumber = displayEditProfile.phone?.trim() || undefined;
+      // Persist to the backend (PUT /users/me/profile).
+      await userApi.updateMyProfile({ firstName, lastName, phoneNumber });
+      // Reflect the saved values app-wide (header, etc.) and into localStorage so
+      // they survive a reload — setUser persists the user.
+      setUser({
+        ...user,
+        fullName: `${firstName} ${lastName}`,
+        phone: phoneNumber,
+      });
+      setProfile(displayEditProfile);
+      setIsEditing(false);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Failed to save profile. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCancel = () => {
     setEditedProfile(displayProfile);
+    setSaveError(null);
     setIsEditing(false);
   };
 
@@ -200,10 +231,11 @@ export function ProfilePage() {
                     </button>
                     <button
                       onClick={handleSave}
-                      className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-800 bg-white hover:bg-gray-50 rounded-xl transition-all duration-300 shadow-lg hover:-translate-y-0.5"
+                      disabled={saving}
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-800 bg-white hover:bg-gray-50 rounded-xl transition-all duration-300 shadow-lg hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      <Save className="w-3.5 h-3.5" />
-                      Save Changes
+                      {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      {saving ? 'Saving…' : 'Save Changes'}
                     </button>
                   </>
                 ) : (
@@ -219,6 +251,14 @@ export function ProfilePage() {
             </div>
           </div>
         </div>
+
+        {/* ── Save error ── */}
+        {saveError && (
+          <div className="glass-card rounded-2xl px-5 py-3 flex items-center gap-2 animate-fade-up border-l-4 border-red-500" style={{ background: 'rgba(254,242,242,0.85)' }}>
+            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+            <span className="text-sm font-semibold text-red-700">{saveError}</span>
+          </div>
+        )}
 
         {/* ── Tab Navigation ── */}
         <div className="glass-card rounded-2xl p-1.5 animate-fade-up" style={{ animationDelay: '0.1s' }}>

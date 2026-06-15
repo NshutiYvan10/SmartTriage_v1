@@ -26,6 +26,14 @@ export const userApi = {
   update: (id: string, data: Partial<CreateUserRequest>) =>
     put<UserResponse>(`/users/${id}`, data),
 
+  /**
+   * Self-service profile edit — the signed-in user updates their OWN name and
+   * phone. Hits PUT /users/me/profile, which always acts on the authenticated
+   * principal (no id needed). This is the real save the Profile page uses.
+   */
+  updateMyProfile: (data: { firstName: string; lastName: string; phoneNumber?: string }) =>
+    put<UserResponse>('/users/me/profile', data),
+
   getById: (id: string) =>
     get<UserResponse>(`/users/${id}`),
 

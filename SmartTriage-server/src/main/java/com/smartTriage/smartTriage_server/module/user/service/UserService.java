@@ -9,6 +9,7 @@ import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundExcep
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import com.smartTriage.smartTriage_server.module.hospital.service.HospitalService;
 import com.smartTriage.smartTriage_server.module.user.dto.CreateUserRequest;
+import com.smartTriage.smartTriage_server.module.user.dto.UpdateProfileRequest;
 import com.smartTriage.smartTriage_server.module.user.dto.UpdateUserRequest;
 import com.smartTriage.smartTriage_server.module.user.dto.UserResponse;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
@@ -232,6 +233,25 @@ public class UserService implements UserDetailsService {
      * replacement first — every hospital floor needs at least one
      * permanent unit-management authority.
      */
+    /**
+     * Self-service profile update — a user editing THEIR OWN name / phone from
+     * the Profile page. Only the narrow {@link UpdateProfileRequest} fields are
+     * touched; role / designation / email / hospital are left untouched (those
+     * stay admin-only). The {@code userId} is the authenticated principal's own
+     * id (resolved in the controller), so this can never write another user.
+     */
+    @Transactional
+    public UserResponse updateMyProfile(UUID userId, UpdateProfileRequest request) {
+        User user = findUserOrThrow(userId);
+        user.setFirstName(request.getFirstName().trim());
+        user.setLastName(request.getLastName().trim());
+        String phone = request.getPhoneNumber();
+        user.setPhoneNumber(phone != null && !phone.isBlank() ? phone.trim() : null);
+        user = userRepository.save(user);
+        log.info("User {} updated their own profile (name/phone)", user.getEmail());
+        return UserMapper.toResponse(user);
+    }
+
     private void assertNotLastChargeNurse(User user, String actionVerb) {
         UUID hospitalId = user.getHospital().getId();
         long currentCount = userRepository

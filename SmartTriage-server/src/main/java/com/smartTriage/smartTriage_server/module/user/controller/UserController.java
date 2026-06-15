@@ -4,8 +4,10 @@ import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.common.enums.Designation;
 import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.module.user.dto.CreateUserRequest;
+import com.smartTriage.smartTriage_server.module.user.dto.UpdateProfileRequest;
 import com.smartTriage.smartTriage_server.module.user.dto.UpdateUserRequest;
 import com.smartTriage.smartTriage_server.module.user.dto.UserResponse;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +17,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
@@ -99,6 +102,22 @@ public class UserController {
             @PathVariable UUID id, @Valid @RequestBody UpdateUserRequest request) {
         UserResponse response = userService.updateUser(id, request);
         return ResponseEntity.ok(ApiResponse.success("User updated", response));
+    }
+
+    /**
+     * Self-service profile edit — the signed-in user updates THEIR OWN name and
+     * phone from the Profile page. Always operates on the authenticated
+     * principal's own id (never a path-supplied id), so any logged-in user may
+     * call it with no cross-user write risk. This is the save path the Profile
+     * page was previously missing entirely (the old "Save" was a no-op).
+     */
+    @PutMapping("/me/profile")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<UserResponse>> updateMyProfile(
+            @AuthenticationPrincipal User principal,
+            @Valid @RequestBody UpdateProfileRequest request) {
+        UserResponse response = userService.updateMyProfile(principal.getId(), request);
+        return ResponseEntity.ok(ApiResponse.success("Profile updated", response));
     }
 
     /**
