@@ -12,6 +12,7 @@ import com.smartTriage.smartTriage_server.common.enums.VisitStatus;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
+import com.smartTriage.smartTriage_server.module.alert.service.ClinicalAlertService;
 import com.smartTriage.smartTriage_server.module.ems.dto.CreateEmsRunRequest;
 import com.smartTriage.smartTriage_server.module.ems.dto.EmsRunResponse;
 import com.smartTriage.smartTriage_server.module.ems.dto.FieldTriageRequest;
@@ -63,6 +64,7 @@ class EmsWorkflowIntegrationTest extends AbstractIntegrationTest {
     @Autowired private VisitRepository visitRepository;
     @Autowired private ClinicalAlertRepository alertRepository;
     @Autowired private EmsRunService emsRunService;
+    @Autowired private ClinicalAlertService clinicalAlertService;
 
     private Hospital hospital;
     private User paramedic;
@@ -152,6 +154,9 @@ class EmsWorkflowIntegrationTest extends AbstractIntegrationTest {
         Visit afterArrival = visitRepository.findById(enRoute.getVisitId()).orElseThrow();
         assertEquals(VisitStatus.AWAITING_TRIAGE, afterArrival.getStatus());
         assertNotNull(afterArrival.getEdRetriageDueAt());
+        // RED arrival → tighter 5-min re-triage fuse (not the default 15).
+        assertEquals(java.time.Duration.ofMinutes(5),
+                java.time.Duration.between(afterArrival.getArrivalConfirmedAt(), afterArrival.getEdRetriageDueAt()));
 
         // Receiving nurse (not the paramedic) acknowledges handover.
         actAs(nurse);
@@ -235,5 +240,27 @@ class EmsWorkflowIntegrationTest extends AbstractIntegrationTest {
         // Patient row is hospital-scoped — a silent cross-hospital move is refused.
         assertThrows(ClinicalBusinessException.class, () ->
                 emsRunService.reroute(run.getId(), RerouteRequest.builder().hospitalId(other.getId()).build()));
+    }
+
+    @Test
+    void preArrivalAck_stampsRunSoParamedicSeesItWasReceived() {
+        actAs(paramedic);
+        EmsRunResponse run = newRun(hospital);
+        EmsRunResponse enRoute = emsRunService.preregister(run.getId(), new PreregisterRequest());
+
+        ClinicalAlert preArrival = alertRepository
+                .findByVisitIdAndIsActiveTrueOrderByCreatedAtDesc(enRoute.getVisitId(), PageRequest.of(0, 10))
+                .getContent().stream()
+                .filter(a -> a.getAlertType() == AlertType.EMS_PRE_ARRIVAL)
+                .findFirst().orElseThrow();
+
+        // The receiving nurse acknowledges the inbound.
+        actAs(nurse);
+        clinicalAlertService.acknowledgeAlert(preArrival.getId(), "Prepping bay");
+
+        // The paramedic's run now reflects that the ED received it.
+        EmsRunResponse refreshed = emsRunService.getById(run.getId());
+        assertNotNull(refreshed.getPreArrivalAckedAt());
+        assertNotNull(refreshed.getPreArrivalAckedByName());
     }
 }

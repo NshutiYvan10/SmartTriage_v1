@@ -70,6 +70,9 @@ public class EmsRunResponse {
     private boolean lightsActive;
     private Instant lightsActivatedAt;
 
+    private Instant preArrivalAckedAt;
+    private String preArrivalAckedByName;
+
     private Instant createdAt;
     private Instant updatedAt;
 

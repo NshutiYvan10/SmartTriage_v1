@@ -184,6 +184,15 @@ public class EmsRun extends BaseEntity {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
+    // ── Pre-arrival acknowledgement (receiving ED → paramedic feedback)
+
+    /** When the receiving ED acknowledged the pre-arrival alert (first ack wins). */
+    @Column(name = "pre_arrival_acked_at")
+    private Instant preArrivalAckedAt;
+
+    @Column(name = "pre_arrival_acked_by_name", length = 255)
+    private String preArrivalAckedByName;
+
     // ── Lights / priority transport
 
     /** Blue-light run — drives urgent (audible, RESUS-routed) pre-arrival alerts. */

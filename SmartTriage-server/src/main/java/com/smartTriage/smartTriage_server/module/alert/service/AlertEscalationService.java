@@ -52,6 +52,8 @@ public class AlertEscalationService {
     // Escalation thresholds
     private static final int TIER_2_MINUTES = 2;
     private static final int TIER_3_MINUTES = 5;
+    /** A CRITICAL ambulance pre-arrival (RED / lights) unacknowledged this long is re-alarmed. */
+    private static final int EMS_PREARRIVAL_REESCALATE_MINUTES = 2;
 
     /**
      * Create and route a doctor notification alert for a triaged patient.
@@ -180,6 +182,29 @@ public class AlertEscalationService {
                         alert.getId(), e.getMessage());
             }
         }
+
+        // Incoming CRITICAL ambulance pre-arrivals (RED / lights). These fire
+        // once on submit; if the receiving team doesn't acknowledge a crashing
+        // patient who may be only minutes out, re-alarm hospital-wide on a
+        // SHORT fuse (the ETA can be < 5 min, so we don't wait the full
+        // time-critical window). Idempotent via escalatedAt (the finder already
+        // filters escalatedAt IS NULL).
+        for (ClinicalAlert alert : clinicalAlertRepository.findUnescalatedCriticalEmsPreArrivals()) {
+            try {
+                long minutesSinceCreate = ChronoUnit.MINUTES
+                        .between(alert.getCreatedAt() != null ? alert.getCreatedAt() : Instant.now(), Instant.now());
+                if (minutesSinceCreate < EMS_PREARRIVAL_REESCALATE_MINUTES) {
+                    continue; // still inside the ack window
+                }
+                UUID hospitalId = alert.getVisit().getPatient().getHospital().getId();
+                rebroadcastTimeCriticalAlert(alert, hospitalId);
+                log.warn("[escalation] Unacknowledged CRITICAL inbound pre-arrival {} re-alarmed at hospital {}",
+                        alert.getId(), hospitalId);
+            } catch (Exception e) {
+                log.warn("Failed to escalate inbound pre-arrival alert {}: {}",
+                        alert.getId(), e.getMessage());
+            }
+        }
     }
 
     /**
@@ -190,11 +215,14 @@ public class AlertEscalationService {
      * DOCTOR_NOTIFICATION does; the second broadcast IS the escalation.
      */
     private void rebroadcastTimeCriticalAlert(ClinicalAlert alert, UUID hospitalId) {
+        long unackedMin = alert.getCreatedAt() != null
+                ? ChronoUnit.MINUTES.between(alert.getCreatedAt(), Instant.now())
+                : 0;
         alert.setEscalatedAt(Instant.now());
         alert.setEscalationTier(2);
         alert.setSeverity(AlertSeverity.CRITICAL);
         alert.setMessage(alert.getMessage() + "  [ESCALATED — unacknowledged for "
-                + TIER_3_MINUTES + " minutes]");
+                + unackedMin + " min]");
         clinicalAlertRepository.save(alert);
 
         java.util.Map<String, Object> alertWithAlarm = new java.util.HashMap<>();

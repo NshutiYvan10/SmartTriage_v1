@@ -250,9 +250,19 @@ function RunCard({ run, glassCard, glassInner, text, isDark, onOpen, onPreregist
               <Siren className="w-3.5 h-3.5 animate-pulse" /> Lights
             </span>
           )}
+          {run.preArrivalAckedAt && (
+            <span className="text-xs font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-600 inline-flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> ED acknowledged
+            </span>
+          )}
         </div>
         <span className={`text-xs ${text.muted}`}>{formatDistanceToNow(new Date(run.dispatchedAt), { addSuffix: true })}</span>
       </div>
+      {run.preArrivalAckedAt && (
+        <div className="text-sm text-emerald-600 flex items-center gap-1 mb-2">
+          <CheckCircle2 className="w-4 h-4" /> Received by {run.preArrivalAckedByName ?? 'ED'} · {formatDistanceToNow(new Date(run.preArrivalAckedAt), { addSuffix: true })}
+        </div>
+      )}
 
       <div className="mb-2">
         <div className={`text-base font-bold ${text.heading}`}>{run.mechanism ?? 'Patient'}</div>

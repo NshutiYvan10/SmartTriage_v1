@@ -71,6 +71,8 @@ import java.util.stream.Collectors;
 public class EmsRunService {
 
     private static final Duration ED_RETRIAGE_WINDOW = Duration.ofMinutes(15);
+    /** Tighter re-triage fuse for a field-RED / lights arrival — they can't wait 15 min at the door. */
+    private static final Duration ED_RETRIAGE_WINDOW_RED = Duration.ofMinutes(5);
 
     private final EmsRunRepository emsRunRepository;
     private final EmsInterventionRepository interventionRepository;
@@ -506,7 +508,10 @@ public class EmsRunService {
 
         Visit v = run.getVisit();
         v.setArrivalConfirmedAt(now);
-        v.setEdRetriageDueAt(now.plus(ED_RETRIAGE_WINDOW));
+        // RED / lights arrivals get a tighter ED re-triage deadline — a
+        // field-critical patient at the door must not sit 15 min un-triaged.
+        boolean redOrLights = isRedField(run.getFieldTriageCategory()) || run.isLightsActive();
+        v.setEdRetriageDueAt(now.plus(redOrLights ? ED_RETRIAGE_WINDOW_RED : ED_RETRIAGE_WINDOW));
         // B11 — advance REGISTERED → AWAITING_TRIAGE on physical arrival so the
         // triage queue/board reflects "arrived, awaiting triage" rather than the
         // pre-arrival REGISTERED state. Guarded to REGISTERED so a visit that has

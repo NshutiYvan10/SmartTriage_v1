@@ -80,6 +80,9 @@ export interface EmsRun {
   lightsActive: boolean;
   lightsActivatedAt: string | null;
 
+  preArrivalAckedAt: string | null;
+  preArrivalAckedByName: string | null;
+
   createdAt: string;
   updatedAt: string;
 

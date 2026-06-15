@@ -95,6 +95,19 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
         List<ClinicalAlert> findUnacknowledgedTimeCriticalAlerts();
 
         /**
+         * Unacknowledged, not-yet-re-escalated CRITICAL ambulance pre-arrivals
+         * (RED / lights). Fed to the escalation scheduler so a crashing inbound
+         * that nobody acknowledged gets re-alarmed before the patient arrives.
+         * escalatedAt IS NULL ensures we re-page only once.
+         */
+        @Query("SELECT a FROM ClinicalAlert a WHERE a.isActive = true AND a.isAcknowledged = false " +
+                        "AND a.escalatedAt IS NULL " +
+                        "AND a.alertType = com.smartTriage.smartTriage_server.common.enums.AlertType.EMS_PRE_ARRIVAL " +
+                        "AND a.severity = com.smartTriage.smartTriage_server.common.enums.AlertSeverity.CRITICAL " +
+                        "ORDER BY a.createdAt ASC")
+        List<ClinicalAlert> findUnescalatedCriticalEmsPreArrivals();
+
+        /**
          * Unacknowledged alerts for a specific zone — for zone doctor dashboard.
          */
         @Query("SELECT a FROM ClinicalAlert a JOIN a.visit v WHERE v.hospital.id = :hospitalId " +

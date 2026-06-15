@@ -1,10 +1,15 @@
 package com.smartTriage.smartTriage_server.module.alert.service;
 
 import com.smartTriage.smartTriage_server.common.enums.AlertSeverity;
+import com.smartTriage.smartTriage_server.common.enums.AlertType;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
+import com.smartTriage.smartTriage_server.common.enums.EmsRunStatus;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
+import com.smartTriage.smartTriage_server.module.ems.mapper.EmsRunMapper;
+import com.smartTriage.smartTriage_server.module.ems.repository.EmsRunRepository;
+import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +36,8 @@ import java.util.UUID;
 public class ClinicalAlertService {
 
     private final ClinicalAlertRepository clinicalAlertRepository;
+    private final EmsRunRepository emsRunRepository;
+    private final RealTimeEventPublisher eventPublisher;
 
     public Page<ClinicalAlert> getAlertsForVisit(UUID visitId, Pageable pageable) {
         return clinicalAlertRepository.findByVisitIdAndIsActiveTrueOrderByCreatedAtDesc(visitId, pageable);
@@ -115,6 +122,37 @@ public class ClinicalAlertService {
         alert = clinicalAlertRepository.save(alert);
         log.info("Alert acknowledged: {} (Type: {} Severity: {} Tier: {})",
                 alert.getId(), alert.getAlertType(), alert.getSeverity(), alert.getEscalationTier());
+
+        // Reflect an EMS pre-arrival acknowledgement back to the paramedic:
+        // stamp the run so the crew's dashboard shows "ED acknowledged — <name>"
+        // (first ack wins). The paramedic otherwise had no "the hospital has
+        // seen you" signal until handover.
+        if (alert.getAlertType() == AlertType.EMS_PRE_ARRIVAL && alert.getVisit() != null) {
+            try {
+                String acker = ackerName(alert);
+                emsRunRepository.findByVisitIdAndIsActiveTrue(alert.getVisit().getId()).ifPresent(run -> {
+                    if (run.getPreArrivalAckedAt() == null
+                            && run.getStatus() != EmsRunStatus.HANDED_OFF
+                            && run.getStatus() != EmsRunStatus.CANCELLED) {
+                        run.setPreArrivalAckedAt(Instant.now());
+                        run.setPreArrivalAckedByName(acker);
+                        emsRunRepository.save(run);
+                        eventPublisher.publishEmsRun(run.getHospital().getId(), EmsRunMapper.toResponse(run));
+                    }
+                });
+            } catch (Exception e) {
+                log.warn("Could not stamp EMS pre-arrival ack for visit {}: {}",
+                        alert.getVisit().getId(), e.getMessage());
+            }
+        }
         return alert;
+    }
+
+    private static String ackerName(ClinicalAlert alert) {
+        User u = alert.getAcknowledgedBy();
+        if (u == null) return "ED";
+        String n = ((u.getFirstName() != null ? u.getFirstName() : "") + " "
+                + (u.getLastName() != null ? u.getLastName() : "")).trim();
+        return n.isEmpty() ? "ED" : n;
     }
 }
