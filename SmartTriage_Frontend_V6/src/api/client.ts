@@ -201,3 +201,47 @@ export function patch<T>(path: string, data?: unknown): Promise<T> {
 export function del<T>(path: string): Promise<T> {
   return apiRequest<T>(path, { method: 'DELETE' });
 }
+
+/**
+ * Authed binary GET for file downloads (e.g. PDF). Returns the Blob plus the
+ * server's Content-Disposition filename (falling back to `fallbackName`).
+ * Handles a single 401 → refresh → retry like apiRequest.
+ */
+export async function downloadBlob(
+  path: string,
+  fallbackName = 'download'
+): Promise<{ blob: Blob; filename: string }> {
+  const doFetch = () => {
+    const headers: Record<string, string> = {};
+    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+    return fetch(`${API_BASE}${path}`, { method: 'GET', headers });
+  };
+  let response = await doFetch();
+  if (response.status === 401 && refreshToken) {
+    const refreshed = await refreshAccessToken();
+    if (!refreshed) {
+      window.location.href = '/';
+      throw new ApiError('Session expired', 401);
+    }
+    response = await doFetch();
+  }
+  if (!response.ok) {
+    throw new ApiError(`Download failed with status ${response.status}`, response.status);
+  }
+  const blob = await response.blob();
+  const cd = response.headers.get('Content-Disposition') || '';
+  const match = /filename="?([^"]+)"?/.exec(cd);
+  return { blob, filename: match ? match[1] : fallbackName };
+}
+
+/** Trigger a browser download of a Blob with the given filename. */
+export function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

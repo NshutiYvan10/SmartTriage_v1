@@ -17,7 +17,11 @@ import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import com.smartTriage.smartTriage_server.module.hospital.repository.HospitalRepository;
 import com.smartTriage.smartTriage_server.module.medication.entity.MedicationAdministration;
 import com.smartTriage.smartTriage_server.module.medication.repository.MedicationAdministrationRepository;
+import com.smartTriage.smartTriage_server.module.isolation.entity.InfectionScreening;
+import com.smartTriage.smartTriage_server.module.isolation.repository.InfectionScreeningRepository;
 import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
+import com.smartTriage.smartTriage_server.module.patient.entity.PatientAllergy;
+import com.smartTriage.smartTriage_server.module.patient.repository.PatientAllergyRepository;
 import com.smartTriage.smartTriage_server.module.triage.entity.TriageRecord;
 import com.smartTriage.smartTriage_server.module.triage.repository.TriageRecordRepository;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
@@ -64,6 +68,8 @@ public class HandoverReportService {
     private final MedicationAdministrationRepository medicationAdministrationRepository;
     private final ClinicalAlertRepository clinicalAlertRepository;
     private final ClinicalNoteRepository clinicalNoteRepository;
+    private final PatientAllergyRepository patientAllergyRepository;
+    private final InfectionScreeningRepository infectionScreeningRepository;
     /**
      * V67 — builds the dedicated medication-audit section (typed orders,
      * dose-by-dose log with actors/witnesses/reasons, PRN usage,
@@ -199,6 +205,23 @@ public class HandoverReportService {
     private String buildPatientSummary(Visit visit) {
         Patient patient = visit.getPatient();
         StringBuilder sb = new StringBuilder();
+
+        // Unidentified placeholder — must be unmistakable so the incoming team
+        // never mistakes "Unknown Alpha" for a real name, and knows identity is
+        // an open, time-sensitive task.
+        if (patient.isUnidentified()) {
+            String label = patient.getPlaceholderLabel() != null
+                    ? patient.getPlaceholderLabel() : patient.getLastName();
+            sb.append("** UNIDENTIFIED PATIENT ** — registered as placeholder \"Unknown ")
+              .append(label).append("\".\n");
+            if (patient.getPlaceholderAssignedAt() != null) {
+                long mins = Duration.between(patient.getPlaceholderAssignedAt(), Instant.now()).toMinutes();
+                sb.append("   Identity UNRESOLVED for ").append(formatDuration(mins))
+                  .append(" — resolve via 'Set Patient Identity' on the chart as soon as possible.\n");
+            }
+            sb.append("\n");
+        }
+
         sb.append("Name: ").append(patient.getFirstName()).append(" ").append(patient.getLastName()).append("\n");
 
         if (patient.getDateOfBirth() != null) {
@@ -217,17 +240,87 @@ public class HandoverReportService {
         sb.append("Visit Number: ").append(visit.getVisitNumber()).append("\n");
         sb.append("Pediatric: ").append(visit.isPediatric() ? "Yes" : "No").append("\n");
 
+        // Current physical location — so the incoming clinician can find the patient.
+        sb.append("Location: ");
+        sb.append(visit.getCurrentEdZone() != null ? "Zone " + visit.getCurrentEdZone() : "Zone —");
+        var bed = visit.getCurrentBed();
+        if (bed != null) {
+            sb.append(", Bed ").append(bed.getCode() != null ? bed.getCode() : "");
+            if (bed.getLabel() != null && !bed.getLabel().isBlank()) {
+                sb.append(" (").append(bed.getLabel()).append(")");
+            }
+        } else {
+            sb.append(", no bed assigned");
+        }
+        sb.append("\n");
+
         if (patient.getChronicConditions() != null && !patient.getChronicConditions().isBlank()) {
             sb.append("Known Conditions: ").append(patient.getChronicConditions()).append("\n");
         }
-        if (patient.getKnownAllergies() != null && !patient.getKnownAllergies().isBlank()) {
-            sb.append("Allergies: ").append(patient.getKnownAllergies()).append("\n");
-        }
+
+        // Allergies — prefer the structured, verification-aware list (refuted
+        // entries are excluded by findActiveByPatientId); fall back to the
+        // legacy free-text only if no structured rows exist.
+        sb.append(buildAllergyLine(patient));
+
         if (patient.getBloodType() != null) {
             sb.append("Blood Type: ").append(patient.getBloodType()).append("\n");
         }
 
+        // Infection-control / isolation status.
+        String isolation = buildIsolationLine(visit);
+        if (isolation != null) {
+            sb.append(isolation);
+        }
+
         return sb.toString();
+    }
+
+    private String buildAllergyLine(Patient patient) {
+        List<PatientAllergy> allergies = patientAllergyRepository.findActiveByPatientId(patient.getId());
+        if (allergies.isEmpty()) {
+            if (patient.getKnownAllergies() != null && !patient.getKnownAllergies().isBlank()) {
+                return "Allergies (unverified free-text): " + patient.getKnownAllergies() + "\n";
+            }
+            return "Allergies: None known\n";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("** ALLERGIES (").append(allergies.size()).append(") **\n");
+        for (PatientAllergy a : allergies) {
+            String name = a.getAllergenName();
+            if (name == null || name.isBlank()) name = "Unknown allergen";
+            sb.append("   - ").append(name);
+            if (a.getSeverity() != null) sb.append(" [").append(a.getSeverity()).append("]");
+            if (a.getReaction() != null && !a.getReaction().isBlank()) sb.append(" — ").append(a.getReaction());
+            if (a.getVerificationStatus() != null) sb.append(" (").append(a.getVerificationStatus()).append(")");
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
+
+    private String buildIsolationLine(Visit visit) {
+        List<InfectionScreening> screenings = infectionScreeningRepository
+                .findByVisitIdAndIsActiveTrueOrderByScreenedAtDesc(visit.getId());
+        if (screenings.isEmpty()) return null;
+        InfectionScreening latest = screenings.get(0);
+        var iso = latest.getIsolationType();
+        boolean active = iso != null && !"NONE".equalsIgnoreCase(iso.name())
+                && latest.getIsolationEndedAt() == null;
+        if (!active) return null;
+        StringBuilder sb = new StringBuilder();
+        sb.append("** ISOLATION: ").append(iso);
+        if (latest.getIsolationRoomAssigned() != null && !latest.getIsolationRoomAssigned().isBlank()) {
+            sb.append(" — room ").append(latest.getIsolationRoomAssigned());
+        }
+        if (latest.getRiskLevel() != null) sb.append(" (risk: ").append(latest.getRiskLevel()).append(")");
+        sb.append(" **\n");
+        return sb.toString();
+    }
+
+    private static String formatDuration(long minutes) {
+        if (minutes < 60) return minutes + " min";
+        long h = minutes / 60, m = minutes % 60;
+        return m == 0 ? h + "h" : h + "h " + m + "m";
     }
 
     private String buildPresentingComplaint(Visit visit) {
@@ -515,26 +608,76 @@ public class HandoverReportService {
             }
         }
 
+        // Disposition & follow-up status — unresolved items the next clinician owns.
+        StringBuilder dispo = new StringBuilder();
+        if (visit.getDispositionType() != null) {
+            dispo.append("Disposition: ").append(visit.getDispositionType());
+            if (visit.getDispositionNotes() != null && !visit.getDispositionNotes().isBlank()) {
+                dispo.append(" — ").append(visit.getDispositionNotes());
+            }
+            dispo.append("\n");
+        } else if (visit.getStatus() == VisitStatus.PENDING_DISPOSITION) {
+            dispo.append("Disposition: PENDING — decision required.\n");
+        }
+        if (visit.isPendingResusOverflow()) {
+            dispo.append("** RESUS OVERFLOW — patient at RESUS acuity without an available bed; needs placement. **\n");
+        }
+        if (visit.isAmbulancePreArrival() && visit.getArrivalConfirmedAt() == null) {
+            dispo.append("Ambulance pre-arrival — not yet physically confirmed at the door");
+            if (visit.getFieldTriageCategory() != null) {
+                dispo.append(" (field triage ").append(visit.getFieldTriageCategory()).append(")");
+            }
+            dispo.append("\n");
+        }
+        if (visit.getEdRetriageDueAt() != null && visit.getEdRetriageDueAt().isBefore(Instant.now())) {
+            dispo.append("** ED re-triage OVERDUE for this ambulance arrival — confirm the field triage still holds. **\n");
+        }
+        if (dispo.length() > 0) {
+            sb.append("\nDisposition & Follow-up:\n").append(dispo);
+        }
+
         return sb.length() > 0 ? sb.toString() : "No outstanding tasks.";
     }
 
     private String buildPlanOfCare(Visit visit) {
-        Optional<ClinicalNote> treatmentPlan = clinicalNoteRepository
-                .findFirstByVisitIdAndNoteTypeAndIsActiveTrueOrderByRecordedAtDesc(
-                        visit.getId(), NoteType.TREATMENT_PLAN);
+        StringBuilder sb = new StringBuilder();
 
-        if (treatmentPlan.isPresent()) {
-            ClinicalNote note = treatmentPlan.get();
-            StringBuilder sb = new StringBuilder();
-            sb.append("Treatment Plan (").append(TIME_FMT.format(note.getRecordedAt())).append("):\n");
-            if (note.getRecordedByName() != null) {
-                sb.append("By: ").append(note.getRecordedByName()).append("\n");
-            }
-            sb.append(note.getContent()).append("\n");
-            return sb.toString();
+        // Doctor of record — accountability for the continuing team.
+        var doctor = visit.getPrimaryClinician();
+        if (doctor != null) {
+            sb.append("Doctor of Record: ").append(doctor.getFirstName()).append(" ")
+              .append(doctor.getLastName()).append("\n\n");
         }
 
-        return "No treatment plan recorded.";
+        // The outgoing clinician's narrative impression/assessment — the
+        // "what does the doctor think right now" that a plan alone omits.
+        // Most recent of each note type, examination → impression → progress.
+        appendLatestNote(sb, visit, NoteType.PHYSICAL_FINDINGS, "Examination Findings");
+        appendLatestNote(sb, visit, NoteType.DOCTOR_NOTE, "Clinical Impression (Doctor's Note)");
+        appendLatestNote(sb, visit, NoteType.PROGRESS_NOTE, "Latest Progress Note");
+
+        // Treatment plan.
+        clinicalNoteRepository
+                .findFirstByVisitIdAndNoteTypeAndIsActiveTrueOrderByRecordedAtDesc(
+                        visit.getId(), NoteType.TREATMENT_PLAN)
+                .ifPresent(note -> {
+                    sb.append("Treatment Plan (").append(TIME_FMT.format(note.getRecordedAt())).append(")");
+                    if (note.getRecordedByName() != null) sb.append(" — ").append(note.getRecordedByName());
+                    sb.append(":\n").append(note.getContent()).append("\n");
+                });
+
+        return sb.length() > 0 ? sb.toString() : "No assessment or plan recorded.";
+    }
+
+    /** Append the most recent note of {@code type} under {@code heading}, if one exists. */
+    private void appendLatestNote(StringBuilder sb, Visit visit, NoteType type, String heading) {
+        clinicalNoteRepository
+                .findFirstByVisitIdAndNoteTypeAndIsActiveTrueOrderByRecordedAtDesc(visit.getId(), type)
+                .ifPresent(note -> {
+                    sb.append(heading).append(" (").append(TIME_FMT.format(note.getRecordedAt())).append(")");
+                    if (note.getRecordedByName() != null) sb.append(" — ").append(note.getRecordedByName());
+                    sb.append(":\n").append(note.getContent()).append("\n\n");
+                });
     }
 
     private String buildEdTimeline(Visit visit) {

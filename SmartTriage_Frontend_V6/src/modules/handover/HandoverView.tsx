@@ -6,13 +6,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   ClipboardCheck, ChevronDown, ChevronUp, Clock, CheckCircle,
-  Loader2, RefreshCw, X, Plus, Printer, UserCheck,
+  Loader2, RefreshCw, X, Plus, Printer, UserCheck, Download,
   FileText, Activity, AlertTriangle, Stethoscope,
   HeartPulse, FlaskConical, Pill, ListTodo, ClipboardList,
   MessageSquare, Timer,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { handoverApi } from '@/api/handover';
+import { saveBlob } from '@/api/client';
 import type { HandoverReport } from '@/api/handover';
 import { format } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
@@ -47,8 +48,8 @@ const REPORT_SECTIONS: { key: keyof HandoverReport; label: string; icon: typeof 
   // every administration with actor/witness, misses with reasons).
   { key: 'medicationAudit', label: 'Medication Audit Trail', icon: Pill },
   { key: 'activeClinicalAlerts', label: 'Active Clinical Alerts', icon: AlertTriangle },
-  { key: 'outstandingTasks', label: 'Outstanding Tasks', icon: ListTodo },
-  { key: 'planOfCare', label: 'Plan of Care', icon: ClipboardCheck },
+  { key: 'outstandingTasks', label: 'Outstanding Tasks & Disposition', icon: ListTodo },
+  { key: 'planOfCare', label: 'Assessment & Plan', icon: ClipboardCheck },
   { key: 'edTimeline', label: 'ED Timeline', icon: Timer },
 ];
 
@@ -149,6 +150,20 @@ export function HandoverView() {
   // ── Print hint ──
   const handlePrint = () => {
     window.print();
+  };
+
+  // Download the professional, letterheaded PDF for this report.
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const handleDownloadPdf = async (reportId: string) => {
+    setDownloadingId(reportId);
+    try {
+      const { blob, filename } = await handoverApi.downloadPdf(reportId);
+      saveBlob(blob, filename);
+    } catch (e) {
+      console.error('[Handover] PDF download failed', e);
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const totalPages = Math.ceil(totalElements / 20);
@@ -372,6 +387,16 @@ export function HandoverView() {
 
                       {/* Actions */}
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDownloadPdf(report.id); }}
+                          disabled={downloadingId === report.id}
+                          title="Download as PDF"
+                          className="print:hidden inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-cyan-700 bg-cyan-500/10 hover:bg-cyan-500/20 rounded-xl transition-all disabled:opacity-50"
+                        >
+                          {downloadingId === report.id
+                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                            : <Download className="w-3 h-3" />} PDF
+                        </button>
                         {!report.isAcknowledged && (
                           <button
                             onClick={(e) => { e.stopPropagation(); setAckDialog({ reportId: report.id }); setAckName(''); }}

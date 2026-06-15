@@ -7,10 +7,13 @@ import com.smartTriage.smartTriage_server.module.handover.dto.GenerateShiftHando
 import com.smartTriage.smartTriage_server.module.handover.dto.HandoverReportResponse;
 import com.smartTriage.smartTriage_server.module.handover.entity.HandoverReport;
 import com.smartTriage.smartTriage_server.module.handover.mapper.HandoverReportMapper;
+import com.smartTriage.smartTriage_server.module.handover.service.HandoverPdfService;
 import com.smartTriage.smartTriage_server.module.handover.service.HandoverReportService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -32,6 +35,7 @@ import java.util.stream.Collectors;
 public class HandoverReportController {
 
     private final HandoverReportService handoverReportService;
+    private final HandoverPdfService handoverPdfService;
 
     /**
      * Generate a handover report for a specific visit.
@@ -129,5 +133,19 @@ public class HandoverReportController {
     public ResponseEntity<ApiResponse<HandoverReportResponse>> getReport(@PathVariable UUID id) {
         HandoverReport report = handoverReportService.getReport(id);
         return ResponseEntity.ok(ApiResponse.success(HandoverReportMapper.toResponse(report)));
+    }
+
+    /**
+     * Download the handover as a professional, letterheaded PDF for printing /
+     * physical record-keeping. Contains every on-screen section verbatim.
+     */
+    @GetMapping("/{id}/pdf")
+    @PreAuthorize("@clinicalAuthz.canAccessHandoverReport(authentication, #id)")
+    public ResponseEntity<byte[]> downloadPdf(@PathVariable UUID id) {
+        HandoverPdfService.RenderedPdf pdf = handoverPdfService.renderDocument(id);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + pdf.filename() + "\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf.bytes());
     }
 }

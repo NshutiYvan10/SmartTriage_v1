@@ -1,4 +1,4 @@
-import { get, post, put } from './client';
+import { get, post, put, downloadBlob } from './client';
 
 export interface HandoverReport {
   id: string;
@@ -45,4 +45,6 @@ export const handoverApi = {
   getForHospital: (hospitalId: string) =>
     get<HandoverReport[]>(`/handover/hospital/${hospitalId}/shift`),
   get: (id: string) => get<HandoverReport>(`/handover/${id}`),
+  // Professional letterheaded PDF for printing / physical record-keeping.
+  downloadPdf: (id: string) => downloadBlob(`/handover/${id}/pdf`, `handover-${id}.pdf`),
 };
