@@ -880,6 +880,11 @@ public class EmsRunService {
             s.append(" • BP ").append(run.getFieldSbp()).append("/").append(run.getFieldDbp());
         }
         if (run.getFieldSpo2() != null) s.append(" • SpO2 ").append(run.getFieldSpo2()).append("%");
+        // Carry the paramedic's MIST/SBAR handover notes into the alert text so
+        // the charge nurse reads context from the live ping, not only the modal.
+        if (run.getNotes() != null && !run.getNotes().isBlank()) {
+            s.append(" — handover: ").append(run.getNotes());
+        }
         if (req != null && req.getPreArrivalNote() != null && !req.getPreArrivalNote().isBlank()) {
             s.append(" — ").append(req.getPreArrivalNote());
         }

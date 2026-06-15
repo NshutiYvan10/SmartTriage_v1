@@ -120,6 +120,9 @@ export function InboundEmsBoard() {
                     <div className="text-[10px] text-white/70 mt-0.5">
                       {run.paramedicName ?? 'Paramedic'} • {(run.interventions?.length ?? 0)} interventions logged
                     </div>
+                    {run.notes && (
+                      <div className="text-[11px] text-white/90 mt-0.5 italic">“{run.notes}”</div>
+                    )}
                   </div>
                   {run.status === 'ARRIVED' && (
                     <button
