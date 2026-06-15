@@ -45,10 +45,14 @@ public class ChargeNurseDelegationController {
     }
 
     /**
-     * Revoke an existing delegation early. The service enforces that only
-     * the original CN, the delegate, or an admin may revoke.
+     * Revoke an existing delegation early. Authority is resolved from the
+     * delegation's hospital: the participants (delegating CN / delegate) may
+     * always revoke; HOSPITAL_ADMIN only within their own hospital; SUPER_ADMIN
+     * anywhere. (The service repeats the participant/admin check as
+     * defence-in-depth.)
      */
     @PostMapping("/{delegationId}/revoke")
+    @PreAuthorize("@shiftAssignmentAuthz.canRevokeDelegation(authentication, #delegationId)")
     public ResponseEntity<ApiResponse<ChargeNurseDelegationDtos.Response>> revoke(
             @PathVariable UUID delegationId,
             @RequestBody(required = false) ChargeNurseDelegationDtos.RevokeRequest request) {

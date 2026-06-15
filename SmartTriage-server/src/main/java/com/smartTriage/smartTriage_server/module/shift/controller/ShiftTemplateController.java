@@ -39,6 +39,7 @@ public class ShiftTemplateController {
 
     /** Fetch a single template with its full assignment roster. */
     @GetMapping("/{templateId}")
+    @PreAuthorize("@shiftAssignmentAuthz.canViewTemplateById(authentication, #templateId)")
     public ResponseEntity<ApiResponse<ShiftTemplateResponse>> getById(@PathVariable UUID templateId) {
         return ResponseEntity.ok(ApiResponse.success(shiftTemplateService.getById(templateId)));
     }
@@ -59,12 +60,10 @@ public class ShiftTemplateController {
 
     /** Replace an existing template's contents (name, period, roster). */
     @PutMapping("/{templateId}")
-    // Authz sweep — the body carries no hospitalId (it comes from the
-    // stored template), so hospital-level canManageTemplates cannot be
-    // expressed here. Role-gate matches DELETE below; proper per-template
-    // scoping needs a template-aware authz method (flagged in the sweep
-    // report as follow-up).
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE')")
+    // Template-aware scoping: the body carries no hospitalId, so authority is
+    // resolved from the stored template's hospital (same actor set as the POST
+    // create endpoint — CHARGE_NURSE / shift-lead / delegate at that hospital).
+    @PreAuthorize("@shiftAssignmentAuthz.canManageTemplateById(authentication, #templateId)")
     public ResponseEntity<ApiResponse<ShiftTemplateResponse>> update(
             @PathVariable UUID templateId,
             @Valid @RequestBody UpsertShiftTemplateRequest request) {
@@ -74,7 +73,7 @@ public class ShiftTemplateController {
 
     /** Soft-delete a template (so history stays queryable). */
     @DeleteMapping("/{templateId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE')")
+    @PreAuthorize("@shiftAssignmentAuthz.canManageTemplateById(authentication, #templateId)")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID templateId) {
         shiftTemplateService.delete(templateId);
         return ResponseEntity.ok(ApiResponse.success("Shift template deleted", null));

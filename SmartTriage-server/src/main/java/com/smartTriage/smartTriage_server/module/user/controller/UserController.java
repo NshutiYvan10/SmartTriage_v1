@@ -43,6 +43,10 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
+    // Authz sweep follow-up — staff PII is hospital-scoped. canAccessUser
+    // allows self, same-hospital peers (any role — needed for directory /
+    // shift-planner pickers), and SUPER_ADMIN; denies cross-hospital reads.
+    @PreAuthorize("@clinicalAuthz.canAccessUser(authentication, #id)")
     public ResponseEntity<ApiResponse<UserResponse>> getUser(@PathVariable UUID id) {
         UserResponse response = userService.getUserById(id);
         return ResponseEntity.ok(ApiResponse.success(response));

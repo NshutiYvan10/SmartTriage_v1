@@ -4,10 +4,12 @@ import com.smartTriage.smartTriage_server.common.enums.Designation;
 import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.module.shift.entity.ShiftAssignment;
 import com.smartTriage.smartTriage_server.module.shift.entity.ShiftSwapRequest;
+import com.smartTriage.smartTriage_server.module.shift.entity.ShiftTemplate;
 import com.smartTriage.smartTriage_server.module.shift.entity.StaffLeave;
 import com.smartTriage.smartTriage_server.module.shift.repository.ChargeNurseDelegationRepository;
 import com.smartTriage.smartTriage_server.module.shift.repository.ShiftAssignmentRepository;
 import com.smartTriage.smartTriage_server.module.shift.repository.ShiftSwapRequestRepository;
+import com.smartTriage.smartTriage_server.module.shift.repository.ShiftTemplateRepository;
 import com.smartTriage.smartTriage_server.module.shift.repository.StaffLeaveRepository;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
@@ -90,6 +92,7 @@ public class ShiftAssignmentAuthz {
     private final ChargeNurseDelegationRepository chargeNurseDelegationRepository;
     private final StaffLeaveRepository staffLeaveRepository;
     private final ShiftSwapRequestRepository shiftSwapRequestRepository;
+    private final ShiftTemplateRepository shiftTemplateRepository;
 
     /**
      * @return true if the authenticated user may assign staff for the given
@@ -217,6 +220,79 @@ public class ShiftAssignmentAuthz {
     @Transactional(readOnly = true)
     public boolean canManageTemplates(Authentication authentication, UUID hospitalId) {
         return canAssign(authentication, hospitalId);
+    }
+
+    /**
+     * Template-aware MUTATE authority. The PUT/DELETE endpoints carry no
+     * hospitalId in the body, so hospital scoping must come from the stored
+     * template: resolve template → hospital → reuse {@link #canManageTemplates}.
+     * Closes the gap where any NURSE / HOSPITAL_ADMIN at ANY hospital could
+     * edit/delete another hospital's template by id.
+     */
+    @Transactional(readOnly = true)
+    public boolean canManageTemplateById(Authentication authentication, UUID templateId) {
+        try {
+            if (templateId == null) return false;
+            return shiftTemplateRepository.findById(templateId)
+                    .map(ShiftTemplate::getHospital)
+                    .map(h -> h != null && canManageTemplates(authentication, h.getId()))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canManageTemplateById evaluation error for template {}: {}",
+                    templateId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Template-aware READ authority: resolve template → hospital →
+     * {@link #canViewShift}. Closes the cross-hospital read leak on
+     * GET /shift-templates/{id}, which had no guard.
+     */
+    @Transactional(readOnly = true)
+    public boolean canViewTemplateById(Authentication authentication, UUID templateId) {
+        try {
+            if (templateId == null) return false;
+            return shiftTemplateRepository.findById(templateId)
+                    .map(ShiftTemplate::getHospital)
+                    .map(h -> h != null && canViewShift(authentication, h.getId()))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canViewTemplateById evaluation error for template {}: {}",
+                    templateId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Authority to revoke a charge-nurse delegation. The participants (the
+     * delegating CN and the named delegate) may always revoke their own row;
+     * a HOSPITAL_ADMIN may revoke only within their OWN hospital; SUPER_ADMIN
+     * anywhere. Closes the cross-hospital gap where a HOSPITAL_ADMIN of one
+     * hospital could revoke another hospital's delegation (silently stripping
+     * an acting CN's mutate authority mid-shift).
+     */
+    @Transactional(readOnly = true)
+    public boolean canRevokeDelegation(Authentication authentication, UUID delegationId) {
+        try {
+            if (delegationId == null) return false;
+            User user = currentUser(authentication);
+            if (user == null) return false;
+            return chargeNurseDelegationRepository.findById(delegationId).map(d -> {
+                UUID hid = d.getHospital() != null ? d.getHospital().getId() : null;
+                if (hid == null) return false;
+                if (user.getRole() == Role.SUPER_ADMIN) return true;
+                boolean participant =
+                        (d.getDelegatingUser() != null && user.getId().equals(d.getDelegatingUser().getId()))
+                     || (d.getDelegate() != null && user.getId().equals(d.getDelegate().getId()));
+                if (participant) return true;
+                return user.getRole() == Role.HOSPITAL_ADMIN && belongsToHospital(user, hid);
+            }).orElse(false);
+        } catch (Exception e) {
+            log.error("canRevokeDelegation evaluation error for delegation {}: {}",
+                    delegationId, e.getMessage(), e);
+            return false;
+        }
     }
 
     /**

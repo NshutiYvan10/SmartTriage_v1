@@ -38,12 +38,20 @@ public class HospitalController {
     }
 
     @GetMapping("/{id}")
+    // Authz sweep follow-up — hospital metadata is same-hospital-scoped
+    // (SUPER_ADMIN sees any). Prevents cross-hospital read of contact /
+    // bed-capacity directory info by an authenticated user elsewhere.
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #id)")
     public ResponseEntity<ApiResponse<HospitalResponse>> getHospital(@PathVariable UUID id) {
         HospitalResponse response = hospitalService.getHospitalById(id);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/code/{code}")
+    // The authz bean is keyed on hospital UUID, not code, and the only
+    // frontend caller of by-code is dead; no anonymous/registration flow
+    // needs it, so restrict to SUPER_ADMIN.
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<ApiResponse<HospitalResponse>> getHospitalByCode(@PathVariable String code) {
         HospitalResponse response = hospitalService.getHospitalByCode(code);
         return ResponseEntity.ok(ApiResponse.success(response));
