@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════
    Visit Detail Page — Full Clinical Workspace
-   Tabs: Overview, Vitals, Triage, Clinical Signs, Notes, Diagnoses,
-         Investigations, Medications, Alerts, Disposition
+   Tabs: Overview, Pre-hospital, Vitals, Triage, Clinical Signs, Notes,
+         Diagnoses, Investigations, Sepsis, Medications, Alerts, Disposition
    ═══════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -11,9 +11,10 @@ import {
   FlaskConical, Pill, BellRing, Heart, Thermometer,
   Wind, Droplets, Brain, Clock, User, AlertTriangle, ChevronRight,
   Plus, Send, CheckCircle2, XCircle, Eye, Loader2, RefreshCw, LogOut,
-  TrendingUp, Sparkles, Siren, UserCheck,
+  TrendingUp, Sparkles, Siren, UserCheck, ShieldAlert,
 } from 'lucide-react';
 import { ClinicalSignsTab } from './ClinicalSignsTab';
+import { SepsisPanel } from './SepsisPanel';
 import { PrehospitalTab } from '@/modules/ems/PrehospitalTab';
 import { DiagnosisPanel } from './DiagnosisPanel';
 import { InvestigationPanel } from './InvestigationPanel';
@@ -106,6 +107,10 @@ const TABS = [
   { id: 'notes', label: 'Notes', icon: FileText },
   { id: 'diagnoses', label: 'Diagnoses', icon: ClipboardList },
   { id: 'investigations', label: 'Investigations', icon: FlaskConical },
+  // Sepsis sits between Investigations and Medications: it consumes the
+  // vitals + labs gathered upstream and, on a positive screen, drives the
+  // antibiotic/fluid bundle that flows into Medications.
+  { id: 'sepsis', label: 'Sepsis', icon: ShieldAlert },
   { id: 'medications', label: 'Medications', icon: Pill },
   { id: 'alerts', label: 'Alerts', icon: BellRing },
   { id: 'disposition', label: 'Disposition', icon: LogOut },
@@ -797,6 +802,7 @@ export function VisitDetailPage() {
           {activeTab === 'notes' && <NotesTab notes={notes} showForm={showNoteForm} setShowForm={setShowNoteForm} onSubmit={handleCreateNote} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'diagnoses' && <DiagnosesTab diagnoses={diagnoses} showForm={showDiagnosisForm} setShowForm={setShowDiagnosisForm} onSubmit={handleCreateDiagnosis} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'investigations' && <InvestigationsTab investigations={investigations} showForm={showInvestigationForm} setShowForm={setShowInvestigationForm} onSubmit={handleOrderInvestigation} onAction={handleInvestigationAction} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} userName={userName} />}
+          {activeTab === 'sepsis' && <SepsisPanel visitId={visit.id} latestVitals={latestVitals} onScreened={loadData} />}
           {activeTab === 'medications' && <MedicationsTab medications={medications} showForm={showMedicationForm} setShowForm={setShowMedicationForm} onSubmit={handlePrescribeMedication} onAction={handleMedicationAction} formLoading={formLoading} patient={patient} visit={visit} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'alerts' && <AlertsTab alerts={visitAlerts} onAcknowledge={handleAcknowledgeAlert} visit={visit} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'disposition' && <DispositionTab visit={visit} onDisposition={handleRecordDisposition} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}

@@ -50,7 +50,12 @@ export const sepsisApi = {
   // mismatch. Completing is one-way (idempotent set-true) server-side.
   completeBundleItem: (screeningId: string, item: string) =>
     put<SepsisScreening>(`/sepsis/bundle/${screeningId}/item/${item}`),
-  getForVisit: (visitId: string) => get<SepsisScreening[]>(`/sepsis/visit/${visitId}`),
+  // GET /sepsis/visit/{id} returns a Spring Page<SepsisScreeningResponse>
+  // ({content,totalElements,…}), NOT a bare array — unwrap .content so
+  // callers get a real SepsisScreening[]. (This was previously typed as an
+  // array and would have silently been a non-array object at runtime.)
+  getForVisit: (visitId: string) =>
+    get<{ content: SepsisScreening[] }>(`/sepsis/visit/${visitId}`).then((p) => p?.content ?? []),
   getActive: (hospitalId: string, zone?: string) =>
     get<SepsisScreening[]>(
       `/sepsis/hospital/${hospitalId}/active${zone ? `?zone=${zone}` : ''}`,
