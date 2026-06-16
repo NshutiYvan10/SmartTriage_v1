@@ -3,7 +3,7 @@
  * Connects on auth, subscribes to hospital-wide + zone-scoped + user-targeted topics,
  * pipes real-time data into Zustand stores.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useAlertStore } from '@/store/alertStore';
 import { useVitalStore } from '@/store/vitalStore';
@@ -14,6 +14,8 @@ import {
   subscribeToZoneAlerts,
   subscribeToUserAlerts,
   subscribeToVitals,
+  subscribeConnectionState,
+  getConnectionGeneration,
 } from '@/api/websocket';
 import type { ClinicalAlertResponse, AlertType, EdZone } from '@/api/types';
 import type { AIAlert } from '@/types';
@@ -182,4 +184,18 @@ export function useVisitVitalsWebSocket(visitId: string | undefined) {
       unsubRef.current = null;
     };
   }, [visitId]);
+}
+
+/**
+ * useWebSocketGeneration – returns a counter that increments on every WebSocket
+ * (re)connect. Include it in a subscription effect's dependency array so the
+ * effect re-runs (and re-subscribes) after the shared client is torn down and
+ * rebuilt — e.g. when the app-level alert hook reconnects on a covered-zone
+ * change. Without this, an ad-hoc feature subscription (sepsis dashboard/panel)
+ * would silently die after such a reconnect.
+ */
+export function useWebSocketGeneration(): number {
+  const [generation, setGeneration] = useState<number>(getConnectionGeneration());
+  useEffect(() => subscribeConnectionState(setGeneration), []);
+  return generation;
 }

@@ -174,6 +174,12 @@ public class SepsisBundleMonitorService {
             for (User cn : shiftAssignmentService.getChargeNurse(hospitalId)) {
                 realTimeEventPublisher.publishUserAlert(cn.getId(), resp);
             }
+            // Live refresh for the Sepsis dashboard / per-visit panel so a
+            // bundle escalation surfaces without a manual refresh.
+            realTimeEventPublisher.publishSepsisEventAfterCommit(hospitalId, java.util.Map.of(
+                    "eventType", "BUNDLE_ESCALATION",
+                    "visitId", visit.getId().toString(),
+                    "sepsisStatus", screening.getSepsisStatus().name()));
         } catch (Exception e) {
             log.warn("Failed to publish sepsis bundle escalation {}: {}", saved.getId(), e.getMessage());
         }

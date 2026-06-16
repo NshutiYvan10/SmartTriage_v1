@@ -18,7 +18,10 @@ import {
   AlertTriangle, RefreshCw, History,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
-import { sepsisApi, type SepsisScreening } from '@/api/sepsis';
+import { sepsisApi, type SepsisScreening, type SepsisScreeningRequest } from '@/api/sepsis';
+import { subscribeToSepsis } from '@/api/websocket';
+import { useWebSocketGeneration } from '@/hooks/useWebSocket';
+import { useAuthStore } from '@/store/authStore';
 import type { VitalSignsResponse } from '@/api/types';
 import { ApiError } from '@/api/client';
 import { format } from 'date-fns';
@@ -86,6 +89,8 @@ interface SepsisPanelProps {
 
 export function SepsisPanel({ visitId, latestVitals, onScreened }: SepsisPanelProps) {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const hospitalId = useAuthStore((s) => s.user?.hospitalId) || '';
+  const wsGen = useWebSocketGeneration();
 
   const [screenings, setScreenings] = useState<SepsisScreening[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,6 +100,11 @@ export function SepsisPanel({ visitId, latestVitals, onScreened }: SepsisPanelPr
   // Re-render every 30s so the live bundle timer advances.
   const [, setTick] = useState(0);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Optional labs a clinician can attach to the screening (operator-entered;
+  // the system has no coded lab lookup). Empty form → no body → the screen is
+  // byte-for-byte the prior vitals-only request.
+  const [showLabsForm, setShowLabsForm] = useState(false);
+  const [labs, setLabs] = useState({ lactate: '', wbc: '', infectionSource: '', notes: '' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -116,11 +126,45 @@ export function SepsisPanel({ visitId, latestVitals, onScreened }: SepsisPanelPr
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
   }, []);
 
+  // Live refresh: a screening run elsewhere — or a bundle escalation — for
+  // THIS visit refreshes the panel. Dedicated sepsis topic; filter by visitId.
+  useEffect(() => {
+    if (!hospitalId) return;
+    const unsub = subscribeToSepsis(hospitalId, (event: { visitId?: string }) => {
+      if (event?.visitId === visitId) load();
+    });
+    return () => unsub();
+  }, [hospitalId, visitId, load, wsGen]);
+
   const runScreening = async () => {
     setRunning(true);
     setError(null);
     try {
-      await sepsisApi.screen(visitId);
+      // Build the optional override body. Numbers are sent only when the field
+      // is non-blank AND parses to a finite value; blanks are omitted so an
+      // empty form posts no body (identical to the prior vitals-only screen).
+      const body: SepsisScreeningRequest = {};
+      const lactate = Number(labs.lactate);
+      if (labs.lactate.trim() !== '' && Number.isFinite(lactate)) body.lactateLevel = lactate;
+      const wbc = Number(labs.wbc);
+      if (labs.wbc.trim() !== '' && Number.isFinite(wbc)) {
+        // Unit guard: WBC is an ABSOLUTE count (cells/µL). A value < 100 is
+        // almost certainly a ×10⁹/L mis-entry (e.g. 11.2) that would otherwise
+        // read as profound leukopenia. Block it with a clear hint rather than
+        // run a screening off a unit error. (Backend enforces the same floor.)
+        if (wbc < 100) {
+          setError('WBC looks like a ×10⁹/L value — enter the ABSOLUTE count in cells/µL (e.g. 11000, not 11.2).');
+          return; // finally{} resets running; form stays open to correct
+        }
+        body.wbcCount = wbc;
+      }
+      if (labs.infectionSource.trim() !== '') body.suspectedInfectionSource = labs.infectionSource.trim();
+      if (labs.notes.trim() !== '') body.notes = labs.notes.trim();
+      const hasBody = Object.keys(body).length > 0;
+
+      await sepsisApi.screen(visitId, hasBody ? body : undefined);
+      setLabs({ lactate: '', wbc: '', infectionSource: '', notes: '' });
+      setShowLabsForm(false);
       await load();
       onScreened?.();
     } catch (err) {
@@ -200,6 +244,19 @@ export function SepsisPanel({ visitId, latestVitals, onScreened }: SepsisPanelPr
               </button>
             )}
             <button
+              onClick={() => setShowLabsForm((s) => !s)}
+              disabled={running}
+              title="Optionally attach lactate / WBC / suspected infection source to this screening"
+              className={`inline-flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-bold rounded-xl transition-colors ${
+                showLabsForm
+                  ? 'bg-cyan-500/15 text-cyan-500'
+                  : isDark ? 'bg-white/5 text-slate-300 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <FlaskConical className="w-3.5 h-3.5" />
+              {showLabsForm ? 'Hide labs' : 'Add labs'}
+            </button>
+            <button
               onClick={runScreening}
               disabled={running || noVitals}
               title={noVitals ? 'Record vitals first — screening needs at least one set of vitals on file.' : 'Run a sepsis screening now'}
@@ -228,6 +285,67 @@ export function SepsisPanel({ visitId, latestVitals, onScreened }: SepsisPanelPr
           <div className="mt-3 flex items-start gap-2 rounded-xl px-3 py-2.5 bg-red-500/10 border border-red-500/20">
             <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
             <p className="text-[11px] font-semibold text-red-500">{error}</p>
+          </div>
+        )}
+
+        {showLabsForm && (
+          <div className="mt-3 rounded-xl p-4 animate-fade-up" style={glassInner}>
+            <p className={`text-[11px] font-bold uppercase tracking-wider mb-3 ${text.muted}`}>
+              Optional labs &amp; context (operator-entered)
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className={`block text-[10px] font-semibold mb-1 ${text.muted}`}>Lactate (mmol/L)</label>
+                <input
+                  type="number" inputMode="decimal" step="0.1" min="0"
+                  value={labs.lactate}
+                  onChange={(e) => setLabs((l) => ({ ...l, lactate: e.target.value }))}
+                  placeholder="e.g. 2.4"
+                  className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+                  style={glassCard}
+                />
+                <p className={`text-[9px] mt-1 ${text.muted}`}>&gt; 2.0 mmol/L escalates to severe sepsis</p>
+              </div>
+              <div>
+                <label className={`block text-[10px] font-semibold mb-1 ${text.muted}`}>WBC (cells/µL)</label>
+                <input
+                  type="number" inputMode="numeric" step="100" min="0"
+                  value={labs.wbc}
+                  onChange={(e) => setLabs((l) => ({ ...l, wbc: e.target.value }))}
+                  placeholder="e.g. 14500"
+                  className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+                  style={glassCard}
+                />
+                <p className={`text-[9px] mt-1 ${text.muted}`}>Absolute count — &gt;12000 or &lt;4000 meets the SIRS criterion</p>
+              </div>
+              <div className="sm:col-span-2">
+                <label className={`block text-[10px] font-semibold mb-1 ${text.muted}`}>Suspected infection source</label>
+                <input
+                  type="text"
+                  value={labs.infectionSource}
+                  onChange={(e) => setLabs((l) => ({ ...l, infectionSource: e.target.value }))}
+                  placeholder="e.g. pneumonia, urinary, intra-abdominal, skin/soft-tissue…"
+                  className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+                  style={glassCard}
+                />
+                <p className={`text-[9px] mt-1 ${text.muted}`}>With SIRS ≥ 2, a named source escalates to sepsis-suspected</p>
+              </div>
+              <div className="sm:col-span-2">
+                <label className={`block text-[10px] font-semibold mb-1 ${text.muted}`}>Notes</label>
+                <textarea
+                  rows={2}
+                  value={labs.notes}
+                  onChange={(e) => setLabs((l) => ({ ...l, notes: e.target.value }))}
+                  placeholder="Optional context for this screening"
+                  className="w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none"
+                  style={glassCard}
+                />
+              </div>
+            </div>
+            <p className={`text-[10px] mt-2 ${text.muted}`}>
+              All optional — leave blank to screen on vitals alone. Click{' '}
+              <span className="font-bold">{screenings.length > 0 ? 'Re-screen' : 'Run screening'}</span> to apply.
+            </p>
           </div>
         )}
       </div>

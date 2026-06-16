@@ -39,8 +39,27 @@ export interface SepsisScreening {
   createdAt: string;
 }
 
+/**
+ * Optional overrides a clinician can attach when running a screening — these
+ * are looked up nowhere automatically (the system has no coded lab catalog),
+ * so they're operator-entered. They drive: WBC → SIRS WBC criterion; infection
+ * source → SEPSIS_SUSPECTED; lactate > 2.0 mmol/L → SEVERE_SEPSIS. Mirrors the
+ * backend SepsisScreeningRequest DTO. All optional — omitting the body screens
+ * on vitals alone.
+ */
+export interface SepsisScreeningRequest {
+  suspectedInfectionSource?: string;
+  lactateLevel?: number;   // mmol/L
+  wbcCount?: number;       // absolute count, cells/µL
+  wbcBandsElevated?: boolean;
+  notes?: string;
+}
+
 export const sepsisApi = {
-  screen: (visitId: string) => post<SepsisScreening>(`/sepsis/screen/${visitId}`),
+  // post() only serializes a body when one is passed, so screen(visitId) with
+  // no body is byte-for-byte the prior vitals-only request.
+  screen: (visitId: string, body?: SepsisScreeningRequest) =>
+    post<SepsisScreening>(`/sepsis/screen/${visitId}`, body),
   // B7 — backend path is PUT /sepsis/bundle/{id}/start (was calling
   // /sepsis/{id}/start-bundle → silent 404).
   startBundle: (screeningId: string) => put<SepsisScreening>(`/sepsis/bundle/${screeningId}/start`),

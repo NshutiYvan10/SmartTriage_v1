@@ -8,6 +8,36 @@ let stompClient: Client | null = null;
 const subscriptions = new Map<string, { unsubscribe: () => void }>();
 
 /**
+ * Connection "generation" — incremented on every successful (re)connect.
+ *
+ * The app-level alert hook (useWebSocket) tears down and rebuilds the single
+ * shared client whenever the user's covered zones change. That drops EVERY
+ * ad-hoc subscription in the map — including feature subscriptions like the
+ * sepsis dashboard's — and only re-subscribes the alert topics. Feature hooks
+ * therefore include this generation in their effect deps (via
+ * useWebSocketGeneration) so they RE-establish their subscription after any
+ * reconnect instead of silently going dead.
+ */
+let connectionGeneration = 0;
+const connectionListeners = new Set<(gen: number) => void>();
+
+export function getConnectionGeneration(): number {
+  return connectionGeneration;
+}
+
+export function subscribeConnectionState(listener: (gen: number) => void): () => void {
+  connectionListeners.add(listener);
+  return () => { connectionListeners.delete(listener); };
+}
+
+function notifyConnectionListeners() {
+  connectionGeneration += 1;
+  connectionListeners.forEach((l) => {
+    try { l(connectionGeneration); } catch { /* a listener error must not break the socket */ }
+  });
+}
+
+/**
  * Pending subscriptions queued while the STOMP client is activating.
  *
  * Why this exists: `Client.active` flips to `true` the moment we call
@@ -61,6 +91,9 @@ export function connectWebSocket(onConnect?: () => void): Client {
       // register against existing topics see the right state.
       flushPendingSubscriptions();
       onConnect?.();
+      // Tell feature hooks the (re)connection happened so they can re-establish
+      // any ad-hoc subscription a prior teardown dropped.
+      notifyConnectionListeners();
     },
     onDisconnect: () => {
       console.log('[WS] Disconnected');
@@ -121,7 +154,7 @@ export function subscribeToTopic<T>(
       pending.cancelled = true;
       const live = subscriptions.get(topic);
       if (live) {
-        live.unsubscribe();
+        try { live.unsubscribe(); } catch { /* client may already be torn down */ }
         subscriptions.delete(topic);
       }
     };
@@ -134,7 +167,7 @@ export function subscribeToTopic<T>(
     const subscription = stompClient.subscribe(topic, rawCallback);
     subscriptions.set(topic, subscription);
     return () => {
-      subscription.unsubscribe();
+      try { subscription.unsubscribe(); } catch { /* client may already be torn down */ }
       subscriptions.delete(topic);
     };
   } catch (err) {
@@ -145,7 +178,7 @@ export function subscribeToTopic<T>(
       pending.cancelled = true;
       const live = subscriptions.get(topic);
       if (live) {
-        live.unsubscribe();
+        try { live.unsubscribe(); } catch { /* client may already be torn down */ }
         subscriptions.delete(topic);
       }
     };
@@ -196,6 +229,21 @@ export function subscribeToLabOrders(
   callback: (labOrder: any) => void
 ): () => void {
   return subscribeToTopic(`/topic/lab/${hospitalId}`, callback);
+}
+
+/**
+ * Subscribe to sepsis events for a hospital. Uses a DEDICATED topic
+ * (/topic/sepsis/{hospitalId}) rather than the alert topics, because the
+ * subscription map allows only one subscriber per topic string and the
+ * app-wide alert hook (useWebSocket) already owns /topic/alerts/* — reusing
+ * those would clobber the global alert toasts. Payload is a small
+ * { eventType, visitId, sepsisStatus } map; subscribers refetch on any event.
+ */
+export function subscribeToSepsis(
+  hospitalId: string,
+  callback: (event: any) => void
+): () => void {
+  return subscribeToTopic(`/topic/sepsis/${hospitalId}`, callback);
 }
 
 /** Subscribe to medication events for a hospital (Workflow 3).

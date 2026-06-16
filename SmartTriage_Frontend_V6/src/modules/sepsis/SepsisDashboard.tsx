@@ -13,6 +13,8 @@ import { useTheme } from '@/hooks/useTheme';
 import { useScopedView } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
 import { sepsisApi } from '@/api/sepsis';
+import { subscribeToSepsis } from '@/api/websocket';
+import { useWebSocketGeneration } from '@/hooks/useWebSocket';
 import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
 import type { SepsisScreening } from '@/api/sepsis';
 import { format } from 'date-fns';
@@ -69,6 +71,9 @@ export function SepsisDashboard() {
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const scope = useScopedView();
+  // Bumps on every WebSocket (re)connect so the subscribe effect below
+  // re-subscribes after the shared client is rebuilt on a covered-zone change.
+  const wsGen = useWebSocketGeneration();
 
   const [screenings, setScreenings] = useState<SepsisScreening[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,6 +103,17 @@ export function SepsisDashboard() {
   }, [hospitalId, scope.mode, scope.zone]);
 
   useEffect(() => { loadScreenings(); }, [loadScreenings]);
+
+  /* ── Live refresh ──
+     Subscribe to the dedicated sepsis topic so a new positive screen or a
+     bundle escalation refreshes the board without a manual click. A dedicated
+     topic (not /topic/alerts/*) avoids clobbering the app-wide alert hook,
+     which owns those topics (one subscriber per topic string). */
+  useEffect(() => {
+    if (!hospitalId || scope.mode === 'RESTRICTED') return;
+    const unsub = subscribeToSepsis(hospitalId, () => { loadScreenings(); });
+    return () => unsub();
+  }, [hospitalId, scope.mode, loadScreenings, wsGen]);
 
   /* ── Timer tick for bundle elapsed ── */
   useEffect(() => {

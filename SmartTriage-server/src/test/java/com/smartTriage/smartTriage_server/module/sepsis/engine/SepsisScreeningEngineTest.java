@@ -48,6 +48,14 @@ class SepsisScreeningEngineTest {
         return v;
     }
 
+    private Visit pediatricVisitMonths(int ageMonths) {
+        Visit v = new Visit();
+        v.setVisitNumber("V-PEDS-M");
+        v.setPediatric(true);
+        v.setPatient(Patient.builder().dateOfBirth(LocalDate.now().minusMonths(ageMonths)).build());
+        return v;
+    }
+
     // ── Clearly negative ────────────────────────────────────────────
 
     @Test
@@ -151,6 +159,57 @@ class SepsisScreeningEngineTest {
         assertEquals(SepsisStatus.SIRS_POSITIVE, r.status());
         assertTrue(r.pediatric());
         assertNotNull(r.pediatricCaveat());
+    }
+
+    // ── Pediatric hypotension / shock (PALS 5th-percentile SBP for age) ──
+
+    @Test
+    @DisplayName("Hypotensive septic infant (6mo, SBP 55 < PALS 70) → SEPTIC_SHOCK + bundle")
+    void pediatricInfantHypotensionIsShock() {
+        // 6 months → infant bands (HR>130, RR>39) + PALS threshold 70 (1mo–<1y).
+        // SIRS: temp 39.5 (✓), HR 160 (>130 ✓), RR 30 (≤39 no) → SIRS 2 → SIRS_POSITIVE.
+        // SBP 55 < 70 → organ dysfunction → SEVERE_SEPSIS → 55 < 70 → SEPTIC_SHOCK.
+        SepsisScreeningResult r = engine.screenForSepsis(
+                vitals(39.5, 160, 30, 55, AvpuScore.ALERT), pediatricVisitMonths(6));
+        assertEquals(SepsisStatus.SEPTIC_SHOCK, r.status());
+        assertTrue(r.bundleRequired());
+        assertTrue(r.systolicBpLow());   // persisted record must reflect pediatric hypotension
+        assertTrue(r.pediatric());
+        assertNotNull(r.pediatricCaveat());
+    }
+
+    @Test
+    @DisplayName("Hypotensive neonate (0mo, SBP 55 < PALS 60) → SEPTIC_SHOCK")
+    void pediatricNeonateHypotensionIsShock() {
+        // <1 month → PALS threshold 60. SIRS: temp 39 (✓) + HR 170 (>130 ✓) → 2 → SIRS_POSITIVE.
+        // SBP 55 < 60 → organ dysfunction → SEVERE → SEPTIC_SHOCK.
+        SepsisScreeningResult r = engine.screenForSepsis(
+                vitals(39.0, 170, 30, 55, AvpuScore.ALERT), pediatricVisitMonths(0));
+        assertEquals(SepsisStatus.SEPTIC_SHOCK, r.status());
+        assertTrue(r.bundleRequired());
+    }
+
+    @Test
+    @DisplayName("Child just below PALS-for-age SBP (6y, SBP 78 < 70+12=82) → SEPTIC_SHOCK")
+    void pediatricChildBelowThresholdIsShock() {
+        // 6y → child bands (HR>99). PALS threshold = 70 + 6×2 = 82.
+        // SIRS: temp 39 (✓) + HR 110 (>99 ✓) → 2 → SIRS_POSITIVE. SBP 78 < 82 → SEVERE → SHOCK.
+        SepsisScreeningResult r = engine.screenForSepsis(
+                vitals(39.0, 110, 18, 78, AvpuScore.ALERT), pediatricVisit(6));
+        assertEquals(SepsisStatus.SEPTIC_SHOCK, r.status());
+        assertTrue(r.systolicBpLow());
+    }
+
+    @Test
+    @DisplayName("Child AT/above PALS-for-age SBP (6y, SBP 85 ≥ 82) → NOT hypotensive, stays SIRS_POSITIVE")
+    void pediatricChildNormotensiveNotShock() {
+        // Same child + SIRS 2, but SBP 85 ≥ 82 threshold → no BP organ dysfunction.
+        // No infection/lactate at engine level → remains SIRS_POSITIVE (not SEVERE/SHOCK).
+        SepsisScreeningResult r = engine.screenForSepsis(
+                vitals(39.0, 110, 18, 85, AvpuScore.ALERT), pediatricVisit(6));
+        assertEquals(SepsisStatus.SIRS_POSITIVE, r.status());
+        assertFalse(r.systolicBpLow());
+        assertFalse(r.bundleRequired());
     }
 
     // ── Missing data ────────────────────────────────────────────────

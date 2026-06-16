@@ -269,4 +269,53 @@ public class RealTimeEventPublisher {
             fire.run();
         }
     }
+
+    // ====================================================================
+    // SEPSIS DASHBOARD TOPIC
+    // ====================================================================
+
+    /**
+     * Push a lightweight sepsis event to the hospital's dedicated sepsis topic.
+     * The Sepsis dashboard and per-visit Sepsis panel subscribe here and
+     * re-fetch on any event (new positive screen, bundle escalation).
+     *
+     * <p>A DEDICATED topic (not {@code /topic/alerts/{hospitalId}}) is used
+     * deliberately: the frontend socket layer allows only ONE subscriber per
+     * topic string, and the app-wide alert hook already owns the alert topics —
+     * reusing them would silently clobber the global alert toasts.
+     *
+     * <p>Payload is a small map ({@code eventType}, {@code visitId},
+     * {@code sepsisStatus?}); subscribers refetch, so the shape stays minimal.
+     */
+    public void publishSepsisEvent(UUID hospitalId, Map<String, Object> payload) {
+        String topic = "/topic/sepsis/" + hospitalId;
+        messagingTemplate.convertAndSend(topic, (Object) payload);
+        log.debug("Published sepsis event {} to {}", payload.get("eventType"), topic);
+    }
+
+    /**
+     * Publish a sepsis event AFTER the current transaction commits, so a
+     * subscriber that reacts by re-fetching sees the committed screening row
+     * (avoids the read-before-commit race). Falls back to an immediate publish
+     * when there is no active transaction (the {@code @Scheduled} bundle
+     * monitor, tests). Best-effort: a STOMP failure never propagates into the
+     * caller's transaction.
+     */
+    public void publishSepsisEventAfterCommit(UUID hospitalId, Map<String, Object> payload) {
+        Runnable fire = () -> {
+            try {
+                publishSepsisEvent(hospitalId, payload);
+            } catch (Exception e) {
+                log.warn("Failed to publish sepsis event for hospital {}: {}", hospitalId, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override public void afterCommit() { fire.run(); }
+                    });
+        } else {
+            fire.run();
+        }
+    }
 }

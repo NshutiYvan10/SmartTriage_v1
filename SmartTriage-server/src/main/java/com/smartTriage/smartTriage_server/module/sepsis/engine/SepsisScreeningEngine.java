@@ -77,16 +77,17 @@ public class SepsisScreeningEngine {
         // age-appropriate "above normal for age" cutoffs grounded in the same norms
         // the pediatric triage calculator uses (infant < 3y, child 3-12y).
         boolean pediatric = false;
+        int ageMonths = -1;         // resolved below for pediatric patients
         int sirsHrThreshold = 90;   // adult: HR > 90
         int sirsRrThreshold = 20;   // adult: RR > 20
         try {
             pediatric = visit.isPediatric();
-            if (pediatric && visit.getPatient() != null) {
-                int ageYears = visit.getPatient().getAgeInYears();
-                if (ageYears < 3) {          // infant
+            if (pediatric) {
+                ageMonths = resolveAgeMonths(visit);
+                if (ageMonths < INFANT_AGE_BOUNDARY_MONTHS) {   // infant (< 3y)
                     sirsHrThreshold = 130;
                     sirsRrThreshold = 39;
-                } else {                     // child 3-12
+                } else {                                        // child 3-12y
                     sirsHrThreshold = 99;
                     sirsRrThreshold = 26;
                 }
@@ -94,6 +95,11 @@ public class SepsisScreeningEngine {
         } catch (Exception ignored) {
             // fall back to adult thresholds if age can't be resolved
         }
+        // PALS 5th-percentile systolic-BP hypotension cutoff for this child's age
+        // (mmHg). -1 (never trips) for adults / unresolved age. Computed once and
+        // reused by the organ-dysfunction and septic-shock blocks below so a
+        // hypotensive child can finally reach SEVERE_SEPSIS / SEPTIC_SHOCK.
+        int pedHypotensionSbp = pediatric ? pediatricHypotensionThreshold(ageMonths) : -1;
 
         // ================================================================
         // qSOFA SCORING
@@ -196,13 +202,22 @@ public class SepsisScreeningEngine {
         if (status == SepsisStatus.SEPSIS_SUSPECTED || status == SepsisStatus.SIRS_POSITIVE) {
             boolean hasOrganDysfunction = false;
 
-            // Adult hypotension threshold. Pediatric hypotension is age-dependent
-            // and compensated pediatric shock is often normotensive, so we do NOT
-            // apply the adult SBP cutoff to children (the caveat directs the
-            // clinician to age-specific assessment instead).
+            // Adult hypotension threshold (SBP < 90).
             if (!pediatric && vitals.getSystolicBp() != null && vitals.getSystolicBp() < 90) {
                 hasOrganDysfunction = true;
+                systolicBpLow = true;
                 findings.add("Organ dysfunction: SBP < 90 mmHg (hypotension)");
+            }
+            // Pediatric hypotension — assessed against the PALS 5th-percentile
+            // systolic-BP-for-age threshold (NOT the adult cutoff). Frank
+            // hypotension in a child is a decompensated (late) sign; previously
+            // children could not reach SEVERE_SEPSIS on blood pressure at all.
+            else if (pediatric && pedHypotensionSbp > 0
+                    && vitals.getSystolicBp() != null && vitals.getSystolicBp() < pedHypotensionSbp) {
+                hasOrganDysfunction = true;
+                systolicBpLow = true;
+                findings.add("Organ dysfunction: pediatric hypotension — SBP " + vitals.getSystolicBp()
+                        + " mmHg < " + pedHypotensionSbp + " mmHg (PALS 5th-percentile for age)");
             }
 
             // Lactate > 2 mmol/L is checked at the service level (from screening request)
@@ -220,6 +235,18 @@ public class SepsisScreeningEngine {
                 && vitals.getSystolicBp() != null && vitals.getSystolicBp() < 70) {
             status = SepsisStatus.SEPTIC_SHOCK;
             findings.add("SEPTIC SHOCK: Persistent severe hypotension (SBP < 70 mmHg)");
+        }
+        // Pediatric: frank hypotension below the PALS 5th-percentile-for-age
+        // threshold is, by definition, decompensated shock in a child. PALS does
+        // not define a separate lower "shock" SBP and pediatric shock is often
+        // normotensive/compensated, so we do NOT invent an unvalidated second
+        // cutoff — an overtly hypotensive child is treated as septic shock.
+        // Single-reading proxy; confirm fluid-refractory status clinically.
+        else if (pediatric && status == SepsisStatus.SEVERE_SEPSIS && pedHypotensionSbp > 0
+                && vitals.getSystolicBp() != null && vitals.getSystolicBp() < pedHypotensionSbp) {
+            status = SepsisStatus.SEPTIC_SHOCK;
+            findings.add("SEPTIC SHOCK: pediatric hypotension below PALS 5th-percentile for age (SBP "
+                    + vitals.getSystolicBp() + " < " + pedHypotensionSbp + " mmHg)");
         }
 
         boolean bundleRequired = status == SepsisStatus.SEPSIS_SUSPECTED
@@ -256,11 +283,12 @@ public class SepsisScreeningEngine {
         // ================================================================
         String pediatricCaveat = null;
         if (pediatric) {
-            pediatricCaveat = "Pediatric patient: SIRS vital thresholds were age-adjusted. Adult qSOFA "
-                    + "hypotension/RR thresholds are NOT validated for children, and compensated pediatric "
-                    + "septic shock can be normotensive — apply clinical judgment and age-specific assessment; "
-                    + "do not treat a negative screen as reassuring.";
-            findings.add("PEDIATRIC: age-adjusted SIRS thresholds applied; adult qSOFA not validated in children.");
+            pediatricCaveat = "Pediatric patient: SIRS vital thresholds were age-adjusted and blood pressure was "
+                    + "assessed against PALS 5th-percentile-for-age hypotension thresholds. The adult qSOFA "
+                    + "respiratory-rate threshold is NOT validated for children and was not applied; compensated "
+                    + "pediatric septic shock can be normotensive, so a normal BP does NOT exclude shock — apply "
+                    + "clinical judgment and age-specific assessment; do not treat a negative screen as reassuring.";
+            findings.add("PEDIATRIC: age-adjusted SIRS thresholds + PALS hypotension-for-age applied; adult qSOFA RR not applied.");
         }
 
         log.info("Sepsis screening for Visit {}: Status={}, qSOFA={}, SIRS={}, Bundle={}, Pediatric={}, InsufficientData={}",
@@ -273,5 +301,54 @@ public class SepsisScreeningEngine {
                 findings, bundleRequired,
                 pediatric, pediatricCaveat, insufficientData, dataQualityNote
         );
+    }
+
+    /**
+     * Boundary (months) between the infant and child SIRS bands — &lt; 36 months
+     * (3 years) is treated as an infant. Also the conservative default age used
+     * when a pediatric visit's date of birth cannot be resolved, mirroring the
+     * triage pipeline's child-form default (TriageService.ageInMonths).
+     */
+    private static final int INFANT_AGE_BOUNDARY_MONTHS = 36;
+
+    /**
+     * Resolve the patient's age in whole months from date of birth. Null-safe:
+     * returns the conservative child default ({@link #INFANT_AGE_BOUNDARY_MONTHS})
+     * when the patient or DOB is unknown, and clamps negatives to 0. Months
+     * precision (not years) is required because the PALS hypotension bands turn
+     * on a &lt;1-month / &lt;1-year distinction a year-only age cannot express.
+     */
+    private static int resolveAgeMonths(Visit visit) {
+        try {
+            if (visit.getPatient() != null && visit.getPatient().getDateOfBirth() != null) {
+                long months = java.time.temporal.ChronoUnit.MONTHS.between(
+                        visit.getPatient().getDateOfBirth(), java.time.LocalDate.now());
+                return (int) Math.max(0, months);
+            }
+        } catch (Exception ignored) {
+            // fall through to the conservative default
+        }
+        return INFANT_AGE_BOUNDARY_MONTHS;
+    }
+
+    /**
+     * PALS 5th-percentile systolic blood pressure (mmHg) below which a child is
+     * hypotensive, by age:
+     * <ul>
+     *   <li>&lt; 1 month (term neonate): &lt; 60</li>
+     *   <li>1 month – &lt; 1 year:       &lt; 70</li>
+     *   <li>1 – 10 years:               &lt; 70 + (age_years × 2)</li>
+     *   <li>&gt; 10 years:               &lt; 90</li>
+     * </ul>
+     * (Pediatric Advanced Life Support; Surviving Sepsis Campaign — pediatric.)
+     */
+    private static int pediatricHypotensionThreshold(int ageMonths) {
+        if (ageMonths < 1) return 60;
+        if (ageMonths < 12) return 70;
+        if (ageMonths < 120) {
+            int ageYears = ageMonths / 12;
+            return 70 + (ageYears * 2);
+        }
+        return 90;
     }
 }

@@ -84,17 +84,36 @@ public class SepsisService {
         boolean wbcCriteriaMet = result.wbcCriteriaMet();
         int sirsScore = result.sirsScore();
         SepsisStatus status = result.status();
+        String wbcUnitWarning = null;
 
         if (request != null && request.getWbcCount() != null) {
-            if (request.getWbcCount() > 12000 || request.getWbcCount() < 4000) {
+            double wbc = request.getWbcCount();
+            // Unit-safety floor: WBC must be an ABSOLUTE count in cells/µL
+            // (criterion thresholds 12,000 / 4,000). A value below 100 is
+            // implausible as an absolute count and is almost certainly a
+            // ×10^9/L SI mis-entry (e.g. "11.2"). Scoring it would silently
+            // turn a NORMAL count into profound leukopenia → a false SIRS point
+            // → a false CRITICAL sepsis alert + 1-hour bundle. So an implausible
+            // value is IGNORED for scoring and flagged in the data-quality note
+            // rather than driving a criterion off a unit error. (Same discipline
+            // as the medication dose-unit hazard guard.)
+            if (wbc < 100.0) {
+                log.warn("Sepsis screen: ignoring implausible WBC {} for visit {} — expected an absolute "
+                        + "count in cells/µL, not ×10^9/L", wbc, visitId);
+                wbcUnitWarning = "WBC entry " + wbc + " was ignored — implausible as an absolute count "
+                        + "(cells/µL); it looks like a ×10^9/L value. Re-enter the absolute count.";
+            } else if (wbc > 12000 || wbc < 4000) {
                 wbcCriteriaMet = true;
                 sirsScore++;
             }
-            if (Boolean.TRUE.equals(request.getWbcBandsElevated())) {
-                wbcCriteriaMet = true;
-                if (sirsScore == result.sirsScore()) { // Only increment once
-                    sirsScore++;
-                }
+        }
+        // Band forms (>10% bands) are an independent SIRS criterion, not tied to
+        // the absolute count — evaluate regardless. The "increment once" guard
+        // keeps the WBC criterion worth at most one SIRS point.
+        if (request != null && Boolean.TRUE.equals(request.getWbcBandsElevated())) {
+            wbcCriteriaMet = true;
+            if (sirsScore == result.sirsScore()) {
+                sirsScore++;
             }
         }
 
@@ -121,6 +140,15 @@ public class SepsisService {
             status = SepsisStatus.SEVERE_SEPSIS;
         }
 
+        // Fold any WBC unit-safety warning into the data-quality note so the
+        // ignored value is visible on the record/dashboard, never silent.
+        String dataQualityNote = result.dataQualityNote();
+        if (wbcUnitWarning != null) {
+            dataQualityNote = (dataQualityNote == null || dataQualityNote.isBlank())
+                    ? wbcUnitWarning
+                    : dataQualityNote + " " + wbcUnitWarning;
+        }
+
         // Resolve screened-by name
         String screenedByName = resolveCurrentUserName();
 
@@ -144,7 +172,7 @@ public class SepsisService {
                 .pediatric(result.pediatric())
                 .pediatricCaveat(result.pediatricCaveat())
                 .insufficientData(result.insufficientData())
-                .dataQualityNote(result.dataQualityNote())
+                .dataQualityNote(dataQualityNote)
                 .notes(request != null ? request.getNotes() : null)
                 .build();
 
@@ -334,6 +362,15 @@ public class SepsisService {
 
         alert = clinicalAlertRepository.save(alert);
         publishSepsisAlert(alert, hospitalId, zone, zoneDoctor);
+        // Live refresh for the Sepsis dashboard / per-visit panel via the
+        // dedicated sepsis topic, AFTER commit so a refetch sees this saved
+        // screening. Best-effort (never breaks the screening transaction).
+        if (hospitalId != null) {
+            realTimeEventPublisher.publishSepsisEventAfterCommit(hospitalId, java.util.Map.of(
+                    "eventType", "SCREENING_POSITIVE",
+                    "visitId", visit.getId().toString(),
+                    "sepsisStatus", status.name()));
+        }
 
         log.warn("SEPSIS ALERT generated: Visit={}, Status={}, zone={}, doctor={}",
                 visit.getVisitNumber(), status, zone, zoneDoctor != null ? zoneDoctor.getId() : "unassigned");

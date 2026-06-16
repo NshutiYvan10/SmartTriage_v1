@@ -124,6 +124,24 @@ class SepsisServiceTest {
     }
 
     @Test
+    @DisplayName("Implausible WBC (11.2 — an SI ×10^9/L mis-entry) is IGNORED, not scored as leukopenia")
+    void implausibleWbcUnitEntryIsIgnored() {
+        // Vitals alone → SIRS 0 / qSOFA 0 → NO_SEPSIS. 11.2 looks like ×10^9/L;
+        // as an absolute count it is < 4000 and WOULD have falsely scored
+        // profound leukopenia → false SIRS → false CRITICAL sepsis. The
+        // unit-safety floor must ignore it and flag the data-quality note.
+        givenVitals(37.0, 80, 16, 120, AvpuScore.ALERT, false);
+        SepsisScreening s = service.screenPatient(visitId,
+                SepsisScreeningRequest.builder().wbcCount(11.2).build());
+
+        assertEquals(SepsisStatus.NO_SEPSIS, s.getSepsisStatus());
+        assertEquals(0, s.getSirsScore());
+        org.junit.jupiter.api.Assertions.assertFalse(s.isWbcCriteriaMet());
+        org.junit.jupiter.api.Assertions.assertNotNull(s.getDataQualityNote()); // flagged, never silent
+        verify(alertRepo, never()).save(any(ClinicalAlert.class));
+    }
+
+    @Test
     @DisplayName("Negative screen → NO_SEPSIS, no alert, no push")
     void negativeScreen() {
         givenVitals(37.0, 80, 16, 120, AvpuScore.ALERT, false);
