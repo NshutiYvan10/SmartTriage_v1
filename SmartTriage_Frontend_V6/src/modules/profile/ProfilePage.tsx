@@ -84,7 +84,7 @@ function buildProfileFromAuth(user: { fullName: string; email: string; role: Use
 }
 
 export function ProfilePage() {
-  const { isDark } = useTheme();
+  const { isDark, toggle: toggleTheme } = useTheme();
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const roleMeta = user ? ROLE_META[user.role] : null;
@@ -110,13 +110,21 @@ export function ProfilePage() {
     setIsEditing(false);
   }, [user?.id, user?.role]);
 
-  // Settings state
-  const [emailNotifs, setEmailNotifs] = useState(true);
-  const [pushNotifs, setPushNotifs] = useState(true);
-  const [soundAlerts, setSoundAlerts] = useState(false);
-  const [criticalOnly, setCriticalOnly] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
-  const [compactView, setCompactView] = useState(false);
+  // Preferences — wired to REAL mechanisms (no mockups).
+  //  • Dark mode → the global theme store (persists per device).
+  //  • Critical-alert sound → the flag CriticalAlertNotifier reads
+  //    ('smarttriage:critical-mute'; '1' = muted). sessionStorage by design,
+  //    so the audible cue for deteriorating patients re-arms each session.
+  const [soundOn, setSoundOn] = useState(
+    () => sessionStorage.getItem('smarttriage:critical-mute') !== '1',
+  );
+  const toggleSound = () => {
+    setSoundOn((prev) => {
+      const next = !prev;
+      sessionStorage.setItem('smarttriage:critical-mute', next ? '0' : '1');
+      return next;
+    });
+  };
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -463,51 +471,33 @@ export function ProfilePage() {
           </div>
         )}
 
-        {/* Settings Tab */}
+        {/* Preferences Tab — only real, working, persisted settings. */}
         {activeTab === 'settings' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-fade-up" style={{ animationDelay: '0.3s' }}>
-            {/* Notification Preferences */}
+            {/* Alerts */}
             <div className="glass-card rounded-3xl overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100/60">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-600 to-cyan-500 flex items-center justify-center shadow-sm">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center shadow-sm">
                     <Bell className="w-4 h-4 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-gray-900">Notification Preferences</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">How you receive updates</p>
+                    <h2 className="text-sm font-bold text-gray-900">Alerts</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">Audible cue for deteriorating patients</p>
                   </div>
                 </div>
               </div>
-              <div className="p-5 divide-y divide-gray-100/60">
+              <div className="p-5">
                 <SettingToggle
-                  label="Email Notifications"
-                  description="Receive notification summaries via email"
-                  enabled={emailNotifs}
-                  onToggle={() => setEmailNotifs(!emailNotifs)}
-                />
-                <SettingToggle
-                  label="Push Notifications"
-                  description="Browser push notifications for real-time alerts"
-                  enabled={pushNotifs}
-                  onToggle={() => setPushNotifs(!pushNotifs)}
-                />
-                <SettingToggle
-                  label="Sound Alerts"
-                  description="Play sound for critical notifications"
-                  enabled={soundAlerts}
-                  onToggle={() => setSoundAlerts(!soundAlerts)}
-                />
-                <SettingToggle
-                  label="Critical Only"
-                  description="Only receive notifications for critical events"
-                  enabled={criticalOnly}
-                  onToggle={() => setCriticalOnly(!criticalOnly)}
+                  label="Critical alert sound"
+                  description="Play a tone when a new CRITICAL patient alert arrives. Re-enables each session so a deteriorating patient is never silently missed."
+                  enabled={soundOn}
+                  onToggle={toggleSound}
                 />
               </div>
             </div>
 
-            {/* Appearance Preferences */}
+            {/* Appearance */}
             <div className="glass-card rounded-3xl overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100/60">
                 <div className="flex items-center gap-3">
@@ -516,46 +506,17 @@ export function ProfilePage() {
                   </div>
                   <div>
                     <h2 className="text-sm font-bold text-gray-900">Appearance</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">Visual & display preferences</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Display preference for this device</p>
                   </div>
                 </div>
               </div>
               <div className="p-5">
-                <div className="divide-y divide-gray-100/60">
-                  <SettingToggle
-                    label="Dark Mode"
-                    description="Switch to dark theme across the application"
-                    enabled={darkMode}
-                    onToggle={() => setDarkMode(!darkMode)}
-                  />
-                  <SettingToggle
-                    label="Compact View"
-                    description="Reduce spacing for more information density"
-                    enabled={compactView}
-                    onToggle={() => setCompactView(!compactView)}
-                  />
-                </div>
-
-                <div className="mt-5 pt-4 border-t border-gray-100/60">
-                  <label className="text-xs font-semibold text-gray-500 mb-3 block uppercase tracking-wider">Theme Color</label>
-                  <div className="flex gap-3">
-                    {[
-                      { color: 'bg-cyan-600', active: true },
-                      { color: 'bg-blue-500', active: false },
-                      { color: 'bg-emerald-500', active: false },
-                      { color: 'bg-violet-500', active: false },
-                      { color: 'bg-rose-500', active: false },
-                      { color: 'bg-amber-500', active: false },
-                    ].map((item, i) => (
-                      <button
-                        key={i}
-                        className={`w-9 h-9 rounded-xl ${item.color} ${
-                          item.active ? 'ring-2 ring-offset-2 ring-cyan-600 shadow-lg' : 'shadow-sm'
-                        } transition-all duration-300 hover:scale-110 hover:-translate-y-0.5`}
-                      />
-                    ))}
-                  </div>
-                </div>
+                <SettingToggle
+                  label="Dark Mode"
+                  description="Switch to the dark theme across the application. Applied immediately and remembered on this device."
+                  enabled={isDark}
+                  onToggle={toggleTheme}
+                />
               </div>
             </div>
           </div>
@@ -563,7 +524,7 @@ export function ProfilePage() {
 
         {/* Security Tab */}
         {activeTab === 'security' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-fade-up" style={{ animationDelay: '0.3s' }}>
+          <div className="max-w-xl animate-fade-up" style={{ animationDelay: '0.3s' }}>
             {/* Change Password */}
             <div className="glass-card rounded-3xl overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100/60">
@@ -634,66 +595,6 @@ export function ProfilePage() {
               </div>
             </div>
 
-            {/* Security Settings Column */}
-            <div className="space-y-4">
-              {/* Two-Factor */}
-              <div className="glass-card rounded-3xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-100/60">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-sm">
-                      <Shield className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <h2 className="text-sm font-bold text-gray-900">Two-Factor Authentication</h2>
-                      <p className="text-xs text-gray-500 mt-0.5">Extra security layer for your account</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="p-5">
-                  <p className="text-xs text-gray-600 mb-4 leading-relaxed">
-                    Add an extra layer of security to your account by enabling two-factor authentication.
-                  </p>
-                  <button className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl transition-all duration-300 shadow-lg shadow-emerald-600/20 hover:shadow-xl hover:-translate-y-0.5">
-                    <Shield className="w-3.5 h-3.5" />
-                    Enable 2FA
-                  </button>
-                </div>
-              </div>
-
-              {/* Login History */}
-              <div className="glass-card rounded-3xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-100/60">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm">
-                      <Clock className="w-4 h-4 text-white" />
-                    </div>
-                    <h2 className="text-sm font-bold text-gray-900">Login History</h2>
-                  </div>
-                </div>
-                <div className="p-5 space-y-3">
-                  {[
-                    { device: 'Chrome on Windows', location: 'Kigali, Rwanda', time: 'Now', active: true },
-                    { device: 'Safari on iPhone', location: 'Kigali, Rwanda', time: '2 hours ago', active: false },
-                    { device: 'Chrome on Windows', location: 'Kigali, Rwanda', time: 'Yesterday', active: false },
-                  ].map((session, i) => (
-                    <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-white/60 transition-all duration-300">
-                      <div>
-                        <p className="text-xs font-semibold text-gray-800">{session.device}</p>
-                        <p className="text-[11px] text-gray-400 font-medium mt-0.5">
-                          {session.location} · {session.time}
-                        </p>
-                      </div>
-                      {session.active && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200">
-                          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                          Active
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
