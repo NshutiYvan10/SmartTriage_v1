@@ -336,6 +336,9 @@ export function AdultTriageForm() {
   const [diastolicBP, setDiastolicBP] = useState('');
   const [spo2, setSpo2] = useState('');
   const [bloodGlucose, setBloodGlucose] = useState('');
+  // Glucose unit the nurse is entering in. Stored/classified value is mmol/L;
+  // a mg/dL glucometer reading is converted at the edge before it is sent.
+  const [glucoseUnit, setGlucoseUnit] = useState<'MMOL_L' | 'MG_DL'>('MMOL_L');
   const [weightVal, setWeightVal] = useState('');
   const [heightVal, setHeightVal] = useState('');
   const [painScore, setPainScore] = useState('');
@@ -596,6 +599,17 @@ export function AdultTriageForm() {
         ALERT: 'ALERT', VOICE: 'VERBAL', PAIN: 'PAIN', UNRESPONSIVE: 'UNRESPONSIVE',
       };
       try {
+        // Convert a mg/dL glucose entry to mmol/L (the unit every triage /
+        // hypoglycaemia threshold uses) before it reaches the request or the
+        // hypoglycaemia flag, so a glucometer reading isn't misclassified.
+        const toMmolGlucose = (raw?: string): number | undefined => {
+          if (!raw) return undefined;
+          const n = parseFloat(raw);
+          if (isNaN(n)) return undefined;
+          return glucoseUnit === 'MG_DL' ? n / 18 : n;
+        };
+        const glucoseMmol = toMmolGlucose(bloodGlucose);
+        const dynGlucoseMmol = toMmolGlucose(fieldValues['blood_glucose']);
         const triageResponse = await triageApi.perform({
           visitId: targetPatientId,
           // B10 — persist the phone field (previously dropped: no DTO slot).
@@ -611,7 +625,7 @@ export function AdultTriageForm() {
           hasComa: tewsInput.avpu === 'PAIN' || tewsInput.avpu === 'UNRESPONSIVE',
           hasPurpuricRash: !!checkedSigns['rash_petechiae'],
           hasBurnFaceInhalation: false,
-          hasHypoglycaemia: fieldValues['blood_glucose'] ? parseFloat(fieldValues['blood_glucose']) < 3.0 : false,
+          hasHypoglycaemia: dynGlucoseMmol != null && dynGlucoseMmol < 3.0,
           hasStabGunWoundNeckChest: false,
           // TEWS components
           mobility: tewsInput.mobility as 'WALKING' | 'WITH_HELP' | 'STRETCHER',
@@ -673,7 +687,7 @@ export function AdultTriageForm() {
           // Additional Vitals
           spo2: spo2 ? parseInt(spo2) : undefined,
           diastolicBp: diastolicBP ? parseInt(diastolicBP) : undefined,
-          bloodGlucose: bloodGlucose ? parseFloat(bloodGlucose) : undefined,
+          bloodGlucose: glucoseMmol,
           painScore: painScore ? parseInt(painScore) : undefined,
           weightKg: weightVal ? parseFloat(weightVal) : undefined,
           heightCm: heightVal ? parseFloat(heightVal) : undefined,
@@ -1466,7 +1480,23 @@ export function AdultTriageForm() {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <div><label className={labelCls}>SpO₂ (%)</label><input type="number" value={spo2} onChange={(e) => setSpo2(e.target.value)} placeholder="—" className={`${inputCls} ${getVitalBg('spo2', spo2)}`} />{spo2Value !== null && spo2Value < 92 && <p className="text-[9px] text-red-600 mt-0.5 font-semibold">⚠ Critical – forces RED</p>}</div>
               <div><label className={labelCls}>Diastolic BP (mmHg)</label><input type="number" value={diastolicBP} onChange={(e) => setDiastolicBP(e.target.value)} placeholder="—" className={`${inputCls} ${getVitalBg('diastolicBP', diastolicBP)}`} /></div>
-              <div><label className={labelCls}>Blood Glucose (mmol/L)</label><input type="number" step="0.1" value={bloodGlucose} onChange={(e) => setBloodGlucose(e.target.value)} placeholder="—" className={`${inputCls} ${getVitalBg('glucose', bloodGlucose)}`} /></div>
+              <div>
+                <label className={`${labelCls} flex items-center gap-1.5`}>Blood Glucose
+                  <span className="inline-flex rounded overflow-hidden border border-slate-200">
+                    {(['MMOL_L', 'MG_DL'] as const).map((u) => (
+                      <button key={u} type="button" onClick={() => setGlucoseUnit(u)}
+                        className={`px-1.5 py-0.5 text-[9px] font-bold ${glucoseUnit === u ? 'bg-cyan-500 text-white' : 'bg-white text-slate-500'}`}>
+                        {u === 'MMOL_L' ? 'mmol/L' : 'mg/dL'}
+                      </button>
+                    ))}
+                  </span>
+                </label>
+                <input type="number" step={glucoseUnit === 'MG_DL' ? '1' : '0.1'} value={bloodGlucose} onChange={(e) => setBloodGlucose(e.target.value)} placeholder="—"
+                  className={`${inputCls} ${getVitalBg('glucose', glucoseUnit === 'MG_DL' && bloodGlucose ? String(parseFloat(bloodGlucose) / 18) : bloodGlucose)}`} />
+                {glucoseUnit === 'MG_DL' && bloodGlucose && !isNaN(parseFloat(bloodGlucose)) && (
+                  <p className="text-[9px] text-slate-500 mt-0.5">= {(parseFloat(bloodGlucose) / 18).toFixed(1)} mmol/L</p>
+                )}
+              </div>
               <div><label className={labelCls}>Weight (kg)</label><input type="number" step="0.1" value={weightVal} onChange={(e) => setWeightVal(e.target.value)} placeholder="Optional" className={inputCls} /></div>
               <div><label className={labelCls}>Height (cm)</label><input type="number" value={heightVal} onChange={(e) => setHeightVal(e.target.value)} placeholder="Optional" className={inputCls} /></div>
               <div><label className={labelCls}>Pain Score (0-10)</label><input type="number" min="0" max="10" value={painScore} onChange={(e) => setPainScore(e.target.value)} placeholder="—" className={inputCls} /></div>

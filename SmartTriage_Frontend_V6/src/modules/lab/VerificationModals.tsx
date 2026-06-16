@@ -53,7 +53,7 @@ export function VerifyResultModal({ order, verifiedByName, onClose, onSaved }: V
         <div className={`text-base font-bold ${order.isCritical ? 'text-rose-500' : text.heading}`}>
           {order.resultValue} {order.resultUnit}
         </div>
-        {order.referenceRangeMin !== null && order.referenceRangeMax !== null && (
+        {order.referenceRangeMin != null && order.referenceRangeMax != null && (
           <div className={`text-[10px] ${text.muted}`}>
             Reference: {order.referenceRangeMin} – {order.referenceRangeMax} {order.resultUnit}
           </div>

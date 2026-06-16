@@ -342,6 +342,9 @@ export function PediatricTriageForm() {
   const [diastolicBP, setDiastolicBP] = useState('');
   const [spo2, setSpo2] = useState('');
   const [bloodGlucose, setBloodGlucose] = useState('');
+  // Glucose unit the nurse is entering in. Stored/classified value is mmol/L;
+  // a mg/dL glucometer reading is converted at the edge before it is sent.
+  const [glucoseUnit, setGlucoseUnit] = useState<'MMOL_L' | 'MG_DL'>('MMOL_L');
   const [weightVal, setWeightVal] = useState(patient?.weight?.toString() || '');
   const [heightVal, setHeightVal] = useState('');
 
@@ -629,8 +632,15 @@ export function PediatricTriageForm() {
         NORMAL: 'WALKING',
         UNABLE: 'STRETCHER',
       };
-      const glucoseValue = fieldValues['blood_glucose']
-        ? parseFloat(fieldValues['blood_glucose']) : undefined;
+      // Convert a mg/dL glucose entry to mmol/L (the unit every triage /
+      // hypoglycaemia threshold uses) before it feeds the flags or the request.
+      const toMmolGlucose = (raw?: string): number | undefined => {
+        if (!raw) return undefined;
+        const n = parseFloat(raw);
+        if (isNaN(n)) return undefined;
+        return glucoseUnit === 'MG_DL' ? n / 18 : n;
+      };
+      const glucoseValue = toMmolGlucose(fieldValues['blood_glucose']);
       const isInfant = ageBand === 'INFANT';
 
       try {
@@ -1361,7 +1371,23 @@ export function PediatricTriageForm() {
               <div><label className={labelCls}>SpO₂ (%)</label><input type="number" value={spo2} onChange={(e) => setSpo2(e.target.value)} placeholder="—" className={`${inputCls} ${getVitalBg('spo2', spo2)}`} />{spo2Value !== null && spo2Value < 92 && <p className="text-[9px] text-red-600 mt-0.5 font-semibold">⚠ Critical – forces RED</p>}{spo2Value !== null && spo2Value < 94 && spo2Value >= 92 && <p className="text-[9px] text-amber-600 mt-0.5 font-semibold">⚠ Below infant threshold (94%)</p>}</div>
               <div><label className={labelCls}>Systolic BP (mmHg)</label><input type="number" value={systolicBP} onChange={(e) => setSystolicBP(e.target.value)} placeholder="—" className={inputCls} /></div>
               <div><label className={labelCls}>Diastolic BP (mmHg)</label><input type="number" value={diastolicBP} onChange={(e) => setDiastolicBP(e.target.value)} placeholder="—" className={inputCls} /></div>
-              <div><label className={labelCls}>Blood Glucose (mmol/L)</label><input type="number" step="0.1" value={bloodGlucose} onChange={(e) => setBloodGlucose(e.target.value)} placeholder="—" className={`${inputCls} ${getVitalBg('glucose', bloodGlucose)}`} /></div>
+              <div>
+                <label className={`${labelCls} flex items-center gap-1.5`}>Blood Glucose
+                  <span className="inline-flex rounded overflow-hidden border border-slate-200">
+                    {(['MMOL_L', 'MG_DL'] as const).map((u) => (
+                      <button key={u} type="button" onClick={() => setGlucoseUnit(u)}
+                        className={`px-1.5 py-0.5 text-[9px] font-bold ${glucoseUnit === u ? 'bg-cyan-500 text-white' : 'bg-white text-slate-500'}`}>
+                        {u === 'MMOL_L' ? 'mmol/L' : 'mg/dL'}
+                      </button>
+                    ))}
+                  </span>
+                </label>
+                <input type="number" step={glucoseUnit === 'MG_DL' ? '1' : '0.1'} value={bloodGlucose} onChange={(e) => setBloodGlucose(e.target.value)} placeholder="—"
+                  className={`${inputCls} ${getVitalBg('glucose', glucoseUnit === 'MG_DL' && bloodGlucose ? String(parseFloat(bloodGlucose) / 18) : bloodGlucose)}`} />
+                {glucoseUnit === 'MG_DL' && bloodGlucose && !isNaN(parseFloat(bloodGlucose)) && (
+                  <p className="text-[9px] text-slate-500 mt-0.5">= {(parseFloat(bloodGlucose) / 18).toFixed(1)} mmol/L</p>
+                )}
+              </div>
               <div>
                 <label className={labelCls}>Age-based Normal Ranges</label>
                 <div className="px-2.5 py-1.5 bg-pink-50/80 border border-pink-200/60 rounded-lg text-[10px] text-pink-700 flex items-center gap-1.5">

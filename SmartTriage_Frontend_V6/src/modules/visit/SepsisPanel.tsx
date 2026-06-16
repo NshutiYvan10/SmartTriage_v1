@@ -500,14 +500,14 @@ function ScreeningCard({
               )}
 
               {/* Infection source & lactate */}
-              {(screening.suspectedInfectionSource || screening.lactateLevel !== null) && (
+              {(screening.suspectedInfectionSource || screening.lactateLevel != null) && (
                 <div className="flex items-center gap-3 mt-2 flex-wrap">
                   {screening.suspectedInfectionSource && (
                     <span className={`text-[10px] ${text.muted}`}>
                       Source: <span className={text.body}>{screening.suspectedInfectionSource}</span>
                     </span>
                   )}
-                  {screening.lactateLevel !== null && (
+                  {screening.lactateLevel != null && (
                     <span className={`text-[10px] font-bold ${screening.lactateLevel >= 4 ? 'text-red-400' : screening.lactateLevel >= 2 ? 'text-amber-400' : 'text-emerald-400'}`}>
                       Lactate: {screening.lactateLevel} mmol/L
                     </span>
@@ -546,7 +546,7 @@ function ScreeningCard({
               const done = screening[item.key] === true;
               const isUpdating = actionLoading === `${screening.id}-${item.key}`;
               const Icon = item.icon;
-              const locked = !isLatest || screening.bundleCompletedAt !== null;
+              const locked = !isLatest || screening.bundleCompletedAt != null;
               return (
                 <button
                   key={String(item.key)}

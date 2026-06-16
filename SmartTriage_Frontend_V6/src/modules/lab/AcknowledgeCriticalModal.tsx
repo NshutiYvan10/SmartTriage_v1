@@ -81,7 +81,7 @@ export function AcknowledgeCriticalModal({ order, acknowledgedByName, onClose, o
           {order.criticalValueType && (
             <div className={`text-[11px] ${text.body}`}>{order.criticalValueType.replace(/_/g, ' ')}</div>
           )}
-          {order.referenceRangeMin !== null && order.referenceRangeMax !== null && (
+          {order.referenceRangeMin != null && order.referenceRangeMax != null && (
             <div className={`text-[10px] ${text.muted}`}>
               Reference: {order.referenceRangeMin} – {order.referenceRangeMax} {order.resultUnit}
             </div>

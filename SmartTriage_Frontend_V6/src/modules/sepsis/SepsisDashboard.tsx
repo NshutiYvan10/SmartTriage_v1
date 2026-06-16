@@ -456,7 +456,7 @@ export function SepsisDashboard() {
                             <button
                               key={item.key}
                               onClick={() => handleToggleBundleItem(screening, item.key)}
-                              disabled={isUpdating || screening.bundleCompletedAt !== null}
+                              disabled={isUpdating || screening.bundleCompletedAt != null}
                               className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-[11px] font-bold transition-all ${
                                 done
                                   ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'

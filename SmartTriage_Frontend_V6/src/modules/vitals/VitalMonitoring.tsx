@@ -718,17 +718,22 @@ export function VitalMonitoring() {
                 subtitle={currentVitals.ecgRhythm ?? 'Normal sinus rhythm'}
               />
               
-              {/* Glucose — stored/streamed in mmol/L (the unit every threshold uses) */}
-              <VitalCard
-                label="Glucose"
-                value={currentVitals.glucose.toFixed(1)}
-                unit="mmol/L"
-                icon={Candy}
-                status={getVitalStatus(currentVitals.glucose, 3.9, 11.0)}
-                trend="stable"
-                range="3.9-11.0 mmol/L"
-                subtitle="Random"
-              />
+              {/* Glucose — stored/streamed in mmol/L (the unit every threshold uses).
+                  Only shown when a glucose value is actually present: bedside monitors
+                  don't measure glucose (POC fingerstick / glucometer), so most monitor
+                  feeds have none — and rendering .toFixed on an absent value would crash. */}
+              {currentVitals.glucose != null && (
+                <VitalCard
+                  label="Glucose"
+                  value={currentVitals.glucose.toFixed(1)}
+                  unit="mmol/L"
+                  icon={Candy}
+                  status={getVitalStatus(currentVitals.glucose, 3.9, 11.0)}
+                  trend="stable"
+                  range="3.9-11.0 mmol/L"
+                  subtitle="Random"
+                />
+              )}
             </div>
           </div>
         )}

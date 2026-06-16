@@ -379,7 +379,7 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
                         <div className={`text-[11px] mt-0.5 ${subtleTextCls}`}>
                           MRN {c.medicalRecordNumber || '—'}
                           {c.dateOfBirth && <> · DOB {c.dateOfBirth}</>}
-                          {c.ageInYears !== null && <> · {c.ageInYears}y</>}
+                          {c.ageInYears != null && <> · {c.ageInYears}y</>}
                           {c.gender && <> · {c.gender}</>}
                           {c.nationalIdLast4 && <> · NID …{c.nationalIdLast4}</>}
                         </div>

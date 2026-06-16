@@ -255,7 +255,7 @@ export function PatientHistoryPanel({ patientId, excludeVisitId, emptyMessage }:
                 {triagePill && (
                   <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${triagePill.cls}`}>
                     {triagePill.label}
-                    {v.currentTewsScore !== null && <> · TEWS {v.currentTewsScore}</>}
+                    {v.currentTewsScore != null && <> · TEWS {v.currentTewsScore}</>}
                   </span>
                 )}
                 {dispoPill && (

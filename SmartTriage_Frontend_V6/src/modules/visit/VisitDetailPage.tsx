@@ -736,7 +736,7 @@ export function VisitDetailPage() {
                   {visit.chiefComplaint && (
                     <p className="text-white/50 text-xs">CC: {visit.chiefComplaint}</p>
                   )}
-                  {visit.currentTewsScore !== null && (
+                  {visit.currentTewsScore != null && (
                     <p className="text-cyan-400 text-xs font-bold">TEWS: {visit.currentTewsScore}</p>
                   )}
                 </div>

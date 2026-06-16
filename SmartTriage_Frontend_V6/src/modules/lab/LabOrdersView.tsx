@@ -533,7 +533,7 @@ function LabOrderCard({
           <div className={`text-sm font-bold ${order.isCritical ? 'text-rose-500' : order.isAbnormal ? 'text-amber-500' : text.heading}`}>
             {order.resultValue} {order.resultUnit}
           </div>
-          {order.referenceRangeMin !== null && order.referenceRangeMax !== null && (
+          {order.referenceRangeMin != null && order.referenceRangeMax != null && (
             <div className={`text-[10px] ${text.muted}`}>
               Ref: {order.referenceRangeMin} – {order.referenceRangeMax} {order.resultUnit}
             </div>

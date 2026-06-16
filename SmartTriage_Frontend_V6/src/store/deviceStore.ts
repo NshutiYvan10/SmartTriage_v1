@@ -27,7 +27,10 @@ const DEVICE_VITAL_MAP: Record<DeviceType, (keyof Omit<VitalSigns, 'timestamp' |
   THERMOMETER: ['temperature'],
   GLUCOMETER: ['glucose'],
   RESPIRATORY_MONITOR: ['respiratoryRate'],
-  MULTI_PARAMETER: ['heartRate', 'respiratoryRate', 'spo2', 'systolicBP', 'diastolicBP', 'temperature', 'ecg', 'glucose'],
+  // Bedside multi-parameter monitors don't measure blood glucose (it's a
+  // point-of-care fingerstick / dedicated glucometer reading), so glucose is
+  // NOT a streamed channel here — it arrives via manual/POC entry or a GLUCOMETER.
+  MULTI_PARAMETER: ['heartRate', 'respiratoryRate', 'spo2', 'systolicBP', 'diastolicBP', 'temperature', 'ecg'],
 };
 
 // ── Signal quality from numeric strength ──
@@ -372,7 +375,7 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   // ── Get unpaired devices ──
   getAvailableDevices: () => {
     const all = Array.from(get().devices.values());
-    return all.filter((d) => d.pairedPatientId === null);
+    return all.filter((d) => d.pairedPatientId == null);
   },
 
   // ── Get all devices ──

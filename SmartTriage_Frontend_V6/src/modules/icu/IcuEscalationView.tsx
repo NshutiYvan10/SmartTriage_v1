@@ -390,7 +390,7 @@ export function IcuEscalationView() {
                               <AlertTriangle className="w-3 h-3" />
                               Elapsed: {formatElapsed(esc.escalatedAt)}
                             </span>
-                            {esc.icuResponseMinutes !== null && (
+                            {esc.icuResponseMinutes != null && (
                               <span className={`text-[10px] flex items-center gap-1 font-bold ${
                                 esc.icuResponseMinutes <= 15 ? 'text-emerald-400' : esc.icuResponseMinutes <= 30 ? 'text-amber-400' : 'text-red-400'
                               }`}>
