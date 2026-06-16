@@ -246,6 +246,19 @@ export function subscribeToSepsis(
   return subscribeToTopic(`/topic/sepsis/${hospitalId}`, callback);
 }
 
+/**
+ * Subscribe to fast-track (stroke / STEMI) events for a hospital. Dedicated
+ * topic (same rationale as subscribeToSepsis — avoids clobbering the app-wide
+ * alert subscription). Payload is a small { eventType, visitId } map; refetch
+ * on any event.
+ */
+export function subscribeToFastTrack(
+  hospitalId: string,
+  callback: (event: any) => void
+): () => void {
+  return subscribeToTopic(`/topic/fasttrack/${hospitalId}`, callback);
+}
+
 /** Subscribe to medication events for a hospital (Workflow 3).
  *  Payload is a MedicationResponse — emitted on prescribe and every
  *  workflow transition (administer/countersign/hold/refuse/cancel).

@@ -318,4 +318,46 @@ public class RealTimeEventPublisher {
             fire.run();
         }
     }
+
+    // ====================================================================
+    // FAST TRACK DASHBOARD TOPIC
+    // ====================================================================
+
+    /**
+     * Push a lightweight fast-track event to the hospital's dedicated fast-track
+     * topic. The Fast Track dashboard and per-visit Fast Track panel subscribe
+     * here and re-fetch on any event (activation, ECG/CT recorded, status change,
+     * SLA breach). A DEDICATED topic (not {@code /topic/alerts/*}) is used on
+     * purpose — the frontend socket allows one subscriber per topic and the
+     * app-wide alert hook owns the alert topics. Payload is a small map
+     * ({@code eventType}, {@code visitId}); subscribers refetch.
+     */
+    public void publishFastTrackEvent(UUID hospitalId, Map<String, Object> payload) {
+        String topic = "/topic/fasttrack/" + hospitalId;
+        messagingTemplate.convertAndSend(topic, (Object) payload);
+        log.debug("Published fast-track event {} to {}", payload.get("eventType"), topic);
+    }
+
+    /**
+     * Publish a fast-track event AFTER the current transaction commits (so a
+     * refetch sees the saved activation), falling back to immediate publish with
+     * no active transaction (the {@code @Scheduled} monitor / tests). Best-effort.
+     */
+    public void publishFastTrackEventAfterCommit(UUID hospitalId, Map<String, Object> payload) {
+        Runnable fire = () -> {
+            try {
+                publishFastTrackEvent(hospitalId, payload);
+            } catch (Exception e) {
+                log.warn("Failed to publish fast-track event for hospital {}: {}", hospitalId, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override public void afterCommit() { fire.run(); }
+                    });
+        } else {
+            fire.run();
+        }
+    }
 }

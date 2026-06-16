@@ -12,6 +12,7 @@ import com.smartTriage.smartTriage_server.module.clinical.repository.Investigati
 import com.smartTriage.smartTriage_server.module.handover.repository.HandoverReportRepository;
 import com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository;
 import com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository;
+import com.smartTriage.smartTriage_server.module.fasttrack.repository.FastTrackActivationRepository;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
@@ -99,6 +100,7 @@ public class ClinicalAuthz {
     private final HandoverReportRepository handoverReportRepository;
     private final ClinicalAlertRepository clinicalAlertRepository;
     private final SepsisScreeningRepository sepsisScreeningRepository;
+    private final FastTrackActivationRepository fastTrackActivationRepository;
 
     /**
      * @return true if the authenticated user is attached to {@code hospitalId}.
@@ -542,6 +544,23 @@ public class ClinicalAuthz {
                     .orElse(false);
         } catch (Exception e) {
             log.error("canAccessSepsisScreening error for screening {}: {}", screeningId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** Scopes the fast-track mutating endpoints (status / ecg / ct / complete /
+     *  cancel / acknowledge) to the activation's own hospital, so a clinician at
+     *  hospital B cannot record an ECG/CT result or drive the status of hospital
+     *  A's stroke/STEMI activation by enumerating a UUID. */
+    @Transactional(readOnly = true)
+    public boolean canAccessFastTrack(Authentication authentication, UUID activationId) {
+        try {
+            if (activationId == null) return false;
+            return fastTrackActivationRepository.findVisitIdById(activationId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessFastTrack error for activation {}: {}", activationId, e.getMessage(), e);
             return false;
         }
     }

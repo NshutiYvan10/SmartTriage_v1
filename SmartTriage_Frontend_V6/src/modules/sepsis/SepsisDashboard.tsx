@@ -125,8 +125,12 @@ export function SepsisDashboard() {
   const filtered = screenings.filter((s) => {
     switch (filter) {
       case 'qsofa_high': return s.qsofaScore >= 2;
-      case 'bundle_in_progress': return s.bundleStartedAt !== null && s.bundleCompletedAt === null;
-      case 'completed': return s.bundleCompletedAt !== null;
+      // Truthy checks (not !== null / === null): the backend omits null fields
+      // (spring.jackson default-property-inclusion=non_null), so an unstarted
+      // bundle arrives as `undefined`, not null — strict !== null would wrongly
+      // treat it as started.
+      case 'bundle_in_progress': return !!s.bundleStartedAt && !s.bundleCompletedAt;
+      case 'completed': return !!s.bundleCompletedAt;
       default: return true;
     }
   });
@@ -398,14 +402,14 @@ export function SepsisDashboard() {
                           )}
 
                           {/* Infection source & lactate */}
-                          {(screening.suspectedInfectionSource || screening.lactateLevel !== null) && (
+                          {(screening.suspectedInfectionSource || screening.lactateLevel != null) && (
                             <div className="flex items-center gap-3 mt-2">
                               {screening.suspectedInfectionSource && (
                                 <span className={`text-[10px] ${text.muted}`}>
                                   Source: <span className={text.body}>{screening.suspectedInfectionSource}</span>
                                 </span>
                               )}
-                              {screening.lactateLevel !== null && (
+                              {screening.lactateLevel != null && (
                                 <span className={`text-[10px] font-bold ${screening.lactateLevel >= 4 ? 'text-red-400' : screening.lactateLevel >= 2 ? 'text-amber-400' : 'text-emerald-400'}`}>
                                   Lactate: {screening.lactateLevel} mmol/L
                                 </span>

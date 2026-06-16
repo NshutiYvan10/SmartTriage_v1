@@ -32,4 +32,13 @@ public interface FastTrackActivationRepository extends JpaRepository<FastTrackAc
      * Check for existing active fast-track for a visit — prevents duplicate activations.
      */
     boolean existsByVisitIdAndStatusNotInAndIsActiveTrue(UUID visitId, List<FastTrackStatus> terminalStatuses);
+
+    /** Project the owning visit id for an activation — used by ClinicalAuthz to
+     *  scope the mutating endpoints to the activation's own hospital. */
+    @Query("SELECT f.visit.id FROM FastTrackActivation f WHERE f.id = :id")
+    Optional<UUID> findVisitIdById(@Param("id") UUID id);
+
+    /** All non-terminal active activations across hospitals — the SLA monitor
+     *  scans these for door-to-ECG / door-to-CT / door-to-needle breaches. */
+    List<FastTrackActivation> findByStatusNotInAndIsActiveTrue(List<FastTrackStatus> terminalStatuses);
 }

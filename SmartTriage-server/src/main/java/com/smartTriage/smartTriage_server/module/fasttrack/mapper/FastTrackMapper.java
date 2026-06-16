@@ -18,6 +18,10 @@ public final class FastTrackMapper {
                 .status(activation.getStatus())
                 .activatedAt(activation.getActivatedAt())
                 .activatedByName(activation.getActivatedByName())
+                .acknowledgedAt(activation.getAcknowledgedAt())
+                .acknowledgedByName(activation.getAcknowledgedByName())
+                .lastUpdatedByName(activation.getLastUpdatedByName())
+                .completedByName(activation.getCompletedByName())
                 .symptomOnsetTime(activation.getSymptomOnsetTime())
                 .beFastScore(activation.getBeFastScore())
                 .nihssScore(activation.getNihssScore())
@@ -26,6 +30,7 @@ public final class FastTrackMapper {
                 .ctResult(activation.getCtResult())
                 .isHemorrhagic(activation.getIsHemorrhagic())
                 .thrombolysisEligible(activation.getThrombolysisEligible())
+                .thrombolysisAdvisory(activation.getThrombolysisAdvisory())
                 .thrombolysisStartedAt(activation.getThrombolysisStartedAt())
                 .doorToCtMinutes(activation.getDoorToCtMinutes())
                 .chestPainOnsetTime(activation.getChestPainOnsetTime())
@@ -51,6 +56,11 @@ public final class FastTrackMapper {
         if (activation.getVisit() != null) {
             builder.visitId(activation.getVisit().getId());
             builder.visitNumber(activation.getVisit().getVisitNumber());
+            builder.currentZone(activation.getVisit().getCurrentEdZone() != null
+                    ? activation.getVisit().getCurrentEdZone().name() : null);
+            if (activation.getVisit().getHospital() != null) {
+                builder.hospitalId(activation.getVisit().getHospital().getId());
+            }
             if (activation.getVisit().getPatient() != null) {
                 builder.patientName(
                         activation.getVisit().getPatient().getFirstName() + " " +

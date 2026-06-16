@@ -132,5 +132,19 @@ public enum AlertType {
      *    completion deadline.
      */
     SEPSIS_BUNDLE_NOT_STARTED,
-    SEPSIS_BUNDLE_OVERDUE
+    SEPSIS_BUNDLE_OVERDUE,
+
+    /**
+     * Fast-track (time-critical stroke / STEMI / NSTEMI / TIA) pathway alerts.
+     *  - FAST_TRACK_ACTIVATED: a stroke/MI pathway was activated for a visit;
+     *    CRITICAL, owned by the zone doctor + charge nurse (door-to-treatment
+     *    clock is now running). A dedicated type (not VITAL_SIGN_ABNORMAL) so it
+     *    is distinguishable in the alert stream AND picked up by the
+     *    time-critical re-escalation loop if left unacknowledged.
+     *  - FAST_TRACK_SLA_BREACH: a door-to-ECG / door-to-CT / door-to-needle
+     *    target was missed on an active pathway — raised by the fast-track
+     *    monitor and re-paged to the accountable clinicians.
+     */
+    FAST_TRACK_ACTIVATED,
+    FAST_TRACK_SLA_BREACH
 }

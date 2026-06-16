@@ -23,11 +23,19 @@ public class FastTrackResponse {
     private UUID visitId;
     private String visitNumber;
     private String patientName;
+    private UUID hospitalId;
+    private String currentZone;
 
     private FastTrackType fastTrackType;
     private FastTrackStatus status;
     private Instant activatedAt;
     private String activatedByName;
+
+    // Action trail (V75)
+    private Instant acknowledgedAt;
+    private String acknowledgedByName;
+    private String lastUpdatedByName;
+    private String completedByName;
 
     // Stroke-specific
     private Instant symptomOnsetTime;
@@ -38,6 +46,7 @@ public class FastTrackResponse {
     private String ctResult;
     private Boolean isHemorrhagic;
     private Boolean thrombolysisEligible;
+    private String thrombolysisAdvisory;
     private Instant thrombolysisStartedAt;
     private Integer doorToCtMinutes;
 

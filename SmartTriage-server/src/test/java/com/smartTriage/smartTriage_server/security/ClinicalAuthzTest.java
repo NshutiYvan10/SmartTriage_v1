@@ -42,6 +42,7 @@ class ClinicalAuthzTest {
     private ShiftAssignmentService shiftAssignmentService;
     private ClinicalAlertRepository clinicalAlertRepository;
     private com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository sepsisScreeningRepository;
+    private com.smartTriage.smartTriage_server.module.fasttrack.repository.FastTrackActivationRepository fastTrackActivationRepository;
     private ClinicalAuthz authz;
 
     private final UUID hospitalId = UUID.randomUUID();
@@ -53,6 +54,8 @@ class ClinicalAuthzTest {
         clinicalAlertRepository = mock(ClinicalAlertRepository.class);
         sepsisScreeningRepository =
                 mock(com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository.class);
+        fastTrackActivationRepository =
+                mock(com.smartTriage.smartTriage_server.module.fasttrack.repository.FastTrackActivationRepository.class);
         authz = new ClinicalAuthz(
                 userRepository,
                 mock(VisitRepository.class),
@@ -63,7 +66,16 @@ class ClinicalAuthzTest {
                 mock(InvestigationRepository.class),
                 mock(HandoverReportRepository.class),
                 clinicalAlertRepository,
-                sepsisScreeningRepository);
+                sepsisScreeningRepository,
+                fastTrackActivationRepository);
+    }
+
+    @Test
+    void canAccessFastTrack_deniesUnknownActivation() {
+        UUID missing = UUID.randomUUID();
+        when(fastTrackActivationRepository.findVisitIdById(missing)).thenReturn(java.util.Optional.empty());
+        assertFalse(authz.canAccessFastTrack(
+                authFor(user(Role.DOCTOR, null, hospitalId)), missing));
     }
 
     @Test

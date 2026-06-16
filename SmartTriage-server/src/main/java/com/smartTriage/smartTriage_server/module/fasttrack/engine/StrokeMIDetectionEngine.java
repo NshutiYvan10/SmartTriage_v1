@@ -35,6 +35,7 @@ public class StrokeMIDetectionEngine {
      * @return recommendation, or null if no stroke indicators detected
      */
     public FastTrackRecommendation screenForStroke(Visit visit, TriageRecord triage) {
+        if (visit == null || triage == null) return null;
         List<String> findings = new ArrayList<>();
         int indicatorCount = 0;
 
@@ -104,10 +105,23 @@ public class StrokeMIDetectionEngine {
         FastTrackType type = indicatorCount >= 3 ? FastTrackType.STROKE_SUSPECTED : FastTrackType.TIA_SUSPECTED;
         double confidence = Math.min(1.0, indicatorCount * 0.2);
 
-        // If focal neurologic deficit is present, always suspect stroke
-        if (triage.isVuFocalNeurologicDeficit()) {
+        // Hard findings force STROKE (never TIA): a focal neurologic deficit,
+        // coma, convulsions, or an UNRESPONSIVE AVPU are persistent/severe and
+        // by definition NOT a (transient, fully-resolved) TIA. Judging severity
+        // by raw indicator count alone would under-triage e.g. a comatose
+        // patient (count 1) to the lower-urgency TIA pathway.
+        boolean hardFinding = triage.isVuFocalNeurologicDeficit()
+                || triage.isHasComa()
+                || triage.isHasConvulsions()
+                || triage.getAvpu() == AvpuScore.UNRESPONSIVE;
+        if (hardFinding) {
             type = FastTrackType.STROKE_SUSPECTED;
             confidence = Math.max(confidence, 0.7);
+        }
+
+        if (visit.isPediatric()) {
+            findings.add("PEDIATRIC: pediatric stroke presents differently than adult and is rare; "
+                    + "BE-FAST/keyword screening is adult-oriented — apply pediatric judgment.");
         }
 
         String reasoning = String.format("Stroke screening: %d indicator(s) detected. %s",
@@ -127,19 +141,26 @@ public class StrokeMIDetectionEngine {
      * @return recommendation, or null if no MI indicators detected
      */
     public FastTrackRecommendation screenForMI(Visit visit, TriageRecord triage) {
+        if (visit == null || triage == null) return null;
         List<String> findings = new ArrayList<>();
         int indicatorCount = 0;
+        boolean hasChestPain = false;
+        boolean hasAnginalEquivalent = false;   // SOB / radiation / autonomic — atypical ACS
+        boolean hasRiskFactor = false;
+        boolean pediatric = visit.isPediatric();
 
-        // Chest pain — primary MI discriminator from triage form
+        // Chest pain — primary (typical) MI discriminator from triage form
         if (triage.isVuChestPain()) {
             findings.add("Chest pain present (triage discriminator)");
             indicatorCount += 2;
+            hasChestPain = true;
         }
 
-        // Shortness of breath — associated MI symptom
+        // Shortness of breath — a recognised anginal equivalent
         if (triage.isVuShortnessOfBreath()) {
-            findings.add("Shortness of breath");
+            findings.add("Shortness of breath (possible anginal equivalent)");
             indicatorCount++;
+            hasAnginalEquivalent = true;
         }
 
         // Check chief complaint for MI-related keywords
@@ -150,61 +171,81 @@ public class StrokeMIDetectionEngine {
                     || lowerComplaint.contains("chest pressure")) {
                 findings.add("Chief complaint: chest pain/tightness/pressure");
                 indicatorCount++;
+                hasChestPain = true;
             }
             if (lowerComplaint.contains("radiating") || lowerComplaint.contains("jaw pain")
                     || lowerComplaint.contains("left arm")) {
                 findings.add("Chief complaint: radiating pain pattern");
                 indicatorCount++;
+                hasAnginalEquivalent = true;
             }
             if (lowerComplaint.contains("diaphoresis") || lowerComplaint.contains("sweating")
-                    || lowerComplaint.contains("nausea")) {
+                    || lowerComplaint.contains("nausea") || lowerComplaint.contains("syncope")
+                    || lowerComplaint.contains("collapse")) {
                 findings.add("Chief complaint: associated autonomic symptoms");
                 indicatorCount++;
+                hasAnginalEquivalent = true;
             }
         }
 
-        // Age as risk factor (> 40 years increases suspicion)
-        if (visit.getPatient() != null && visit.getPatient().getAgeInYears() > 40) {
+        // Age as risk factor (> 40 years) — adults only; the adult-MI age
+        // heuristic is not applicable to children.
+        if (!pediatric && visit.getPatient() != null && visit.getPatient().getAgeInYears() > 40) {
             findings.add("Age > 40 years (increased MI risk)");
             indicatorCount++;
+            hasRiskFactor = true;
         }
 
-        // Known diabetic — atypical MI presentations common
+        // Comorbidity risk factors.
         if (visit.getPatient() != null && visit.getPatient().getChronicConditions() != null) {
             String conditions = visit.getPatient().getChronicConditions().toLowerCase();
             if (conditions.contains("diabetes")) {
-                findings.add("Known diabetic — atypical MI presentation possible");
+                findings.add("Known diabetic — atypical MI presentation common");
                 indicatorCount++;
+                hasRiskFactor = true;
             }
             if (conditions.contains("hypertension") || conditions.contains("htn")) {
                 findings.add("Known hypertension — MI risk factor");
                 indicatorCount++;
+                hasRiskFactor = true;
             }
             if (conditions.contains("cardiac") || conditions.contains("heart") || conditions.contains("ihd")
                     || conditions.contains("coronary")) {
                 findings.add("Known cardiac history — increased MI risk");
                 indicatorCount++;
+                hasRiskFactor = true;
             }
         }
 
-        if (indicatorCount == 0) {
-            return null;
-        }
-
-        // Must have chest pain to trigger MI fast-track
-        if (!triage.isVuChestPain() && (complaint == null ||
-                (!complaint.toLowerCase().contains("chest pain") && !complaint.toLowerCase().contains("chest tightness")))) {
+        // Gate: fire for a TYPICAL presentation (chest pain) OR ANY anginal-
+        // equivalent (SOB, radiation/jaw/arm, autonomic symptoms). A documented
+        // risk factor is a CONFIDENCE booster (it adds to indicatorCount), NOT a
+        // precondition — requiring it would re-create the under-fire on atypical
+        // ACS whose comorbidities simply weren't recorded at triage (the very
+        // diabetic/elderly/female population the chest-pain gate used to miss).
+        if (!hasChestPain && !hasAnginalEquivalent) {
             return null;
         }
 
         double confidence = Math.min(1.0, indicatorCount * 0.15);
-        FastTrackType type = FastTrackType.STEMI_SUSPECTED;
 
-        String reasoning = String.format("MI screening: %d indicator(s) detected. %s",
-                indicatorCount, String.join("; ", findings));
+        // Pre-ECG we cannot distinguish STEMI from NSTEMI, so we suspect ACS
+        // (NSTEMI_SUSPECTED) and let the ECG ST-elevation reading upgrade to
+        // STEMI. Always-emitting STEMI pre-ECG (the previous behaviour)
+        // overstated the pathway.
+        FastTrackType type = FastTrackType.NSTEMI_SUSPECTED;
 
-        log.info("MI screening for visit {}: {} indicators detected, confidence={}",
-                visit.getId(), indicatorCount, confidence);
+        if (pediatric) {
+            findings.add("PEDIATRIC: adult ACS criteria are not validated in children — "
+                    + "interpret with caution and involve pediatric cardiology.");
+        }
+
+        String reasoning = String.format("MI/ACS screening: %d indicator(s) detected%s. %s",
+                indicatorCount, hasChestPain ? "" : " (ATYPICAL — no chest pain)",
+                String.join("; ", findings));
+
+        log.info("MI screening for visit {}: {} indicators, type={}, confidence={}, atypical={}",
+                visit.getId(), indicatorCount, type, confidence, !hasChestPain);
 
         return new FastTrackRecommendation(type, confidence, reasoning, findings);
     }

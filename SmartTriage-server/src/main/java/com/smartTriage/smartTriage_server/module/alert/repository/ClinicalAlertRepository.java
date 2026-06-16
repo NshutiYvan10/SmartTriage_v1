@@ -90,7 +90,9 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
                         "    com.smartTriage.smartTriage_server.common.enums.AlertType.SEPSIS_SCREENING, " +
                         "    com.smartTriage.smartTriage_server.common.enums.AlertType.ICU_ESCALATION_REQUESTED, " +
                         "    com.smartTriage.smartTriage_server.common.enums.AlertType.CRITICAL_VALUE_UNACKNOWLEDGED, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.DETERIORATION_DETECTED) " +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.DETERIORATION_DETECTED, " +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.FAST_TRACK_ACTIVATED, " +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.FAST_TRACK_SLA_BREACH) " +
                         "ORDER BY a.createdAt ASC")
         List<ClinicalAlert> findUnacknowledgedTimeCriticalAlerts();
 
@@ -136,6 +138,11 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
          * Check for existing unacknowledged alert of a given type for a visit — prevents duplicate alerts.
          */
         boolean existsByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(UUID visitId, AlertType alertType);
+
+        /** The open (unacknowledged, active) alert of a type for a visit — used to
+         *  acknowledge the FAST_TRACK_ACTIVATED alert when the pathway is accepted. */
+        java.util.Optional<ClinicalAlert> findFirstByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(
+                UUID visitId, AlertType alertType);
 
         /**
          * Find unacknowledged alerts by type for a hospital — for retriage dashboard queries.

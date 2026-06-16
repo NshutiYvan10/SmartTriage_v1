@@ -52,6 +52,21 @@ public class FastTrackActivation extends BaseEntity {
     private String activatedByName;
 
     // ====================================================================
+    // ACTION TRAIL (V75) — ownership + per-transition actor
+    // ====================================================================
+
+    /** When a clinician explicitly accepted ownership of the door-to-treatment clock. */
+    @Column(name = "acknowledged_at")
+    private Instant acknowledgedAt;
+
+    @Column(name = "acknowledged_by_name")
+    private String acknowledgedByName;
+
+    /** Who performed the most recent status/result transition (authenticated user). */
+    @Column(name = "last_updated_by_name")
+    private String lastUpdatedByName;
+
+    // ====================================================================
     // STROKE-SPECIFIC FIELDS
     // ====================================================================
 
@@ -80,8 +95,16 @@ public class FastTrackActivation extends BaseEntity {
     @Column(name = "is_hemorrhagic")
     private Boolean isHemorrhagic;
 
+    /** Within the IV-thrombolysis time window (advisory only — NOT a
+     *  contraindication-cleared verdict; see thrombolysisAdvisory). */
     @Column(name = "thrombolysis_eligible")
     private Boolean thrombolysisEligible;
+
+    /** Human-readable thrombolysis guidance: window tier + the explicit
+     *  reminder to confirm contraindications (BP, glucose, anticoagulation).
+     *  The system flags the window; the clinician makes the decision. */
+    @Column(name = "thrombolysis_advisory", columnDefinition = "TEXT")
+    private String thrombolysisAdvisory;
 
     @Column(name = "thrombolysis_started_at")
     private Instant thrombolysisStartedAt;
@@ -147,6 +170,9 @@ public class FastTrackActivation extends BaseEntity {
 
     @Column(name = "completed_at")
     private Instant completedAt;
+
+    @Column(name = "completed_by_name")
+    private String completedByName;
 
     @Column(name = "outcome", columnDefinition = "TEXT")
     private String outcome;
