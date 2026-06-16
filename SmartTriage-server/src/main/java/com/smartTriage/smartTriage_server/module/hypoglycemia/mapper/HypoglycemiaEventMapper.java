@@ -18,6 +18,10 @@ public final class HypoglycemiaEventMapper {
                 .glucoseLevel(event.getGlucoseLevel())
                 .triggerReason(event.getTriggerReason())
                 .severity(event.getSeverity())
+                .glucoseSource(event.getGlucoseSource())
+                .neonatal(event.isNeonatal())
+                .detectedByName(event.getDetectedByName())
+                .recheckDueAt(event.getRecheckDueAt())
                 .treatmentGiven(event.getTreatmentGiven())
                 .treatmentGivenAt(event.getTreatmentGivenAt())
                 .treatmentGivenByName(event.getTreatmentGivenByName())
@@ -25,12 +29,15 @@ public final class HypoglycemiaEventMapper {
                 .repeatGlucoseAt(event.getRepeatGlucoseAt())
                 .resolved(event.isResolved())
                 .resolvedAt(event.getResolvedAt())
+                .resolvedByName(event.getResolvedByName())
                 .notes(event.getNotes())
                 .createdAt(event.getCreatedAt());
 
         if (event.getVisit() != null) {
             builder.visitId(event.getVisit().getId());
             builder.visitNumber(event.getVisit().getVisitNumber());
+            builder.currentZone(event.getVisit().getCurrentEdZone() != null
+                    ? event.getVisit().getCurrentEdZone().name() : null);
             if (event.getVisit().getPatient() != null) {
                 builder.patientName(
                         event.getVisit().getPatient().getFirstName() + " " +

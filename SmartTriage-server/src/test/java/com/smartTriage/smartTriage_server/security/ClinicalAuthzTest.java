@@ -43,6 +43,7 @@ class ClinicalAuthzTest {
     private ClinicalAlertRepository clinicalAlertRepository;
     private com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository sepsisScreeningRepository;
     private com.smartTriage.smartTriage_server.module.fasttrack.repository.FastTrackActivationRepository fastTrackActivationRepository;
+    private com.smartTriage.smartTriage_server.module.hypoglycemia.repository.HypoglycemiaEventRepository hypoglycemiaEventRepository;
     private ClinicalAuthz authz;
 
     private final UUID hospitalId = UUID.randomUUID();
@@ -56,6 +57,8 @@ class ClinicalAuthzTest {
                 mock(com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository.class);
         fastTrackActivationRepository =
                 mock(com.smartTriage.smartTriage_server.module.fasttrack.repository.FastTrackActivationRepository.class);
+        hypoglycemiaEventRepository =
+                mock(com.smartTriage.smartTriage_server.module.hypoglycemia.repository.HypoglycemiaEventRepository.class);
         authz = new ClinicalAuthz(
                 userRepository,
                 mock(VisitRepository.class),
@@ -67,7 +70,8 @@ class ClinicalAuthzTest {
                 mock(HandoverReportRepository.class),
                 clinicalAlertRepository,
                 sepsisScreeningRepository,
-                fastTrackActivationRepository);
+                fastTrackActivationRepository,
+                hypoglycemiaEventRepository);
     }
 
     @Test
@@ -75,6 +79,14 @@ class ClinicalAuthzTest {
         UUID missing = UUID.randomUUID();
         when(fastTrackActivationRepository.findVisitIdById(missing)).thenReturn(java.util.Optional.empty());
         assertFalse(authz.canAccessFastTrack(
+                authFor(user(Role.DOCTOR, null, hospitalId)), missing));
+    }
+
+    @Test
+    void canAccessHypoglycemiaEvent_deniesUnknownEvent() {
+        UUID missing = UUID.randomUUID();
+        when(hypoglycemiaEventRepository.findVisitIdById(missing)).thenReturn(java.util.Optional.empty());
+        assertFalse(authz.canAccessHypoglycemiaEvent(
                 authFor(user(Role.DOCTOR, null, hospitalId)), missing));
     }
 

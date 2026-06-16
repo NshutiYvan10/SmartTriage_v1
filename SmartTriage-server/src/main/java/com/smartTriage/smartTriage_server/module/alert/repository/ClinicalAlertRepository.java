@@ -92,7 +92,9 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
                         "    com.smartTriage.smartTriage_server.common.enums.AlertType.CRITICAL_VALUE_UNACKNOWLEDGED, " +
                         "    com.smartTriage.smartTriage_server.common.enums.AlertType.DETERIORATION_DETECTED, " +
                         "    com.smartTriage.smartTriage_server.common.enums.AlertType.FAST_TRACK_ACTIVATED, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.FAST_TRACK_SLA_BREACH) " +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.FAST_TRACK_SLA_BREACH, " +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.HYPOGLYCEMIA_CRITICAL, " +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.HYPOGLYCEMIA_RECHECK_OVERDUE) " +
                         "ORDER BY a.createdAt ASC")
         List<ClinicalAlert> findUnacknowledgedTimeCriticalAlerts();
 

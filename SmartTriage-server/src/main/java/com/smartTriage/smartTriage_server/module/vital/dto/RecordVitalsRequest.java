@@ -1,6 +1,7 @@
 package com.smartTriage.smartTriage_server.module.vital.dto;
 
 import com.smartTriage.smartTriage_server.common.enums.AvpuScore;
+import com.smartTriage.smartTriage_server.common.enums.GlucoseUnit;
 import com.smartTriage.smartTriage_server.common.enums.VitalSource;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -50,7 +51,18 @@ public class RecordVitalsRequest {
 
     private AvpuScore avpu;
 
+    /**
+     * Blood glucose in {@link #bloodGlucoseUnit} (default mmol/L). Stored and
+     * classified in mmol/L after conversion. No physiologic Min/Max here on
+     * purpose: a hyperglycemic-crisis value legitimately exceeds 40 mmol/L, so a
+     * hard cap would block recording it — the unit-aware conversion, not a range
+     * clamp, is what keeps the value on the correct scale.
+     */
     private Double bloodGlucose;
+
+    /** Unit {@link #bloodGlucose} was entered in. Defaults to mmol/L when omitted. */
+    @Builder.Default
+    private GlucoseUnit bloodGlucoseUnit = GlucoseUnit.MMOL_L;
 
     @Min(value = 0, message = "Pain score minimum is 0")
     @Max(value = 10, message = "Pain score maximum is 10")

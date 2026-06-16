@@ -37,7 +37,8 @@ public class HypoglycemiaController {
     }
 
     @PutMapping("/{eventId}/treatment")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessHypoglycemiaEvent(authentication, #eventId)")
     public ResponseEntity<ApiResponse<HypoglycemiaEventResponse>> recordTreatment(
             @PathVariable UUID eventId,
             @Valid @RequestBody RecordTreatmentRequest request) {
@@ -47,7 +48,8 @@ public class HypoglycemiaController {
     }
 
     @PutMapping("/{eventId}/repeat-glucose")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessHypoglycemiaEvent(authentication, #eventId)")
     public ResponseEntity<ApiResponse<HypoglycemiaEventResponse>> recordRepeatGlucose(
             @PathVariable UUID eventId,
             @Valid @RequestBody RepeatGlucoseRequest request) {
@@ -57,7 +59,8 @@ public class HypoglycemiaController {
     }
 
     @PutMapping("/{eventId}/resolve")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessHypoglycemiaEvent(authentication, #eventId)")
     public ResponseEntity<ApiResponse<HypoglycemiaEventResponse>> resolveEvent(
             @PathVariable UUID eventId) {
         HypoglycemiaEventResponse response = HypoglycemiaEventMapper.toResponse(

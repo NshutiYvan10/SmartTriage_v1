@@ -1,6 +1,9 @@
 package com.smartTriage.smartTriage_server.module.vital.service;
 
+import com.smartTriage.smartTriage_server.common.enums.AvpuScore;
+import com.smartTriage.smartTriage_server.common.enums.GlucoseUnit;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
+import com.smartTriage.smartTriage_server.module.hypoglycemia.service.HypoglycemiaService;
 import com.smartTriage.smartTriage_server.module.iot.engine.ContinuousMonitoringEngine;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.visit.service.VisitService;
@@ -42,10 +45,25 @@ public class VitalSignsService {
      * so there is no circular bean wiring.
      */
     private final ContinuousMonitoringEngine monitoringEngine;
+    /**
+     * Hypoglycemia auto-detection on every manual/POC glucose reading. Like the
+     * deterioration hook above, its entry point is best-effort (never throws) so
+     * it can never break the clinician's vitals write. HypoglycemiaService does
+     * not depend back on this service, so there is no circular wiring.
+     */
+    private final HypoglycemiaService hypoglycemiaService;
 
     @Transactional
     public VitalSignsResponse recordVitals(RecordVitalsRequest request) {
         Visit visit = visitService.findVisitOrThrow(request.getVisitId());
+
+        // Normalise glucose to mmol/L (the canonical unit) using the declared
+        // source unit, so a mg/dL glucometer reading is stored and classified
+        // correctly instead of being read as a (wildly wrong) mmol/L value.
+        GlucoseUnit glucoseUnit = request.getBloodGlucoseUnit() != null
+                ? request.getBloodGlucoseUnit() : GlucoseUnit.MMOL_L;
+        Double glucoseMmol = request.getBloodGlucose() != null
+                ? glucoseUnit.toMmolL(request.getBloodGlucose()) : null;
 
         VitalSigns vitals = VitalSigns.builder()
                 .visit(visit)
@@ -57,7 +75,7 @@ public class VitalSignsService {
                 .temperature(request.getTemperature())
                 .spo2(request.getSpo2())
                 .avpu(request.getAvpu())
-                .bloodGlucose(request.getBloodGlucose())
+                .bloodGlucose(glucoseMmol)
                 .painScore(request.getPainScore())
                 .gcsScore(request.getGcsScore())
                 .weightKg(request.getWeightKg())
@@ -80,6 +98,16 @@ public class VitalSignsService {
         // alert. evaluateManualVitals is best-effort (never throws), so a
         // failure cannot roll back or break the vitals write above.
         monitoringEngine.evaluateManualVitals(visit, vitals);
+
+        // Auto-detect hypoglycemia on every glucose reading — previously the
+        // detector only ran on a manual POST and read a frozen triage snapshot,
+        // so a low POC fingerstick recorded here produced no event/alert.
+        if (vitals.getBloodGlucose() != null) {
+            boolean neuroglycopenia =
+                    (vitals.getAvpu() != null && vitals.getAvpu() != AvpuScore.ALERT)
+                    || (vitals.getGcsScore() != null && vitals.getGcsScore() < 15);
+            hypoglycemiaService.evaluateGlucoseReading(visit, vitals.getBloodGlucose(), neuroglycopenia, "MANUAL_VITALS");
+        }
 
         return VitalSignsMapper.toResponse(vitals);
     }

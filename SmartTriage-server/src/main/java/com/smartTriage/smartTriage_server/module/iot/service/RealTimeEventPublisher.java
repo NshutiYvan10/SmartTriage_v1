@@ -360,4 +360,40 @@ public class RealTimeEventPublisher {
             fire.run();
         }
     }
+
+    // ====================================================================
+    // HYPOGLYCEMIA DASHBOARD TOPIC
+    // ====================================================================
+
+    /**
+     * Push a lightweight hypoglycemia event to the hospital's dedicated topic.
+     * The Hypoglycemia dashboard and per-visit panel subscribe here and re-fetch
+     * on any event (detected / treated / rechecked / resolved / recheck-overdue).
+     * Dedicated topic (not /topic/alerts/*) for the same one-subscriber-per-topic
+     * reason as sepsis/fast-track. Payload is a small {eventType, visitId} map.
+     */
+    public void publishHypoglycemiaEvent(UUID hospitalId, Map<String, Object> payload) {
+        String topic = "/topic/hypoglycemia/" + hospitalId;
+        messagingTemplate.convertAndSend(topic, (Object) payload);
+        log.debug("Published hypoglycemia event {} to {}", payload.get("eventType"), topic);
+    }
+
+    /** After-commit variant (so a refetch sees the saved event); immediate when no tx. Best-effort. */
+    public void publishHypoglycemiaEventAfterCommit(UUID hospitalId, Map<String, Object> payload) {
+        Runnable fire = () -> {
+            try {
+                publishHypoglycemiaEvent(hospitalId, payload);
+            } catch (Exception e) {
+                log.warn("Failed to publish hypoglycemia event for hospital {}: {}", hospitalId, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override public void afterCommit() { fire.run(); }
+                    });
+        } else {
+            fire.run();
+        }
+    }
 }

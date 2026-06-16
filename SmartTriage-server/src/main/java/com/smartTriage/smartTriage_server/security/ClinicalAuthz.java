@@ -13,6 +13,7 @@ import com.smartTriage.smartTriage_server.module.handover.repository.HandoverRep
 import com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository;
 import com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository;
 import com.smartTriage.smartTriage_server.module.fasttrack.repository.FastTrackActivationRepository;
+import com.smartTriage.smartTriage_server.module.hypoglycemia.repository.HypoglycemiaEventRepository;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
@@ -101,6 +102,7 @@ public class ClinicalAuthz {
     private final ClinicalAlertRepository clinicalAlertRepository;
     private final SepsisScreeningRepository sepsisScreeningRepository;
     private final FastTrackActivationRepository fastTrackActivationRepository;
+    private final HypoglycemiaEventRepository hypoglycemiaEventRepository;
 
     /**
      * @return true if the authenticated user is attached to {@code hospitalId}.
@@ -561,6 +563,23 @@ public class ClinicalAuthz {
                     .orElse(false);
         } catch (Exception e) {
             log.error("canAccessFastTrack error for activation {}: {}", activationId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** Scopes the hypoglycemia mutating endpoints (treatment / repeat-glucose /
+     *  resolve) to the event's own hospital, so a clinician cannot write a
+     *  treatment/recheck/resolution to another hospital's event by enumerating
+     *  an eventId. */
+    @Transactional(readOnly = true)
+    public boolean canAccessHypoglycemiaEvent(Authentication authentication, UUID eventId) {
+        try {
+            if (eventId == null) return false;
+            return hypoglycemiaEventRepository.findVisitIdById(eventId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessHypoglycemiaEvent error for event {}: {}", eventId, e.getMessage(), e);
             return false;
         }
     }

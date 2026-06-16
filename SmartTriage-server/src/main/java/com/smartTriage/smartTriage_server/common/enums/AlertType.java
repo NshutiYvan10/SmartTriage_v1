@@ -146,5 +146,18 @@ public enum AlertType {
      *    monitor and re-paged to the accountable clinicians.
      */
     FAST_TRACK_ACTIVATED,
-    FAST_TRACK_SLA_BREACH
+    FAST_TRACK_SLA_BREACH,
+
+    /**
+     * Hypoglycemia detection + recheck escalation (fatal in minutes).
+     *  - HYPOGLYCEMIA_CRITICAL: a low glucose reading was detected. CRITICAL for
+     *    moderate/severe (and HIGH for mild), owned by the zone doctor + nurse +
+     *    charge nurse and pushed in real time. A dedicated type (not
+     *    VITAL_SIGN_ABNORMAL) so it is distinguishable AND picked up by the
+     *    time-critical re-escalation loop.
+     *  - HYPOGLYCEMIA_RECHECK_OVERDUE: the mandatory 15-minute post-treatment
+     *    recheck was not performed — raised by the recheck monitor.
+     */
+    HYPOGLYCEMIA_CRITICAL,
+    HYPOGLYCEMIA_RECHECK_OVERDUE
 }

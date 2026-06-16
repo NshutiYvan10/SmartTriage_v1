@@ -475,7 +475,7 @@ export function VitalMonitoring() {
                               { key: 'systolicBP', label: 'Blood Pressure', unit: 'mmHg', icon: Activity, color: 'text-red-400', format: (v) => `${Math.round(v)}/${currentVitals ? Math.round(currentVitals.diastolicBP) : '—'}` },
                               { key: 'temperature', label: 'Temperature', unit: '°C', icon: Thermometer, color: 'text-orange-500', format: (v) => v.toFixed(1) },
                               { key: 'ecg', label: 'ECG', unit: 'mV', icon: Zap, color: 'text-yellow-500', format: (v) => v.toFixed(2) },
-                              { key: 'glucose', label: 'Glucose', unit: 'mg/dL', icon: Candy, color: 'text-pink-500', format: (v) => Math.round(v).toString() },
+                              { key: 'glucose', label: 'Glucose', unit: 'mmol/L', icon: Candy, color: 'text-pink-500', format: (v) => v.toFixed(1) },
                             ];
 
                             return vitalChannels
@@ -501,14 +501,15 @@ export function VitalMonitoring() {
                                     // ECG here is ST-segment deviation in mV,
                                     // not bpm — normal band is roughly ±0.5 mV.
                                     ch.key === 'ecg' ? -0.5 :
-                                    ch.key === 'glucose' ? 70 : 0,
+                                    // Glucose is stored/streamed in mmol/L — normal band ≈ 3.9–11.0.
+                                    ch.key === 'glucose' ? 3.9 : 0,
                                     ch.key === 'spo2' ? 100 :
                                     ch.key === 'heartRate' ? (thresholds?.heartRate.max || 100) :
                                     ch.key === 'respiratoryRate' ? (thresholds?.respiratoryRate.max || 20) :
                                     ch.key === 'systolicBP' ? 140 :
                                     ch.key === 'temperature' ? 37.2 :
                                     ch.key === 'ecg' ? 0.5 :
-                                    ch.key === 'glucose' ? 110 : 999
+                                    ch.key === 'glucose' ? 11.0 : 999
                                   );
                                   status = raw;
                                 }
@@ -717,15 +718,15 @@ export function VitalMonitoring() {
                 subtitle={currentVitals.ecgRhythm ?? 'Normal sinus rhythm'}
               />
               
-              {/* Glucose */}
+              {/* Glucose — stored/streamed in mmol/L (the unit every threshold uses) */}
               <VitalCard
                 label="Glucose"
-                value={Math.round(currentVitals.glucose)}
-                unit="mg/dL"
+                value={currentVitals.glucose.toFixed(1)}
+                unit="mmol/L"
                 icon={Candy}
-                status={getVitalStatus(currentVitals.glucose, 70, 110)}
+                status={getVitalStatus(currentVitals.glucose, 3.9, 11.0)}
                 trend="stable"
-                range="70-110 mg/dL"
+                range="3.9-11.0 mmol/L"
                 subtitle="Random"
               />
             </div>

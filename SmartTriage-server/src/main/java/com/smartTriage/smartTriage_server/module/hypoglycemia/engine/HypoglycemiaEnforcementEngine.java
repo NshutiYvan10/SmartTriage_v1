@@ -1,74 +1,75 @@
 package com.smartTriage.smartTriage_server.module.hypoglycemia.engine;
 
 import com.smartTriage.smartTriage_server.common.enums.AvpuScore;
+import com.smartTriage.smartTriage_server.common.enums.HypoglycemiaSeverity;
 import com.smartTriage.smartTriage_server.module.triage.entity.TriageRecord;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * HypoglycemiaEnforcementEngine — enforces mandatory glucose checks per Rwanda protocol.
+ * HypoglycemiaEnforcementEngine — enforces mandatory glucose checks and
+ * classifies hypoglycemia severity per ADA/WHO bands (Rwanda-adapted).
  *
- * Mandatory glucose check triggers:
- * - AVPU != ALERT (altered consciousness)
- * - Convulsions
- * - Coma
- * - Altered mental status
+ * Mandatory glucose-check triggers: AVPU != ALERT, convulsions, coma, altered
+ * mental status. Recommended: known diabetic (chronicConditions).
  *
- * Recommended glucose check:
- * - Known diabetic (from patient.chronicConditions)
- *
- * Glucose interpretation:
- * - < 3.0 mmol/L → CRITICAL → immediate treatment (50mL 50% dextrose IV adults, 5mL/kg 10% dextrose children)
- * - 3.0-3.9 mmol/L → MILD → close monitoring
- * - >= 4.0 mmol/L → NORMAL
+ * Severity (mmol/L), adult/child:
+ *   NORMAL   >= 3.9   |   MILD < 3.9   |   MODERATE < 3.0
+ *   SEVERE   < 2.2  OR  any hypoglycemia with neuroglycopenia (altered
+ *            consciousness / convulsions / coma)
+ * Neonatal (< 28 days): treat below 2.6 mmol/L; SEVERE < 2.0 or neuroglycopenic.
  */
 @Slf4j
 @Component
 public class HypoglycemiaEnforcementEngine {
 
-    private static final double CRITICAL_THRESHOLD = 3.0;
-    private static final double MILD_THRESHOLD = 4.0;
+    // Adult/child cut-offs (mmol/L)
+    static final double MILD_THRESHOLD = 3.9;       // < 3.9 = hypoglycemic (alert level)
+    static final double MODERATE_THRESHOLD = 3.0;   // < 3.0 = clinically significant
+    static final double SEVERE_THRESHOLD = 2.2;     // < 2.2 = severe
+    // Neonatal cut-offs (mmol/L)
+    static final double NEONATAL_NORMAL_THRESHOLD = 2.6;
+    static final double NEONATAL_SEVERE_THRESHOLD = 2.0;
+    static final long NEONATE_MAX_AGE_DAYS = 28;
 
     /**
-     * Enforce glucose check requirements based on triage findings.
-     *
-     * @param visit  the current visit
-     * @param triage the most recent triage record
-     * @return HypoglycemiaCheckResult with check requirements and glucose interpretation
+     * Enforce glucose-check requirements from triage findings and classify the
+     * triage glucose value if present.
      */
     public HypoglycemiaCheckResult enforceGlucoseCheck(Visit visit, TriageRecord triage) {
         List<String> triggerReasons = new ArrayList<>();
         boolean checkMandatory = false;
+        boolean neuroglycopenia = false;
 
-        // AVPU != ALERT → MANDATORY
-        if (triage.getAvpu() != null && triage.getAvpu() != AvpuScore.ALERT) {
-            triggerReasons.add("altered_consciousness (AVPU: " + triage.getAvpu().getDescription() + ")");
-            checkMandatory = true;
+        if (triage != null) {
+            if (triage.getAvpu() != null && triage.getAvpu() != AvpuScore.ALERT) {
+                triggerReasons.add("altered_consciousness (AVPU: " + triage.getAvpu().getDescription() + ")");
+                checkMandatory = true;
+                neuroglycopenia = true;
+            }
+            if (triage.isHasConvulsions()) {
+                triggerReasons.add("convulsions");
+                checkMandatory = true;
+                neuroglycopenia = true;
+            }
+            if (triage.isHasComa()) {
+                triggerReasons.add("coma");
+                checkMandatory = true;
+                neuroglycopenia = true;
+            }
+            if (triage.isVuAlteredMentalStatus()) {
+                triggerReasons.add("altered_mental_status");
+                checkMandatory = true;
+                neuroglycopenia = true;
+            }
         }
 
-        // Convulsions → MANDATORY
-        if (triage.isHasConvulsions()) {
-            triggerReasons.add("convulsions");
-            checkMandatory = true;
-        }
-
-        // Coma → MANDATORY
-        if (triage.isHasComa()) {
-            triggerReasons.add("coma");
-            checkMandatory = true;
-        }
-
-        // Altered mental status → MANDATORY
-        if (triage.isVuAlteredMentalStatus()) {
-            triggerReasons.add("altered_mental_status");
-            checkMandatory = true;
-        }
-
-        // Known diabetic → RECOMMENDED
         boolean isKnownDiabetic = false;
         if (visit.getPatient() != null && visit.getPatient().getChronicConditions() != null) {
             String conditions = visit.getPatient().getChronicConditions().toLowerCase();
@@ -79,86 +80,101 @@ public class HypoglycemiaEnforcementEngine {
         }
 
         boolean requiresCheck = checkMandatory || isKnownDiabetic;
-
-        if (!requiresCheck) {
-            return new HypoglycemiaCheckResult(false, false, null, false, "NONE",
-                    null, List.of());
-        }
-
-        // Interpret glucose if available
-        Double glucoseValue = resolveGlucoseValue(triage);
-        boolean isHypoglycemic = false;
-        String severity = "PENDING_CHECK";
-        String treatmentProtocol = null;
-
-        if (glucoseValue != null) {
-            if (glucoseValue < CRITICAL_THRESHOLD) {
-                isHypoglycemic = true;
-                severity = "CRITICAL";
-                treatmentProtocol = determineTreatmentProtocol(visit);
-                log.warn("CRITICAL hypoglycemia detected: glucose={} mmol/L, visit={}",
-                        glucoseValue, visit.getId());
-            } else if (glucoseValue < MILD_THRESHOLD) {
-                isHypoglycemic = true;
-                severity = "MILD";
-                treatmentProtocol = "Oral glucose if conscious. Monitor closely. Repeat glucose in 15 minutes.";
-                log.info("Mild hypoglycemia detected: glucose={} mmol/L, visit={}",
-                        glucoseValue, visit.getId());
-            } else {
-                severity = "NORMAL";
-            }
-        }
-
-        log.info("Glucose check enforcement for visit {}: mandatory={}, reasons={}, glucose={}, severity={}",
-                visit.getId(), checkMandatory, triggerReasons, glucoseValue, severity);
-
-        return new HypoglycemiaCheckResult(requiresCheck, checkMandatory, glucoseValue,
-                isHypoglycemic, severity, treatmentProtocol, triggerReasons);
+        Double glucoseValue = triage != null ? resolveGlucoseValue(triage) : null;
+        return interpret(visit, glucoseValue, neuroglycopenia, requiresCheck, checkMandatory, triggerReasons);
     }
 
     /**
-     * Resolve the glucose value from triage record.
-     * Checks bloodGlucose, convulsionGlucose, comaGlucose, and neurological glucose fields.
+     * Interpret a glucose reading from ANY source (manual/POC vitals, IoT stream,
+     * or triage) — the shared classification path. {@code neuroglycopenia} is true
+     * when the patient also has altered consciousness / convulsions / coma.
      */
+    public HypoglycemiaCheckResult interpret(Visit visit, Double glucose, boolean neuroglycopenia,
+                                             boolean requiresCheck, boolean checkMandatory,
+                                             List<String> triggerReasons) {
+        boolean neonate = isNeonate(visit);
+        HypoglycemiaSeverity severity = classify(glucose, neonate, neuroglycopenia);
+        String treatmentProtocol = severity.isHypoglycemic() ? treatmentProtocol(visit, neonate) : null;
+
+        if (severity == HypoglycemiaSeverity.SEVERE) {
+            log.warn("SEVERE hypoglycemia: glucose={} mmol/L, neonate={}, visit={}", glucose, neonate, visit.getId());
+        } else if (severity.isHypoglycemic()) {
+            log.info("{} hypoglycemia: glucose={} mmol/L, visit={}", severity, glucose, visit.getId());
+        }
+
+        return new HypoglycemiaCheckResult(requiresCheck, checkMandatory, glucose,
+                severity, neonate, treatmentProtocol,
+                triggerReasons == null ? List.of() : triggerReasons);
+    }
+
+    /** Classify a glucose value into a severity band, age- and symptom-aware. */
+    public HypoglycemiaSeverity classify(Double glucose, boolean neonate, boolean neuroglycopenia) {
+        if (glucose == null) return HypoglycemiaSeverity.PENDING_CHECK;
+
+        if (neonate) {
+            if (glucose >= NEONATAL_NORMAL_THRESHOLD) return HypoglycemiaSeverity.NORMAL;
+            // Any neonatal hypoglycemia is treated; very low or symptomatic is severe.
+            if (glucose < NEONATAL_SEVERE_THRESHOLD || neuroglycopenia) return HypoglycemiaSeverity.SEVERE;
+            return HypoglycemiaSeverity.MODERATE;
+        }
+
+        if (glucose >= MILD_THRESHOLD) return HypoglycemiaSeverity.NORMAL;
+        // Hypoglycemic. Severe = profoundly low OR clinically-significant-low WITH neuroglycopenia.
+        if (glucose < SEVERE_THRESHOLD || (glucose < MODERATE_THRESHOLD && neuroglycopenia)) {
+            return HypoglycemiaSeverity.SEVERE;
+        }
+        if (glucose < MODERATE_THRESHOLD) return HypoglycemiaSeverity.MODERATE;
+        return HypoglycemiaSeverity.MILD;
+    }
+
+    private boolean isNeonate(Visit visit) {
+        try {
+            if (visit.getPatient() != null && visit.getPatient().getDateOfBirth() != null) {
+                long days = ChronoUnit.DAYS.between(visit.getPatient().getDateOfBirth(), LocalDate.now());
+                return days >= 0 && days < NEONATE_MAX_AGE_DAYS;
+            }
+        } catch (Exception ignored) {
+            // unknown age → not treated as neonate
+        }
+        return false;
+    }
+
     private Double resolveGlucoseValue(TriageRecord triage) {
-        if (triage.getBloodGlucose() != null) {
-            return triage.getBloodGlucose();
-        }
-        if (triage.getConvulsionGlucose() != null) {
-            return triage.getConvulsionGlucose();
-        }
-        if (triage.getComaGlucose() != null) {
-            return triage.getComaGlucose();
-        }
-        if (triage.getVuNeurologicalGlucose() != null) {
-            return triage.getVuNeurologicalGlucose();
-        }
+        if (triage.getBloodGlucose() != null) return triage.getBloodGlucose();
+        if (triage.getConvulsionGlucose() != null) return triage.getConvulsionGlucose();
+        if (triage.getComaGlucose() != null) return triage.getComaGlucose();
+        if (triage.getVuNeurologicalGlucose() != null) return triage.getVuNeurologicalGlucose();
         return null;
     }
 
-    /**
-     * Determine treatment protocol based on patient age per Rwanda guidelines.
-     */
-    private String determineTreatmentProtocol(Visit visit) {
-        if (visit.isPediatric()) {
-            return "PEDIATRIC: 5mL/kg of 10% dextrose IV. Recheck glucose in 15 minutes. " +
-                    "If still <3.0 mmol/L, repeat dextrose bolus.";
+    private String treatmentProtocol(Visit visit, boolean neonate) {
+        if (neonate) {
+            return "NEONATAL: 2 mL/kg of 10% dextrose IV/IO bolus, then a 10% dextrose infusion. "
+                    + "Recheck glucose in 15–30 minutes; involve pediatrics/neonatology.";
         }
-        return "ADULT: 50mL of 50% dextrose IV. Recheck glucose in 15 minutes. " +
-                "If still <3.0 mmol/L, repeat dextrose bolus. Consider dextrose infusion.";
+        if (visit.isPediatric()) {
+            return "PEDIATRIC: 5 mL/kg of 10% dextrose IV. Recheck glucose in 15 minutes. "
+                    + "Repeat dextrose if still < 3.0 mmol/L.";
+        }
+        return "ADULT: 50 mL of 50% dextrose IV (or 200 mL of 10%). If conscious and able to swallow, "
+                + "15–20 g oral fast-acting carbohydrate. Recheck glucose in 15 minutes. Repeat if still "
+                + "< 3.0 mmol/L; consider a dextrose infusion.";
     }
 
     /**
-     * Result record for glucose check enforcement.
+     * Result of a glucose-check enforcement / interpretation.
      */
     public record HypoglycemiaCheckResult(
             boolean requiresCheck,
             boolean checkMandatory,
             Double glucoseValue,
-            boolean isHypoglycemic,
-            String severity,
+            HypoglycemiaSeverity severity,
+            boolean neonatal,
             String treatmentProtocol,
             List<String> triggerReasons
     ) {
+        public boolean isHypoglycemic() {
+            return severity != null && severity.isHypoglycemic();
+        }
     }
 }

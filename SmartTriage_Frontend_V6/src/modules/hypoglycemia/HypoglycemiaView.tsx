@@ -12,14 +12,22 @@ import {
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
 import { hypoglycemiaApi } from '@/api/hypoglycemia';
+import { subscribeToHypoglycemia } from '@/api/websocket';
+import { useWebSocketGeneration } from '@/hooks/useWebSocket';
+import { ApiError } from '@/api/client';
 import type { HypoglycemiaEvent } from '@/api/hypoglycemia';
 import { format } from 'date-fns';
 
-/* ── Severity colour map ─────────────────────────────────── */
+/* ── Severity colour map — keys MUST match the backend HypoglycemiaSeverity enum
+   (NORMAL/MILD/MODERATE/SEVERE/PENDING_CHECK). An unknown value falls back to
+   SEVERE (red) — NEVER downgrade an unrecognised band to a low-urgency colour. ── */
+const SEVERITY_FALLBACK = { color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-red-500/20', label: 'CHECK' };
 const SEVERITY_CONFIG: Record<string, { color: string; bg: string; border: string; label: string }> = {
-  SEVERE:   { color: 'text-red-500',    bg: 'bg-red-500/10',    border: 'border-red-500/20',    label: 'SEVERE' },
-  MODERATE: { color: 'text-amber-500',  bg: 'bg-amber-500/10',  border: 'border-amber-500/20',  label: 'MODERATE' },
-  MILD:     { color: 'text-yellow-500', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20', label: 'MILD' },
+  SEVERE:        { color: 'text-red-600',     bg: 'bg-red-500/15',    border: 'border-red-500/30',    label: 'SEVERE' },
+  MODERATE:      { color: 'text-red-400',     bg: 'bg-red-500/10',    border: 'border-red-500/20',    label: 'MODERATE' },
+  MILD:          { color: 'text-amber-500',   bg: 'bg-amber-500/10',  border: 'border-amber-500/20',  label: 'MILD' },
+  NORMAL:        { color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', label: 'NORMAL' },
+  PENDING_CHECK: { color: 'text-amber-500',   bg: 'bg-amber-500/10',  border: 'border-amber-500/20',  label: 'CHECK PENDING' },
 };
 
 const TREATMENT_OPTIONS = [
@@ -29,8 +37,10 @@ const TREATMENT_OPTIONS = [
   'IV D10W infusion',
 ];
 
-function getGlucoseSeverity(level: number | null): { color: string; bgColor: string; label: string } {
-  if (level === null) return { color: 'text-slate-400', bgColor: 'bg-slate-500/10', label: 'N/A' };
+function getGlucoseSeverity(level: number | null | undefined): { color: string; bgColor: string; label: string } {
+  // Loose null check — backend omits null fields (non_null serialization) so an
+  // un-valued reading arrives as `undefined`; `=== null` would fall through to NORMAL.
+  if (level == null) return { color: 'text-slate-400', bgColor: 'bg-slate-500/10', label: 'N/A' };
   if (level < 2.2) return { color: 'text-red-500', bgColor: 'bg-red-500/10', label: 'SEVERE' };
   if (level < 3.0) return { color: 'text-amber-500', bgColor: 'bg-amber-500/10', label: 'MODERATE' };
   if (level < 4.0) return { color: 'text-yellow-500', bgColor: 'bg-yellow-500/10', label: 'MILD' };
@@ -44,15 +54,18 @@ export function HypoglycemiaView() {
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
 
+  const wsGen = useWebSocketGeneration();
   const [events, setEvents] = useState<HypoglycemiaEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   /* Workflow modal state */
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
   const [workflowStep, setWorkflowStep] = useState<WorkflowStep | null>(null);
   const [selectedTreatment, setSelectedTreatment] = useState<string>('');
   const [repeatGlucose, setRepeatGlucose] = useState<string>('');
+  const [repeatUnit, setRepeatUnit] = useState<'MMOL_L' | 'MG_DL'>('MMOL_L');
 
   /* ── Data loading ──────────────────────────────────────── */
   const loadEvents = useCallback(async () => {
@@ -61,9 +74,13 @@ export function HypoglycemiaView() {
     try {
       const data = await hypoglycemiaApi.getUnresolved(hospitalId);
       setEvents(Array.isArray(data) ? data : []);
+      setError(null);
     } catch (err) {
+      // Surface the failure — never render a green "all clear" empty state when
+      // the load actually failed (that would mask a real outage as resolved).
       console.error('Failed to load hypoglycemia events:', err);
       setEvents([]);
+      setError(err instanceof ApiError ? err.message : 'Failed to load hypoglycemia events');
     } finally {
       setLoading(false);
     }
@@ -71,18 +88,31 @@ export function HypoglycemiaView() {
 
   useEffect(() => { loadEvents(); }, [loadEvents]);
 
+  /* ── Live refresh — dedicated hypoglycemia topic; re-subscribes on reconnect. ── */
+  useEffect(() => {
+    if (!hospitalId) return;
+    const unsub = subscribeToHypoglycemia(hospitalId, () => { loadEvents(); });
+    return () => unsub();
+  }, [hospitalId, loadEvents, wsGen]);
+
+  const reportError = (err: unknown, fallback: string) => {
+    setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : fallback);
+    console.error(fallback, err);
+  };
+
   /* ── Actions ───────────────────────────────────────────── */
   const handleRecordTreatment = async (id: string) => {
     if (!selectedTreatment) return;
     setActionLoading(id);
+    setError(null);
     try {
-      await hypoglycemiaApi.recordTreatment(id, { treatmentGiven: selectedTreatment });
+      await hypoglycemiaApi.recordTreatment(id, { treatment: selectedTreatment });
       setActiveEventId(null);
       setWorkflowStep(null);
       setSelectedTreatment('');
       loadEvents();
     } catch (err) {
-      console.error('Failed to record treatment:', err);
+      reportError(err, 'Failed to record treatment');
     } finally {
       setActionLoading(null);
     }
@@ -92,14 +122,16 @@ export function HypoglycemiaView() {
     const value = parseFloat(repeatGlucose);
     if (isNaN(value) || value <= 0) return;
     setActionLoading(id);
+    setError(null);
     try {
-      await hypoglycemiaApi.recordRepeatGlucose(id, { repeatGlucoseLevel: value });
+      await hypoglycemiaApi.recordRepeatGlucose(id, { glucoseLevel: value, unit: repeatUnit });
       setActiveEventId(null);
       setWorkflowStep(null);
       setRepeatGlucose('');
+      setRepeatUnit('MMOL_L');
       loadEvents();
     } catch (err) {
-      console.error('Failed to record repeat glucose:', err);
+      reportError(err, 'Failed to record repeat glucose');
     } finally {
       setActionLoading(null);
     }
@@ -107,11 +139,12 @@ export function HypoglycemiaView() {
 
   const handleResolve = async (id: string) => {
     setActionLoading(id);
+    setError(null);
     try {
       await hypoglycemiaApi.resolve(id);
       loadEvents();
     } catch (err) {
-      console.error('Failed to resolve event:', err);
+      reportError(err, 'Failed to resolve event');
     } finally {
       setActionLoading(null);
     }
@@ -122,6 +155,7 @@ export function HypoglycemiaView() {
     setWorkflowStep(step);
     setSelectedTreatment('');
     setRepeatGlucose('');
+    setRepeatUnit('MMOL_L');
   };
 
   const closeWorkflow = () => {
@@ -129,12 +163,16 @@ export function HypoglycemiaView() {
     setWorkflowStep(null);
     setSelectedTreatment('');
     setRepeatGlucose('');
+    setRepeatUnit('MMOL_L');
   };
 
   /* ── Determine next workflow step for an event ─────────── */
   const getNextStep = (evt: HypoglycemiaEvent): WorkflowStep | null => {
     if (!evt.treatmentGiven) return 'treat';
-    if (evt.repeatGlucoseLevel === null) return 'repeat-glucose';
+    // Loose null — backend omits null fields, so an un-recorded repeat arrives as
+    // `undefined`; `=== null` would skip straight to resolve and let a clinician
+    // close the event WITHOUT the mandatory post-treatment glucose recheck.
+    if (evt.repeatGlucoseLevel == null) return 'repeat-glucose';
     return 'resolve';
   };
 
@@ -172,21 +210,28 @@ export function HypoglycemiaView() {
           </div>
         </div>
 
+        {error && (
+          <div className="rounded-2xl px-4 py-3 flex items-start gap-2 bg-red-500/10 border border-red-500/20 animate-fade-up">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+            <p className="text-[12px] font-semibold text-red-500">{error}</p>
+          </div>
+        )}
+
         {/* ── Event List ─────────────────────────────────── */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-6 h-6 animate-spin text-cyan-500" />
           </div>
-        ) : events.length === 0 ? (
+        ) : events.length === 0 && !error ? (
           <div className="rounded-2xl p-8 text-center animate-fade-up" style={glassCard}>
             <CheckCircle2 className="w-10 h-10 mx-auto mb-3 text-emerald-500" />
             <p className={`text-sm font-bold ${text.heading}`}>No unresolved events</p>
             <p className={`text-xs mt-1 ${text.muted}`}>All hypoglycemia events have been resolved</p>
           </div>
-        ) : (
+        ) : events.length === 0 ? null : (
           <div className="space-y-3">
             {events.map((evt, i) => {
-              const sev = SEVERITY_CONFIG[evt.severity] || SEVERITY_CONFIG.MILD;
+              const sev = SEVERITY_CONFIG[evt.severity] || SEVERITY_FALLBACK;
               const glucoseInfo = getGlucoseSeverity(evt.glucoseLevel);
               const nextStep = getNextStep(evt);
               const isActive = activeEventId === evt.id;
@@ -202,12 +247,21 @@ export function HypoglycemiaView() {
                       {/* Glucose level badge */}
                       <div className={`w-14 h-14 rounded-xl ${glucoseInfo.bgColor} flex flex-col items-center justify-center shrink-0`}>
                         <span className={`text-lg font-bold ${glucoseInfo.color}`}>
-                          {evt.glucoseLevel !== null ? evt.glucoseLevel.toFixed(1) : '—'}
+                          {evt.glucoseLevel != null ? evt.glucoseLevel.toFixed(1) : '—'}
                         </span>
                         <span className={`text-[8px] font-bold uppercase ${glucoseInfo.color}`}>mmol/L</span>
                       </div>
 
                       <div className="flex-1 min-w-0">
+                        {/* Patient identity — a hospital-wide board must say WHO is hypoglycemic */}
+                        {(evt.patientName || evt.visitNumber) && (
+                          <p className={`text-sm font-bold ${text.heading} mb-1`}>
+                            {evt.patientName || 'Patient'}
+                            {evt.visitNumber && <span className={`ml-2 text-[10px] font-mono font-normal ${text.muted}`}>{evt.visitNumber}</span>}
+                            {evt.currentZone && <span className={`ml-2 text-[10px] font-normal ${text.muted}`}>· {evt.currentZone.replace(/_/g, ' ')}</span>}
+                            {evt.neonatal && <span className="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded bg-fuchsia-500/15 text-fuchsia-400">NEONATAL</span>}
+                          </p>
+                        )}
                         {/* Badges row */}
                         <div className="flex flex-wrap items-center gap-2 mb-1.5">
                           <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg border ${sev.bg} ${sev.color} ${sev.border}`}>
@@ -248,7 +302,7 @@ export function HypoglycemiaView() {
                         </div>
 
                         {/* Repeat glucose comparison */}
-                        {evt.treatmentGiven && evt.repeatGlucoseLevel !== null && (
+                        {evt.treatmentGiven && evt.repeatGlucoseLevel != null && (
                           <div className="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-slate-500/5">
                             <FlaskConical className="w-3.5 h-3.5 text-cyan-500" />
                             <span className={`text-xs ${text.body}`}>
@@ -369,23 +423,37 @@ export function HypoglycemiaView() {
                       style={{ borderTop: isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)' }}
                     >
                       <p className={`text-xs font-bold mb-3 ${text.heading}`}>Record Repeat Glucose Level</p>
-                      <div className="flex items-center gap-3">
-                        <div className="relative">
-                          <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            max="30"
-                            value={repeatGlucose}
-                            onChange={(e) => setRepeatGlucose(e.target.value)}
-                            placeholder="e.g. 4.2"
-                            className={`w-32 px-3 py-2 text-sm rounded-xl border outline-none transition-colors ${
-                              isDark
-                                ? 'bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-cyan-500/40'
-                                : 'bg-white border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-cyan-500'
-                            }`}
-                          />
-                          <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] ${text.muted}`}>mmol/L</span>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <input
+                          type="number"
+                          step={repeatUnit === 'MG_DL' ? '1' : '0.1'}
+                          min="0"
+                          max={repeatUnit === 'MG_DL' ? '600' : '30'}
+                          value={repeatGlucose}
+                          onChange={(e) => setRepeatGlucose(e.target.value)}
+                          placeholder={repeatUnit === 'MG_DL' ? 'e.g. 75' : 'e.g. 4.2'}
+                          className={`w-28 px-3 py-2 text-sm rounded-xl border outline-none transition-colors ${
+                            isDark
+                              ? 'bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-cyan-500/40'
+                              : 'bg-white border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-cyan-500'
+                          }`}
+                        />
+                        {/* Unit toggle — a mg/dL glucometer reading is converted server-side */}
+                        <div className={`inline-flex rounded-xl p-0.5 ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
+                          {(['MMOL_L', 'MG_DL'] as const).map((u) => (
+                            <button
+                              key={u}
+                              type="button"
+                              onClick={() => setRepeatUnit(u)}
+                              className={`px-2.5 py-1.5 text-[10px] font-bold rounded-lg transition-colors ${
+                                repeatUnit === u
+                                  ? 'bg-cyan-500/20 text-cyan-500'
+                                  : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'
+                              }`}
+                            >
+                              {u === 'MMOL_L' ? 'mmol/L' : 'mg/dL'}
+                            </button>
+                          ))}
                         </div>
                         <button
                           onClick={() => handleRecordRepeatGlucose(evt.id)}
@@ -408,17 +476,20 @@ export function HypoglycemiaView() {
                           Cancel
                         </button>
                       </div>
-                      {repeatGlucose && !isNaN(parseFloat(repeatGlucose)) && (
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className={`text-[10px] ${text.muted}`}>Preview:</span>
-                          <span className={`text-xs font-bold ${getGlucoseSeverity(parseFloat(repeatGlucose)).color}`}>
-                            {parseFloat(repeatGlucose).toFixed(1)} mmol/L
-                          </span>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${getGlucoseSeverity(parseFloat(repeatGlucose)).bgColor} ${getGlucoseSeverity(parseFloat(repeatGlucose)).color}`}>
-                            {getGlucoseSeverity(parseFloat(repeatGlucose)).label}
-                          </span>
-                        </div>
-                      )}
+                      {repeatGlucose && !isNaN(parseFloat(repeatGlucose)) && (() => {
+                        const mmol = repeatUnit === 'MG_DL' ? parseFloat(repeatGlucose) / 18 : parseFloat(repeatGlucose);
+                        const info = getGlucoseSeverity(mmol);
+                        return (
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className={`text-[10px] ${text.muted}`}>Preview:</span>
+                            <span className={`text-xs font-bold ${info.color}`}>{mmol.toFixed(1)} mmol/L</span>
+                            {repeatUnit === 'MG_DL' && (
+                              <span className={`text-[10px] ${text.muted}`}>({parseFloat(repeatGlucose).toFixed(0)} mg/dL)</span>
+                            )}
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${info.bgColor} ${info.color}`}>{info.label}</span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>

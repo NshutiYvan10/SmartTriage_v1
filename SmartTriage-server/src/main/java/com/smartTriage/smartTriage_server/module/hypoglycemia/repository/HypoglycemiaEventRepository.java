@@ -28,4 +28,11 @@ public interface HypoglycemiaEventRepository extends JpaRepository<HypoglycemiaE
      * Check for existing unresolved event for a visit — prevents duplicate events.
      */
     boolean existsByVisitIdAndResolvedFalseAndIsActiveTrue(UUID visitId);
+
+    /** Project the owning visit id — used by ClinicalAuthz to scope the mutating endpoints. */
+    @Query("SELECT h.visit.id FROM HypoglycemiaEvent h WHERE h.id = :id")
+    Optional<UUID> findVisitIdById(@Param("id") UUID id);
+
+    /** All unresolved active events — the recheck monitor scans these for overdue rechecks. */
+    List<HypoglycemiaEvent> findByResolvedFalseAndIsActiveTrue();
 }

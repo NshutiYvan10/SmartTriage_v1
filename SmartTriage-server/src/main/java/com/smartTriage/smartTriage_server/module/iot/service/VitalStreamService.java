@@ -54,6 +54,10 @@ public class VitalStreamService {
     private final com.smartTriage.smartTriage_server.module.iot.repository.DeviceSessionRepository sessionRepository;
     private final VitalValidationEngine validationEngine;
     private final RealTimeEventPublisher eventPublisher;
+    /** Hypoglycemia auto-detection on a validated IoT glucose reading. Best-effort
+     *  (never throws), and HypoglycemiaService does not depend back on this
+     *  service, so there is no circular wiring. */
+    private final com.smartTriage.smartTriage_server.module.hypoglycemia.service.HypoglycemiaService hypoglycemiaService;
 
     // ====================================================================
     // DATA INGESTION
@@ -184,6 +188,13 @@ public class VitalStreamService {
                 session.transitionState(
                         com.smartTriage.smartTriage_server.common.enums.MonitoringState.LIVE);
                 sessionRepository.save(session);
+            }
+
+            // Auto-detect hypoglycemia on a validated glucose reading from the
+            // monitor stream — previously the hypoglycemia detector never saw
+            // IoT glucose at all. Best-effort.
+            if (payload.getBloodGlucose() != null) {
+                hypoglycemiaService.evaluateGlucoseReading(visit, payload.getBloodGlucose(), false, "IOT_STREAM");
             }
 
             final VitalStream savedStream = stream;

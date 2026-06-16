@@ -47,9 +47,25 @@ public class HypoglycemiaEvent extends BaseEntity {
     @Column(name = "trigger_reason", nullable = false)
     private String triggerReason;
 
-    /** CRITICAL (<3.0), MILD (3.0-3.9), NORMAL (>=4.0) */
+    /** HypoglycemiaSeverity.name(): MILD / MODERATE / SEVERE / NORMAL / PENDING_CHECK. */
     @Column(name = "severity", nullable = false, length = 20)
     private String severity;
+
+    /** Where the triggering glucose came from: TRIAGE / MANUAL_VITALS / IOT_STREAM / REPEAT. */
+    @Column(name = "glucose_source", length = 30)
+    private String glucoseSource;
+
+    /** True when classified under neonatal (< 28 days) thresholds. */
+    @Column(name = "is_neonatal", nullable = false)
+    @Builder.Default
+    private boolean neonatal = false;
+
+    @Column(name = "detected_by_name")
+    private String detectedByName;
+
+    /** When the next glucose recheck is due (detection/treatment + 15 min) — drives the recheck monitor. */
+    @Column(name = "recheck_due_at")
+    private Instant recheckDueAt;
 
     @Column(name = "treatment_given", columnDefinition = "TEXT")
     private String treatmentGiven;
@@ -73,6 +89,9 @@ public class HypoglycemiaEvent extends BaseEntity {
 
     @Column(name = "resolved_at")
     private Instant resolvedAt;
+
+    @Column(name = "resolved_by_name")
+    private String resolvedByName;
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;

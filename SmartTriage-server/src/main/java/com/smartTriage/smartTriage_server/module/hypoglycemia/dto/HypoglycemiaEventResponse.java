@@ -22,10 +22,16 @@ public class HypoglycemiaEventResponse {
     private String visitNumber;
     private String patientName;
 
+    private String currentZone;
+
     private Instant detectedAt;
     private Double glucoseLevel;
     private String triggerReason;
     private String severity;
+    private String glucoseSource;
+    private boolean neonatal;
+    private String detectedByName;
+    private Instant recheckDueAt;
 
     private String treatmentGiven;
     private Instant treatmentGivenAt;
@@ -36,6 +42,7 @@ public class HypoglycemiaEventResponse {
 
     private boolean resolved;
     private Instant resolvedAt;
+    private String resolvedByName;
     private String notes;
 
     private Instant createdAt;
