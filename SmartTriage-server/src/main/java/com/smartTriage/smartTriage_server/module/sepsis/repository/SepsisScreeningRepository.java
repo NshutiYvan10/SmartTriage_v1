@@ -18,6 +18,10 @@ public interface SepsisScreeningRepository extends JpaRepository<SepsisScreening
 
     Optional<SepsisScreening> findByIdAndIsActiveTrue(UUID id);
 
+    /** Resolve a screening's visit id — used by ClinicalAuthz to scope bundle endpoints. */
+    @Query("SELECT s.visit.id FROM SepsisScreening s WHERE s.id = :id AND s.isActive = true")
+    Optional<UUID> findVisitIdById(@Param("id") UUID id);
+
     Page<SepsisScreening> findByVisitIdAndIsActiveTrueOrderByScreenedAtDesc(UUID visitId, Pageable pageable);
 
     /**

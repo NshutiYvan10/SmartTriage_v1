@@ -41,6 +41,7 @@ class ClinicalAuthzTest {
     private UserRepository userRepository;
     private ShiftAssignmentService shiftAssignmentService;
     private ClinicalAlertRepository clinicalAlertRepository;
+    private com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository sepsisScreeningRepository;
     private ClinicalAuthz authz;
 
     private final UUID hospitalId = UUID.randomUUID();
@@ -50,6 +51,8 @@ class ClinicalAuthzTest {
         userRepository = mock(UserRepository.class);
         shiftAssignmentService = mock(ShiftAssignmentService.class);
         clinicalAlertRepository = mock(ClinicalAlertRepository.class);
+        sepsisScreeningRepository =
+                mock(com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository.class);
         authz = new ClinicalAuthz(
                 userRepository,
                 mock(VisitRepository.class),
@@ -59,7 +62,16 @@ class ClinicalAuthzTest {
                 mock(DiagnosisRepository.class),
                 mock(InvestigationRepository.class),
                 mock(HandoverReportRepository.class),
-                clinicalAlertRepository);
+                clinicalAlertRepository,
+                sepsisScreeningRepository);
+    }
+
+    @Test
+    void canAccessSepsisScreening_deniesUnknownScreening() {
+        UUID missing = UUID.randomUUID();
+        when(sepsisScreeningRepository.findVisitIdById(missing)).thenReturn(java.util.Optional.empty());
+        assertFalse(authz.canAccessSepsisScreening(
+                authFor(user(Role.DOCTOR, null, hospitalId)), missing));
     }
 
     private Authentication authFor(User user) {

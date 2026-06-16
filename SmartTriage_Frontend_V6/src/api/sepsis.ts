@@ -3,6 +3,8 @@ import { get, post, put } from './client';
 export interface SepsisScreening {
   id: string;
   visitId: string;
+  visitNumber?: string;
+  patientName?: string;
   screenedAt: string;
   screenedByName: string;
   sepsisStatus: string;
@@ -25,6 +27,14 @@ export interface SepsisScreening {
   lactateMeasured: boolean;
   vasopressorsIfNeeded: boolean;
   repeatLactateIfElevated: boolean;
+  // Pediatric safety + data quality (V74)
+  pediatric?: boolean;
+  pediatricCaveat?: string | null;
+  insufficientData?: boolean;
+  dataQualityNote?: string | null;
+  // Time-stamped action trail (V74)
+  bundleStartedByName?: string | null;
+  bundleCompletedByName?: string | null;
   notes: string;
   createdAt: string;
 }

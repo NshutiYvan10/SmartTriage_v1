@@ -4,7 +4,11 @@ import com.smartTriage.smartTriage_server.common.enums.*;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
+import com.smartTriage.smartTriage_server.module.alert.mapper.ClinicalAlertMapper;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
+import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher;
+import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.sepsis.dto.SepsisScreeningRequest;
 import com.smartTriage.smartTriage_server.module.sepsis.engine.SepsisScreeningEngine;
 import com.smartTriage.smartTriage_server.module.sepsis.engine.SepsisScreeningEngine.SepsisScreeningResult;
@@ -46,6 +50,8 @@ public class SepsisService {
     private final VisitRepository visitRepository;
     private final VitalSignsRepository vitalSignsRepository;
     private final ClinicalAlertRepository clinicalAlertRepository;
+    private final ShiftAssignmentService shiftAssignmentService;
+    private final RealTimeEventPublisher realTimeEventPublisher;
 
     /**
      * Screen a patient for sepsis using their latest vital signs.
@@ -92,7 +98,16 @@ public class SepsisService {
             }
         }
 
-        // Re-evaluate status with updated SIRS score if infection is suspected
+        // CRITICAL: the engine fixed `status` from its vitals-only SIRS score, BEFORE
+        // the WBC criterion was added here. Re-evaluate SIRS positivity now, or a
+        // patient who reaches SIRS >= 2 ONLY because of the WBC criterion would be
+        // silently left NO_SEPSIS — no alert, no bundle — a missed septic patient.
+        if (sirsScore >= 2 && status == SepsisStatus.NO_SEPSIS) {
+            status = SepsisStatus.SIRS_POSITIVE;
+        }
+
+        // Re-evaluate status with updated SIRS score if infection is suspected.
+        // SIRS + a suspected infection source IS sepsis by definition.
         if (request != null && request.getSuspectedInfectionSource() != null
                 && !request.getSuspectedInfectionSource().isBlank()
                 && sirsScore >= 2 && status == SepsisStatus.SIRS_POSITIVE) {
@@ -126,6 +141,10 @@ public class SepsisService {
                 .wbcCriteriaMet(wbcCriteriaMet)
                 .suspectedInfectionSource(request != null ? request.getSuspectedInfectionSource() : null)
                 .lactateLevel(lactateLevel)
+                .pediatric(result.pediatric())
+                .pediatricCaveat(result.pediatricCaveat())
+                .insufficientData(result.insufficientData())
+                .dataQualityNote(result.dataQualityNote())
                 .notes(request != null ? request.getNotes() : null)
                 .build();
 
@@ -166,10 +185,11 @@ public class SepsisService {
         }
 
         screening.setBundleStartedAt(Instant.now());
+        screening.setBundleStartedByName(resolveCurrentUserName());
         screening = sepsisScreeningRepository.save(screening);
 
-        log.info("Sepsis bundle started: Screening={}, Visit={}",
-                screeningId, screening.getVisit().getVisitNumber());
+        log.info("Sepsis bundle started: Screening={}, Visit={}, by={}",
+                screeningId, screening.getVisit().getVisitNumber(), screening.getBundleStartedByName());
 
         return screening;
     }
@@ -182,18 +202,19 @@ public class SepsisService {
         SepsisScreening screening = sepsisScreeningRepository.findByIdAndIsActiveTrue(screeningId)
                 .orElseThrow(() -> new ResourceNotFoundException("SepsisScreening", "id", screeningId));
 
+        Instant now = Instant.now();
         switch (item) {
-            case BLOOD_CULTURE_OBTAINED -> screening.setBloodCultureObtained(true);
-            case BROAD_SPECTRUM_ANTIBIOTICS -> screening.setBroadSpectrumAntibiotics(true);
-            case IV_CRYSTALLOID_BOLUS -> screening.setIvCrystalloidBolus(true);
-            case LACTATE_MEASURED -> screening.setLactateMeasured(true);
-            case VASOPRESSORS_IF_NEEDED -> screening.setVasopressorsIfNeeded(true);
-            case REPEAT_LACTATE_IF_ELEVATED -> screening.setRepeatLactateIfElevated(true);
+            case BLOOD_CULTURE_OBTAINED -> { screening.setBloodCultureObtained(true); screening.setBloodCultureObtainedAt(now); }
+            case BROAD_SPECTRUM_ANTIBIOTICS -> { screening.setBroadSpectrumAntibiotics(true); screening.setBroadSpectrumAntibioticsAt(now); }
+            case IV_CRYSTALLOID_BOLUS -> { screening.setIvCrystalloidBolus(true); screening.setIvCrystalloidBolusAt(now); }
+            case LACTATE_MEASURED -> { screening.setLactateMeasured(true); screening.setLactateMeasuredAt(now); }
+            case VASOPRESSORS_IF_NEEDED -> { screening.setVasopressorsIfNeeded(true); screening.setVasopressorsIfNeededAt(now); }
+            case REPEAT_LACTATE_IF_ELEVATED -> { screening.setRepeatLactateIfElevated(true); screening.setRepeatLactateIfElevatedAt(now); }
         }
 
         screening = sepsisScreeningRepository.save(screening);
 
-        log.info("Bundle item completed: {} for Screening={}", item.name(), screeningId);
+        log.info("Bundle item completed: {} for Screening={} at {}", item.name(), screeningId, now);
 
         return screening;
     }
@@ -211,15 +232,19 @@ public class SepsisService {
                     "Cannot complete bundle that has not been started for screening " + screeningId);
         }
 
-        screening.setBundleCompletedAt(Instant.now());
+        Instant now = Instant.now();
+        screening.setBundleCompletedAt(now);
+        screening.setBundleCompletedByName(resolveCurrentUserName());
 
-        // Mark all items as complete
-        screening.setBloodCultureObtained(true);
-        screening.setBroadSpectrumAntibiotics(true);
-        screening.setIvCrystalloidBolus(true);
-        screening.setLactateMeasured(true);
-        screening.setVasopressorsIfNeeded(true);
-        screening.setRepeatLactateIfElevated(true);
+        // Stamp any not-yet-completed item as done NOW. Items completed earlier
+        // keep their own earlier timestamp, so the time-stamped action trail
+        // preserves the partial-completion truth (rather than blindly back-dating).
+        if (!screening.isBloodCultureObtained()) { screening.setBloodCultureObtained(true); screening.setBloodCultureObtainedAt(now); }
+        if (!screening.isBroadSpectrumAntibiotics()) { screening.setBroadSpectrumAntibiotics(true); screening.setBroadSpectrumAntibioticsAt(now); }
+        if (!screening.isIvCrystalloidBolus()) { screening.setIvCrystalloidBolus(true); screening.setIvCrystalloidBolusAt(now); }
+        if (!screening.isLactateMeasured()) { screening.setLactateMeasured(true); screening.setLactateMeasuredAt(now); }
+        if (!screening.isVasopressorsIfNeeded()) { screening.setVasopressorsIfNeeded(true); screening.setVasopressorsIfNeededAt(now); }
+        if (!screening.isRepeatLactateIfElevated()) { screening.setRepeatLactateIfElevated(true); screening.setRepeatLactateIfElevatedAt(now); }
 
         screening = sepsisScreeningRepository.save(screening);
 
@@ -271,15 +296,23 @@ public class SepsisService {
 
     private void generateSepsisAlert(Visit visit, SepsisScreening screening, SepsisStatus status) {
         String patientName = visit.getPatient().getFirstName() + " " + visit.getPatient().getLastName();
+        UUID hospitalId = visit.getHospital() != null ? visit.getHospital().getId() : null;
+        EdZone zone = visit.getCurrentEdZone();
 
-        AlertSeverity severity = AlertSeverity.CRITICAL;
-        String title = "SEPSIS DETECTED — " + status.name().replace("_", " ");
+        // Resolve the accountable zone doctor so the alert is OWNED, not
+        // hospital-generic — the doctor on this patient's zone is responsible
+        // for acting on the 1-hour bundle.
+        User zoneDoctor = null;
+        if (hospitalId != null && zone != null) {
+            List<User> doctors = shiftAssignmentService.getDoctorsForZone(hospitalId, zone);
+            if (!doctors.isEmpty()) zoneDoctor = doctors.get(0);
+        }
 
         ClinicalAlert alert = ClinicalAlert.builder()
                 .visit(visit)
                 .alertType(AlertType.SEPSIS_SCREENING)
-                .severity(severity)
-                .title(title)
+                .severity(AlertSeverity.CRITICAL)
+                .title("SEPSIS DETECTED — " + status.name().replace("_", " "))
                 .message(String.format(
                         "SEPSIS SCREENING POSITIVE for patient %s (Visit: %s). " +
                         "Status: %s. qSOFA: %d/3, SIRS: %d/4. " +
@@ -293,13 +326,44 @@ public class SepsisService {
                         screening.getLactateLevel() != null
                                 ? "Lactate: " + screening.getLactateLevel() + " mmol/L. "
                                 : ""))
+                .targetZone(zone)
+                .targetDoctor(zoneDoctor)
+                .escalationTier(1)
                 .autoGenerated(true)
                 .build();
 
-        clinicalAlertRepository.save(alert);
+        alert = clinicalAlertRepository.save(alert);
+        publishSepsisAlert(alert, hospitalId, zone, zoneDoctor);
 
-        log.warn("SEPSIS ALERT generated: Visit={}, Status={}, Severity={}",
-                visit.getVisitNumber(), status, severity);
+        log.warn("SEPSIS ALERT generated: Visit={}, Status={}, zone={}, doctor={}",
+                visit.getVisitNumber(), status, zone, zoneDoctor != null ? zoneDoctor.getId() : "unassigned");
+    }
+
+    /**
+     * Push a sepsis alert in real time to the zone board, the accountable zone
+     * doctor, and the charge nurse(s) in parallel — so a CRITICAL detection is
+     * seen immediately, not only on a later REST refresh. Best-effort: a STOMP
+     * failure must never break the screening transaction. Reused for the bundle
+     * monitor's escalation alerts too.
+     */
+    void publishSepsisAlert(ClinicalAlert alert, UUID hospitalId, EdZone zone, User zoneDoctor) {
+        try {
+            if (hospitalId == null || alert == null) return;
+            var resp = ClinicalAlertMapper.toResponse(alert);
+            realTimeEventPublisher.publishHospitalAlert(hospitalId, resp);
+            if (zone != null) {
+                realTimeEventPublisher.publishZoneAlert(hospitalId, zone, resp);
+            }
+            if (zoneDoctor != null) {
+                realTimeEventPublisher.publishUserAlert(zoneDoctor.getId(), resp);
+            }
+            for (User cn : shiftAssignmentService.getChargeNurse(hospitalId)) {
+                realTimeEventPublisher.publishUserAlert(cn.getId(), resp);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to publish sepsis alert {}: {}",
+                    alert != null ? alert.getId() : null, e.getMessage());
+        }
     }
 
     private String resolveCurrentUserName() {

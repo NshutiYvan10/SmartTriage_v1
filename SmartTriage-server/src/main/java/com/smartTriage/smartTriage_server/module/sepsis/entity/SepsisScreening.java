@@ -139,6 +139,56 @@ public class SepsisScreening extends BaseEntity {
     private boolean repeatLactateIfElevated = false;
 
     // ====================================================================
+    // ACTION TRAIL — who ran the bundle and WHEN each item was completed
+    // (time-stamped 1-hour-bundle record for medico-legal traceability)
+    // ====================================================================
+
+    @Column(name = "bundle_started_by_name")
+    private String bundleStartedByName;
+
+    @Column(name = "bundle_completed_by_name")
+    private String bundleCompletedByName;
+
+    @Column(name = "blood_culture_obtained_at")
+    private Instant bloodCultureObtainedAt;
+
+    @Column(name = "broad_spectrum_antibiotics_at")
+    private Instant broadSpectrumAntibioticsAt;
+
+    @Column(name = "iv_crystalloid_bolus_at")
+    private Instant ivCrystalloidBolusAt;
+
+    @Column(name = "lactate_measured_at")
+    private Instant lactateMeasuredAt;
+
+    @Column(name = "vasopressors_if_needed_at")
+    private Instant vasopressorsIfNeededAt;
+
+    @Column(name = "repeat_lactate_if_elevated_at")
+    private Instant repeatLactateIfElevatedAt;
+
+    // ====================================================================
+    // PEDIATRIC SAFETY + DATA QUALITY
+    // ====================================================================
+
+    /** True when the patient is pediatric — age-banded SIRS thresholds applied. */
+    @Column(name = "is_pediatric", nullable = false)
+    @Builder.Default
+    private boolean pediatric = false;
+
+    /** Mandatory caveat for pediatric screens (adult qSOFA not validated in children). */
+    @Column(name = "pediatric_caveat", columnDefinition = "TEXT")
+    private String pediatricCaveat;
+
+    /** True when key scoring vitals were missing — a negative must not reassure. */
+    @Column(name = "insufficient_data", nullable = false)
+    @Builder.Default
+    private boolean insufficientData = false;
+
+    @Column(name = "data_quality_note", columnDefinition = "TEXT")
+    private String dataQualityNote;
+
+    // ====================================================================
     // NOTES
     // ====================================================================
 

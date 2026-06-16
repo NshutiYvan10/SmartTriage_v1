@@ -77,7 +77,8 @@ public class SepsisController {
      * Start the 1-hour sepsis bundle timer for a screening.
      */
     @PutMapping("/bundle/{screeningId}/start")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessSepsisScreening(authentication, #screeningId)")
     public ResponseEntity<ApiResponse<SepsisBundleStatusResponse>> startBundle(
             @PathVariable UUID screeningId) {
         SepsisScreening screening = sepsisService.startBundle(screeningId);
@@ -89,7 +90,8 @@ public class SepsisController {
      * Complete a specific bundle item.
      */
     @PutMapping("/bundle/{screeningId}/item/{item}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessSepsisScreening(authentication, #screeningId)")
     public ResponseEntity<ApiResponse<SepsisBundleStatusResponse>> completeBundleItem(
             @PathVariable UUID screeningId,
             @PathVariable SepsisBundleItem item) {

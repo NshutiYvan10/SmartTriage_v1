@@ -27,15 +27,21 @@ const qsofaColor = (score: number) => {
   return { text: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' };
 };
 
-/* ── Sepsis status badge ── */
+/* ── Sepsis status badge ──
+   Keys MUST match the backend SepsisStatus enum exactly. Previously they used
+   POSSIBLE/PROBABLE/SEPSIS, which never matched SIRS_POSITIVE/SEPSIS_SUSPECTED,
+   so a real sepsis-suspected case fell through to a wrong colour. */
+const STATUS_FALLBACK = { color: 'text-slate-400', bg: 'bg-slate-500/10' };
 const STATUS_CONFIG: Record<string, { color: string; bg: string }> = {
-  NO_SEPSIS:      { color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-  POSSIBLE:       { color: 'text-amber-400', bg: 'bg-amber-500/10' },
-  PROBABLE:       { color: 'text-orange-400', bg: 'bg-orange-500/10' },
-  SEPSIS:         { color: 'text-red-400', bg: 'bg-red-500/10' },
-  SEVERE_SEPSIS:  { color: 'text-red-500', bg: 'bg-red-500/15' },
-  SEPTIC_SHOCK:   { color: 'text-red-600', bg: 'bg-red-500/20' },
+  NO_SEPSIS:        { color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+  SIRS_POSITIVE:    { color: 'text-amber-400', bg: 'bg-amber-500/10' },
+  SEPSIS_SUSPECTED: { color: 'text-red-400', bg: 'bg-red-500/10' },
+  SEVERE_SEPSIS:    { color: 'text-red-500', bg: 'bg-red-500/15' },
+  SEPTIC_SHOCK:     { color: 'text-red-600', bg: 'bg-red-500/20' },
 };
+
+/* Statuses for which the 1-hour bundle is required (mirrors the backend). */
+const BUNDLE_REQUIRED_STATUSES = ['SEPSIS_SUSPECTED', 'SEVERE_SEPSIS', 'SEPTIC_SHOCK'];
 
 /* ── Bundle checklist items ── */
 const BUNDLE_ITEMS: { key: keyof SepsisScreening; label: string; icon: typeof Droplets }[] = [
@@ -287,7 +293,7 @@ export function SepsisDashboard() {
           <div className="space-y-4">
             {filtered.map((screening, i) => {
               const qc = qsofaColor(screening.qsofaScore);
-              const statusCfg = STATUS_CONFIG[screening.sepsisStatus] || STATUS_CONFIG.POSSIBLE;
+              const statusCfg = STATUS_CONFIG[screening.sepsisStatus] || STATUS_FALLBACK;
               const progress = bundleProgress(screening);
               const bundleActive = screening.bundleStartedAt && !screening.bundleCompletedAt;
 
@@ -328,6 +334,16 @@ export function SepsisDashboard() {
                             )}
                           </div>
 
+                          {/* Patient identity — so a multi-patient board shows WHICH patient each card is */}
+                          {(screening.patientName || screening.visitNumber) && (
+                            <p className={`text-sm font-bold ${text.heading} mb-1`}>
+                              {screening.patientName || 'Patient'}
+                              {screening.visitNumber && (
+                                <span className={`ml-2 text-[10px] font-mono font-normal ${text.muted}`}>{screening.visitNumber}</span>
+                              )}
+                            </p>
+                          )}
+
                           {/* Screened info */}
                           <div className="flex items-center gap-3 flex-wrap">
                             <p className={`text-xs ${text.body}`}>
@@ -351,6 +367,19 @@ export function SepsisDashboard() {
                               {screening.systolicBpLow ? '\u2713' : '\u2717'} SBP &le; 100
                             </span>
                           </div>
+
+                          {/* Safety banners — data quality + pediatric caveat */}
+                          {screening.insufficientData && (
+                            <p className="text-[10px] font-semibold text-amber-400 mt-2">
+                              ⚠ Insufficient vitals — a negative screen is NOT reassuring.
+                              {screening.dataQualityNote ? ` ${screening.dataQualityNote}` : ''}
+                            </p>
+                          )}
+                          {screening.pediatric && screening.pediatricCaveat && (
+                            <p className="text-[10px] font-semibold text-fuchsia-300 mt-2 leading-relaxed">
+                              ⚠ {screening.pediatricCaveat}
+                            </p>
+                          )}
 
                           {/* Infection source & lactate */}
                           {(screening.suspectedInfectionSource || screening.lactateLevel !== null) && (
@@ -432,8 +461,9 @@ export function SepsisDashboard() {
                     </div>
                   )}
 
-                  {/* ── Action Bar ── */}
-                  {!screening.bundleStartedAt && screening.qsofaScore >= 2 && (
+                  {/* ── Action Bar ── bundle is offered for ALL bundle-required
+                      statuses (SIRS/lactate-driven sepsis too), not qSOFA>=2 alone. */}
+                  {!screening.bundleStartedAt && BUNDLE_REQUIRED_STATUSES.includes(screening.sepsisStatus) && (
                     <div
                       className="px-5 py-3 border-t"
                       style={{ borderColor: isDark ? 'rgba(2,132,199,0.12)' : 'rgba(203,213,225,0.3)' }}

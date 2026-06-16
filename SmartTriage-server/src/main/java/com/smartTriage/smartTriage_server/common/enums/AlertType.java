@@ -119,5 +119,18 @@ public enum AlertType {
      * (GENERAL, AMBULATORY, OBSERVATION) where the operational tempo
      * doesn't warrant a notification.
      */
-    BED_AVAILABLE
+    BED_AVAILABLE,
+
+    /**
+     * Sepsis 1-hour bundle compliance escalations. DISTINCT from the
+     * SEPSIS_SCREENING detection alert on purpose: the bundle monitor dedups
+     * on these types, so an unacknowledged original SEPSIS_SCREENING alert can
+     * no longer suppress the escalation for a patient nobody has acted on.
+     *  - SEPSIS_BUNDLE_NOT_STARTED: sepsis detected but the 1-hour bundle was
+     *    not started within the start deadline.
+     *  - SEPSIS_BUNDLE_OVERDUE:     bundle in progress past the 60-minute
+     *    completion deadline.
+     */
+    SEPSIS_BUNDLE_NOT_STARTED,
+    SEPSIS_BUNDLE_OVERDUE
 }

@@ -61,6 +61,22 @@ public class SepsisScreeningResponse {
     private int bundleItemsCompleted;
     private int bundleItemsTotal;
 
+    // Pediatric safety + data quality
+    private boolean pediatric;
+    private String pediatricCaveat;
+    private boolean insufficientData;
+    private String dataQualityNote;
+
+    // Time-stamped action trail
+    private String bundleStartedByName;
+    private String bundleCompletedByName;
+    private Instant bloodCultureObtainedAt;
+    private Instant broadSpectrumAntibioticsAt;
+    private Instant ivCrystalloidBolusAt;
+    private Instant lactateMeasuredAt;
+    private Instant vasopressorsIfNeededAt;
+    private Instant repeatLactateIfElevatedAt;
+
     private String notes;
     private Instant createdAt;
 }

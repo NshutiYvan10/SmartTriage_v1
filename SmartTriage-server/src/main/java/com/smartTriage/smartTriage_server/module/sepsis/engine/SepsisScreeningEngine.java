@@ -54,7 +54,11 @@ public class SepsisScreeningEngine {
             boolean respiratoryRateCriteriaMet,
             boolean wbcCriteriaMet,
             List<String> findings,
-            boolean bundleRequired
+            boolean bundleRequired,
+            boolean pediatric,
+            String pediatricCaveat,
+            boolean insufficientData,
+            String dataQualityNote
     ) {}
 
     /**
@@ -66,6 +70,30 @@ public class SepsisScreeningEngine {
      */
     public SepsisScreeningResult screenForSepsis(VitalSigns vitals, Visit visit) {
         List<String> findings = new ArrayList<>();
+
+        // Age-band the SIRS vital thresholds. Adult cutoffs badly misfit children:
+        // a well infant's normal HR (80-130) and RR (26-39) both exceed the adult
+        // SIRS HR>90 / RR>20, so adult thresholds over-screen well babies. We use
+        // age-appropriate "above normal for age" cutoffs grounded in the same norms
+        // the pediatric triage calculator uses (infant < 3y, child 3-12y).
+        boolean pediatric = false;
+        int sirsHrThreshold = 90;   // adult: HR > 90
+        int sirsRrThreshold = 20;   // adult: RR > 20
+        try {
+            pediatric = visit.isPediatric();
+            if (pediatric && visit.getPatient() != null) {
+                int ageYears = visit.getPatient().getAgeInYears();
+                if (ageYears < 3) {          // infant
+                    sirsHrThreshold = 130;
+                    sirsRrThreshold = 39;
+                } else {                     // child 3-12
+                    sirsHrThreshold = 99;
+                    sirsRrThreshold = 26;
+                }
+            }
+        } catch (Exception ignored) {
+            // fall back to adult thresholds if age can't be resolved
+        }
 
         // ================================================================
         // qSOFA SCORING
@@ -86,15 +114,18 @@ public class SepsisScreeningEngine {
             findings.add("Altered mentation detected (GCS: " + vitals.getGcsScore() + ")");
         }
 
-        // Respiratory rate >= 22
-        if (vitals.getRespiratoryRate() != null && vitals.getRespiratoryRate() >= 22) {
+        // Respiratory rate >= 22 (adult qSOFA only — the adult RR/SBP qSOFA
+        // thresholds are NOT validated in children, so for pediatric patients we
+        // do not apply them; pediatric suspicion is driven by age-banded SIRS +
+        // the mandatory caveat, avoiding adult-threshold false positives).
+        if (!pediatric && vitals.getRespiratoryRate() != null && vitals.getRespiratoryRate() >= 22) {
             respiratoryRateHigh = true;
             qsofaScore++;
             findings.add("Respiratory rate elevated: " + vitals.getRespiratoryRate() + " (>= 22)");
         }
 
-        // Systolic BP <= 100
-        if (vitals.getSystolicBp() != null && vitals.getSystolicBp() <= 100) {
+        // Systolic BP <= 100 (adult qSOFA only — see note above)
+        if (!pediatric && vitals.getSystolicBp() != null && vitals.getSystolicBp() <= 100) {
             systolicBpLow = true;
             qsofaScore++;
             findings.add("Systolic BP low: " + vitals.getSystolicBp() + " mmHg (<= 100)");
@@ -117,18 +148,20 @@ public class SepsisScreeningEngine {
             findings.add("Temperature abnormal: " + vitals.getTemperature() + "°C (>38 or <36)");
         }
 
-        // Heart rate > 90
-        if (vitals.getHeartRate() != null && vitals.getHeartRate() > 90) {
+        // Heart rate above the age-appropriate threshold
+        if (vitals.getHeartRate() != null && vitals.getHeartRate() > sirsHrThreshold) {
             heartRateCriteriaMet = true;
             sirsScore++;
-            findings.add("Heart rate elevated: " + vitals.getHeartRate() + " bpm (>90)");
+            findings.add("Heart rate elevated: " + vitals.getHeartRate() + " bpm (>" + sirsHrThreshold
+                    + (pediatric ? ", age-adjusted)" : ")"));
         }
 
-        // Respiratory rate > 20
-        if (vitals.getRespiratoryRate() != null && vitals.getRespiratoryRate() > 20) {
+        // Respiratory rate above the age-appropriate threshold
+        if (vitals.getRespiratoryRate() != null && vitals.getRespiratoryRate() > sirsRrThreshold) {
             respiratoryRateCriteriaMet = true;
             sirsScore++;
-            findings.add("Respiratory rate elevated for SIRS: " + vitals.getRespiratoryRate() + " (>20)");
+            findings.add("Respiratory rate elevated for SIRS: " + vitals.getRespiratoryRate() + " (>" + sirsRrThreshold
+                    + (pediatric ? ", age-adjusted)" : ")"));
         }
 
         // WBC criteria — note: WBC is typically from lab investigations, not vitals.
@@ -163,7 +196,11 @@ public class SepsisScreeningEngine {
         if (status == SepsisStatus.SEPSIS_SUSPECTED || status == SepsisStatus.SIRS_POSITIVE) {
             boolean hasOrganDysfunction = false;
 
-            if (vitals.getSystolicBp() != null && vitals.getSystolicBp() < 90) {
+            // Adult hypotension threshold. Pediatric hypotension is age-dependent
+            // and compensated pediatric shock is often normotensive, so we do NOT
+            // apply the adult SBP cutoff to children (the caveat directs the
+            // clinician to age-specific assessment instead).
+            if (!pediatric && vitals.getSystolicBp() != null && vitals.getSystolicBp() < 90) {
                 hasOrganDysfunction = true;
                 findings.add("Organ dysfunction: SBP < 90 mmHg (hypotension)");
             }
@@ -179,7 +216,7 @@ public class SepsisScreeningEngine {
         // Persistent hypotension (SBP < 90) → SEPTIC_SHOCK
         // In a full implementation, this would check if hypotension persists after fluid resuscitation.
         // Here we flag it based on very low SBP as a conservative measure.
-        if (status == SepsisStatus.SEVERE_SEPSIS
+        if (!pediatric && status == SepsisStatus.SEVERE_SEPSIS
                 && vitals.getSystolicBp() != null && vitals.getSystolicBp() < 70) {
             status = SepsisStatus.SEPTIC_SHOCK;
             findings.add("SEPTIC SHOCK: Persistent severe hypotension (SBP < 70 mmHg)");
@@ -193,14 +230,48 @@ public class SepsisScreeningEngine {
             findings.add("1-HOUR SEPSIS BUNDLE REQUIRED — initiate immediately");
         }
 
-        log.info("Sepsis screening for Visit {}: Status={}, qSOFA={}, SIRS={}, Bundle={}",
-                visit.getVisitNumber(), status, qsofaScore, sirsScore, bundleRequired);
+        // ================================================================
+        // DATA QUALITY — a negative built on missing vitals must NOT reassure
+        // ================================================================
+        List<String> missing = new ArrayList<>();
+        if (vitals.getTemperature() == null) missing.add("temperature");
+        if (vitals.getHeartRate() == null) missing.add("heart rate");
+        if (vitals.getRespiratoryRate() == null) missing.add("respiratory rate");
+        if (vitals.getSystolicBp() == null) missing.add("systolic BP");
+        if (vitals.getAvpu() == null && vitals.getGcsScore() == null) missing.add("mentation (AVPU/GCS)");
+        int present = 5 - missing.size();
+        boolean insufficientData = present < 3;
+        String dataQualityNote = missing.isEmpty() ? null
+                : "Screened with missing vitals: " + String.join(", ", missing)
+                  + (insufficientData
+                        ? " — INSUFFICIENT DATA: a negative result is NOT reassuring; re-screen when vitals are complete."
+                        : ".");
+        if (insufficientData) {
+            findings.add("** INSUFFICIENT DATA ** — scored on only " + present
+                    + "/5 core vitals (missing: " + String.join(", ", missing) + "). Do not treat a negative as reassuring.");
+        }
+
+        // ================================================================
+        // PEDIATRIC CAVEAT — adult qSOFA is not validated in children
+        // ================================================================
+        String pediatricCaveat = null;
+        if (pediatric) {
+            pediatricCaveat = "Pediatric patient: SIRS vital thresholds were age-adjusted. Adult qSOFA "
+                    + "hypotension/RR thresholds are NOT validated for children, and compensated pediatric "
+                    + "septic shock can be normotensive — apply clinical judgment and age-specific assessment; "
+                    + "do not treat a negative screen as reassuring.";
+            findings.add("PEDIATRIC: age-adjusted SIRS thresholds applied; adult qSOFA not validated in children.");
+        }
+
+        log.info("Sepsis screening for Visit {}: Status={}, qSOFA={}, SIRS={}, Bundle={}, Pediatric={}, InsufficientData={}",
+                visit.getVisitNumber(), status, qsofaScore, sirsScore, bundleRequired, pediatric, insufficientData);
 
         return new SepsisScreeningResult(
                 status, qsofaScore, sirsScore,
                 alteredMentation, respiratoryRateHigh, systolicBpLow,
                 temperatureCriteriaMet, heartRateCriteriaMet, respiratoryRateCriteriaMet, wbcCriteriaMet,
-                findings, bundleRequired
+                findings, bundleRequired,
+                pediatric, pediatricCaveat, insufficientData, dataQualityNote
         );
     }
 }

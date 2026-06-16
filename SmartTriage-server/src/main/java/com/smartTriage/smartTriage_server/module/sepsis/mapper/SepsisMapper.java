@@ -58,6 +58,18 @@ public final class SepsisMapper {
                 .repeatLactateIfElevated(screening.isRepeatLactateIfElevated())
                 .bundleItemsCompleted(itemsCompleted)
                 .bundleItemsTotal(TOTAL_BUNDLE_ITEMS)
+                .pediatric(screening.isPediatric())
+                .pediatricCaveat(screening.getPediatricCaveat())
+                .insufficientData(screening.isInsufficientData())
+                .dataQualityNote(screening.getDataQualityNote())
+                .bundleStartedByName(screening.getBundleStartedByName())
+                .bundleCompletedByName(screening.getBundleCompletedByName())
+                .bloodCultureObtainedAt(screening.getBloodCultureObtainedAt())
+                .broadSpectrumAntibioticsAt(screening.getBroadSpectrumAntibioticsAt())
+                .ivCrystalloidBolusAt(screening.getIvCrystalloidBolusAt())
+                .lactateMeasuredAt(screening.getLactateMeasuredAt())
+                .vasopressorsIfNeededAt(screening.getVasopressorsIfNeededAt())
+                .repeatLactateIfElevatedAt(screening.getRepeatLactateIfElevatedAt())
                 .notes(screening.getNotes())
                 .createdAt(screening.getCreatedAt());
 

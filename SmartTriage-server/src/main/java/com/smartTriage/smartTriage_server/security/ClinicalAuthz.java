@@ -11,6 +11,7 @@ import com.smartTriage.smartTriage_server.module.clinical.repository.DiagnosisRe
 import com.smartTriage.smartTriage_server.module.clinical.repository.InvestigationRepository;
 import com.smartTriage.smartTriage_server.module.handover.repository.HandoverReportRepository;
 import com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository;
+import com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
@@ -97,6 +98,7 @@ public class ClinicalAuthz {
     private final InvestigationRepository investigationRepository;
     private final HandoverReportRepository handoverReportRepository;
     private final ClinicalAlertRepository clinicalAlertRepository;
+    private final SepsisScreeningRepository sepsisScreeningRepository;
 
     /**
      * @return true if the authenticated user is attached to {@code hospitalId}.
@@ -524,6 +526,22 @@ public class ClinicalAuthz {
                     .orElse(false);
         } catch (Exception e) {
             log.error("canAccessDiagnosis error for diagnosis {}: {}", diagnosisId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** Same pattern as canAccessClinicalNote, for sepsis screenings — scopes the
+     *  bundle endpoints (start / complete item) to the screening's own hospital so
+     *  a clinician cannot advance another hospital's bundle by enumerating a UUID. */
+    @Transactional(readOnly = true)
+    public boolean canAccessSepsisScreening(Authentication authentication, UUID screeningId) {
+        try {
+            if (screeningId == null) return false;
+            return sepsisScreeningRepository.findVisitIdById(screeningId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessSepsisScreening error for screening {}: {}", screeningId, e.getMessage(), e);
             return false;
         }
     }
