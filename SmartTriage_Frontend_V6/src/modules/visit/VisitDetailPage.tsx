@@ -1631,8 +1631,17 @@ function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, on
                 {inv.isAbnormal && !inv.isCritical && <span className="text-[10px] font-bold text-amber-500">ABNORMAL</span>}
               </div>
             )}
-            {/* Actions */}
-            {inv.status !== 'RESULTED' && inv.status !== 'CANCELLED' && (
+            {/* Actions — lab-routed investigations are owned by the Lab (they have a
+                linked LabOrder the lab tech drives via the Lab queue), so the chart does
+                NOT offer specimen/result actions for them; doing so would desync the
+                Investigation and LabOrder records. */}
+            {inv.labRouted ? (
+              inv.status !== 'RESULTED' && inv.status !== 'CANCELLED' && (
+                <p className={`text-[10px] mt-3 inline-flex items-center gap-1 ${text.muted}`}>
+                  <FlaskConical className="w-3 h-3" /> Managed by the Lab — track progress in the Lab queue
+                </p>
+              )
+            ) : inv.status !== 'RESULTED' && inv.status !== 'CANCELLED' && (
               <div className="flex items-center gap-2 mt-3">
                 {inv.status === 'ORDERED' && <button onClick={() => onAction(inv.id, 'specimen')} className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 transition-colors">Specimen Collected</button>}
                 {inv.status === 'SPECIMEN_COLLECTED' && <button onClick={() => onAction(inv.id, 'progress')} className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20 transition-colors">Mark In Progress</button>}

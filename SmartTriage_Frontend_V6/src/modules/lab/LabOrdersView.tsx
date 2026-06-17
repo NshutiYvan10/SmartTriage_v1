@@ -225,6 +225,19 @@ export function LabOrdersView() {
     }
   }
 
+  async function handleAcknowledge(order: LabOrder) {
+    if (actionLoading) return;
+    setActionLoading(order.id);
+    try {
+      await labApi.acknowledgeOrder(order.id, techName || undefined);
+      flash('ok', `Acknowledged ${order.orderNumber}`);
+    } catch (err: any) {
+      flash('err', err?.message || 'Acknowledge failed');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
   async function handleStartProcessing(order: LabOrder) {
     if (actionLoading) return;
     setActionLoading(order.id);
@@ -382,6 +395,7 @@ export function LabOrdersView() {
                 isHeadLabTech={isHeadLabTech}
                 onReceive={() => handleReceive(order)}
                 onReject={() => setRejectTarget(order)}
+                onAckOrder={() => handleAcknowledge(order)}
                 onStartProcessing={() => handleStartProcessing(order)}
                 onEnterResult={() => setResultTarget(order)}
                 onAcknowledge={() => setAckTarget(order)}
@@ -463,6 +477,7 @@ interface CardProps {
   isHeadLabTech: boolean;
   onReceive: () => void;
   onReject: () => void;
+  onAckOrder: () => void;
   onStartProcessing: () => void;
   onEnterResult: () => void;
   onAcknowledge: () => void;
@@ -473,7 +488,7 @@ interface CardProps {
 
 function LabOrderCard({
   order, animationDelay, glassCard, glassInner, text, isLoading, isHeadLabTech,
-  onReceive, onReject, onStartProcessing, onEnterResult, onAcknowledge,
+  onReceive, onReject, onAckOrder, onStartProcessing, onEnterResult, onAcknowledge,
   onVerify, onVerifyReject, onOverride,
 }: CardProps) {
   const pri = priorityColor(order.priority);
@@ -569,10 +584,26 @@ function LabOrderCard({
         </div>
       )}
 
+      {/* Acknowledged-by-lab indicator — shows the lab has picked the order up. */}
+      {order.acknowledgedByLabAt && (
+        <div className={`text-[10px] mb-2 inline-flex items-center gap-1 ${text.muted}`}>
+          <ClipboardCheck className="w-3 h-3 text-cyan-500" /> Acknowledged{order.acknowledgedByLabName ? ` by ${order.acknowledgedByLabName}` : ''}
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex flex-wrap gap-2">
         {(order.status === 'ORDERED' || order.status === 'SPECIMEN_COLLECTED') && (
           <>
+            {!order.acknowledgedByLabAt && (
+              <button
+                onClick={onAckOrder}
+                disabled={isLoading}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-cyan-500/15 text-cyan-500 hover:bg-cyan-500/25 disabled:opacity-50"
+              >
+                <ClipboardCheck className="w-3 h-3" /> Acknowledge
+              </button>
+            )}
             <button
               onClick={onReceive}
               disabled={isLoading}

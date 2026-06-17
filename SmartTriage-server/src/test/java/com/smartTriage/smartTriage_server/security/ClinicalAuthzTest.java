@@ -46,6 +46,7 @@ class ClinicalAuthzTest {
     private com.smartTriage.smartTriage_server.module.hypoglycemia.repository.HypoglycemiaEventRepository hypoglycemiaEventRepository;
     private com.smartTriage.smartTriage_server.module.isolation.repository.InfectionScreeningRepository infectionScreeningRepository;
     private com.smartTriage.smartTriage_server.module.pathway.repository.PathwayActivationRepository pathwayActivationRepository;
+    private com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository labOrderRepository;
     private ClinicalAuthz authz;
 
     private final UUID hospitalId = UUID.randomUUID();
@@ -65,6 +66,8 @@ class ClinicalAuthzTest {
                 mock(com.smartTriage.smartTriage_server.module.isolation.repository.InfectionScreeningRepository.class);
         pathwayActivationRepository =
                 mock(com.smartTriage.smartTriage_server.module.pathway.repository.PathwayActivationRepository.class);
+        labOrderRepository =
+                mock(com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository.class);
         authz = new ClinicalAuthz(
                 userRepository,
                 mock(VisitRepository.class),
@@ -79,7 +82,17 @@ class ClinicalAuthzTest {
                 fastTrackActivationRepository,
                 hypoglycemiaEventRepository,
                 infectionScreeningRepository,
-                pathwayActivationRepository);
+                pathwayActivationRepository,
+                labOrderRepository);
+    }
+
+    @Test
+    void canAccessLabOrder_deniesUnknownOrder() {
+        UUID missing = UUID.randomUUID();
+        when(labOrderRepository.findVisitIdById(missing)).thenReturn(java.util.Optional.empty());
+        assertFalse(authz.canAccessLabOrder(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("u", "p"),
+                missing));
     }
 
     @Test

@@ -69,6 +69,7 @@ public enum AlertType {
     // Lab turnaround alert types
     STAT_LAB_OVERDUE,
     URGENT_LAB_OVERDUE,
+    ROUTINE_LAB_OVERDUE,
     CRITICAL_VALUE_UNACKNOWLEDGED,
     /**
      * Early-warning alert: a lab order has been sitting in ORDERED

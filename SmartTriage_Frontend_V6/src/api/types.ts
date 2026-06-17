@@ -1021,6 +1021,9 @@ export interface InvestigationResponse {
   visitNumber: string | null;
   patientName: string | null;
   investigationType: InvestigationType;
+  /** True when routed to the lab (linked LabOrder the lab owns). The chart hides
+   *  specimen/result actions for these so the two records can't diverge. */
+  labRouted: boolean;
   testName: string;
   /** V62 — doctor User FK. Null on legacy rows. */
   orderedById: string | null;

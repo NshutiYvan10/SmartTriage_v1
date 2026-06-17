@@ -56,21 +56,10 @@ public class InvestigationService {
         private final ClinicalAlertRepository clinicalAlertRepository;
         private final LabOrderService labOrderService;
 
-        /**
-         * Investigation types that should also create a {@link
-         * com.smartTriage.smartTriage_server.module.lab.entity.LabOrder}
-         * so the lab tech's inbox and {@code /topic/lab/{hospitalId}}
-         * subscribers see the order in real time.
-         *
-         * <p>Radiology / imaging / ECG types do NOT belong here —
-         * those have (or will have) their own dashboards. Adding them
-         * to the lab queue would only generate noise.
-         */
-        private static final Set<InvestigationType> LAB_ROUTABLE_TYPES = EnumSet.of(
-                        InvestigationType.LABORATORY,
-                        InvestigationType.BLOOD_GAS,
-                        InvestigationType.URINALYSIS,
-                        InvestigationType.RAPID_TEST);
+        // Lab-routable investigation types (LABORATORY/BLOOD_GAS/URINALYSIS/RAPID_TEST)
+        // are defined on InvestigationType.isLabRoutable() — the single source of truth
+        // shared with the doctor-chart UI gating. Radiology/imaging/ECG do NOT route to
+        // the lab (separate department).
 
         // ====================================================================
         // ORDER
@@ -111,7 +100,7 @@ public class InvestigationService {
                 // order. Without this hook the doctor's order is silently
                 // dropped from the lab queue — exactly the silent-failure
                 // mode the clinical-safety standard rules out.
-                if (LAB_ROUTABLE_TYPES.contains(investigation.getInvestigationType())) {
+                if (investigation.getInvestigationType().isLabRoutable()) {
                         LabPriority priority = parseLabPriority(investigation.getPriority());
                         // The InvestigationPanel concatenates "Indication: …"
                         // and "Lab notes: …" into the single notes field.
@@ -149,9 +138,29 @@ public class InvestigationService {
         // STATUS TRANSITIONS
         // ====================================================================
 
+        /**
+         * A lab-routed investigation is OWNED by the lab (it has a linked LabOrder the lab
+         * tech drives). Its specimen/progress/result lifecycle must be advanced via the lab
+         * workflow, never the chart — otherwise the Investigation and LabOrder records
+         * diverge. Enforced here (not just hidden in the UI) so a direct API call can't
+         * desync them.
+         */
+        private void requireNotLabManaged(Investigation inv, String action) {
+                // Block ONLY when a linked LabOrder actually exists — a lab-routable row
+                // with no LabOrder (e.g. legacy data, or a never-bridged order) must still
+                // be drivable from the chart so it isn't a dead-end.
+                if (inv.getInvestigationType() != null && inv.getInvestigationType().isLabRoutable()
+                                && labOrderService.hasActiveLabOrderForInvestigation(inv.getId())) {
+                        throw new ClinicalBusinessException(
+                                        "Investigation '" + inv.getTestName() + "' is managed by the Lab — "
+                                        + action + " via the Lab workflow, not the chart.");
+                }
+        }
+
         @Transactional
         public InvestigationResponse markSpecimenCollected(UUID investigationId) {
                 Investigation investigation = findInvestigationOrThrow(investigationId);
+                requireNotLabManaged(investigation, "record specimen collection");
 
                 if (investigation.getStatus() != InvestigationStatus.ORDERED) {
                         throw new ClinicalBusinessException(
@@ -172,6 +181,7 @@ public class InvestigationService {
         @Transactional
         public InvestigationResponse markInProgress(UUID investigationId) {
                 Investigation investigation = findInvestigationOrThrow(investigationId);
+                requireNotLabManaged(investigation, "update its progress");
 
                 if (investigation.getStatus() != InvestigationStatus.ORDERED
                                 && investigation.getStatus() != InvestigationStatus.SPECIMEN_COLLECTED) {
@@ -192,6 +202,7 @@ public class InvestigationService {
         @Transactional
         public InvestigationResponse recordResult(RecordInvestigationResultRequest request) {
                 Investigation investigation = findInvestigationOrThrow(request.getInvestigationId());
+                requireNotLabManaged(investigation, "record its result");
 
                 if (investigation.getStatus() == InvestigationStatus.CANCELLED
                                 || investigation.getStatus() == InvestigationStatus.RESULTED) {
@@ -234,6 +245,10 @@ public class InvestigationService {
         @Transactional
         public InvestigationResponse cancelInvestigation(UUID investigationId, String reason) {
                 Investigation investigation = findInvestigationOrThrow(investigationId);
+                // A lab-owned investigation must be cancelled via the lab workflow (which
+                // also cancels the linked LabOrder) — cancelling only the chart side would
+                // desync the records.
+                requireNotLabManaged(investigation, "cancel it");
 
                 if (investigation.getStatus() == InvestigationStatus.RESULTED) {
                         throw new ClinicalBusinessException(
@@ -267,10 +282,15 @@ public class InvestigationService {
         }
 
         public List<InvestigationResponse> getAllInvestigationsForVisit(UUID visitId) {
+                // labRouted means "the lab OWNS this" (drives the chart's action gating).
+                // A lab-routable TYPE alone isn't enough — a legacy row with no LabOrder must
+                // still be drivable from the chart, so confirm an active LabOrder exists.
+                java.util.Set<UUID> labOwned = labOrderService.investigationIdsWithActiveLabOrder(visitId);
                 return investigationRepository
                                 .findByVisitIdAndIsActiveTrueOrderByOrderedAtAsc(visitId)
                                 .stream()
                                 .map(ClinicalMapper::toResponse)
+                                .map(r -> { r.setLabRouted(r.isLabRouted() && labOwned.contains(r.getId())); return r; })
                                 .collect(Collectors.toList());
         }
 

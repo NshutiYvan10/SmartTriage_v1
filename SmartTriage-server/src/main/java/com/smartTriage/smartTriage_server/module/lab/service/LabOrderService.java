@@ -197,8 +197,28 @@ public class LabOrderService {
         }
 
         order = labOrderRepository.save(order);
-        log.info("Specimen collected for order {} by {}", order.getOrderNumber(), collectedByName);
+        log.info("Specimen collected for order {} by {}", order.getOrderNumber(), order.getSpecimenCollectedByName());
 
+        return broadcastAndMap(order);
+    }
+
+    /**
+     * Lab tech acknowledges it has SEEN the order (distinct from receiving the specimen)
+     * — gives the doctor visibility that the lab has picked it up. Records actor + time
+     * from the authenticated principal; does NOT change the workflow status, so the order
+     * stays in the inbox until a specimen is collected/received. First acknowledgement wins.
+     */
+    @Transactional
+    public LabOrderResponse acknowledgeOrder(UUID orderId, String acknowledgedByName) {
+        LabOrder order = findOrderOrThrow(orderId);
+        requireStatusIn(order, "acknowledge order",
+                LabOrderStatus.ORDERED, LabOrderStatus.SPECIMEN_COLLECTED, LabOrderStatus.RECEIVED_BY_LAB);
+        if (order.getAcknowledgedByLabAt() == null) {
+            order.setAcknowledgedByLabAt(Instant.now());
+            order.setAcknowledgedByLabName(resolveActor(acknowledgedByName));
+            order = labOrderRepository.save(order);
+            log.info("Lab order {} acknowledged by {}", order.getOrderNumber(), order.getAcknowledgedByLabName());
+        }
         return broadcastAndMap(order);
     }
 
@@ -731,13 +751,47 @@ public class LabOrderService {
     public Page<LabOrderResponse> getOrdersForVisit(UUID visitId, Pageable pageable) {
         return labOrderRepository
                 .findByVisitIdAndIsActiveTrueOrderByOrderedAtDesc(visitId, pageable)
-                .map(LabOrderMapper::toResponse);
+                .map(LabOrderMapper::toResponse)
+                .map(LabOrderService::maskPreVerificationResult);
+    }
+
+    /**
+     * A result that is still AWAITING_VERIFICATION must NOT be shown as a value on the
+     * per-visit chart list — it is a junior's draft the senior hasn't signed off, and the
+     * "doctor must not see it pre-verification" guarantee was previously enforced only at
+     * the alert layer. Blank the result fields here (the lab tech sees the draft via the
+     * dedicated verification queue, not this list).
+     */
+    private static LabOrderResponse maskPreVerificationResult(LabOrderResponse r) {
+        if (r != null && r.getStatus() == LabOrderStatus.AWAITING_VERIFICATION) {
+            r.setResultValue(null);
+            r.setResultNumeric(null);
+            r.setResultUnit(null);
+            r.setAbnormal(false);
+            r.setCritical(false);
+            // notes can echo the draft value/critical description (recordResult folds them
+            // in), so blank it too — otherwise the masked value leaks through notes.
+            r.setNotes(null);
+        }
+        return r;
+    }
+
+    /** Does the investigation have an active LabOrder (i.e. the lab "owns" its lifecycle)? */
+    public boolean hasActiveLabOrderForInvestigation(UUID investigationId) {
+        return labOrderRepository.existsByInvestigation_IdAndIsActiveTrue(investigationId);
+    }
+
+    /** Investigation ids on a visit that have an active LabOrder — lets the chart show its
+     *  own lifecycle actions only for investigations the lab is NOT driving. */
+    public java.util.Set<UUID> investigationIdsWithActiveLabOrder(UUID visitId) {
+        return new java.util.HashSet<>(labOrderRepository.findInvestigationIdsWithActiveLabOrderForVisit(visitId));
     }
 
     public Page<LabOrderResponse> getPendingOrders(UUID hospitalId, Pageable pageable) {
         return labOrderRepository
                 .findPendingOrders(hospitalId, pageable)
-                .map(LabOrderMapper::toResponse);
+                .map(LabOrderMapper::toResponse)
+                .map(LabOrderService::maskPreVerificationResult);
     }
 
     public List<CriticalValueResponse> getCriticalResults(UUID hospitalId) {

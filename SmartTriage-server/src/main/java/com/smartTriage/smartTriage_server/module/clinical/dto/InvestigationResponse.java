@@ -31,6 +31,10 @@ public class InvestigationResponse {
     private String visitNumber;
     private String patientName;
     private InvestigationType investigationType;
+    /** True when this investigation is routed to the lab (has a linked LabOrder the lab
+     *  owns). The chart hides specimen/result lifecycle actions for these so the
+     *  Investigation and LabOrder records cannot diverge. */
+    private boolean labRouted;
     private String testName;
     /** V62 — doctor User FK so the aggregate query can filter reliably. */
     private UUID orderedById;

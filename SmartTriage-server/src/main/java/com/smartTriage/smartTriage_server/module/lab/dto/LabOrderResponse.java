@@ -38,6 +38,9 @@ public class LabOrderResponse {
     private Instant specimenCollectedAt;
     private String specimenCollectedByName;
 
+    private Instant acknowledgedByLabAt;
+    private String acknowledgedByLabName;
+
     private Instant receivedByLabAt;
     private String accessionNumber;
     private Instant processingStartedAt;

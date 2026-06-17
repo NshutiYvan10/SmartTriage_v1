@@ -57,7 +57,8 @@ public class LabOrderController {
     // ====================================================================
 
     @PostMapping("/order")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #request.visitId)")
     public ResponseEntity<ApiResponse<LabOrderResponse>> orderLab(
             @Valid @RequestBody OrderLabRequest request) {
         LabOrderResponse response = labOrderService.orderLab(request.getVisitId(), request);
@@ -70,7 +71,8 @@ public class LabOrderController {
     // ====================================================================
 
     @PutMapping("/{orderId}/collect-specimen")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN') "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
     public ResponseEntity<ApiResponse<LabOrderResponse>> collectSpecimen(
             @PathVariable UUID orderId,
             @RequestParam(required = false) String collectedByName) {
@@ -78,8 +80,20 @@ public class LabOrderController {
         return ResponseEntity.ok(ApiResponse.success("Specimen collected", response));
     }
 
+    /** Lab acknowledges it has SEEN the order (does not change status). */
+    @PutMapping("/{orderId}/acknowledge")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN') "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
+    public ResponseEntity<ApiResponse<LabOrderResponse>> acknowledgeOrder(
+            @PathVariable UUID orderId,
+            @RequestParam(required = false) String acknowledgedByName) {
+        LabOrderResponse response = labOrderService.acknowledgeOrder(orderId, acknowledgedByName);
+        return ResponseEntity.ok(ApiResponse.success("Order acknowledged", response));
+    }
+
     @PutMapping("/{orderId}/receive")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN') "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
     public ResponseEntity<ApiResponse<LabOrderResponse>> receiveInLab(
             @PathVariable UUID orderId,
             @RequestBody(required = false) ReceiveSpecimenRequest request) {
@@ -88,7 +102,8 @@ public class LabOrderController {
     }
 
     @PostMapping("/{orderId}/reject")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN') "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
     public ResponseEntity<ApiResponse<LabOrderResponse>> rejectSpecimen(
             @PathVariable UUID orderId,
             @Valid @RequestBody RejectSpecimenRequest request) {
@@ -97,7 +112,8 @@ public class LabOrderController {
     }
 
     @PostMapping("/{orderId}/start-processing")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN') "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
     public ResponseEntity<ApiResponse<LabOrderResponse>> startProcessing(
             @PathVariable UUID orderId,
             @RequestParam(required = false) String startedByName) {
@@ -106,7 +122,8 @@ public class LabOrderController {
     }
 
     @PutMapping("/{orderId}/result")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN') "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
     public ResponseEntity<ApiResponse<LabOrderResponse>> recordResult(
             @PathVariable UUID orderId,
             @Valid @RequestBody RecordLabResultRequest request) {
@@ -115,7 +132,8 @@ public class LabOrderController {
     }
 
     @PutMapping("/{orderId}/acknowledge-critical")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
     public ResponseEntity<ApiResponse<LabOrderResponse>> acknowledgeCriticalValue(
             @PathVariable UUID orderId,
             @RequestBody(required = false) AcknowledgeCriticalRequest request) {
@@ -124,7 +142,8 @@ public class LabOrderController {
     }
 
     @PutMapping("/{orderId}/cancel")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
     public ResponseEntity<ApiResponse<LabOrderResponse>> cancelOrder(
             @PathVariable UUID orderId,
             @RequestParam(required = false) String reason,
@@ -143,8 +162,9 @@ public class LabOrderController {
      * can override for support cases.
      */
     @PostMapping("/{orderId}/verify")
-    @PreAuthorize("hasRole('SUPER_ADMIN') or "
-            + "(hasRole('LAB_TECHNICIAN') and @userAdminAuthz.hasDesignation(authentication, 'HEAD_LAB_TECHNICIAN'))")
+    @PreAuthorize("(hasRole('SUPER_ADMIN') or "
+            + "(hasRole('LAB_TECHNICIAN') and @userAdminAuthz.hasDesignation(authentication, 'HEAD_LAB_TECHNICIAN'))) "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
     public ResponseEntity<ApiResponse<LabOrderResponse>> verifyResult(
             @PathVariable UUID orderId,
             @RequestBody(required = false) VerifyResultRequest request) {
@@ -157,8 +177,9 @@ public class LabOrderController {
      * junior. Status returns to PROCESSING; the junior re-enters.
      */
     @PostMapping("/{orderId}/verify-reject")
-    @PreAuthorize("hasRole('SUPER_ADMIN') or "
-            + "(hasRole('LAB_TECHNICIAN') and @userAdminAuthz.hasDesignation(authentication, 'HEAD_LAB_TECHNICIAN'))")
+    @PreAuthorize("(hasRole('SUPER_ADMIN') or "
+            + "(hasRole('LAB_TECHNICIAN') and @userAdminAuthz.hasDesignation(authentication, 'HEAD_LAB_TECHNICIAN'))) "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
     public ResponseEntity<ApiResponse<LabOrderResponse>> rejectVerification(
             @PathVariable UUID orderId,
             @Valid @RequestBody RejectVerificationRequest request) {
@@ -171,7 +192,8 @@ public class LabOrderController {
      * sign-off. Required reason is logged.
      */
     @PostMapping("/{orderId}/release-without-verification")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN') "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
     public ResponseEntity<ApiResponse<LabOrderResponse>> releaseWithoutVerification(
             @PathVariable UUID orderId,
             @Valid @RequestBody OverrideVerificationRequest request) {

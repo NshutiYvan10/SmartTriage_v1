@@ -52,6 +52,8 @@ public final class ClinicalMapper {
                 .visitNumber(visitNumber)
                 .patientName(patientName)
                 .investigationType(investigation.getInvestigationType())
+                .labRouted(investigation.getInvestigationType() != null
+                        && investigation.getInvestigationType().isLabRoutable())
                 .testName(investigation.getTestName())
                 .orderedById(investigation.getOrderedBy() != null
                         ? investigation.getOrderedBy().getId() : null)

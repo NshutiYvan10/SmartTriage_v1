@@ -29,6 +29,8 @@ public final class LabOrderMapper {
                 .specimenType(order.getSpecimenType())
                 .specimenCollectedAt(order.getSpecimenCollectedAt())
                 .specimenCollectedByName(order.getSpecimenCollectedByName())
+                .acknowledgedByLabAt(order.getAcknowledgedByLabAt())
+                .acknowledgedByLabName(order.getAcknowledgedByLabName())
                 .receivedByLabAt(order.getReceivedByLabAt())
                 .accessionNumber(order.getAccessionNumber())
                 .processingStartedAt(order.getProcessingStartedAt())

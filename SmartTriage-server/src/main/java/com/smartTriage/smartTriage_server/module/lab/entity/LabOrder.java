@@ -93,6 +93,14 @@ public class LabOrder extends BaseEntity {
     @Column(name = "specimen_collected_by_name", length = 255)
     private String specimenCollectedByName;
 
+    /** Lab acknowledged it has SEEN the order (distinct from specimen receipt) — lets a
+     *  doctor see the lab has picked it up. Does not change workflow status (V82). */
+    @Column(name = "acknowledged_by_lab_at")
+    private Instant acknowledgedByLabAt;
+
+    @Column(name = "acknowledged_by_lab_name", length = 255)
+    private String acknowledgedByLabName;
+
     @Column(name = "received_by_lab_at")
     private Instant receivedByLabAt;
 

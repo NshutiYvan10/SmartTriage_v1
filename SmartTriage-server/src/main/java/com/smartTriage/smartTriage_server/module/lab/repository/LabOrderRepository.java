@@ -20,6 +20,10 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
 
     Optional<LabOrder> findByIdAndIsActiveTrue(UUID id);
 
+    /** Projection for hospital-scope authz — the order's visit id. */
+    @Query("SELECT o.visit.id FROM LabOrder o WHERE o.id = :id")
+    Optional<UUID> findVisitIdById(@Param("id") UUID id);
+
     Optional<LabOrder> findByOrderNumberAndIsActiveTrue(String orderNumber);
 
     Page<LabOrder> findByVisitIdAndIsActiveTrueOrderByOrderedAtDesc(
@@ -49,9 +53,22 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
     @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
             "AND o.isActive = true AND o.isCritical = true " +
             "AND o.criticalValueAcknowledgedAt IS NULL " +
+            // RESULTED only — a critical value still AWAITING_VERIFICATION is a junior's
+            // unverified draft and must NOT surface on the doctor's critical banner.
+            "AND o.resultedAt IS NOT NULL " +
             "ORDER BY o.resultedAt ASC")
     List<LabOrder> findUnacknowledgedCriticalResults(
             @Param("hospitalId") UUID hospitalId);
+
+    /** Active LabOrder exists for this investigation — the lab "owns" its lifecycle. */
+    boolean existsByInvestigation_IdAndIsActiveTrue(UUID investigationId);
+
+    /** Investigation ids on a visit that have an active LabOrder (lab-owned), so the
+     *  chart can show its own lifecycle actions only for investigations the lab is NOT
+     *  driving (e.g. legacy lab-routable rows with no LabOrder). */
+    @Query("SELECT o.investigation.id FROM LabOrder o WHERE o.visit.id = :visitId " +
+            "AND o.isActive = true AND o.investigation IS NOT NULL")
+    List<UUID> findInvestigationIdsWithActiveLabOrderForVisit(@Param("visitId") UUID visitId);
 
     /**
      * Does this visit still have ANY resulted critical lab order whose critical
@@ -80,6 +97,9 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
      */
     @Query("SELECT o FROM LabOrder o WHERE o.isActive = true AND o.priority = :priority " +
             "AND o.resultedAt IS NULL AND o.cancelledAt IS NULL " +
+            // Exclude terminal REJECTED (which has neither resultedAt nor cancelledAt set)
+            // so a rejected specimen isn't counted as an overdue order forever.
+            "AND o.status <> com.smartTriage.smartTriage_server.common.enums.LabOrderStatus.REJECTED " +
             "AND o.orderedAt < :cutoff")
     List<LabOrder> findOverdueOrdersByPriority(
             @Param("priority") LabPriority priority,

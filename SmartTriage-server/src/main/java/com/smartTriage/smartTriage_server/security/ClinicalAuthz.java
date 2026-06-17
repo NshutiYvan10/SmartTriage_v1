@@ -16,6 +16,7 @@ import com.smartTriage.smartTriage_server.module.fasttrack.repository.FastTrackA
 import com.smartTriage.smartTriage_server.module.hypoglycemia.repository.HypoglycemiaEventRepository;
 import com.smartTriage.smartTriage_server.module.isolation.repository.InfectionScreeningRepository;
 import com.smartTriage.smartTriage_server.module.pathway.repository.PathwayActivationRepository;
+import com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
@@ -107,6 +108,7 @@ public class ClinicalAuthz {
     private final HypoglycemiaEventRepository hypoglycemiaEventRepository;
     private final InfectionScreeningRepository infectionScreeningRepository;
     private final PathwayActivationRepository pathwayActivationRepository;
+    private final LabOrderRepository labOrderRepository;
 
     /**
      * @return true if the authenticated user is attached to {@code hospitalId}.
@@ -616,6 +618,21 @@ public class ClinicalAuthz {
                     .orElse(false);
         } catch (Exception e) {
             log.error("canAccessPathwayActivation error for activation {}: {}", activationId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** Hospital-scope authz for a lab order — maps order → visit → canAccessVisit, so a
+     *  lab order can only be acted on within its own hospital. */
+    @Transactional(readOnly = true)
+    public boolean canAccessLabOrder(Authentication authentication, UUID orderId) {
+        try {
+            if (orderId == null) return false;
+            return labOrderRepository.findVisitIdById(orderId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessLabOrder error for order {}: {}", orderId, e.getMessage(), e);
             return false;
         }
     }

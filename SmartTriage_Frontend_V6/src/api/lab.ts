@@ -31,6 +31,8 @@ export interface LabOrder {
   specimenType: string | null;
   specimenCollectedAt: string | null;
   specimenCollectedByName: string | null;
+  acknowledgedByLabAt: string | null;
+  acknowledgedByLabName: string | null;
   receivedByLabAt: string | null;
   accessionNumber: string | null;
   processingStartedAt: string | null;
@@ -134,6 +136,9 @@ export const labApi = {
 
   collectSpecimen: (orderId: string, collectedByName?: string) =>
     put<LabOrder>(`/lab/${orderId}/collect-specimen${collectedByName ? `?collectedByName=${encodeURIComponent(collectedByName)}` : ''}`),
+
+  acknowledgeOrder: (orderId: string, acknowledgedByName?: string) =>
+    put<LabOrder>(`/lab/${orderId}/acknowledge${acknowledgedByName ? `?acknowledgedByName=${encodeURIComponent(acknowledgedByName)}` : ''}`),
 
   receiveInLab: (orderId: string, body?: ReceiveSpecimenRequest) =>
     put<LabOrder>(`/lab/${orderId}/receive`, body ?? {}),
