@@ -65,15 +65,26 @@ function mapWsAlert(raw: any): Omit<AIAlert, 'id' | 'timestamp' | 'acknowledged'
   };
 }
 
-/** Deduplication: track alert IDs we've already added to prevent double-add from overlapping topics */
-const recentAlertIds = new Set<string>();
+/**
+ * Deduplication across overlapping topics (hospital + zone + user all carry the same
+ * alert). Keyed on id + escalationTier + severity, NOT id alone: an escalation re-broadcast
+ * of the same id (tier bumped / severity raised — e.g. the no-doctor auto-Tier-2 frame that
+ * fires synchronously milliseconds after the Tier-1 frame, or the 5-min re-page) carries a
+ * DIFFERENT key and so falls through to addAlert's upsert instead of being silently dropped.
+ * An identical re-delivery (same id+tier+severity, e.g. the same frame on three topics) is
+ * dropped. Map entry expires after 30s; cleanup only removes the entry if it hasn't been
+ * superseded by a newer key in the meantime.
+ */
+const recentAlertKeys = new Map<string, string>();
 function dedupeAndAdd(raw: any) {
   const backendId = raw.id;
-  if (backendId && recentAlertIds.has(backendId)) return; // already handled
   if (backendId) {
-    recentAlertIds.add(backendId);
-    // Clean up after 30s to prevent memory leak
-    setTimeout(() => recentAlertIds.delete(backendId), 30_000);
+    const key = `${raw.escalationTier ?? 0}:${raw.severity ?? ''}`;
+    if (recentAlertKeys.get(backendId) === key) return; // identical re-delivery — drop
+    recentAlertKeys.set(backendId, key);
+    setTimeout(() => {
+      if (recentAlertKeys.get(backendId) === key) recentAlertKeys.delete(backendId);
+    }, 30_000);
   }
   useAlertStore.getState().addAlert({ ...mapWsAlert(raw), backendId: backendId || undefined });
 }

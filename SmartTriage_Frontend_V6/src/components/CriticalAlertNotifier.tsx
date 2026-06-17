@@ -50,51 +50,75 @@ export function CriticalAlertNotifier() {
   const [flashing, setFlashing] = useState(false);
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
 
-  // Track ids we've already announced so re-renders / store reorders
-  // don't double-fire. Persists across re-renders via ref.
-  const announcedIds = useRef<Set<string>>(new Set());
+  // Track the (alert, escalation-tier) pairs we've already announced so re-renders /
+  // store reorders don't double-fire — BUT a re-escalation (same id, higher tier) is a
+  // NEW key, so an unacknowledged time-critical alert that the scheduler re-pages will
+  // re-alarm rather than stay silent. Persists across re-renders via ref.
+  const announcedKeys = useRef<Set<string>>(new Set());
+  const keyOf = (a: AIAlert) => `${a.id}:${a.escalationTier ?? 0}`;
   const isQuietRoute = QUIET_PATH_PREFIXES.some((p) => location.pathname.startsWith(p));
+
+  // Has this alert id already been announced at a LOWER escalation tier? Then this is a
+  // RE-ESCALATION (the scheduler re-paged an unacknowledged critical nobody acted on) —
+  // distinct from a brand-new alert.
+  const isReescalation = (a: AIAlert): boolean => {
+    const tier = a.escalationTier ?? 0;
+    for (const k of announcedKeys.current) {
+      const sep = k.lastIndexOf(':');
+      if (sep > 0 && k.slice(0, sep) === a.id && Number(k.slice(sep + 1)) < tier) return true;
+    }
+    return false;
+  };
 
   useEffect(() => {
     // First render: seed announced set with everything currently in
     // the store so we don't blast on initial hydration.
-    if (announcedIds.current.size === 0 && alerts.length > 0) {
-      alerts.forEach((a) => announcedIds.current.add(a.id));
+    if (announcedKeys.current.size === 0 && alerts.length > 0) {
+      alerts.forEach((a) => announcedKeys.current.add(keyOf(a)));
       return;
     }
 
     const fresh = alerts.filter(
       (a) => !a.acknowledged
         && a.severity === 'CRITICAL'
-        && !announcedIds.current.has(a.id),
+        && !announcedKeys.current.has(keyOf(a)),
     );
     if (fresh.length === 0) return;
 
-    fresh.forEach((a) => announcedIds.current.add(a.id));
+    // Re-escalations (a tier bump on an alert we've already seen) must be heard even on
+    // the alert pages — that screen is exactly where the responder is sitting, and the
+    // backend re-pages a time-critical alert only ONCE, so swallowing it on a quiet route
+    // would lose the audible re-alarm permanently. Brand-new alerts stay suppressed on the
+    // alert pages (the user is already looking at the list) as before.
+    const reescalations = fresh.filter(isReescalation);
 
-    if (isQuietRoute) return;
+    fresh.forEach((a) => announcedKeys.current.add(keyOf(a)));
+
+    const toAnnounce = isQuietRoute ? reescalations : fresh;
+    if (toAnnounce.length === 0) return;
 
     // Audible cue.
     playAlertTone();
 
-    // Visual flash.
-    setFlashing(true);
-    window.setTimeout(() => setFlashing(false), FLASH_DURATION_MS);
+    // Visual flash + toast — only off the alert pages (avoid blasting the list view).
+    if (!isQuietRoute) {
+      setFlashing(true);
+      window.setTimeout(() => setFlashing(false), FLASH_DURATION_MS);
 
-    // Toast queue.
-    const now = Date.now();
-    setToasts((prev) => [
-      ...prev,
-      ...fresh.map<ToastEntry>((a) => ({
-        alertId: a.id,
-        message: messageOf(a),
-        // The store mapper stores the backend's visitId under
-        // AIAlert.patientId — see alertStore.mapToAIAlert.
-        visitId: a.patientId || undefined,
-        patientName: a.patientName,
-        spawnedAt: now,
-      })),
-    ]);
+      const now = Date.now();
+      setToasts((prev) => [
+        ...prev,
+        ...fresh.map<ToastEntry>((a) => ({
+          alertId: a.id,
+          message: messageOf(a),
+          // The store mapper stores the backend's visitId under
+          // AIAlert.patientId — see alertStore.mapToAIAlert.
+          visitId: a.patientId || undefined,
+          patientName: a.patientName,
+          spawnedAt: now,
+        })),
+      ]);
+    }
   }, [alerts, isQuietRoute]);
 
   // Auto-expire toasts.

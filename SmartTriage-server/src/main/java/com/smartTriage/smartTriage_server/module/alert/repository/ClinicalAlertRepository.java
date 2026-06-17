@@ -80,29 +80,17 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
          * different (a sepsis alert isn't acknowledged by routing to "all
          * doctors" — it's by starting the bundle), but the principle is
          * the same: a CRITICAL alert sitting unack'd for too long must be
-         * escalated to all-staff before it gets lost.
+         * escalated before it gets lost.
          *
-         * <p>Covers: SEPSIS_SCREENING, ICU_ESCALATION_REQUESTED,
-         * CRITICAL_VALUE_UNACKNOWLEDGED, CRITICAL_LAB_RESULT, DETERIORATION_DETECTED.
+         * <p>The set of types is NOT hard-coded here — it is derived from
+         * {@link com.smartTriage.smartTriage_server.common.enums.AlertType#timeCriticalTypes()}
+         * and passed in by the caller, so a new time-critical AlertType is
+         * automatically scanned the moment it is declared (no silent-drop trap
+         * from forgetting to extend a hand-maintained IN-list).
          */
         @Query("SELECT a FROM ClinicalAlert a WHERE a.isActive = true AND a.isAcknowledged = false " +
-                        "AND a.alertType IN (" +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.SEPSIS_SCREENING, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.ICU_ESCALATION_REQUESTED, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.CRITICAL_VALUE_UNACKNOWLEDGED, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.CRITICAL_LAB_RESULT, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.DETERIORATION_DETECTED, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.FAST_TRACK_ACTIVATED, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.FAST_TRACK_SLA_BREACH, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.HYPOGLYCEMIA_CRITICAL, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.HYPOGLYCEMIA_RECHECK_OVERDUE, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.ISOLATION_REQUIRED, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.ISOLATION_PLACEMENT_OVERDUE, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.NOTIFIABLE_DISEASE, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.PATHWAY_ACTIVATED, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.PATHWAY_STEP_OVERDUE) " +
-                        "ORDER BY a.createdAt ASC")
-        List<ClinicalAlert> findUnacknowledgedTimeCriticalAlerts();
+                        "AND a.alertType IN :types ORDER BY a.createdAt ASC")
+        List<ClinicalAlert> findUnacknowledgedTimeCriticalAlerts(@Param("types") java.util.Collection<AlertType> types);
 
         /**
          * Unacknowledged, not-yet-re-escalated CRITICAL ambulance pre-arrivals

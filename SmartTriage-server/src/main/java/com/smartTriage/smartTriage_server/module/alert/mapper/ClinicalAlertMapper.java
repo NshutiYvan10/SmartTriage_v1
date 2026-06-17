@@ -13,6 +13,8 @@ public final class ClinicalAlertMapper {
         ClinicalAlertResponse.ClinicalAlertResponseBuilder builder = ClinicalAlertResponse.builder()
                 .id(alert.getId())
                 .alertType(alert.getAlertType())
+                .category(alert.getAlertType() != null ? alert.getAlertType().getCategory() : null)
+                .timeCritical(alert.getAlertType() != null && alert.getAlertType().isTimeCritical())
                 .severity(alert.getSeverity())
                 .title(alert.getTitle())
                 .message(alert.getMessage())

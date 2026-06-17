@@ -12,7 +12,7 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { alertApi } from '@/api/alerts';
 import { subscribeToAlerts } from '@/api/websocket';
-import { categoryFor, styleFor } from '@/utils/alertCategory';
+import { categoryOf, styleFor } from '@/utils/alertCategory';
 import type { ClinicalAlertResponse } from '@/api/types';
 import { formatDistanceToNow } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
@@ -122,7 +122,7 @@ export function AlertsView() {
     })
     .filter((a) => {
       if (categoryFilter === 'all') return true;
-      return categoryFor(a.alertType) === categoryFilter;
+      return categoryOf(a) === categoryFilter;
     })
     .filter((a) => {
       if (!searchQuery.trim()) return true;
@@ -408,7 +408,7 @@ export function AlertsView() {
                             Lets a clinician scan past operational noise to
                             the life-threatening stuff at a glance. */}
                         {(() => {
-                          const cat = categoryFor(alert.alertType);
+                          const cat = categoryOf(alert);
                           const cs = styleFor(cat);
                           return (
                             <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-md border uppercase tracking-wide ${cs.chipClass}`}>

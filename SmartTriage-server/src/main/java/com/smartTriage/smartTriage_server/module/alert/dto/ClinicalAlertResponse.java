@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.alert.dto;
 
+import com.smartTriage.smartTriage_server.common.enums.AlertCategory;
 import com.smartTriage.smartTriage_server.common.enums.AlertSeverity;
 import com.smartTriage.smartTriage_server.common.enums.AlertType;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
@@ -23,6 +24,11 @@ public class ClinicalAlertResponse {
     private String patientName;
     private AlertType alertType;
     private AlertSeverity severity;
+    /** Urgency bucket derived from the alert type — authoritative for UI grouping/colour
+     *  so the client never mis-categorises a life-threatening alert as routine. */
+    private AlertCategory category;
+    /** True when an unacknowledged instance is re-paged by the escalation scheduler. */
+    private boolean timeCritical;
     private String title;
     private String message;
 

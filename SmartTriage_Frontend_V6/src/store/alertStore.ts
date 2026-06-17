@@ -107,15 +107,30 @@ export const useAlertStore = create<AlertState>((set, get) => ({
   },
 
   addAlert: (alertData) => {
-    const alert: AIAlert = {
-      ...alertData,
-      id: alertData.backendId || `AL${Date.now()}${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-      timestamp: new Date(),
-      acknowledged: false,
-    };
-    // Deduplicate by ID
+    const id = alertData.backendId || `AL${Date.now()}${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
     set((state) => {
-      if (state.alerts.some(a => a.id === alert.id)) return state;
+      const idx = state.alerts.findIndex((a) => a.id === id);
+      if (idx >= 0) {
+        // UPSERT — a re-broadcast of an existing alert (e.g. the escalation scheduler
+        // re-paging an unacknowledged time-critical alert) must UPDATE the row, not be
+        // silently dropped, so the bumped escalationTier / raised severity / "[ESCALATED]"
+        // message reach the UI and re-trigger the CriticalAlertNotifier (which keys on
+        // id+escalationTier). Acknowledgement state is PRESERVED — a re-page never un-acks.
+        const existing = state.alerts[idx];
+        const merged: AIAlert = {
+          ...existing,
+          message: alertData.message ?? existing.message,
+          title: alertData.title ?? existing.title,
+          severity: alertData.severity ?? existing.severity,
+          escalationTier: alertData.escalationTier ?? existing.escalationTier,
+          targetZone: alertData.targetZone ?? existing.targetZone,
+          targetDoctorName: alertData.targetDoctorName ?? existing.targetDoctorName,
+        };
+        const next = state.alerts.slice();
+        next[idx] = merged;
+        return { alerts: next };
+      }
+      const alert: AIAlert = { ...alertData, id, timestamp: new Date(), acknowledged: false };
       return { alerts: [...state.alerts, alert] };
     });
   },

@@ -165,7 +165,8 @@ public class AlertEscalationService {
         // CriticalAlertNotifier on every connected client beeps + flashes
         // again. Idempotent — we only re-publish once per alert by
         // tracking escalatedAt the same way the doctor pipeline does.
-        for (ClinicalAlert alert : clinicalAlertRepository.findUnacknowledgedTimeCriticalAlerts()) {
+        for (ClinicalAlert alert : clinicalAlertRepository
+                .findUnacknowledgedTimeCriticalAlerts(AlertType.timeCriticalTypes())) {
             try {
                 if (alert.getEscalatedAt() != null) {
                     continue; // already re-paged once
@@ -219,20 +220,31 @@ public class AlertEscalationService {
                 ? ChronoUnit.MINUTES.between(alert.getCreatedAt(), Instant.now())
                 : 0;
         alert.setEscalatedAt(Instant.now());
-        alert.setEscalationTier(2);
+        // Bump the tier so the client recognises a NEW escalation event (the notifier keys
+        // on id+escalationTier and re-alarms on an increase). escalatedAt IS NULL in the
+        // finder still guarantees we only re-page once.
+        alert.setEscalationTier(alert.getEscalationTier() + 1);
+        // Escalation RAISES urgency: an unacknowledged time-critical alert nobody has
+        // touched becomes CRITICAL so it triggers the audible re-alarm. (Lower-acuity
+        // turnaround types like ROUTINE/URGENT_LAB_OVERDUE are deliberately NOT in the
+        // time-critical set, so this never over-promotes a routine event.)
         alert.setSeverity(AlertSeverity.CRITICAL);
-        alert.setMessage(alert.getMessage() + "  [ESCALATED — unacknowledged for "
-                + unackedMin + " min]");
+        if (alert.getMessage() == null || !alert.getMessage().contains("[ESCALATED")) {
+            alert.setMessage((alert.getMessage() != null ? alert.getMessage() : "")
+                    + "  [ESCALATED — unacknowledged for " + unackedMin + " min]");
+        }
         clinicalAlertRepository.save(alert);
 
-        java.util.Map<String, Object> alertWithAlarm = new java.util.HashMap<>();
-        alertWithAlarm.put("alert", com.smartTriage.smartTriage_server.module.alert.mapper
-                .ClinicalAlertMapper.toResponse(alert));
-        alertWithAlarm.put("audibleAlarm", true);
-        eventPublisher.publishAlert(hospitalId, alertWithAlarm);
+        // Publish the TYPED ClinicalAlertResponse so every client parses it identically to
+        // any other alert (id / alertType / severity / category / escalationTier present).
+        // The previous nested {alert, audibleAlarm} Map was unparseable by the client's
+        // mapWsAlert — it degraded to a generic non-critical alert with no id, so the
+        // re-page never re-alarmed and never deduped. The bumped tier on this typed payload
+        // is what the client notifier keys on to re-alarm.
+        eventPublisher.publishHospitalAlert(hospitalId, ClinicalAlertMapper.toResponse(alert));
 
-        log.warn("[escalation] {} alert {} escalated — unacked for {}+ min, hospital {}",
-                alert.getAlertType(), alert.getId(), TIER_3_MINUTES, hospitalId);
+        log.warn("[escalation] {} alert {} escalated (tier {}) — unacked for {} min, hospital {}",
+                alert.getAlertType(), alert.getId(), alert.getEscalationTier(), unackedMin, hospitalId);
     }
 
     /**
@@ -283,17 +295,11 @@ public class AlertEscalationService {
             eventPublisher.publishZoneAlert(hospitalId, zone, response);
         }
 
-        // Send hospital-wide ClinicalAlertResponse
+        // Send hospital-wide typed ClinicalAlertResponse. The tier-3 bump (+ CRITICAL
+        // severity) on this payload is what the client notifier keys on to re-alarm — the
+        // previous parallel `{audibleAlarm:true}` Map was never read by any client and is
+        // dropped here to avoid sending an unparseable second payload.
         eventPublisher.publishHospitalAlert(hospitalId, response);
-
-        // Also send hospital-wide with audible alarm flag for dashboards that support
-        // it
-        Map<String, Object> data = alertToMap(response);
-        data.put("audibleAlarm", true);
-        data.put("escalationMessage", "CRITICAL: Patient " + patientName
-                + " has been waiting " + alert.getSatsTargetMinutes()
-                + "+ minutes without doctor acknowledgment!");
-        eventPublisher.publishAlert(hospitalId, data);
     }
 
     /**
@@ -309,34 +315,4 @@ public class AlertEscalationService {
         };
     }
 
-    /**
-     * Convert ClinicalAlertResponse to a Map for WebSocket publishing.
-     */
-    private Map<String, Object> alertToMap(ClinicalAlertResponse r) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        map.put("id", r.getId().toString());
-        map.put("type", r.getAlertType().name());
-        map.put("severity", r.getSeverity().name());
-        map.put("title", r.getTitle());
-        map.put("message", r.getMessage());
-        map.put("escalationTier", r.getEscalationTier());
-        map.put("satsTargetMinutes", r.getSatsTargetMinutes());
-        map.put("acknowledged", r.isAcknowledged());
-        map.put("createdAt", r.getCreatedAt() != null ? r.getCreatedAt().toString() : null);
-
-        if (r.getVisitId() != null)
-            map.put("visitId", r.getVisitId().toString());
-        if (r.getVisitNumber() != null)
-            map.put("visitNumber", r.getVisitNumber());
-        if (r.getPatientName() != null)
-            map.put("patientName", r.getPatientName());
-        if (r.getTargetZone() != null)
-            map.put("targetZone", r.getTargetZone().name());
-        if (r.getTargetDoctorId() != null)
-            map.put("targetDoctorId", r.getTargetDoctorId().toString());
-        if (r.getTargetDoctorName() != null)
-            map.put("targetDoctorName", r.getTargetDoctorName());
-
-        return map;
-    }
 }

@@ -53,7 +53,7 @@ class AlertEscalationServiceTest {
 
         // The other two escalation pipelines are empty for these tests.
         when(repo.findUnacknowledgedDoctorNotifications()).thenReturn(List.of());
-        when(repo.findUnacknowledgedTimeCriticalAlerts()).thenReturn(List.of());
+        when(repo.findUnacknowledgedTimeCriticalAlerts(any())).thenReturn(List.of());
         when(repo.save(any(ClinicalAlert.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -85,8 +85,10 @@ class AlertEscalationServiceTest {
 
         service.checkEscalations();
 
-        // Re-published hospital-wide with the audible-alarm payload, and stamped.
-        verify(publisher, times(1)).publishAlert(eq(HOSPITAL), anyMap());
+        // Re-published hospital-wide as a TYPED ClinicalAlertResponse (parseable by the
+        // client) — not the old unparseable {alert, audibleAlarm} Map — and stamped. The
+        // tier is bumped (default 1 → 2) so the client notifier re-alarms on the change.
+        verify(publisher, times(1)).publishHospitalAlert(eq(HOSPITAL), any());
         assertNotNull(a.getEscalatedAt());
         assertEquals(2, a.getEscalationTier());
     }
@@ -98,7 +100,7 @@ class AlertEscalationServiceTest {
 
         service.checkEscalations();
 
-        verify(publisher, never()).publishAlert(any(UUID.class), any(Map.class));
+        verify(publisher, never()).publishHospitalAlert(any(UUID.class), any());
         assertNull(a.getEscalatedAt());
     }
 }
