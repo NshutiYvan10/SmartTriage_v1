@@ -126,11 +126,75 @@ class CriticalValueEngineTest {
     }
 
     @Test
-    void panelWithoutThresholds_isNormal() {
-        // A panel (FBC) carries no catalog thresholds and its name matches no keyword
-        // analyte, so a single numeric result is not auto-flagged (documents the
-        // multi-analyte panel limitation).
+    void panelWithoutThresholds_singleResultPath_isNormal() {
+        // The SINGLE-result path can't evaluate a panel (FBC) — its components carry the
+        // thresholds (see evaluateComponent tests below). A single numeric for the whole
+        // panel is therefore not auto-flagged here.
         var result = engine.evaluateResult(order("Full Blood Count", "3.0", 3.0, "x10^9/L"), null);
         assertThat(result.isCritical()).isFalse();
+    }
+
+    // ── Per-analyte (panel component) detection ──
+
+    @Test
+    void component_criticalLow_flagged() {
+        // K+ 6.8 inside a U&E — at/above the 6.0 critical-high → critical.
+        var r = engine.evaluateComponent("Potassium", 6.8, "mmol/L", "mmol/L", 2.5, 6.0);
+        assertThat(r.isCritical()).isTrue();
+        assertThat(r.criticalValueType()).isEqualTo(CriticalValueType.POTASSIUM_HIGH);
+    }
+
+    @Test
+    void component_hypoxemia_pO2_flagged() {
+        // pO2 6.0 kPa inside a blood gas — the value the single-result model could never
+        // catch — is at/below the 8.0 critical-low → critical, with the specific PO2_LOW type.
+        var r = engine.evaluateComponent("pO2", 6.0, "kPa", "kPa", 8.0, null);
+        assertThat(r.isCritical()).isTrue();
+        assertThat(r.criticalValueType()).isEqualTo(CriticalValueType.PO2_LOW);
+    }
+
+    @Test
+    void component_hypercapnia_pCO2_flagged() {
+        // pCO2 10 kPa inside a blood gas — at/above the 9.5 critical-high (CO2 narcosis) →
+        // critical, typed PCO2_HIGH.
+        var r = engine.evaluateComponent("pCO2", 10.0, "kPa", "kPa", null, 9.5);
+        assertThat(r.isCritical()).isTrue();
+        assertThat(r.criticalValueType()).isEqualTo(CriticalValueType.PCO2_HIGH);
+    }
+
+    @Test
+    void component_withinRange_isNormal() {
+        var r = engine.evaluateComponent("Potassium", 4.2, "mmol/L", "mmol/L", 2.5, 6.0);
+        assertThat(r.isCritical()).isFalse();
+    }
+
+    @Test
+    void component_unitMismatch_suppressesAutoCritical() {
+        // A potassium value reported in mg/dL must NOT be compared against the mmol/L
+        // critical thresholds — returns normal (caller flags abnormal + verify-manually).
+        var r = engine.evaluateComponent("Potassium", 7.0, "mg/dL", "mmol/L", 2.5, 6.0);
+        assertThat(r.isCritical()).isFalse();
+    }
+
+    @Test
+    void component_blankUnit_treatedAsCanonical() {
+        // The analyte identity is unambiguous (from the panel definition), so a blank
+        // entered unit is safely treated as the component's canonical unit.
+        var r = engine.evaluateComponent("Potassium", 6.5, "", "mmol/L", 2.5, 6.0);
+        assertThat(r.isCritical()).isTrue();
+    }
+
+    @Test
+    void component_nullNumericOrNoThresholds_isNormal() {
+        assertThat(engine.evaluateComponent("Urea", null, "mmol/L", "mmol/L", null, null).isCritical()).isFalse();
+        assertThat(engine.evaluateComponent("Urea", 9.0, "mmol/L", "mmol/L", null, null).isCritical()).isFalse();
+    }
+
+    @Test
+    void component_inclusiveAtThreshold_flagged() {
+        // Exactly at the critical-low boundary (Hb 5.0 g/dL, crit_low 5) → critical (<=).
+        var r = engine.evaluateComponent("Hemoglobin", 5.0, "g/dL", "g/dL", 5.0, null);
+        assertThat(r.isCritical()).isTrue();
+        assertThat(r.criticalValueType()).isEqualTo(CriticalValueType.HEMOGLOBIN_LOW);
     }
 }

@@ -20,9 +20,10 @@ import org.springframework.stereotype.Component;
  * are now likewise unit-gated. Qualitative results (malaria / troponin text) are
  * matched by name regardless of unit.
  *
- * <p>NB: a panel (FBC, U&E, …) yields many analytes but a LabOrder stores a single
- * numeric result, so panel rows carry no thresholds; per-analyte detection inside a
- * panel needs a multi-analyte results model (separate, larger work).
+ * <p>A panel (FBC, U&E, …) yields many analytes. Those are evaluated per-analyte via
+ * {@link #evaluateComponent} against each analyte's own unit + thresholds (defined in
+ * {@code lab_panel_component}, V83), so a single critical analyte (e.g. K+ inside a U&E
+ * or pO2 inside a blood gas) is detected even when the rest of the panel is normal.
  */
 @Slf4j
 @Component
@@ -269,6 +270,11 @@ public class CriticalValueEngine {
         if (testNameLower.contains("creatinine")) return CriticalValueType.CREATININE_HIGH;
         if (testNameLower.contains("lactate")) return CriticalValueType.LACTATE_HIGH;
         if (testNameLower.contains("inr") || testNameLower.contains("coagulation")) return CriticalValueType.INR_HIGH;
+        // Blood-gas analytes — pO2/pCO2 carry their own specific types (per-analyte panel
+        // detection); the generic pH match stays last so it doesn't shadow pco2.
+        if (testNameLower.contains("po2") || testNameLower.contains("oxygen")) return CriticalValueType.PO2_LOW;
+        if (testNameLower.contains("pco2") || testNameLower.contains("carbon dioxide")) return CriticalValueType.PCO2_HIGH;
+        if (testNameLower.contains("bilirubin")) return CriticalValueType.BILIRUBIN_HIGH;
         if (testNameLower.contains("blood gas") || testNameLower.equals("ph") || testNameLower.contains(" ph")) {
             return high ? CriticalValueType.PH_HIGH : CriticalValueType.PH_LOW;
         }
@@ -279,5 +285,47 @@ public class CriticalValueEngine {
         String message = String.format(formatMessage, order.getResultNumeric());
         log.warn("CRITICAL: {} for order {}", message, order.getOrderNumber());
         return CriticalValueResult.critical(type, message);
+    }
+
+    // ── Per-analyte (panel component) evaluation ──
+
+    /**
+     * Evaluate one analyte of a multi-analyte (panel) result against its OWN unit and
+     * critical thresholds (carried by the panel-component definition).
+     *
+     * <p>Unlike the single-result keyword path, the analyte identity is unambiguous here
+     * (it comes from the panel definition, not inferred from a free-text test name), so a
+     * BLANK entered unit is safely treated as the component's canonical unit. A PRESENT but
+     * incompatible unit suppresses auto-critical (the caller flags it abnormal + a
+     * verify-manually note) so a value reported in the wrong unit is never mis-evaluated.
+     *
+     * @return a critical result if the value breaches a panic threshold, else normal.
+     */
+    public CriticalValueResult evaluateComponent(String analyteName, Double numeric, String enteredUnit,
+            String canonicalUnit, Double criticalLow, Double criticalHigh) {
+        if (numeric == null || (criticalLow == null && criticalHigh == null)) {
+            return CriticalValueResult.normal();
+        }
+        if (!unitCompatible(enteredUnit, canonicalUnit)) {
+            return CriticalValueResult.normal();   // wrong unit — caller marks abnormal + note
+        }
+        String nameLower = analyteName != null ? analyteName.toLowerCase().trim() : "";
+        String unit = (canonicalUnit != null && !canonicalUnit.isBlank()) ? canonicalUnit
+                : (enteredUnit != null ? enteredUnit : "");
+        if (criticalHigh != null && numeric >= criticalHigh) {
+            CriticalValueType type = inferType(nameLower, true);
+            String message = String.format("%s %s %s at/above critical high (%s) — immediate clinician acknowledgement required.",
+                    analyteName, trimNumber(numeric), unit, trimNumber(criticalHigh));
+            log.warn("CRITICAL (component): {}", message);
+            return CriticalValueResult.critical(type, message);
+        }
+        if (criticalLow != null && numeric <= criticalLow) {
+            CriticalValueType type = inferType(nameLower, false);
+            String message = String.format("%s %s %s at/below critical low (%s) — immediate clinician acknowledgement required.",
+                    analyteName, trimNumber(numeric), unit, trimNumber(criticalLow));
+            log.warn("CRITICAL (component): {}", message);
+            return CriticalValueResult.critical(type, message);
+        }
+        return CriticalValueResult.normal();
     }
 }

@@ -11,6 +11,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -89,6 +90,9 @@ public class LabOrderResponse {
 
     /** Authoritative workflow status (post V48). */
     private LabOrderStatus status;
+
+    /** Per-analyte results for a multi-analyte (panel) order; empty for single-analyte tests. */
+    private List<LabResultComponentResponse> components;
 
     private Instant createdAt;
     private Instant updatedAt;

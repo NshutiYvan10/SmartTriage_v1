@@ -75,7 +75,49 @@ export interface LabOrder {
   verificationRejectionReason: string | null;
   verificationRejectedByName: string | null;
   verificationRejectedAt: string | null;
+  /** Per-analyte results for a multi-analyte (panel) order; empty/absent for single-analyte tests. */
+  components?: LabResultComponent[] | null;
   createdAt: string;
+}
+
+/** One analyte's definition within a panel — drives the multi-row result-entry form. */
+export interface LabPanelComponent {
+  analyteName: string;
+  analyteCode: string | null;
+  resultUnit: string | null;
+  referenceLow: number | null;
+  referenceHigh: number | null;
+  displayOrder: number;
+}
+
+/** One analyte's actual result, independently abnormal/critical-flagged. */
+export interface LabResultComponent {
+  analyteName: string;
+  analyteCode: string | null;
+  resultValue: string | null;
+  resultNumeric: number | null;
+  resultUnit: string | null;
+  referenceLow: number | null;
+  referenceHigh: number | null;
+  isAbnormal: boolean;
+  isCritical: boolean;
+  criticalValueType: string | null;
+  displayOrder: number;
+}
+
+export interface RecordComponentResultRequest {
+  analyteName: string;
+  analyteCode?: string;
+  resultValue?: string;
+  resultNumeric?: number;
+  resultUnit?: string;
+}
+
+export interface RecordPanelResultRequest {
+  components: RecordComponentResultRequest[];
+  enteredByName?: string;
+  specimenQualityConcern?: boolean;
+  notes?: string;
 }
 
 export interface VerifyResultRequest {
@@ -151,6 +193,13 @@ export const labApi = {
 
   recordResult: (orderId: string, data: RecordLabResultRequest) =>
     put<LabOrder>(`/lab/${orderId}/result`, data),
+
+  /** Panel-component definition for an order's test (empty for single-analyte tests). */
+  getPanelComponents: (orderId: string) =>
+    get<LabPanelComponent[]>(`/lab/${orderId}/panel-components`),
+
+  recordPanelResult: (orderId: string, data: RecordPanelResultRequest) =>
+    put<LabOrder>(`/lab/${orderId}/result/panel`, data),
 
   acknowledgeCritical: (orderId: string, body?: AcknowledgeCriticalRequest) =>
     put<LabOrder>(`/lab/${orderId}/acknowledge-critical`, body ?? {}),

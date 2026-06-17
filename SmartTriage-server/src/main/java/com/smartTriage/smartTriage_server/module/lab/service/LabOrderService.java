@@ -12,10 +12,14 @@ import com.smartTriage.smartTriage_server.module.lab.dto.*;
 import com.smartTriage.smartTriage_server.module.lab.engine.CriticalValueEngine;
 import com.smartTriage.smartTriage_server.module.lab.engine.CriticalValueResult;
 import com.smartTriage.smartTriage_server.module.lab.entity.LabOrder;
+import com.smartTriage.smartTriage_server.module.lab.entity.LabPanelComponent;
+import com.smartTriage.smartTriage_server.module.lab.entity.LabResultComponent;
 import com.smartTriage.smartTriage_server.module.lab.mapper.LabOrderMapper;
 import com.smartTriage.smartTriage_server.module.hospital.repository.HospitalRepository;
 import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher;
 import com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository;
+import com.smartTriage.smartTriage_server.module.lab.repository.LabPanelComponentRepository;
+import com.smartTriage.smartTriage_server.module.lab.repository.LabResultComponentRepository;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
@@ -60,6 +64,8 @@ public class LabOrderService {
     private final RealTimeEventPublisher realTimeEventPublisher;
     private final HospitalRepository hospitalRepository;
     private final ShiftAssignmentService shiftAssignmentService;
+    private final LabPanelComponentRepository labPanelComponentRepository;
+    private final LabResultComponentRepository labResultComponentRepository;
 
     // ====================================================================
     // ORDER LAB
@@ -492,9 +498,15 @@ public class LabOrderService {
         // guard), skip.
         if (order.isCritical() && !alreadyHadCriticalAlert) {
             order.setCriticalValueNotifiedAt(now);
+            // Prefer the supplied result; else, for a panel order released via the
+            // verify/override/timeout paths (criticalResult==null), rebuild the SPECIFIC
+            // per-analyte description from the stored components so the alert keeps naming
+            // the culprit analytes (e.g. "Potassium 6.8 mmol/L") instead of degrading to a
+            // generic message; fall back to the single-result evaluator otherwise.
             CriticalValueResult cr = criticalResult != null
                     ? criticalResult
-                    : criticalValueEngine.evaluateResult(order);
+                    : criticalResultFromComponents(order);
+            if (cr == null) cr = criticalValueEngine.evaluateResult(order);
             createCriticalValueAlert(order, cr);
         }
 
@@ -523,6 +535,268 @@ public class LabOrderService {
                 order.getOrderNumber(), order.getResultValue(), order.isCritical(), turnaroundMinutes);
 
         return broadcastAndMap(order);
+    }
+
+    // ====================================================================
+    // MULTI-ANALYTE (PANEL) RESULTS
+    // ====================================================================
+
+    /**
+     * Panel-component definition for a test (which analytes it contains, each one's unit +
+     * reference range). Drives the multi-row result-entry form. Empty for single-analyte
+     * tests — the caller falls back to the single-result entry form.
+     */
+    public List<LabPanelComponentResponse> getPanelComponents(String testName) {
+        if (testName == null || testName.isBlank()) return List.of();
+        return labPanelComponentRepository
+                .findByPanelTestNameIgnoreCaseAndIsActiveTrueOrderByDisplayOrderAsc(testName.trim())
+                .stream()
+                .map(LabPanelComponentResponse::from)
+                .collect(Collectors.toList());
+    }
+
+    /** Panel-component definition for a specific order (resolves the order's test name).
+     *  Empty for single-analyte orders. */
+    public List<LabPanelComponentResponse> getPanelComponentsForOrder(UUID orderId) {
+        LabOrder order = findOrderOrThrow(orderId);
+        return getPanelComponents(order.getTestName());
+    }
+
+    /**
+     * Record a multi-analyte (panel) result — one value per analyte. Each component is
+     * evaluated INDEPENDENTLY against its own unit + reference range + critical thresholds
+     * (from {@code lab_panel_component}), so a single critical analyte (e.g. K+ inside a
+     * U&E, or pO2 inside a blood gas) is detected even when the rest of the panel is normal.
+     * The order's isAbnormal/isCritical/criticalValueType roll up from the components, and a
+     * human-readable panel summary is written to the order's resultValue so existing chart /
+     * handover / alert displays still show the result. Verification gating, critical
+     * alerting and Investigation sync reuse the single-result {@link #finaliseResultedOrder}
+     * path. Re-entry (after a senior bounce) replaces the prior component set.
+     */
+    @Transactional
+    public LabOrderResponse recordPanelResult(UUID orderId, RecordPanelResultRequest request) {
+        LabOrder order = findOrderOrThrow(orderId);
+        requireStatusIn(order, "record panel result",
+                LabOrderStatus.RECEIVED_BY_LAB,
+                LabOrderStatus.PROCESSING,
+                LabOrderStatus.AWAITING_VERIFICATION);
+
+        Instant now = Instant.now();
+        String enteredBy = resolveActor(request.getEnteredByName());
+        order.setEnteredByName(enteredBy);
+
+        // Replace any prior draft components (re-entry after a senior bounce).
+        List<LabResultComponent> prior = labResultComponentRepository.findByLabOrder_Id(order.getId());
+        if (!prior.isEmpty()) labResultComponentRepository.deleteAll(prior);
+
+        // Index the panel definitions by analyte name (and code) for unit/range/thresholds.
+        List<LabPanelComponent> defs = labPanelComponentRepository
+                .findByPanelTestNameIgnoreCaseAndIsActiveTrueOrderByDisplayOrderAsc(
+                        order.getTestName() != null ? order.getTestName().trim() : "");
+        java.util.Map<String, LabPanelComponent> defByName = new java.util.HashMap<>();
+        java.util.Map<String, LabPanelComponent> defByCode = new java.util.HashMap<>();
+        for (LabPanelComponent d : defs) {
+            if (d.getAnalyteName() != null) defByName.put(d.getAnalyteName().toLowerCase().trim(), d);
+            if (d.getAnalyteCode() != null) defByCode.put(d.getAnalyteCode().toLowerCase().trim(), d);
+        }
+
+        StringBuilder summary = new StringBuilder();
+        StringBuilder mismatchNotes = new StringBuilder();
+        StringBuilder unrecognisedNotes = new StringBuilder();
+        List<String> criticalDescriptions = new java.util.ArrayList<>();
+        boolean anyAbnormal = false;
+        boolean anyCritical = false;
+        CriticalValueType firstCriticalType = null;
+        int displayOrder = 0;
+
+        for (RecordComponentResultRequest c : request.getComponents()) {
+            String analyteName = c.getAnalyteName() != null ? c.getAnalyteName().trim() : "";
+            if (analyteName.isEmpty()) continue;
+
+            LabPanelComponent def = defByName.get(analyteName.toLowerCase());
+            if (def == null && c.getAnalyteCode() != null) {
+                def = defByCode.get(c.getAnalyteCode().toLowerCase().trim());
+            }
+
+            String canonicalUnit = def != null ? def.getResultUnit() : null;
+            String enteredUnit = (c.getResultUnit() != null && !c.getResultUnit().isBlank())
+                    ? c.getResultUnit() : null;
+            Double numeric = c.getResultNumeric() != null ? c.getResultNumeric() : parseNumeric(c.getResultValue());
+            Double refLow = def != null ? def.getReferenceLow() : null;
+            Double refHigh = def != null ? def.getReferenceHigh() : null;
+            Double critLow = def != null ? def.getCriticalLow() : null;
+            Double critHigh = def != null ? def.getCriticalHigh() : null;
+
+            boolean unitOk = criticalValueEngine.unitCompatible(enteredUnit, canonicalUnit);
+            boolean unitMismatch = enteredUnit != null && canonicalUnit != null && !canonicalUnit.isBlank() && !unitOk;
+
+            boolean abnormal = false;
+            if (numeric != null && unitOk) {
+                if (refLow != null && numeric < refLow) abnormal = true;
+                if (refHigh != null && numeric > refHigh) abnormal = true;
+            }
+
+            CriticalValueResult cr = criticalValueEngine.evaluateComponent(
+                    analyteName, numeric, enteredUnit,
+                    canonicalUnit != null ? canonicalUnit : enteredUnit, critLow, critHigh);
+
+            // No seeded panel-component definition for this analyte means it carries no
+            // thresholds, so evaluateComponent above could not flag it. Rather than let an
+            // unrecognised analyte be a SILENT pass, fall back to the name-keyword critical
+            // rules (potassium/sodium/glucose/Hb/lactate/…) and surface a data-integrity note
+            // so the gap is visible to the tech and an auditor. (The panel entry form only
+            // submits seeded analytes, so this is the API/data-drift defence-in-depth path.)
+            if (def == null) {
+                log.warn("Panel result for order {} has analyte '{}' not in the '{}' panel definition "
+                                + "— no seeded thresholds; applying keyword fallback + flagging for manual review.",
+                        order.getOrderNumber(), analyteName, order.getTestName());
+                if (!cr.isCritical() && numeric != null) {
+                    LabOrder probe = LabOrder.builder()
+                            .orderNumber(order.getOrderNumber())
+                            .testName(analyteName)
+                            .resultValue(c.getResultValue())
+                            .resultNumeric(numeric)
+                            .resultUnit(enteredUnit)
+                            .build();
+                    cr = criticalValueEngine.evaluateResult(probe, null);
+                }
+                unrecognisedNotes.append(String.format(
+                        " | ⚠ analyte '%s' not in panel definition — not range-checked, verify manually.", analyteName));
+            }
+            boolean critical = cr.isCritical();
+
+            if (unitMismatch) {
+                // Cannot compare a value reported in a different unit — flag for manual check.
+                abnormal = true;
+                mismatchNotes.append(String.format(" | ⚠ UNIT MISMATCH: %s '%s' vs expected '%s' — verify manually.",
+                        analyteName, enteredUnit, canonicalUnit));
+            }
+
+            LabResultComponent rc = LabResultComponent.builder()
+                    .labOrder(order)
+                    .analyteName(analyteName)
+                    .analyteCode(c.getAnalyteCode() != null ? c.getAnalyteCode()
+                            : (def != null ? def.getAnalyteCode() : null))
+                    .resultValue(c.getResultValue())
+                    .resultNumeric(numeric)
+                    .resultUnit(enteredUnit != null ? enteredUnit : canonicalUnit)
+                    .referenceLow(refLow)
+                    .referenceHigh(refHigh)
+                    .isAbnormal(abnormal)
+                    .isCritical(critical)
+                    .criticalValueType(critical ? cr.criticalValueType() : null)
+                    // Always the monotonic loop index — components are submitted in the
+                    // definition's display order, and mixing a definition's 1-based order
+                    // with the 0-based counter for unseeded analytes could collide and
+                    // scramble the persisted ordering.
+                    .displayOrder(displayOrder)
+                    .build();
+            labResultComponentRepository.save(rc);
+
+            // Build the order-level summary string.
+            if (summary.length() > 0) summary.append("; ");
+            summary.append(analyteName).append(' ')
+                    .append(c.getResultValue() != null ? c.getResultValue() : "—");
+            String unitForSummary = enteredUnit != null ? enteredUnit : canonicalUnit;
+            if (unitForSummary != null && !unitForSummary.isBlank()) summary.append(' ').append(unitForSummary);
+            if (critical) summary.append(" [CRIT]");
+            else if (abnormal) summary.append(" [ABN]");
+
+            if (critical) {
+                anyCritical = true;
+                if (firstCriticalType == null) firstCriticalType = cr.criticalValueType();
+                if (cr.description() != null) criticalDescriptions.add(cr.description());
+            }
+            if (abnormal) anyAbnormal = true;
+            displayOrder++;
+        }
+
+        // Roll up onto the order. resultUnit/resultNumeric stay null (mixed units); the
+        // human-readable summary carries the per-analyte values for legacy displays.
+        order.setResultValue(summary.toString());
+        order.setResultUnit(null);
+        order.setResultNumeric(null);
+        order.setReferenceRangeMin(null);
+        order.setReferenceRangeMax(null);
+        order.setAbnormal(anyAbnormal);
+        order.setCritical(anyCritical);
+        order.setCriticalValueType(anyCritical ? firstCriticalType : null);
+
+        if (request.getNotes() != null && !request.getNotes().isBlank()) {
+            String existing = order.getNotes() != null ? order.getNotes() + " | " : "";
+            order.setNotes(existing + "Result: " + request.getNotes());
+        }
+        if (mismatchNotes.length() > 0) {
+            String existing = order.getNotes() != null ? order.getNotes() : "";
+            order.setNotes(existing + mismatchNotes);
+        }
+        if (unrecognisedNotes.length() > 0) {
+            // An unrecognised analyte was not range-checked — surface it for manual review.
+            order.setAbnormal(true);
+            anyAbnormal = true;
+            String existing = order.getNotes() != null ? order.getNotes() : "";
+            order.setNotes(existing + unrecognisedNotes);
+        }
+        if (anyCritical) {
+            String existing = order.getNotes() != null ? order.getNotes() + " | " : "";
+            order.setNotes(existing + "CRITICAL: " + String.join("; ", criticalDescriptions));
+        }
+        if (request.isSpecimenQualityConcern()) {
+            String existing = order.getNotes() != null ? order.getNotes() + " | " : "";
+            order.setNotes(existing + "Specimen quality concern flagged at result entry");
+        }
+
+        CriticalValueResult combined = anyCritical
+                ? CriticalValueResult.critical(firstCriticalType, String.join("; ", criticalDescriptions))
+                : CriticalValueResult.normal();
+
+        // Same verification gating as the single-result path.
+        boolean highRisk = order.isCritical() || request.isSpecimenQualityConcern();
+        boolean verifyEnabled = isVerificationEnabledFor(order.getVisit().getHospital().getId());
+        if (highRisk && verifyEnabled) {
+            order.setStatus(LabOrderStatus.AWAITING_VERIFICATION);
+            order.setVerificationRequired(true);
+            order.setVerificationTimeoutAt(now.plus(verificationTimeoutFor(order.getPriority())));
+            order = labOrderRepository.save(order);
+            log.info("Panel result entered for order {} — gated AWAITING_VERIFICATION ({} analytes, {} critical)",
+                    order.getOrderNumber(), request.getComponents().size(), criticalDescriptions.size());
+            return broadcastAndMap(order);
+        }
+
+        return finaliseResultedOrder(order, now, enteredBy, combined, false);
+    }
+
+    /**
+     * Rebuild a critical {@link CriticalValueResult} from an order's stored critical
+     * components — used when a gated panel result is released later (verify / override /
+     * timeout) so the alert message names the specific culprit analytes rather than
+     * degrading to a generic one. Returns null when the order has no critical components
+     * (caller then falls back to the single-result evaluator).
+     */
+    private CriticalValueResult criticalResultFromComponents(LabOrder order) {
+        List<LabResultComponent> critical = labResultComponentRepository
+                .findByLabOrder_IdAndIsActiveTrueOrderByDisplayOrderAsc(order.getId())
+                .stream().filter(LabResultComponent::isCritical).toList();
+        if (critical.isEmpty()) return null;
+        String description = critical.stream()
+                .map(c -> String.format("%s %s%s", c.getAnalyteName(),
+                        c.getResultValue() != null ? c.getResultValue() : "",
+                        c.getResultUnit() != null ? " " + c.getResultUnit() : ""))
+                .collect(Collectors.joining("; "));
+        CriticalValueType type = critical.get(0).getCriticalValueType() != null
+                ? critical.get(0).getCriticalValueType()
+                : order.getCriticalValueType();
+        return CriticalValueResult.critical(type, description);
+    }
+
+    /** Best-effort numeric parse of a free-text result value ("Positive" → null). */
+    private static Double parseNumeric(String value) {
+        if (value == null) return null;
+        try {
+            return Double.parseDouble(value.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     // ====================================================================
@@ -749,9 +1023,19 @@ public class LabOrderService {
     // ====================================================================
 
     public Page<LabOrderResponse> getOrdersForVisit(UUID visitId, Pageable pageable) {
-        return labOrderRepository
-                .findByVisitIdAndIsActiveTrueOrderByOrderedAtDesc(visitId, pageable)
-                .map(LabOrderMapper::toResponse)
+        Page<LabOrder> page = labOrderRepository
+                .findByVisitIdAndIsActiveTrueOrderByOrderedAtDesc(visitId, pageable);
+        // Batch-load all panel components for the page in ONE query (avoids an N+1 of one
+        // SELECT per order on this hot chart endpoint), then attach from a per-order map.
+        List<UUID> orderIds = page.getContent().stream().map(LabOrder::getId).toList();
+        java.util.Map<UUID, List<LabResultComponent>> byOrder = orderIds.isEmpty()
+                ? java.util.Map.of()
+                : labResultComponentRepository
+                    .findByLabOrder_IdInAndIsActiveTrueOrderByDisplayOrderAsc(orderIds)
+                    .stream()
+                    .collect(Collectors.groupingBy(c -> c.getLabOrder().getId()));
+        return page
+                .map(o -> LabOrderMapper.toResponse(o, byOrder.get(o.getId())))
                 .map(LabOrderService::maskPreVerificationResult);
     }
 
@@ -772,6 +1056,9 @@ public class LabOrderService {
             // notes can echo the draft value/critical description (recordResult folds them
             // in), so blank it too — otherwise the masked value leaks through notes.
             r.setNotes(null);
+            // Per-analyte components are the panel's draft values — blank them too so a
+            // pre-verification panel result is not revealed component-by-component.
+            r.setComponents(null);
         }
         return r;
     }
@@ -898,7 +1185,8 @@ public class LabOrderService {
      * the lab-tech dashboard stays live without polling.
      */
     private LabOrderResponse broadcastAndMap(LabOrder order) {
-        LabOrderResponse response = LabOrderMapper.toResponse(order);
+        LabOrderResponse response = LabOrderMapper.toResponse(
+                order, labResultComponentRepository.findByLabOrder_IdAndIsActiveTrueOrderByDisplayOrderAsc(order.getId()));
         broadcastLabOrder(order, response);
         return response;
     }

@@ -545,13 +545,36 @@ function LabOrderCard({
       {order.status === 'RESULTED' && order.resultValue && (
         <div className="rounded-xl p-3 mb-3" style={glassInner}>
           <div className={`text-[10px] uppercase font-bold mb-1 ${text.label}`}>Result</div>
-          <div className={`text-sm font-bold ${order.isCritical ? 'text-rose-500' : order.isAbnormal ? 'text-amber-500' : text.heading}`}>
-            {order.resultValue} {order.resultUnit}
-          </div>
-          {order.referenceRangeMin != null && order.referenceRangeMax != null && (
-            <div className={`text-[10px] ${text.muted}`}>
-              Ref: {order.referenceRangeMin} – {order.referenceRangeMax} {order.resultUnit}
+          {order.components && order.components.length > 0 ? (
+            /* Per-analyte (panel) breakdown — each row independently abnormal/critical-flagged. */
+            <div className="space-y-1">
+              {order.components.map((c) => (
+                <div key={c.analyteName} className="flex items-center justify-between text-xs">
+                  <span className={text.muted}>{c.analyteName}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className={`font-bold ${c.isCritical ? 'text-rose-500' : c.isAbnormal ? 'text-amber-500' : text.body}`}>
+                      {c.resultValue}{c.resultUnit ? ` ${c.resultUnit}` : ''}
+                    </span>
+                    {c.isCritical && <span className="text-[9px] font-bold px-1 rounded bg-rose-500/15 text-rose-500">CRIT</span>}
+                    {!c.isCritical && c.isAbnormal && <span className="text-[9px] font-bold px-1 rounded bg-amber-500/15 text-amber-500">ABN</span>}
+                    {(c.referenceLow != null || c.referenceHigh != null) && (
+                      <span className={`text-[9px] ${text.muted}`}>({c.referenceLow ?? '–'}–{c.referenceHigh ?? '–'})</span>
+                    )}
+                  </span>
+                </div>
+              ))}
             </div>
+          ) : (
+            <>
+              <div className={`text-sm font-bold ${order.isCritical ? 'text-rose-500' : order.isAbnormal ? 'text-amber-500' : text.heading}`}>
+                {order.resultValue} {order.resultUnit}
+              </div>
+              {order.referenceRangeMin != null && order.referenceRangeMax != null && (
+                <div className={`text-[10px] ${text.muted}`}>
+                  Ref: {order.referenceRangeMin} – {order.referenceRangeMax} {order.resultUnit}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

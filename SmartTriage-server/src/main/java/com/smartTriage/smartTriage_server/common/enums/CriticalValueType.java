@@ -25,6 +25,9 @@ public enum CriticalValueType {
     INR_HIGH(">5.0"),
     PH_LOW("<7.2"),
     PH_HIGH(">7.6"),
+    PO2_LOW("<8.0 kPa (severe hypoxemia)"),
+    PCO2_HIGH(">9.5 kPa (hypercapnia / CO2 narcosis)"),
+    BILIRUBIN_HIGH(">250 µmol/L"),
     MALARIA_POSITIVE("Critical in Rwanda context"),
     OTHER_CRITICAL("Other critical value");
 

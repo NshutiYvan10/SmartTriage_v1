@@ -2,10 +2,13 @@ package com.smartTriage.smartTriage_server.module.lab.mapper;
 
 import com.smartTriage.smartTriage_server.module.lab.dto.CriticalValueResponse;
 import com.smartTriage.smartTriage_server.module.lab.dto.LabOrderResponse;
+import com.smartTriage.smartTriage_server.module.lab.dto.LabResultComponentResponse;
 import com.smartTriage.smartTriage_server.module.lab.entity.LabOrder;
+import com.smartTriage.smartTriage_server.module.lab.entity.LabResultComponent;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 /**
  * Maps LabOrder entities to response DTOs.
@@ -75,6 +78,17 @@ public final class LabOrderMapper {
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .build();
+    }
+
+    /** Overload that attaches per-analyte (panel) components. */
+    public static LabOrderResponse toResponse(LabOrder order, List<LabResultComponent> components) {
+        LabOrderResponse response = toResponse(order);
+        if (components != null && !components.isEmpty()) {
+            response.setComponents(components.stream()
+                    .map(LabResultComponentResponse::from)
+                    .toList());
+        }
+        return response;
     }
 
     public static CriticalValueResponse toCriticalValueResponse(LabOrder order) {

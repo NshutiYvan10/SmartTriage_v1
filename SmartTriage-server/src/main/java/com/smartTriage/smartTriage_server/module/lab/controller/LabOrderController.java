@@ -131,6 +131,34 @@ public class LabOrderController {
         return ResponseEntity.ok(ApiResponse.success("Result recorded", response));
     }
 
+    /**
+     * Panel-component definition for an order's test — which analytes the multi-row
+     * result form should collect, each with unit + reference range. Empty for
+     * single-analyte tests (the UI then uses the single-result form).
+     */
+    @GetMapping("/{orderId}/panel-components")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
+    public ResponseEntity<ApiResponse<List<LabPanelComponentResponse>>> getPanelComponents(
+            @PathVariable UUID orderId) {
+        return ResponseEntity.ok(ApiResponse.success(labOrderService.getPanelComponentsForOrder(orderId)));
+    }
+
+    /**
+     * Record a multi-analyte (panel) result — one value per analyte. Each component is
+     * independently flagged abnormal/critical so a single critical analyte inside an
+     * otherwise-normal panel is still detected and escalated.
+     */
+    @PutMapping("/{orderId}/result/panel")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN') "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
+    public ResponseEntity<ApiResponse<LabOrderResponse>> recordPanelResult(
+            @PathVariable UUID orderId,
+            @Valid @RequestBody RecordPanelResultRequest request) {
+        LabOrderResponse response = labOrderService.recordPanelResult(orderId, request);
+        return ResponseEntity.ok(ApiResponse.success("Panel result recorded", response));
+    }
+
     @PutMapping("/{orderId}/acknowledge-critical")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
             + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
