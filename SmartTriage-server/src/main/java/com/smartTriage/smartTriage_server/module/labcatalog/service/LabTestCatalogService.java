@@ -66,6 +66,11 @@ public class LabTestCatalogService {
                 .routineTurnaroundMinutes(t.getRoutineTurnaroundMinutes())
                 .clinicalUse(t.getClinicalUse())
                 .isCommonInRwanda(t.isCommonInRwanda())
+                .resultUnit(t.getResultUnit())
+                .referenceLow(t.getReferenceLow())
+                .referenceHigh(t.getReferenceHigh())
+                .criticalLow(t.getCriticalLow())
+                .criticalHigh(t.getCriticalHigh())
                 .build();
     }
 }

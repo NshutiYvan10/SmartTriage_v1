@@ -75,4 +75,32 @@ public class LabTestCatalog extends BaseEntity {
     @Column(name = "is_common_in_rwanda", nullable = false)
     @Builder.Default
     private boolean isCommonInRwanda = false;
+
+    // ── Result interpretation (V81) — drives unit-safe critical-value detection,
+    //    the abnormal-vs-range flag, and result-entry pre-fill. NULL for panels and
+    //    qualitative tests where a single numeric threshold isn't meaningful. ──
+
+    /** Canonical unit a numeric result is expected in (e.g. "mmol/L", "µmol/L", "pH").
+     *  The critical-value engine only auto-evaluates when the entered result unit
+     *  matches this, so a value in a different unit is never mis-flagged. */
+    @Column(name = "result_unit", length = 30)
+    private String resultUnit;
+
+    /** Lower bound of the normal reference range (in {@link #resultUnit}). */
+    @Column(name = "reference_low")
+    private Double referenceLow;
+
+    /** Upper bound of the normal reference range (in {@link #resultUnit}). */
+    @Column(name = "reference_high")
+    private Double referenceHigh;
+
+    /** Critical (panic) low threshold — at/below requires immediate notification.
+     *  NULL when the test has no clinically-meaningful critical low. */
+    @Column(name = "critical_low")
+    private Double criticalLow;
+
+    /** Critical (panic) high threshold — at/above requires immediate notification.
+     *  NULL when the test has no clinically-meaningful critical high. */
+    @Column(name = "critical_high")
+    private Double criticalHigh;
 }

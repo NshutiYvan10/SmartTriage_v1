@@ -29,4 +29,11 @@ public interface LabTestCatalogRepository extends JpaRepository<LabTestCatalog, 
     List<LabTestCatalog> findByType(@Param("type") InvestigationType type);
 
     List<LabTestCatalog> findByIsCommonInRwandaTrueAndIsActiveTrueOrderByTestNameAsc();
+
+    /** Resolve the catalog entry for a placed order — orders carry the catalog's
+     *  testName/shortName (the order form picks from the catalog), so the canonical
+     *  unit + reference range + critical thresholds can be applied at result time. */
+    java.util.Optional<LabTestCatalog> findFirstByTestNameIgnoreCaseAndIsActiveTrue(String testName);
+
+    java.util.Optional<LabTestCatalog> findFirstByShortNameIgnoreCaseAndIsActiveTrue(String shortName);
 }

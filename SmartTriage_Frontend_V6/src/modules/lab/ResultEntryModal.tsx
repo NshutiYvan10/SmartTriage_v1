@@ -8,11 +8,15 @@
    AcknowledgeCriticalModal — this one just files the result.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useState } from 'react';
-import { Beaker, Loader2, X, AlertOctagon } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Beaker, Loader2, X, AlertOctagon, AlertTriangle } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { labApi } from '@/api/lab';
 import type { LabOrder, RecordLabResultRequest } from '@/api/lab';
+import { labCatalogApi, type LabTestCatalogResponse } from '@/api/labCatalog';
+
+/** Normalize a unit for comparison: lowercase, strip spaces, µ/μ → u. */
+const normUnit = (u: string) => u.trim().toLowerCase().replace(/\s+/g, '').replace(/[µμ]/g, 'u');
 
 interface Props {
   order: LabOrder;
@@ -35,6 +39,33 @@ export function ResultEntryModal({ order, enteredByName, onClose, onSaved }: Pro
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [catalog, setCatalog] = useState<LabTestCatalogResponse | null>(null);
+
+  // Pre-fill the canonical unit + reference range from the catalog so the tech enters
+  // in the expected unit (the backend critical-value check is unit-gated). Best-effort.
+  useEffect(() => {
+    let alive = true;
+    labCatalogApi.search(order.testName).then((list) => {
+      if (!alive) return;
+      // Mirror the backend resolution (testName OR shortName, case-insensitive) so the
+      // pre-fill + mismatch warning agree with what the server actually applies.
+      const key = order.testName.toLowerCase();
+      const match = (list || []).find((c) =>
+        c.testName.toLowerCase() === key || c.shortName?.toLowerCase() === key);
+      if (!match) return;
+      setCatalog(match);
+      setForm((f) => ({
+        ...f,
+        resultUnit: f.resultUnit || match.resultUnit || '',
+        referenceRangeMin: f.referenceRangeMin ?? match.referenceLow ?? undefined,
+        referenceRangeMax: f.referenceRangeMax ?? match.referenceHigh ?? undefined,
+      }));
+    }).catch(() => { /* best-effort — the modal works without pre-fill */ });
+    return () => { alive = false; };
+  }, [order.testName]);
+
+  const expectedUnit = catalog?.resultUnit ?? null;
+  const unitMismatch = !!expectedUnit && !!form.resultUnit && normUnit(form.resultUnit) !== normUnit(expectedUnit);
 
   const numericPreview =
     form.resultNumeric != null
@@ -125,11 +156,13 @@ export function ResultEntryModal({ order, enteredByName, onClose, onSaved }: Pro
             />
           </div>
           <div>
-            <label className={`text-[10px] font-bold uppercase tracking-wider mb-1 block ${text.label}`}>Unit</label>
+            <label className={`text-[10px] font-bold uppercase tracking-wider mb-1 block ${text.label}`}>
+              Unit{expectedUnit ? ` (expected ${expectedUnit})` : ''}
+            </label>
             <input
               value={form.resultUnit ?? ''}
               onChange={(e) => setForm({ ...form, resultUnit: e.target.value })}
-              placeholder="mmol/L"
+              placeholder={expectedUnit ?? 'mmol/L'}
               className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
               style={glassInner}
             />
@@ -157,6 +190,17 @@ export function ResultEntryModal({ order, enteredByName, onClose, onSaved }: Pro
             />
           </div>
         </div>
+
+        {/* Unit-mismatch guard — the backend skips the critical-value check on a unit
+            mismatch and flags it for manual review, so warn the tech before submit. */}
+        {unitMismatch && (
+          <div className="rounded-xl px-3 py-2 mb-3 text-xs font-semibold bg-red-500/10 text-red-500 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>Unit "{form.resultUnit}" differs from the expected "{expectedUnit}". The automatic
+              critical-value check will be skipped and the result flagged for manual verification —
+              confirm the unit before submitting.</span>
+          </div>
+        )}
 
         {/* Sanity preview */}
         {numericPreview && (

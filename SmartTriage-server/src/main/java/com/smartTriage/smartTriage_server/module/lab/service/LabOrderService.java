@@ -348,25 +348,51 @@ public class LabOrderService {
         order.setReferenceRangeMin(request.getReferenceRangeMin());
         order.setReferenceRangeMax(request.getReferenceRangeMax());
 
+        // Resolve the catalog entry so the canonical unit / reference range / critical
+        // thresholds can be applied.
+        com.smartTriage.smartTriage_server.module.labcatalog.entity.LabTestCatalog catalog =
+                criticalValueEngine.resolveCatalog(order);
+
+        // A PRESENT entered unit that differs from the catalog's canonical unit means we
+        // cannot safely compare this number against the catalog reference range OR
+        // thresholds — so we skip the range/abnormal comparison and (below, if nothing
+        // else flagged it) surface it for manual verification. A blank unit is assumed
+        // canonical, so it does not count as a mismatch.
+        boolean unitMismatch = catalog != null && catalog.getResultUnit() != null
+                && order.getResultUnit() != null && !order.getResultUnit().isBlank()
+                && !criticalValueEngine.unitCompatible(order.getResultUnit(), catalog.getResultUnit());
+
+        // Catalog reference-range fallback (only when the unit is compatible — the range
+        // is in the canonical unit) so the abnormal flag still works when the tech didn't
+        // type a range.
+        if (catalog != null && !unitMismatch) {
+            if (order.getReferenceRangeMin() == null) order.setReferenceRangeMin(catalog.getReferenceLow());
+            if (order.getReferenceRangeMax() == null) order.setReferenceRangeMax(catalog.getReferenceHigh());
+        }
+
         if (request.getNotes() != null && !request.getNotes().isBlank()) {
             String existing = order.getNotes() != null ? order.getNotes() + " | " : "";
             order.setNotes(existing + "Result: " + request.getNotes());
         }
 
-        // Check abnormal vs reference range
-        if (request.getResultNumeric() != null) {
+        // Check abnormal vs the effective reference range (typed or catalog-derived) —
+        // skipped on a unit mismatch (cannot compare a value against a range in a
+        // different unit).
+        if (request.getResultNumeric() != null && !unitMismatch) {
             boolean abnormal = false;
-            if (request.getReferenceRangeMin() != null && request.getResultNumeric() < request.getReferenceRangeMin()) {
+            if (order.getReferenceRangeMin() != null && request.getResultNumeric() < order.getReferenceRangeMin()) {
                 abnormal = true;
             }
-            if (request.getReferenceRangeMax() != null && request.getResultNumeric() > request.getReferenceRangeMax()) {
+            if (order.getReferenceRangeMax() != null && request.getResultNumeric() > order.getReferenceRangeMax()) {
                 abnormal = true;
             }
             order.setAbnormal(abnormal);
         }
 
-        // Run critical-value check (sets isCritical + criticalValueType)
-        CriticalValueResult criticalResult = criticalValueEngine.evaluateResult(order);
+        // Run critical-value check (catalog-driven + unit-safe; a present-but-different
+        // unit falls through to the unit-gated keyword rules, so a value in a different
+        // KNOWN unit is still caught).
+        CriticalValueResult criticalResult = criticalValueEngine.evaluateResult(order, catalog);
         if (criticalResult.isCritical()) {
             order.setCritical(true);
             order.setCriticalValueType(criticalResult.criticalValueType());
@@ -378,6 +404,20 @@ public class LabOrderService {
         if (request.isSpecimenQualityConcern()) {
             String existing = order.getNotes() != null ? order.getNotes() + " | " : "";
             order.setNotes(existing + "Specimen quality concern flagged at result entry");
+        }
+
+        // If the entered unit didn't match the expected unit AND nothing flagged it
+        // critical, surface it for manual verification (abnormal + note) rather than
+        // silently passing a value we could not auto-interpret.
+        if (unitMismatch && !criticalResult.isCritical()) {
+            order.setAbnormal(true);
+            String existing = order.getNotes() != null ? order.getNotes() + " | " : "";
+            order.setNotes(existing + String.format(
+                    "⚠ UNIT MISMATCH: result unit '%s' does not match expected '%s' — "
+                    + "auto critical-value check skipped, verify manually.",
+                    order.getResultUnit(), catalog.getResultUnit()));
+            log.warn("Lab result unit mismatch on order {} — entered '{}', expected '{}'",
+                    order.getOrderNumber(), order.getResultUnit(), catalog.getResultUnit());
         }
 
         // Decide release path:
@@ -970,6 +1010,15 @@ public class LabOrderService {
         EdZone zone = zoneOf(order.getVisit());
         User zoneDoctor = resolveZoneDoctor(order.getVisit(), zone);
 
+        // Description can be null if a re-evaluation no longer flags the (already-critical)
+        // order — fall back to the persisted critical type / a generic note so the alert
+        // message never contains a literal "null".
+        String description = criticalResult != null && criticalResult.description() != null
+                ? criticalResult.description()
+                : (order.getCriticalValueType() != null
+                        ? order.getCriticalValueType().getDescription()
+                        : "Critical value flagged");
+
         ClinicalAlert alert = ClinicalAlert.builder()
                 .visit(order.getVisit())
                 .alertType(AlertType.CRITICAL_LAB_RESULT)
@@ -981,7 +1030,7 @@ public class LabOrderService {
                         order.getOrderNumber(),
                         order.getResultValue(),
                         order.getResultUnit() != null ? order.getResultUnit() : "",
-                        criticalResult.description()))
+                        description))
                 .targetZone(zone)
                 .targetDoctor(zoneDoctor)
                 .escalationTier(1)
@@ -993,7 +1042,7 @@ public class LabOrderService {
         // panic value reaches a clinician immediately, not only via the dashboard banner.
         publishOwnedLabAlert(alert, order, zone, zoneDoctor);
 
-        log.warn("CRITICAL LAB ALERT created for order {} — {}", order.getOrderNumber(), criticalResult.description());
+        log.warn("CRITICAL LAB ALERT created for order {} — {}", order.getOrderNumber(), description);
     }
 
     /**

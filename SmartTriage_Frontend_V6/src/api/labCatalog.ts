@@ -18,6 +18,13 @@ export interface LabTestCatalogResponse {
   routineTurnaroundMinutes: number | null;
   clinicalUse: string | null;
   isCommonInRwanda: boolean;
+  /** Canonical result unit + reference range / critical thresholds (V81). Null for
+   *  panels and qualitative tests. Used to pre-fill + unit-guard result entry. */
+  resultUnit: string | null;
+  referenceLow: number | null;
+  referenceHigh: number | null;
+  criticalLow: number | null;
+  criticalHigh: number | null;
 }
 
 export const labCatalogApi = {

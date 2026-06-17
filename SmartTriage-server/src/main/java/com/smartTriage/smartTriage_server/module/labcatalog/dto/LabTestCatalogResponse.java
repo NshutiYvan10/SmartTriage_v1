@@ -23,4 +23,9 @@ public class LabTestCatalogResponse {
     private Integer routineTurnaroundMinutes;
     private String clinicalUse;
     private boolean isCommonInRwanda;
+    private String resultUnit;
+    private Double referenceLow;
+    private Double referenceHigh;
+    private Double criticalLow;
+    private Double criticalHigh;
 }
