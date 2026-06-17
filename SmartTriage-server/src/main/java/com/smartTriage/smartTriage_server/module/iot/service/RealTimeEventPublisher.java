@@ -396,4 +396,39 @@ public class RealTimeEventPublisher {
             fire.run();
         }
     }
+
+    // ====================================================================
+    // INFECTION ISOLATION DASHBOARD TOPIC
+    // ====================================================================
+
+    /**
+     * Push a lightweight isolation event to the hospital's dedicated topic. The
+     * Isolation dashboard + per-visit panel subscribe here and re-fetch on any
+     * event (flagged / room-assigned / cleared / placement-overdue). Dedicated
+     * topic (not /topic/alerts/*) for the one-subscriber-per-topic reason.
+     */
+    public void publishIsolationEvent(UUID hospitalId, Map<String, Object> payload) {
+        String topic = "/topic/isolation/" + hospitalId;
+        messagingTemplate.convertAndSend(topic, (Object) payload);
+        log.debug("Published isolation event {} to {}", payload.get("eventType"), topic);
+    }
+
+    /** After-commit variant (so a refetch sees the saved screening); immediate when no tx. Best-effort. */
+    public void publishIsolationEventAfterCommit(UUID hospitalId, Map<String, Object> payload) {
+        Runnable fire = () -> {
+            try {
+                publishIsolationEvent(hospitalId, payload);
+            } catch (Exception e) {
+                log.warn("Failed to publish isolation event for hospital {}: {}", hospitalId, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override public void afterCommit() { fire.run(); }
+                    });
+        } else {
+            fire.run();
+        }
+    }
 }

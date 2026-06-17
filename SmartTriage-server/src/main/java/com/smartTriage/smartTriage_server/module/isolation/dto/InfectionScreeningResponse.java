@@ -25,6 +25,7 @@ public class InfectionScreeningResponse {
     private UUID visitId;
     private String visitNumber;
     private String patientName;
+    private String currentZone;
 
     private Instant screenedAt;
     private String screenedByName;
@@ -47,6 +48,8 @@ public class InfectionScreeningResponse {
     private String contactDetails;
     private boolean hasBleedingSymptoms;
     private boolean isHealthcareWorker;
+    private boolean immunocompromised;
+    private boolean hasNeckStiffness;
 
     // PPE requirements
     private boolean requiresN95;
@@ -56,12 +59,18 @@ public class InfectionScreeningResponse {
     private boolean requiresApron;
     private boolean requiresBootCovers;
 
-    // Isolation actions
+    // Isolation actions + action trail
     private String isolationRoomAssigned;
+    private Instant isolationRoomAssignedAt;
+    private String isolationAssignedByName;
     private Instant isolationStartedAt;
+    private Instant placementDueAt;
     private Instant isolationEndedAt;
+    private String isolationEndedByName;
+    private String isolationEndReason;
     private Instant publicHealthNotifiedAt;
     private String publicHealthReferenceNumber;
+    private String publicHealthNotifiedByName;
 
     private String notes;
     private List<String> findings;

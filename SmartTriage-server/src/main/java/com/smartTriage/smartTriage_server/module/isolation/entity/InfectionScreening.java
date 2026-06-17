@@ -115,6 +115,16 @@ public class InfectionScreening extends BaseEntity {
     @Builder.Default
     private boolean isHealthcareWorker = false;
 
+    /** Immunocompromised — drives PROTECTIVE (reverse) isolation. */
+    @Column(name = "is_immunocompromised", nullable = false)
+    @Builder.Default
+    private boolean immunocompromised = false;
+
+    /** Neck stiffness / meningism — strengthens meningococcal suspicion. */
+    @Column(name = "has_neck_stiffness", nullable = false)
+    @Builder.Default
+    private boolean hasNeckStiffness = false;
+
     // ====================================================================
     // PPE REQUIREMENTS
     // ====================================================================
@@ -150,11 +160,34 @@ public class InfectionScreening extends BaseEntity {
     @Column(name = "isolation_room_assigned")
     private String isolationRoomAssigned;
 
+    @Column(name = "isolation_room_assigned_at")
+    private Instant isolationRoomAssignedAt;
+
+    /** Who assigned the isolation room (authenticated actor) — action trail. */
+    @Column(name = "isolation_assigned_by_name")
+    private String isolationAssignedByName;
+
     @Column(name = "isolation_started_at")
     private Instant isolationStartedAt;
 
+    /**
+     * When room placement is due. Set when isolation is first required; the
+     * placement monitor escalates ISOLATION_PLACEMENT_OVERDUE if the patient is
+     * not in an isolation room by this time.
+     */
+    @Column(name = "placement_due_at")
+    private Instant placementDueAt;
+
     @Column(name = "isolation_ended_at")
     private Instant isolationEndedAt;
+
+    /** Who cleared/ended isolation (authenticated actor) — action trail. */
+    @Column(name = "isolation_ended_by_name")
+    private String isolationEndedByName;
+
+    /** Why isolation was ended/cleared (required on de-isolation). */
+    @Column(name = "isolation_end_reason", columnDefinition = "TEXT")
+    private String isolationEndReason;
 
     /** When Rwanda RBC/MoH was notified */
     @Column(name = "public_health_notified_at")
@@ -162,6 +195,10 @@ public class InfectionScreening extends BaseEntity {
 
     @Column(name = "public_health_reference_number")
     private String publicHealthReferenceNumber;
+
+    /** Who recorded the public-health notification (authenticated actor). */
+    @Column(name = "public_health_notified_by_name")
+    private String publicHealthNotifiedByName;
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;

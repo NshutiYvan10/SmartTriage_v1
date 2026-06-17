@@ -32,5 +32,11 @@ public class InfectionScreeningRequest {
     private boolean hasBleedingSymptoms;
     private boolean isHealthcareWorker;
 
+    /** Immunocompromised (e.g. advanced HIV, chemotherapy, transplant) — drives PROTECTIVE (reverse) isolation. */
+    private boolean immunocompromised;
+
+    /** Neck stiffness / meningism — strengthens the meningococcal suspicion. */
+    private boolean hasNeckStiffness;
+
     private String notes;
 }

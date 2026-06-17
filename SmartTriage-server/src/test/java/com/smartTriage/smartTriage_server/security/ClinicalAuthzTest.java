@@ -44,6 +44,7 @@ class ClinicalAuthzTest {
     private com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository sepsisScreeningRepository;
     private com.smartTriage.smartTriage_server.module.fasttrack.repository.FastTrackActivationRepository fastTrackActivationRepository;
     private com.smartTriage.smartTriage_server.module.hypoglycemia.repository.HypoglycemiaEventRepository hypoglycemiaEventRepository;
+    private com.smartTriage.smartTriage_server.module.isolation.repository.InfectionScreeningRepository infectionScreeningRepository;
     private ClinicalAuthz authz;
 
     private final UUID hospitalId = UUID.randomUUID();
@@ -59,6 +60,8 @@ class ClinicalAuthzTest {
                 mock(com.smartTriage.smartTriage_server.module.fasttrack.repository.FastTrackActivationRepository.class);
         hypoglycemiaEventRepository =
                 mock(com.smartTriage.smartTriage_server.module.hypoglycemia.repository.HypoglycemiaEventRepository.class);
+        infectionScreeningRepository =
+                mock(com.smartTriage.smartTriage_server.module.isolation.repository.InfectionScreeningRepository.class);
         authz = new ClinicalAuthz(
                 userRepository,
                 mock(VisitRepository.class),
@@ -71,7 +74,16 @@ class ClinicalAuthzTest {
                 clinicalAlertRepository,
                 sepsisScreeningRepository,
                 fastTrackActivationRepository,
-                hypoglycemiaEventRepository);
+                hypoglycemiaEventRepository,
+                infectionScreeningRepository);
+    }
+
+    @Test
+    void canAccessInfectionScreening_deniesUnknownScreening() {
+        UUID missing = UUID.randomUUID();
+        when(infectionScreeningRepository.findVisitIdById(missing)).thenReturn(java.util.Optional.empty());
+        assertFalse(authz.canAccessInfectionScreening(
+                authFor(user(Role.DOCTOR, null, hospitalId)), missing));
     }
 
     @Test

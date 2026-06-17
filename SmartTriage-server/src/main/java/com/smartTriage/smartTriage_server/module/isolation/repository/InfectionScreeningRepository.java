@@ -18,6 +18,27 @@ public interface InfectionScreeningRepository extends JpaRepository<InfectionScr
 
     List<InfectionScreening> findByVisitIdAndIsActiveTrueOrderByScreenedAtDesc(UUID visitId);
 
+    /** Projection for hospital-scope authz — the screening's visit id. */
+    @Query("SELECT s.visit.id FROM InfectionScreening s WHERE s.id = :id")
+    Optional<UUID> findVisitIdById(@Param("id") UUID id);
+
+    /**
+     * Open isolations for a visit — isolation required and not yet ended. Used to
+     * supersede/close a prior active isolation when a lower-risk re-screen clears it,
+     * so a single visit never carries two conflicting active precautions.
+     */
+    @Query("SELECT s FROM InfectionScreening s WHERE s.visit.id = :visitId AND s.isActive = true " +
+            "AND s.isolationType IS NOT NULL AND s.isolationEndedAt IS NULL ORDER BY s.screenedAt DESC")
+    List<InfectionScreening> findOpenIsolationsForVisit(@Param("visitId") UUID visitId);
+
+    /**
+     * Flagged isolations awaiting room placement — isolation required, not yet roomed,
+     * not ended, still active. The placement monitor escalates those past their due time.
+     */
+    @Query("SELECT s FROM InfectionScreening s WHERE s.isActive = true AND s.isolationType IS NOT NULL " +
+            "AND s.isolationEndedAt IS NULL AND s.isolationRoomAssigned IS NULL")
+    List<InfectionScreening> findAwaitingPlacement();
+
     /**
      * Active isolations for a hospital — isolation started but not ended.
      */

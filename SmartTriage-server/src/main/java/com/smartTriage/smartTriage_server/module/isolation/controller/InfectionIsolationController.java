@@ -2,6 +2,7 @@ package com.smartTriage.smartTriage_server.module.isolation.controller;
 
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.module.isolation.dto.AssignRoomRequest;
+import com.smartTriage.smartTriage_server.module.isolation.dto.EndIsolationRequest;
 import com.smartTriage.smartTriage_server.module.isolation.dto.InfectionScreeningRequest;
 import com.smartTriage.smartTriage_server.module.isolation.dto.InfectionScreeningResponse;
 import com.smartTriage.smartTriage_server.module.isolation.dto.PublicHealthNotificationRequest;
@@ -74,7 +75,8 @@ public class InfectionIsolationController {
     }
 
     @PutMapping("/{screeningId}/assign-room")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessInfectionScreening(authentication, #screeningId)")
     public ResponseEntity<ApiResponse<InfectionScreeningResponse>> assignIsolationRoom(
             @PathVariable UUID screeningId,
             @Valid @RequestBody AssignRoomRequest request) {
@@ -84,16 +86,19 @@ public class InfectionIsolationController {
     }
 
     @PutMapping("/{screeningId}/end")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessInfectionScreening(authentication, #screeningId)")
     public ResponseEntity<ApiResponse<InfectionScreeningResponse>> endIsolation(
-            @PathVariable UUID screeningId) {
+            @PathVariable UUID screeningId,
+            @Valid @RequestBody EndIsolationRequest request) {
         InfectionScreeningResponse response = InfectionScreeningMapper.toResponse(
-                isolationService.endIsolation(screeningId));
+                isolationService.endIsolation(screeningId, request.getReason()));
         return ResponseEntity.ok(ApiResponse.success("Isolation ended", response));
     }
 
     @PutMapping("/{screeningId}/notify-public-health")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessInfectionScreening(authentication, #screeningId)")
     public ResponseEntity<ApiResponse<InfectionScreeningResponse>> notifyPublicHealth(
             @PathVariable UUID screeningId,
             @RequestBody(required = false) PublicHealthNotificationRequest request) {

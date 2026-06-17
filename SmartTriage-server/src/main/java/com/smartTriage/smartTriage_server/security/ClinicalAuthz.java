@@ -14,6 +14,7 @@ import com.smartTriage.smartTriage_server.module.patient.repository.PatientRepos
 import com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository;
 import com.smartTriage.smartTriage_server.module.fasttrack.repository.FastTrackActivationRepository;
 import com.smartTriage.smartTriage_server.module.hypoglycemia.repository.HypoglycemiaEventRepository;
+import com.smartTriage.smartTriage_server.module.isolation.repository.InfectionScreeningRepository;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
@@ -103,6 +104,7 @@ public class ClinicalAuthz {
     private final SepsisScreeningRepository sepsisScreeningRepository;
     private final FastTrackActivationRepository fastTrackActivationRepository;
     private final HypoglycemiaEventRepository hypoglycemiaEventRepository;
+    private final InfectionScreeningRepository infectionScreeningRepository;
 
     /**
      * @return true if the authenticated user is attached to {@code hospitalId}.
@@ -580,6 +582,22 @@ public class ClinicalAuthz {
                     .orElse(false);
         } catch (Exception e) {
             log.error("canAccessHypoglycemiaEvent error for event {}: {}", eventId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** Scopes the isolation mutating endpoints (assign-room / end / notify-public-health)
+     *  to the screening's own hospital, so a clinician cannot drive another hospital's
+     *  isolation/de-isolation/notification by enumerating a screeningId. */
+    @Transactional(readOnly = true)
+    public boolean canAccessInfectionScreening(Authentication authentication, UUID screeningId) {
+        try {
+            if (screeningId == null) return false;
+            return infectionScreeningRepository.findVisitIdById(screeningId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessInfectionScreening error for screening {}: {}", screeningId, e.getMessage(), e);
             return false;
         }
     }

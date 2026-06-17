@@ -159,5 +159,21 @@ public enum AlertType {
      *    recheck was not performed — raised by the recheck monitor.
      */
     HYPOGLYCEMIA_CRITICAL,
-    HYPOGLYCEMIA_RECHECK_OVERDUE
+    HYPOGLYCEMIA_RECHECK_OVERDUE,
+
+    /**
+     * Infection isolation (staff + patient exposure control).
+     *  - ISOLATION_REQUIRED: a screening flagged an isolation need (airborne /
+     *    droplet / contact / strict / protective). Owned by the zone doctor +
+     *    charge nurse (for bed/zone reassignment) and pushed in real time. A
+     *    dedicated type (not VITAL_SIGN_ABNORMAL) so it is distinguishable AND
+     *    picked up by the time-critical re-escalation loop.
+     *  - ISOLATION_PLACEMENT_OVERDUE: a flagged patient was not moved into an
+     *    isolation room within the placement window — raised by the placement monitor.
+     *  - NOTIFIABLE_DISEASE: a Rwanda-IDSR notifiable disease was suspected;
+     *    Rwanda Biomedical Centre (RBC) must be notified within 24 hours.
+     */
+    ISOLATION_REQUIRED,
+    ISOLATION_PLACEMENT_OVERDUE,
+    NOTIFIABLE_DISEASE
 }

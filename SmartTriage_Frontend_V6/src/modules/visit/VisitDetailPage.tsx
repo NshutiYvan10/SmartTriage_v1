@@ -17,6 +17,7 @@ import { ClinicalSignsTab } from './ClinicalSignsTab';
 import { SepsisPanel } from './SepsisPanel';
 import { FastTrackPanel } from './FastTrackPanel';
 import { HypoglycemiaPanel } from './HypoglycemiaPanel';
+import { IsolationPanel } from './IsolationPanel';
 import { PrehospitalTab } from '@/modules/ems/PrehospitalTab';
 import { DiagnosisPanel } from './DiagnosisPanel';
 import { InvestigationPanel } from './InvestigationPanel';
@@ -118,6 +119,8 @@ const TABS = [
   { id: 'fast-track', label: 'Fast Track', icon: Zap },
   // Glucose / hypoglycemia — acute, time-critical; sits with the other protocols.
   { id: 'hypoglycemia', label: 'Glucose', icon: Droplets },
+  // Infection isolation — staff/patient exposure control; sits with the other protocols.
+  { id: 'isolation', label: 'Isolation', icon: ShieldAlert },
   { id: 'medications', label: 'Medications', icon: Pill },
   { id: 'alerts', label: 'Alerts', icon: BellRing },
   { id: 'disposition', label: 'Disposition', icon: LogOut },
@@ -812,6 +815,7 @@ export function VisitDetailPage() {
           {activeTab === 'sepsis' && <SepsisPanel visitId={visit.id} latestVitals={latestVitals} onScreened={loadData} />}
           {activeTab === 'fast-track' && <FastTrackPanel visitId={visit.id} onChanged={loadData} />}
           {activeTab === 'hypoglycemia' && <HypoglycemiaPanel visitId={visit.id} onChanged={loadData} />}
+          {activeTab === 'isolation' && <IsolationPanel visitId={visit.id} onChanged={loadData} />}
           {activeTab === 'medications' && <MedicationsTab medications={medications} showForm={showMedicationForm} setShowForm={setShowMedicationForm} onSubmit={handlePrescribeMedication} onAction={handleMedicationAction} formLoading={formLoading} patient={patient} visit={visit} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'alerts' && <AlertsTab alerts={visitAlerts} onAcknowledge={handleAcknowledgeAlert} visit={visit} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'disposition' && <DispositionTab visit={visit} onDisposition={handleRecordDisposition} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
