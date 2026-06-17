@@ -30,6 +30,8 @@ function mapAlertType(t: AlertType | string): AIAlert['type'] {
       return 'DOCTOR_NOTIFICATION';
     case 'VITAL_SIGN_ABNORMAL':
     case 'CRITICAL_LAB_RESULT':
+    case 'LAB_SPECIMEN_REJECTED':
+    case 'LAB_VERIFICATION_OVERRIDDEN':
     case 'IOT_DEVICE_DISCONNECTED':
     case 'IOT_DEVICE_LOW_BATTERY':
     case 'IOT_SIGNAL_QUALITY_DEGRADED':

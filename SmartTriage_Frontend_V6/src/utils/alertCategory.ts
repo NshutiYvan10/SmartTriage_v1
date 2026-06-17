@@ -54,6 +54,11 @@ const CLINICAL_TYPES = new Set<AlertType>([
   'ICU_ESCALATION_REQUESTED' as AlertType,
   'ICU_BED_UNAVAILABLE' as AlertType,
   'CRITICAL_VALUE_UNACKNOWLEDGED' as AlertType,
+  // A junior releasing an unverified (often critical) result without senior
+  // sign-off is a clinical safety-gate bypass, not mere workflow.
+  'LAB_VERIFICATION_OVERRIDDEN',
+  // LAB_SPECIMEN_REJECTED (redraw workflow) intentionally falls through to the
+  // OPERATIONAL default — listed here in a comment to keep the mapping honest.
 ]);
 
 const SYSTEM_TYPES = new Set<AlertType>([

@@ -78,6 +78,20 @@ public enum AlertType {
      * to act before the total turnaround SLA is breached.
      */
     LAB_NOT_RECEIVED,
+    /**
+     * A lab specimen was rejected on receipt (haemolysed, clotted,
+     * mislabelled, etc.) and the ordering doctor must redraw. Previously
+     * this re-used CRITICAL_LAB_RESULT, which mis-categorised redraw
+     * notices as critical results and would have dragged them into the
+     * time-critical re-escalation set; it now has its own type.
+     */
+    LAB_SPECIMEN_REJECTED,
+    /**
+     * A junior tech released an AWAITING_VERIFICATION result WITHOUT senior
+     * sign-off (emergency override) — a safety-gate bypass that governance /
+     * the senior on shift must see. Previously re-used CRITICAL_LAB_RESULT.
+     */
+    LAB_VERIFICATION_OVERRIDDEN,
 
     // EMS / paramedic workflow
     EMS_PRE_ARRIVAL,                       // Ambulance is en route — bay prep

@@ -4,6 +4,7 @@ import com.smartTriage.smartTriage_server.common.enums.*;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
+import com.smartTriage.smartTriage_server.module.alert.mapper.ClinicalAlertMapper;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
 import com.smartTriage.smartTriage_server.module.clinical.entity.Investigation;
 import com.smartTriage.smartTriage_server.module.clinical.repository.InvestigationRepository;
@@ -15,19 +16,25 @@ import com.smartTriage.smartTriage_server.module.lab.mapper.LabOrderMapper;
 import com.smartTriage.smartTriage_server.module.hospital.repository.HospitalRepository;
 import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher;
 import com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository;
+import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.visit.service.VisitService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -52,6 +59,7 @@ public class LabOrderService {
     private final VisitService visitService;
     private final RealTimeEventPublisher realTimeEventPublisher;
     private final HospitalRepository hospitalRepository;
+    private final ShiftAssignmentService shiftAssignmentService;
 
     // ====================================================================
     // ORDER LAB
@@ -64,12 +72,19 @@ public class LabOrderService {
     public LabOrderResponse orderLab(UUID visitId, OrderLabRequest request) {
         Visit visit = visitService.findVisitOrThrow(visitId);
 
+        // Stamp the ordering clinician from the authenticated principal so the
+        // orderedBy FK + name are non-repudiable and the ordering-doctor user-targeted
+        // alert push works for this path too (mirrors InvestigationService.orderInvestigation).
+        User orderer = resolveCurrentUser();
+        String ordererName = resolveActor(request.getOrderedByName());
+
         // Create linked Investigation entity
         Investigation investigation = Investigation.builder()
                 .visit(visit)
                 .investigationType(InvestigationType.LABORATORY)
                 .testName(request.getTestName())
-                .orderedByName(request.getOrderedByName())
+                .orderedBy(orderer)
+                .orderedByName(ordererName)
                 .orderedAt(Instant.now())
                 .status(InvestigationStatus.ORDERED)
                 .priority(request.getPriority().name())
@@ -90,7 +105,7 @@ public class LabOrderService {
                 .priority(request.getPriority())
                 .status(LabOrderStatus.ORDERED)
                 .orderedAt(Instant.now())
-                .orderedByName(request.getOrderedByName())
+                .orderedByName(ordererName)
                 .specimenType(request.getSpecimenType())
                 .clinicalIndication(request.getClinicalIndication())
                 .notes(request.getNotes())
@@ -172,7 +187,7 @@ public class LabOrderService {
         requireStatus(order, LabOrderStatus.ORDERED, "collect specimen");
 
         order.setSpecimenCollectedAt(Instant.now());
-        order.setSpecimenCollectedByName(collectedByName);
+        order.setSpecimenCollectedByName(resolveActor(collectedByName));
         order.setStatus(LabOrderStatus.SPECIMEN_COLLECTED);
 
         if (order.getInvestigation() != null) {
@@ -210,7 +225,7 @@ public class LabOrderService {
             // event — record both timestamps simultaneously.
             order.setSpecimenCollectedAt(now);
             if (request != null && request.getReceivedByName() != null) {
-                order.setSpecimenCollectedByName(request.getReceivedByName());
+                order.setSpecimenCollectedByName(resolveActor(request.getReceivedByName()));
             }
         }
         order.setReceivedByLabAt(now);
@@ -253,7 +268,7 @@ public class LabOrderService {
         Instant now = Instant.now();
         order.setStatus(LabOrderStatus.REJECTED);
         order.setRejectedAt(now);
-        order.setRejectedByName(request.getRejectedByName());
+        order.setRejectedByName(resolveActor(request.getRejectedByName()));
         order.setRejectionReason(request.getReason());
         order.setRejectionNotes(request.getNotes());
 
@@ -262,10 +277,14 @@ public class LabOrderService {
             investigationRepository.save(order.getInvestigation());
         }
 
-        // Fire an alert so the ordering doctor knows to redraw.
+        // Fire an alert so the ordering doctor knows to redraw — its own type
+        // (not CRITICAL_LAB_RESULT) so a redraw notice isn't mis-categorised as a
+        // critical result nor pulled into the critical re-escalation set.
+        EdZone zone = zoneOf(order.getVisit());
+        User zoneDoctor = resolveZoneDoctor(order.getVisit(), zone);
         ClinicalAlert alert = ClinicalAlert.builder()
                 .visit(order.getVisit())
-                .alertType(AlertType.CRITICAL_LAB_RESULT) // re-use type; severity differentiates
+                .alertType(AlertType.LAB_SPECIMEN_REJECTED)
                 .severity(AlertSeverity.HIGH)
                 .title("Lab specimen rejected: " + order.getTestName())
                 .message(String.format(
@@ -274,13 +293,16 @@ public class LabOrderService {
                         request.getReason().name(),
                         request.getNotes() != null && !request.getNotes().isBlank()
                                 ? " (" + request.getNotes() + ")" : ""))
+                .targetZone(zone)
+                .targetDoctor(zoneDoctor)
                 .autoGenerated(true)
                 .build();
-        clinicalAlertRepository.save(alert);
+        alert = clinicalAlertRepository.save(alert);
 
         order = labOrderRepository.save(order);
+        publishOwnedLabAlert(alert, order, zone, zoneDoctor);
         log.warn("Order {} REJECTED by {} — reason: {}",
-                order.getOrderNumber(), request.getRejectedByName(), request.getReason());
+                order.getOrderNumber(), order.getRejectedByName(), request.getReason());
 
         return broadcastAndMap(order);
     }
@@ -318,7 +340,8 @@ public class LabOrderService {
                 LabOrderStatus.AWAITING_VERIFICATION);
 
         Instant now = Instant.now();
-        order.setEnteredByName(request.getEnteredByName());
+        String enteredBy = resolveActor(request.getEnteredByName());
+        order.setEnteredByName(enteredBy);
         order.setResultValue(request.getResultValue());
         order.setResultUnit(request.getResultUnit());
         order.setResultNumeric(request.getResultNumeric());
@@ -382,7 +405,7 @@ public class LabOrderService {
         }
 
         // Direct release (self-verify or low-risk).
-        return finaliseResultedOrder(order, now, request.getEnteredByName(), criticalResult, false);
+        return finaliseResultedOrder(order, now, enteredBy, criticalResult, false);
     }
 
     /**
@@ -456,7 +479,7 @@ public class LabOrderService {
         LabOrder order = findOrderOrThrow(orderId);
         requireStatus(order, LabOrderStatus.AWAITING_VERIFICATION, "verify result");
 
-        String verifier = request != null ? request.getVerifiedByName() : null;
+        String verifier = resolveActor(request != null ? request.getVerifiedByName() : null);
         if (request != null && request.getNotes() != null && !request.getNotes().isBlank()) {
             String existing = order.getNotes() != null ? order.getNotes() + " | " : "";
             order.setNotes(existing + "Verifier note: " + request.getNotes());
@@ -479,12 +502,12 @@ public class LabOrderService {
         order.setVerificationTimeoutAt(null);
         order.setVerificationRejectionCount(order.getVerificationRejectionCount() + 1);
         order.setVerificationRejectionReason(request.getReason());
-        order.setVerificationRejectedByName(request.getRejectedByName());
+        order.setVerificationRejectedByName(resolveActor(request.getRejectedByName()));
         order.setVerificationRejectedAt(now);
 
         order = labOrderRepository.save(order);
         log.warn("Result for order {} REJECTED by senior {} — reason: {}",
-                order.getOrderNumber(), request.getRejectedByName(), request.getReason());
+                order.getOrderNumber(), order.getVerificationRejectedByName(), request.getReason());
 
         return broadcastAndMap(order);
     }
@@ -500,37 +523,40 @@ public class LabOrderService {
         requireStatus(order, LabOrderStatus.AWAITING_VERIFICATION, "override verification");
 
         Instant now = Instant.now();
+        String overrider = resolveActor(request.getOverrideByName());
         order.setVerificationOverride(true);
         order.setVerificationOverrideReason(request.getReason());
-        order.setVerificationOverrideByName(request.getOverrideByName());
+        order.setVerificationOverrideByName(overrider);
         order.setVerificationOverrideAt(now);
 
         log.warn("Verification BYPASSED for order {} by {} — reason: {}",
-                order.getOrderNumber(),
-                request.getOverrideByName(),
-                request.getReason());
+                order.getOrderNumber(), overrider, request.getReason());
 
         // A junior releasing an unverified result without senior sign-off is a
-        // safety-gate bypass — make it auditable/visible as an alert (it was
-        // previously only a WARN log + row columns, invisible on every alert
-        // surface), mirroring the rejectSpecimen pattern.
+        // safety-gate bypass — make it auditable/visible as an OWNED alert (its own
+        // type, not CRITICAL_LAB_RESULT) and push it to the zone/senior/charge nurse.
+        EdZone zone = zoneOf(order.getVisit());
+        User zoneDoctor = resolveZoneDoctor(order.getVisit(), zone);
         ClinicalAlert alert = ClinicalAlert.builder()
                 .visit(order.getVisit())
-                .alertType(AlertType.CRITICAL_LAB_RESULT) // re-use type; title/severity differentiate
+                .alertType(AlertType.LAB_VERIFICATION_OVERRIDDEN)
                 .severity(order.isCritical() ? AlertSeverity.CRITICAL : AlertSeverity.HIGH)
                 .title("Lab verification overridden: " + order.getTestName())
                 .message(String.format(
                         "%s released order %s (%s) WITHOUT senior verification%s. Reason: %s",
-                        request.getOverrideByName(),
+                        overrider,
                         order.getOrderNumber(),
                         order.getTestName(),
                         order.isCritical() ? " [CRITICAL result]" : "",
                         request.getReason()))
+                .targetZone(zone)
+                .targetDoctor(zoneDoctor)
                 .autoGenerated(true)
                 .build();
-        clinicalAlertRepository.save(alert);
+        alert = clinicalAlertRepository.save(alert);
+        publishOwnedLabAlert(alert, order, zone, zoneDoctor);
 
-        return finaliseResultedOrder(order, now, request.getOverrideByName(), null, false);
+        return finaliseResultedOrder(order, now, overrider, null, false);
     }
 
     /**
@@ -601,15 +627,20 @@ public class LabOrderService {
         }
 
         order.setCriticalValueAcknowledgedAt(Instant.now());
+        order.setCriticalValueNotifiedTo(
+                resolveActor(request != null ? request.getAcknowledgedByName() : null));
         if (request != null) {
-            if (request.getAcknowledgedByName() != null) {
-                order.setCriticalValueNotifiedTo(request.getAcknowledgedByName());
-            }
             order.setCriticalReadbackText(request.getReadbackText());
             order.setCriticalContactMethod(request.getContactMethod());
         }
 
         order = labOrderRepository.save(order);
+
+        // Close the escalation loop: acknowledge the open CRITICAL_LAB_RESULT /
+        // CRITICAL_VALUE_UNACKNOWLEDGED alerts for this visit so the time-critical
+        // re-escalation scheduler does NOT re-page all-staff after the doctor has
+        // already responded (avoids false alarms / alert fatigue).
+        acknowledgeOpenCriticalLabAlerts(order);
 
         log.info("Critical value acknowledged for order {} by {} (method: {})",
                 order.getOrderNumber(),
@@ -637,7 +668,7 @@ public class LabOrderService {
         }
 
         order.setCancelledAt(Instant.now());
-        order.setCancelledByName(cancelledByName);
+        order.setCancelledByName(resolveActor(cancelledByName));
         order.setCancelReason(reason);
         order.setStatus(LabOrderStatus.CANCELLED);
 
@@ -648,7 +679,7 @@ public class LabOrderService {
 
         order = labOrderRepository.save(order);
 
-        log.info("Order {} cancelled by {} — reason: {}", order.getOrderNumber(), cancelledByName, reason);
+        log.info("Order {} cancelled by {} — reason: {}", order.getOrderNumber(), order.getCancelledByName(), reason);
 
         return broadcastAndMap(order);
     }
@@ -779,17 +810,166 @@ public class LabOrderService {
     }
 
     private void broadcastLabOrder(LabOrder order, LabOrderResponse response) {
+        final UUID hospitalId = (order.getVisit() != null && order.getVisit().getHospital() != null)
+                ? order.getVisit().getHospital().getId() : null;
+        if (hospitalId == null) return;
+        // Deferred to AFTER COMMIT so a rolled-back result/critical transition never
+        // pushes a phantom (critical-flagged) row to the lab dashboard, matching the
+        // doctor-alert push. Best-effort: a STOMP failure must not break the workflow.
+        Runnable fire = () -> {
+            try {
+                realTimeEventPublisher.publishLabOrder(hospitalId, response);
+            } catch (Exception e) {
+                log.warn("Failed to broadcast lab-order event for {}: {}",
+                        order.getOrderNumber(), e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { fire.run(); }
+            });
+        } else {
+            fire.run();
+        }
+    }
+
+    /**
+     * Prefer the authenticated principal's name over any client-supplied name, so
+     * result authorship / verification / acknowledgement is non-repudiable (the
+     * "who" can't be spoofed by the request body). Falls back to the client value
+     * only when there is no authenticated user (background jobs, tests).
+     */
+    private String resolveActor(String fallback) {
+        String name = formatUserName(resolveCurrentUser());
+        return name != null ? name : fallback;
+    }
+
+    /** Canonical "First Last" (trimmed), falling back to email — mirrors
+     *  InvestigationService.formatUserName so authorship strings are consistent
+     *  and never a bare space. */
+    private String formatUserName(User u) {
+        if (u == null) return null;
+        String first = u.getFirstName() != null ? u.getFirstName().trim() : "";
+        String last = u.getLastName() != null ? u.getLastName().trim() : "";
+        String joined = (first + " " + last).trim();
+        return joined.isEmpty() ? u.getEmail() : joined;
+    }
+
+    /**
+     * The accountable zone doctor for the patient's current zone, or null if none
+     * is on shift / the zone is unknown. Used to OWN lab alerts.
+     */
+    private User resolveZoneDoctor(Visit visit, EdZone zone) {
         try {
-            UUID hospitalId = order.getVisit().getHospital().getId();
-            realTimeEventPublisher.publishLabOrder(hospitalId, response);
+            UUID hospitalId = visit.getHospital() != null ? visit.getHospital().getId() : null;
+            if (hospitalId == null || zone == null) return null;
+            List<User> doctors = shiftAssignmentService.getDoctorsForZone(hospitalId, zone);
+            return doctors.isEmpty() ? null : doctors.get(0);
         } catch (Exception e) {
-            // Never let a broadcast failure roll back the workflow transition.
-            log.warn("Failed to broadcast lab-order event for {}: {}",
+            return null;
+        }
+    }
+
+    private EdZone zoneOf(Visit visit) {
+        return visit.getCurrentTriageCategory() != null
+                ? EdZone.fromTriageCategory(visit.getCurrentTriageCategory())
+                : null;
+    }
+
+    /**
+     * Push a saved lab ClinicalAlert to the people responsible for acting on it —
+     * the zone board, the accountable zone doctor, the ORDERING doctor (resolved
+     * from the linked Investigation), and the charge nurse(s) — over the doctor
+     * alert pipeline (/topic/alerts/*). Deferred to AFTER COMMIT so a rolled-back
+     * result never produces a phantom critical alert, and best-effort so a STOMP
+     * failure never breaks the clinical transaction. Before this, lab alerts were
+     * saved to the DB but only broadcast to the lab-tech inbox topic — the doctor's
+     * alert feed received nothing.
+     */
+    private void publishOwnedLabAlert(ClinicalAlert alert, LabOrder order, EdZone zone, User zoneDoctor) {
+        UUID hospitalId = order.getVisit().getHospital() != null
+                ? order.getVisit().getHospital().getId() : null;
+        if (hospitalId == null || alert == null) return;
+
+        final var resp = ClinicalAlertMapper.toResponse(alert);
+        final EdZone z = zone;
+        final UUID zoneDoctorId = zoneDoctor != null ? zoneDoctor.getId() : null;
+        final UUID orderingDoctorId =
+                (order.getInvestigation() != null && order.getInvestigation().getOrderedBy() != null)
+                        ? order.getInvestigation().getOrderedBy().getId() : null;
+        final List<UUID> chargeNurseIds = shiftAssignmentService.getChargeNurse(hospitalId)
+                .stream().map(User::getId).toList();
+
+        Runnable fire = () -> {
+            try {
+                realTimeEventPublisher.publishHospitalAlert(hospitalId, resp);
+                if (z != null) realTimeEventPublisher.publishZoneAlert(hospitalId, z, resp);
+                if (zoneDoctorId != null) realTimeEventPublisher.publishUserAlert(zoneDoctorId, resp);
+                if (orderingDoctorId != null && !orderingDoctorId.equals(zoneDoctorId)) {
+                    realTimeEventPublisher.publishUserAlert(orderingDoctorId, resp);
+                }
+                for (UUID cnId : chargeNurseIds) realTimeEventPublisher.publishUserAlert(cnId, resp);
+            } catch (Exception e) {
+                log.warn("Failed to publish owned lab alert {} for order {}: {}",
+                        alert.getId(), order.getOrderNumber(), e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { fire.run(); }
+            });
+        } else {
+            fire.run();
+        }
+    }
+
+    /** The authenticated user, or null when there is no security context. */
+    private User resolveCurrentUser() {
+        try {
+            Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+            if (principal instanceof User user) return user;
+        } catch (Exception ignored) { /* no context */ }
+        return null;
+    }
+
+    /**
+     * Acknowledge the open lab critical-value alerts for a visit (CRITICAL_LAB_RESULT
+     * and the monitor's CRITICAL_VALUE_UNACKNOWLEDGED escalation) when the doctor
+     * read-back-acknowledges the value, so the time-critical escalation scheduler
+     * stops re-paging an alert the clinician has already responded to.
+     */
+    private void acknowledgeOpenCriticalLabAlerts(LabOrder order) {
+        try {
+            // The CRITICAL_LAB_RESULT / CRITICAL_VALUE_UNACKNOWLEDGED alerts are
+            // VISIT-scoped (no per-order link). If another resulted critical on the
+            // same visit is still unacknowledged, leave the alerts open so its
+            // escalation is not falsely suppressed — close the loop only once every
+            // critical on the visit has been acknowledged.
+            if (labOrderRepository.hasUnacknowledgedCriticalForVisit(order.getVisit().getId())) {
+                return;
+            }
+            User acker = resolveCurrentUser();
+            List<ClinicalAlert> open = clinicalAlertRepository
+                    .findByVisitIdAndAlertTypeInAndIsAcknowledgedFalseAndIsActiveTrue(
+                            order.getVisit().getId(),
+                            EnumSet.of(AlertType.CRITICAL_LAB_RESULT, AlertType.CRITICAL_VALUE_UNACKNOWLEDGED));
+            for (ClinicalAlert a : open) {
+                a.setAcknowledged(true);
+                a.setAcknowledgedAt(Instant.now());
+                if (acker != null) a.setAcknowledgedBy(acker);
+            }
+            if (!open.isEmpty()) clinicalAlertRepository.saveAll(open);
+        } catch (Exception e) {
+            // Never let alert bookkeeping break the clinical acknowledgement.
+            log.warn("Failed to acknowledge open critical lab alerts for order {}: {}",
                     order.getOrderNumber(), e.getMessage());
         }
     }
 
     private void createCriticalValueAlert(LabOrder order, CriticalValueResult criticalResult) {
+        EdZone zone = zoneOf(order.getVisit());
+        User zoneDoctor = resolveZoneDoctor(order.getVisit(), zone);
+
         ClinicalAlert alert = ClinicalAlert.builder()
                 .visit(order.getVisit())
                 .alertType(AlertType.CRITICAL_LAB_RESULT)
@@ -802,10 +982,16 @@ public class LabOrderService {
                         order.getResultValue(),
                         order.getResultUnit() != null ? order.getResultUnit() : "",
                         criticalResult.description()))
+                .targetZone(zone)
+                .targetDoctor(zoneDoctor)
+                .escalationTier(1)
                 .autoGenerated(true)
                 .build();
 
-        clinicalAlertRepository.save(alert);
+        alert = clinicalAlertRepository.save(alert);
+        // Push to the zone board + accountable/ordering doctor + charge nurse so the
+        // panic value reaches a clinician immediately, not only via the dashboard banner.
+        publishOwnedLabAlert(alert, order, zone, zoneDoctor);
 
         log.warn("CRITICAL LAB ALERT created for order {} — {}", order.getOrderNumber(), criticalResult.description());
     }
@@ -839,9 +1025,8 @@ public class LabOrderService {
                     order.getVisit().getVisitNumber(),
                     investigation.getIsAbnormal() ? " Abnormal value detected." : "");
 
-            EdZone zone = order.getVisit().getCurrentTriageCategory() != null
-                    ? EdZone.fromTriageCategory(order.getVisit().getCurrentTriageCategory())
-                    : null;
+            EdZone zone = zoneOf(order.getVisit());
+            User zoneDoctor = resolveZoneDoctor(order.getVisit(), zone);
 
             ClinicalAlert alert = ClinicalAlert.builder()
                     .visit(order.getVisit())
@@ -850,10 +1035,14 @@ public class LabOrderService {
                     .title(title)
                     .message(message)
                     .targetZone(zone)
+                    .targetDoctor(zoneDoctor)
                     .autoGenerated(true)
                     .build();
 
-            clinicalAlertRepository.save(alert);
+            alert = clinicalAlertRepository.save(alert);
+            // A returned result (even non-critical/abnormal) must reach the doctor's
+            // alert feed — previously this row was saved but never pushed anywhere.
+            publishOwnedLabAlert(alert, order, zone, zoneDoctor);
             log.info("INVESTIGATION_RESULTED alert created for order {} — test:'{}' severity:{}",
                     order.getOrderNumber(), order.getTestName(), severity);
         } catch (Exception e) {

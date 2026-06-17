@@ -83,13 +83,14 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
          * escalated to all-staff before it gets lost.
          *
          * <p>Covers: SEPSIS_SCREENING, ICU_ESCALATION_REQUESTED,
-         * CRITICAL_VALUE_UNACKNOWLEDGED, DETERIORATION_DETECTED.
+         * CRITICAL_VALUE_UNACKNOWLEDGED, CRITICAL_LAB_RESULT, DETERIORATION_DETECTED.
          */
         @Query("SELECT a FROM ClinicalAlert a WHERE a.isActive = true AND a.isAcknowledged = false " +
                         "AND a.alertType IN (" +
                         "    com.smartTriage.smartTriage_server.common.enums.AlertType.SEPSIS_SCREENING, " +
                         "    com.smartTriage.smartTriage_server.common.enums.AlertType.ICU_ESCALATION_REQUESTED, " +
                         "    com.smartTriage.smartTriage_server.common.enums.AlertType.CRITICAL_VALUE_UNACKNOWLEDGED, " +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.CRITICAL_LAB_RESULT, " +
                         "    com.smartTriage.smartTriage_server.common.enums.AlertType.DETERIORATION_DETECTED, " +
                         "    com.smartTriage.smartTriage_server.common.enums.AlertType.FAST_TRACK_ACTIVATED, " +
                         "    com.smartTriage.smartTriage_server.common.enums.AlertType.FAST_TRACK_SLA_BREACH, " +
@@ -150,6 +151,13 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
          *  acknowledge the FAST_TRACK_ACTIVATED alert when the pathway is accepted. */
         java.util.Optional<ClinicalAlert> findFirstByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(
                 UUID visitId, AlertType alertType);
+
+        /** Open (unacknowledged, active) alerts of any of the given types for a visit —
+         *  used to acknowledge the lab CRITICAL_LAB_RESULT / CRITICAL_VALUE_UNACKNOWLEDGED
+         *  alerts when a doctor read-back-acknowledges the critical value, so the
+         *  time-critical escalation loop closes instead of re-paging all-staff. */
+        List<ClinicalAlert> findByVisitIdAndAlertTypeInAndIsAcknowledgedFalseAndIsActiveTrue(
+                UUID visitId, java.util.Collection<AlertType> alertTypes);
 
         /**
          * Find unacknowledged alerts by type for a hospital — for retriage dashboard queries.

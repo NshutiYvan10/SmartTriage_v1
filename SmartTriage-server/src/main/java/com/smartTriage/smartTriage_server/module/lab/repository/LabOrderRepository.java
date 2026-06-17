@@ -54,6 +54,18 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
             @Param("hospitalId") UUID hospitalId);
 
     /**
+     * Does this visit still have ANY resulted critical lab order whose critical
+     * value is unacknowledged? Used so a doctor acknowledging one order's critical
+     * value only closes the (visit-scoped) escalation alerts when no OTHER critical
+     * result on the same visit is still pending — preventing false suppression of a
+     * second critical that nobody has seen.
+     */
+    @Query("SELECT COUNT(o) > 0 FROM LabOrder o WHERE o.visit.id = :visitId " +
+            "AND o.isActive = true AND o.isCritical = true " +
+            "AND o.resultedAt IS NOT NULL AND o.criticalValueAcknowledgedAt IS NULL")
+    boolean hasUnacknowledgedCriticalForVisit(@Param("visitId") UUID visitId);
+
+    /**
      * Active STAT orders (not yet resulted and not cancelled) for a hospital.
      */
     @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
