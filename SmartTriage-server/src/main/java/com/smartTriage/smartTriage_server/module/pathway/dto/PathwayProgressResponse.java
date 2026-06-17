@@ -47,5 +47,6 @@ public class PathwayProgressResponse {
         private Instant completedAt;
         private String completedByName;
         private Integer timeToCompleteMinutes;
+        private String skipReason; // populated when status == "SKIPPED" — why a step was bypassed
     }
 }

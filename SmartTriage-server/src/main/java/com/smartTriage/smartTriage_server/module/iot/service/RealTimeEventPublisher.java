@@ -431,4 +431,38 @@ public class RealTimeEventPublisher {
             fire.run();
         }
     }
+
+    // ====================================================================
+    // CLINICAL PATHWAY DASHBOARD TOPIC
+    // ====================================================================
+
+    /**
+     * Push a lightweight clinical-pathway event to the hospital's dedicated topic.
+     * The pathway panel + active-pathways view subscribe here and re-fetch on any
+     * event (activated / step-completed / step-overdue / completed / abandoned).
+     */
+    public void publishPathwayEvent(UUID hospitalId, Map<String, Object> payload) {
+        String topic = "/topic/pathway/" + hospitalId;
+        messagingTemplate.convertAndSend(topic, (Object) payload);
+        log.debug("Published pathway event {} to {}", payload.get("eventType"), topic);
+    }
+
+    /** After-commit variant (so a refetch sees the saved activation); immediate when no tx. Best-effort. */
+    public void publishPathwayEventAfterCommit(UUID hospitalId, Map<String, Object> payload) {
+        Runnable fire = () -> {
+            try {
+                publishPathwayEvent(hospitalId, payload);
+            } catch (Exception e) {
+                log.warn("Failed to publish pathway event for hospital {}: {}", hospitalId, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override public void afterCommit() { fire.run(); }
+                    });
+        } else {
+            fire.run();
+        }
+    }
 }

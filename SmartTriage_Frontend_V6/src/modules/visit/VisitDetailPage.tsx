@@ -11,13 +11,14 @@ import {
   FlaskConical, Pill, BellRing, Heart, Thermometer,
   Wind, Droplets, Brain, Clock, User, AlertTriangle, ChevronRight,
   Plus, Send, CheckCircle2, XCircle, Eye, Loader2, RefreshCw, LogOut,
-  TrendingUp, Sparkles, Siren, UserCheck, ShieldAlert, Zap,
+  TrendingUp, Sparkles, Siren, UserCheck, ShieldAlert, Zap, Route,
 } from 'lucide-react';
 import { ClinicalSignsTab } from './ClinicalSignsTab';
 import { SepsisPanel } from './SepsisPanel';
 import { FastTrackPanel } from './FastTrackPanel';
 import { HypoglycemiaPanel } from './HypoglycemiaPanel';
 import { IsolationPanel } from './IsolationPanel';
+import { PathwayPanel } from './PathwayPanel';
 import { PrehospitalTab } from '@/modules/ems/PrehospitalTab';
 import { DiagnosisPanel } from './DiagnosisPanel';
 import { InvestigationPanel } from './InvestigationPanel';
@@ -121,6 +122,8 @@ const TABS = [
   { id: 'hypoglycemia', label: 'Glucose', icon: Droplets },
   // Infection isolation — staff/patient exposure control; sits with the other protocols.
   { id: 'isolation', label: 'Isolation', icon: ShieldAlert },
+  // Clinical pathways — protocol checklists (malaria, seizure, obstetric, snakebite, …).
+  { id: 'pathways', label: 'Pathways', icon: Route },
   { id: 'medications', label: 'Medications', icon: Pill },
   { id: 'alerts', label: 'Alerts', icon: BellRing },
   { id: 'disposition', label: 'Disposition', icon: LogOut },
@@ -816,6 +819,7 @@ export function VisitDetailPage() {
           {activeTab === 'fast-track' && <FastTrackPanel visitId={visit.id} onChanged={loadData} />}
           {activeTab === 'hypoglycemia' && <HypoglycemiaPanel visitId={visit.id} onChanged={loadData} />}
           {activeTab === 'isolation' && <IsolationPanel visitId={visit.id} onChanged={loadData} />}
+          {activeTab === 'pathways' && <PathwayPanel visitId={visit.id} onChanged={loadData} />}
           {activeTab === 'medications' && <MedicationsTab medications={medications} showForm={showMedicationForm} setShowForm={setShowMedicationForm} onSubmit={handlePrescribeMedication} onAction={handleMedicationAction} formLoading={formLoading} patient={patient} visit={visit} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'alerts' && <AlertsTab alerts={visitAlerts} onAcknowledge={handleAcknowledgeAlert} visit={visit} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'disposition' && <DispositionTab visit={visit} onDisposition={handleRecordDisposition} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}

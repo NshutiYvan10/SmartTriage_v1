@@ -175,5 +175,18 @@ public enum AlertType {
      */
     ISOLATION_REQUIRED,
     ISOLATION_PLACEMENT_OVERDUE,
-    NOTIFIABLE_DISEASE
+    NOTIFIABLE_DISEASE,
+
+    /**
+     * Clinical-pathway protocol execution.
+     *  - PATHWAY_ACTIVATED: a time-critical care pathway (e.g. status epilepticus,
+     *    severe malaria, obstetric emergency) was activated for a visit — owned by
+     *    the zone doctor + charge nurse and pushed in real time for coordination.
+     *  - PATHWAY_STEP_OVERDUE: a mandatory pathway step passed its protocol timeframe
+     *    without being done/skipped — raised by the pathway compliance monitor.
+     * Dedicated types (not REASSESSMENT_DUE) so they are distinguishable AND picked
+     * up by the time-critical re-escalation loop.
+     */
+    PATHWAY_ACTIVATED,
+    PATHWAY_STEP_OVERDUE
 }

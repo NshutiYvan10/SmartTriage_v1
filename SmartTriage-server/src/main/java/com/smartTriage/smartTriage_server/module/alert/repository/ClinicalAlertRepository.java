@@ -97,7 +97,9 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
                         "    com.smartTriage.smartTriage_server.common.enums.AlertType.HYPOGLYCEMIA_RECHECK_OVERDUE, " +
                         "    com.smartTriage.smartTriage_server.common.enums.AlertType.ISOLATION_REQUIRED, " +
                         "    com.smartTriage.smartTriage_server.common.enums.AlertType.ISOLATION_PLACEMENT_OVERDUE, " +
-                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.NOTIFIABLE_DISEASE) " +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.NOTIFIABLE_DISEASE, " +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.PATHWAY_ACTIVATED, " +
+                        "    com.smartTriage.smartTriage_server.common.enums.AlertType.PATHWAY_STEP_OVERDUE) " +
                         "ORDER BY a.createdAt ASC")
         List<ClinicalAlert> findUnacknowledgedTimeCriticalAlerts();
 

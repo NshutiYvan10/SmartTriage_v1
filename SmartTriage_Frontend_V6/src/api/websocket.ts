@@ -284,6 +284,19 @@ export function subscribeToIsolation(
   return subscribeToTopic(`/topic/isolation/${hospitalId}`, callback);
 }
 
+/**
+ * Subscribe to clinical-pathway events for a hospital. Dedicated topic (same
+ * one-subscriber-per-topic rationale as the other tools). Payload is a small
+ * { eventType, visitId } map (ACTIVATED / STEP_COMPLETED / STEP_SKIPPED /
+ * STEP_OVERDUE / COMPLETED / ABANDONED); refetch on any event.
+ */
+export function subscribeToPathway(
+  hospitalId: string,
+  callback: (event: any) => void
+): () => void {
+  return subscribeToTopic(`/topic/pathway/${hospitalId}`, callback);
+}
+
 /** Subscribe to medication events for a hospital (Workflow 3).
  *  Payload is a MedicationResponse — emitted on prescribe and every
  *  workflow transition (administer/countersign/hold/refuse/cancel).

@@ -15,6 +15,7 @@ import com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeni
 import com.smartTriage.smartTriage_server.module.fasttrack.repository.FastTrackActivationRepository;
 import com.smartTriage.smartTriage_server.module.hypoglycemia.repository.HypoglycemiaEventRepository;
 import com.smartTriage.smartTriage_server.module.isolation.repository.InfectionScreeningRepository;
+import com.smartTriage.smartTriage_server.module.pathway.repository.PathwayActivationRepository;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
@@ -105,6 +106,7 @@ public class ClinicalAuthz {
     private final FastTrackActivationRepository fastTrackActivationRepository;
     private final HypoglycemiaEventRepository hypoglycemiaEventRepository;
     private final InfectionScreeningRepository infectionScreeningRepository;
+    private final PathwayActivationRepository pathwayActivationRepository;
 
     /**
      * @return true if the authenticated user is attached to {@code hospitalId}.
@@ -598,6 +600,22 @@ public class ClinicalAuthz {
                     .orElse(false);
         } catch (Exception e) {
             log.error("canAccessInfectionScreening error for screening {}: {}", screeningId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** Scopes the pathway mutating endpoints (step complete/skip, complete, abandon, progress)
+     *  to the activation's own hospital, so a clinician cannot drive another hospital's
+     *  pathway activation by enumerating an activationId. */
+    @Transactional(readOnly = true)
+    public boolean canAccessPathwayActivation(Authentication authentication, UUID activationId) {
+        try {
+            if (activationId == null) return false;
+            return pathwayActivationRepository.findVisitIdById(activationId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessPathwayActivation error for activation {}: {}", activationId, e.getMessage(), e);
             return false;
         }
     }

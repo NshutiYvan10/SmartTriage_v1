@@ -37,36 +37,47 @@ public class PathwayRecommendationEngine {
         String presenting = normalizeText(triage != null ? triage.getPresentingComplaints() : null);
         String combined = complaint + " " + presenting;
 
-        // Severe Malaria pathway
-        if (containsAny(combined, "malaria", "fever", "rdt positive", "parasitemia", "rigors")) {
+        // Severe Malaria pathway. Malaria-specific signals → HIGH; a bare "fever" is
+        // far too non-specific in an endemic, high-fever-prevalence setting, so it only
+        // yields a low-confidence "screen for malaria" prompt (not a HIGH activation).
+        if (containsAny(combined, "malaria", "rdt positive", "parasitemia")) {
             addRecommendation(recommendations, "MAL-SEV",
-                    "Chief complaint suggests malaria/febrile illness — common in Rwanda",
+                    "Malaria-specific indicators (diagnosis / positive RDT / parasitemia) — severe-malaria pathway indicated",
                     "HIGH", 0.85);
+        } else if (containsAny(combined, "fever", "rigors")) {
+            addRecommendation(recommendations, "MAL-SEV",
+                    "Febrile illness — screen for malaria (RDT) and confirm severity before activating the severe-malaria pathway",
+                    "MEDIUM", 0.45);
         }
 
-        // Head Trauma pathway
+        // Head Trauma pathway. Expanded mechanism/head-injury keyword set; a free-text
+        // head-injury complaint can recommend (at reduced confidence) even without a triage trauma flag.
+        boolean headKeywords = containsAny(combined, "head", "skull", "brain", "concussion", "fall on head",
+                "hit on head", "scalp", "facial", "unconscious", "loss of consciousness",
+                "rta", "road traffic", "motorcycle", "accident", "assault");
         if (triage != null && (triage.getTraumaStatus() != null || triage.isSpecialAcuteTrauma())) {
-            if (containsAny(combined, "head", "skull", "brain", "concussion", "fall on head", "hit on head")) {
+            if (headKeywords) {
                 addRecommendation(recommendations, "TRA-HEAD",
-                        "Trauma with head injury indicators",
-                        "HIGH", 0.90);
+                        "Trauma with head-injury indicators", "HIGH", 0.90);
             } else {
-                // General trauma flagged
                 addRecommendation(recommendations, "TRA-HEAD",
-                        "Acute trauma flagged — assess for head injury component",
-                        "MEDIUM", 0.60);
+                        "Acute trauma flagged — assess for head-injury component", "MEDIUM", 0.60);
             }
+        } else if (headKeywords) {
+            addRecommendation(recommendations, "TRA-HEAD",
+                    "Chief complaint suggests a head injury — assess for the head-trauma pathway", "MEDIUM", 0.55);
         }
 
-        // Acute Coronary Syndrome pathway
+        // Acute Coronary Syndrome — OWNED by the dedicated Fast Track tool (which fires on
+        // atypical ACS too). Steer the clinician there; CARD-ACS is a reference checklist only.
         if (triage != null && triage.isVuChestPain()) {
             addRecommendation(recommendations, "CARD-ACS",
-                    "Chest pain flagged as very urgent sign",
-                    "HIGH", 0.85);
+                    "Chest pain flagged — ACTIVATE FAST TRACK for the owned, SLA-tracked ACS pathway; this checklist is a reference only",
+                    "HIGH", 0.70);
         } else if (containsAny(combined, "chest pain", "cardiac", "heart attack", "myocardial")) {
             addRecommendation(recommendations, "CARD-ACS",
-                    "Chief complaint includes chest pain or cardiac symptoms",
-                    "HIGH", 0.80);
+                    "Cardiac symptoms — use the FAST TRACK tool for ACS (covers atypical presentations); this pathway is a reference checklist",
+                    "HIGH", 0.65);
         }
 
         // Acute Asthma pathway
@@ -99,18 +110,21 @@ public class PathwayRecommendationEngine {
             addRecommendation(recommendations, "OBS-EMERG",
                     "Pregnant patient with emergency signs (vaginal bleeding, abdominal pain, or trauma)",
                     "HIGH", 0.90);
-        } else if (containsAny(combined, "pregnant", "vaginal bleeding", "obstetric", "labour", "labor",
-                "eclampsia", "placenta")) {
+        } else if (containsAny(combined, "pregnant", "vaginal bleeding", "obstetric", "eclampsia",
+                "in labour", "contractions", "antepartum", "postpartum")) {
+            // Dropped bare "labour"/"labor" (matches "laboratory") and "placenta" (low specificity).
             addRecommendation(recommendations, "OBS-EMERG",
                     "Chief complaint suggests obstetric emergency",
                     "HIGH", 0.80);
         }
 
-        // Sepsis Management pathway
-        if (containsAny(combined, "sepsis", "septic", "infection", "high fever")) {
+        // Sepsis — OWNED by the dedicated Sepsis screening tool (qSOFA/SIRS + 1-hr bundle
+        // monitor). Steer there; INF-SEPSIS is a reference checklist only. (Dropped the bare
+        // "infection"/"high fever" triggers — too broad and they double-fired with malaria.)
+        if (containsAny(combined, "sepsis", "septic")) {
             addRecommendation(recommendations, "INF-SEPSIS",
-                    "Clinical indicators suggest possible sepsis",
-                    "HIGH", 0.80);
+                    "Possible sepsis — use the dedicated SEPSIS screening tool (qSOFA/SIRS + bundle monitor); this pathway is a reference checklist only",
+                    "HIGH", 0.65);
         }
 
         // Snakebite Management pathway (common in rural Rwanda)

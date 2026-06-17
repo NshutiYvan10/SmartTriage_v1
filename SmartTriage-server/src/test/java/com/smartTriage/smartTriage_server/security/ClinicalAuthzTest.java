@@ -45,6 +45,7 @@ class ClinicalAuthzTest {
     private com.smartTriage.smartTriage_server.module.fasttrack.repository.FastTrackActivationRepository fastTrackActivationRepository;
     private com.smartTriage.smartTriage_server.module.hypoglycemia.repository.HypoglycemiaEventRepository hypoglycemiaEventRepository;
     private com.smartTriage.smartTriage_server.module.isolation.repository.InfectionScreeningRepository infectionScreeningRepository;
+    private com.smartTriage.smartTriage_server.module.pathway.repository.PathwayActivationRepository pathwayActivationRepository;
     private ClinicalAuthz authz;
 
     private final UUID hospitalId = UUID.randomUUID();
@@ -62,6 +63,8 @@ class ClinicalAuthzTest {
                 mock(com.smartTriage.smartTriage_server.module.hypoglycemia.repository.HypoglycemiaEventRepository.class);
         infectionScreeningRepository =
                 mock(com.smartTriage.smartTriage_server.module.isolation.repository.InfectionScreeningRepository.class);
+        pathwayActivationRepository =
+                mock(com.smartTriage.smartTriage_server.module.pathway.repository.PathwayActivationRepository.class);
         authz = new ClinicalAuthz(
                 userRepository,
                 mock(VisitRepository.class),
@@ -75,7 +78,16 @@ class ClinicalAuthzTest {
                 sepsisScreeningRepository,
                 fastTrackActivationRepository,
                 hypoglycemiaEventRepository,
-                infectionScreeningRepository);
+                infectionScreeningRepository,
+                pathwayActivationRepository);
+    }
+
+    @Test
+    void canAccessPathwayActivation_deniesUnknownActivation() {
+        UUID missing = UUID.randomUUID();
+        when(pathwayActivationRepository.findVisitIdById(missing)).thenReturn(java.util.Optional.empty());
+        assertFalse(authz.canAccessPathwayActivation(
+                authFor(user(Role.DOCTOR, null, hospitalId)), missing));
     }
 
     @Test

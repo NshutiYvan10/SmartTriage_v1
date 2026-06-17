@@ -3,6 +3,8 @@ package com.smartTriage.smartTriage_server.module.pathway.repository;
 import com.smartTriage.smartTriage_server.common.enums.PathwayActivationStatus;
 import com.smartTriage.smartTriage_server.module.pathway.entity.PathwayActivation;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -21,4 +23,11 @@ public interface PathwayActivationRepository extends JpaRepository<PathwayActiva
 
     boolean existsByVisitIdAndPathwayIdAndStatusAndIsActiveTrue(
             UUID visitId, UUID pathwayId, PathwayActivationStatus status);
+
+    /** Projection for hospital-scope authz — the activation's visit id. */
+    @Query("SELECT a.visit.id FROM PathwayActivation a WHERE a.id = :id")
+    Optional<UUID> findVisitIdById(@Param("id") UUID id);
+
+    /** All ACTIVE activations hospital-wide — the compliance monitor scans these for overdue steps. */
+    List<PathwayActivation> findByStatusAndIsActiveTrue(PathwayActivationStatus status);
 }

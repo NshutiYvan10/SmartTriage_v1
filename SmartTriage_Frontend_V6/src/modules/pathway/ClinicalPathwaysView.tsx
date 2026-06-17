@@ -14,54 +14,56 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { pathwayApi } from '@/api/pathway';
 import type {
-  ClinicalPathway, PathwayStep, PathwayActivation,
-  PathwayStepCompletion, PathwayRecommendation,
+  ClinicalPathway, PathwayStep, PathwayActivation, PathwayProgress, PathwayRecommendation,
 } from '@/api/pathway';
+import { ApiError } from '@/api/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
 
-// ── Category badge config ──
+// Live per-step countdown from activation start + the step's protocol timeframe. Only
+// MANDATORY steps flip "overdue" (red) once past their timeframe — mirroring the backend
+// OVERDUE rule (mandatory + past 1x timeframe) so optional steps never raise a false alarm.
+// Uses floored elapsed minutes with a strict > to match the backend boundary EXACTLY
+// (Duration.toMinutes() floors; status flips at minutesSinceActivation > timeframeMinutes),
+// so the red label and the backend OVERDUE status flip at the same instant.
+function stepTimer(
+  activatedAt: string, timeframeMinutes: number | null, isMandatory: boolean,
+): { text: string; overdue: boolean } | null {
+  if (timeframeMinutes == null) return null;
+  const elapsedMin = Math.floor((Date.now() - new Date(activatedAt).getTime()) / 60000);
+  if (elapsedMin > timeframeMinutes) {
+    return isMandatory
+      ? { text: `overdue ${elapsedMin - timeframeMinutes}m`, overdue: true }
+      : { text: 'target passed', overdue: false };
+  }
+  return { text: `due in ${timeframeMinutes - elapsedMin}m`, overdue: false };
+}
+
+// ── Category badge config — keys MUST match the backend PathwayCategory enum
+//    {MALARIA, TRAUMA, RESPIRATORY, CARDIAC, NEUROLOGICAL, OBSTETRIC, PEDIATRIC,
+//     INFECTIOUS_DISEASE, SURGICAL, POISONING, BURNS, SNAKEBITE, OTHER}. ──
+const CATEGORY_FALLBACK = {
+  bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)',
+  text: 'text-slate-600', icon: Stethoscope,
+};
 const CATEGORY_STYLE: Record<string, { bg: string; border: string; text: string; icon: typeof Heart }> = {
-  INFECTIOUS_DISEASE: {
-    bg: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
-    text: 'text-red-600', icon: Bug,
-  },
-  TRAUMA: {
-    bg: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)',
-    text: 'text-amber-600', icon: Siren,
-  },
-  RESPIRATORY: {
-    bg: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)',
-    text: 'text-blue-600', icon: Wind,
-  },
-  NEUROLOGICAL: {
-    bg: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)',
-    text: 'text-purple-600', icon: Brain,
-  },
-  TOXICOLOGY: {
-    bg: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)',
-    text: 'text-emerald-600', icon: Zap,
-  },
-  PEDIATRIC: {
-    bg: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.2)',
-    text: 'text-pink-600', icon: Baby,
-  },
-  CARDIOVASCULAR: {
-    bg: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
-    text: 'text-red-600', icon: Heart,
-  },
-  FLUID_MANAGEMENT: {
-    bg: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)',
-    text: 'text-cyan-600', icon: Droplets,
-  },
-  GENERAL: {
-    bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)',
-    text: 'text-slate-600', icon: Stethoscope,
-  },
+  MALARIA: { bg: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', text: 'text-red-600', icon: Bug },
+  TRAUMA: { bg: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', text: 'text-amber-600', icon: Siren },
+  RESPIRATORY: { bg: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', text: 'text-blue-600', icon: Wind },
+  CARDIAC: { bg: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', text: 'text-red-600', icon: Heart },
+  NEUROLOGICAL: { bg: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)', text: 'text-purple-600', icon: Brain },
+  OBSTETRIC: { bg: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.2)', text: 'text-pink-600', icon: Baby },
+  PEDIATRIC: { bg: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.2)', text: 'text-pink-600', icon: Baby },
+  INFECTIOUS_DISEASE: { bg: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', text: 'text-red-600', icon: Bug },
+  SURGICAL: { bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)', text: 'text-slate-600', icon: Stethoscope },
+  POISONING: { bg: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', text: 'text-emerald-600', icon: Zap },
+  BURNS: { bg: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.2)', text: 'text-orange-600', icon: Zap },
+  SNAKEBITE: { bg: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', text: 'text-emerald-600', icon: Bug },
+  OTHER: { bg: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)', text: 'text-cyan-600', icon: Droplets },
 };
 
 function getCategoryStyle(category: string) {
-  return CATEGORY_STYLE[category] || CATEGORY_STYLE.GENERAL;
+  return CATEGORY_STYLE[category] || CATEGORY_FALLBACK;
 }
 
 type MainView = 'library' | 'active';
@@ -74,8 +76,17 @@ export function ClinicalPathwaysView() {
   // ── Data state ──
   const [pathways, setPathways] = useState<ClinicalPathway[]>([]);
   const [activations, setActivations] = useState<PathwayActivation[]>([]);
+  // Per-activation progress (full step list + live status) — the activation header
+  // endpoint carries NO steps, so the checklist is fetched here keyed by activation id.
+  const [progressMap, setProgressMap] = useState<Record<string, PathwayProgress>>({});
+  // Activation ids whose progress() fetch FAILED — kept distinct from "loaded with 0 steps"
+  // so a failed-to-load checklist is treated as UNKNOWN (block completion, show retry),
+  // never silently as "all steps satisfied" (fail-safe).
+  const [progressErrors, setProgressErrors] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [, setTick] = useState(0); // drives live step countdowns between fetches
 
   // ── View state ──
   const [mainView, setMainView] = useState<MainView>('library');
@@ -109,15 +120,20 @@ export function ClinicalPathwaysView() {
   const [activeVisitIdInput, setActiveVisitIdInput] = useState('');
   const [activeVisitSearched, setActiveVisitSearched] = useState(false);
 
+  const errMsg = (err: unknown, fallback: string) =>
+    err instanceof ApiError ? err.message : err instanceof Error ? err.message : fallback;
+
   // ── Data loading ──
   const loadLibrary = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await pathwayApi.getAll();
       setPathways(data || []);
     } catch (err) {
       console.error('[ClinicalPathwaysView] Failed to load pathways:', err);
       setPathways([]);
+      setError(errMsg(err, 'Failed to load the pathway library.'));
     } finally {
       setLoading(false);
     }
@@ -126,14 +142,36 @@ export function ClinicalPathwaysView() {
   const loadActivePathways = useCallback(async (visitId: string) => {
     if (!visitId.trim()) return;
     setLoading(true);
+    setError(null);
     try {
       const data = await pathwayApi.getActive(visitId.trim());
-      setActivations(data || []);
+      const acts = data || [];
+      setActivations(acts);
+      // Activation headers carry no steps — fetch each activation's live progress checklist.
+      // A per-activation failure is recorded (not swallowed) so the UI can block completion
+      // and offer a retry rather than presenting an unknown checklist as complete-able.
+      const entries = await Promise.all(
+        acts.map(async (a) => {
+          try { return [a.id, await pathwayApi.progress(a.id), false] as const; }
+          catch { return [a.id, null, true] as const; }
+        }),
+      );
+      const map: Record<string, PathwayProgress> = {};
+      const errs = new Set<string>();
+      for (const [id, p, failed] of entries) {
+        if (p) map[id] = p;
+        if (failed) errs.add(id);
+      }
+      setProgressMap(map);
+      setProgressErrors(errs);
       setActiveVisitSearched(true);
     } catch (err) {
       console.error('[ClinicalPathwaysView] Failed to load active pathways:', err);
       setActivations([]);
+      setProgressMap({});
+      setProgressErrors(new Set());
       setActiveVisitSearched(true);
+      setError(errMsg(err, 'Failed to load active pathways for this visit.'));
     } finally {
       setLoading(false);
     }
@@ -142,6 +180,12 @@ export function ClinicalPathwaysView() {
   useEffect(() => {
     if (mainView === 'library') loadLibrary();
   }, [mainView, loadLibrary]);
+
+  // Live tick so per-step countdowns advance between server fetches.
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 30000);
+    return () => clearInterval(t);
+  }, []);
 
   // ── Load steps for a pathway ──
   const togglePathwaySteps = useCallback(async (pathwayId: string) => {
@@ -160,13 +204,19 @@ export function ClinicalPathwaysView() {
     }
   }, [expandedPathwayId, pathwaySteps]);
 
-  // ── Refresh progress for an activation ──
+  // ── Refresh one activation's step checklist (after a step complete/skip) ──
   const refreshProgress = useCallback(async (activationId: string) => {
     try {
-      const updated = await pathwayApi.getProgress(activationId);
-      setActivations((prev) => prev.map((a) => a.id === activationId ? updated : a));
+      const updated = await pathwayApi.progress(activationId);
+      setProgressMap((prev) => ({ ...prev, [activationId]: updated }));
+      setProgressErrors((prev) => {
+        if (!prev.has(activationId)) return prev;
+        const next = new Set(prev); next.delete(activationId); return next;
+      });
     } catch (err) {
       console.error(err);
+      setProgressErrors((prev) => new Set(prev).add(activationId));
+      setError(errMsg(err, 'Failed to refresh pathway progress.'));
     }
   }, []);
 
@@ -193,6 +243,7 @@ export function ClinicalPathwaysView() {
   const submitActivate = async () => {
     if (!activatePathwayId || !activateVisitId.trim()) return;
     setActivateSubmitting(true);
+    setError(null);
     try {
       await pathwayApi.activate({ visitId: activateVisitId.trim(), pathwayId: activatePathwayId });
       setActivateDialogOpen(false);
@@ -200,16 +251,17 @@ export function ClinicalPathwaysView() {
       setMainView('active');
       setActiveVisitIdInput(activateVisitId.trim());
       loadActivePathways(activateVisitId.trim());
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); setError(errMsg(err, 'Failed to activate pathway.')); }
     finally { setActivateSubmitting(false); }
   };
 
   const handleCompleteStep = async (activationId: string, stepId: string) => {
     setActionLoading(`${activationId}-${stepId}`);
+    setError(null);
     try {
       await pathwayApi.completeStep(activationId, stepId);
-      refreshProgress(activationId);
-    } catch (err) { console.error(err); }
+      await refreshProgress(activationId);
+    } catch (err) { console.error(err); setError(errMsg(err, 'Failed to complete step.')); }
     finally { setActionLoading(null); }
   };
 
@@ -224,20 +276,22 @@ export function ClinicalPathwaysView() {
   const submitSkip = async () => {
     if (!skipActivationId || !skipStepId || !skipReason.trim()) return;
     setSkipSubmitting(true);
+    setError(null);
     try {
       await pathwayApi.skipStep(skipActivationId, skipStepId, { reason: skipReason });
       setSkipDialogOpen(false);
-      refreshProgress(skipActivationId);
-    } catch (err) { console.error(err); }
+      await refreshProgress(skipActivationId);
+    } catch (err) { console.error(err); setError(errMsg(err, 'Failed to skip step.')); }
     finally { setSkipSubmitting(false); }
   };
 
   const handleCompletePathway = async (activationId: string) => {
     setActionLoading(activationId);
+    setError(null);
     try {
       await pathwayApi.completePathway(activationId);
       if (activeVisitIdInput.trim()) loadActivePathways(activeVisitIdInput.trim());
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); setError(errMsg(err, 'Failed to complete pathway.')); }
     finally { setActionLoading(null); }
   };
 
@@ -250,19 +304,24 @@ export function ClinicalPathwaysView() {
   const submitAbandon = async () => {
     if (!abandonActivationId || !abandonReason.trim()) return;
     setAbandonSubmitting(true);
+    setError(null);
     try {
       await pathwayApi.abandonPathway(abandonActivationId, abandonReason);
       setAbandonDialogOpen(false);
       if (activeVisitIdInput.trim()) loadActivePathways(activeVisitIdInput.trim());
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); setError(errMsg(err, 'Failed to abandon pathway.')); }
     finally { setAbandonSubmitting(false); }
   };
 
-  // ── Compute progress for an activation ──
-  const getProgress = (activation: PathwayActivation) => {
-    const total = activation.steps?.length || 0;
-    const completed = activation.steps?.filter((s) => s.completedAt || s.wasSkipped).length || 0;
-    return { total, completed, percent: total > 0 ? Math.round((completed / total) * 100) : 0 };
+  // ── Derive a step-count summary from an activation's live progress (no phantom steps) ──
+  const summarize = (activationId: string) => {
+    const p = progressMap[activationId];
+    if (!p) return { total: 0, completed: 0, percent: 0, pendingMandatory: 0, overdue: 0 };
+    const completed = p.completedSteps + p.skippedSteps;
+    const pendingMandatory = p.steps.filter(
+      (s) => s.isMandatory && (s.status === 'PENDING' || s.status === 'OVERDUE')).length;
+    const overdue = p.steps.filter((s) => s.status === 'OVERDUE').length;
+    return { total: p.totalSteps, completed, percent: Math.round(p.completionPercentage), pendingMandatory, overdue };
   };
 
   return (
@@ -364,6 +423,14 @@ export function ClinicalPathwaysView() {
             )}
           </div>
         </div>
+
+        {/* ── Error banner (no longer swallowed) ── */}
+        {error && (
+          <div className="rounded-2xl px-4 py-3 flex items-start gap-2.5 animate-fade-up bg-red-500/10 border border-red-500/20">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+            <p className="text-[12px] font-semibold text-red-500">{error}</p>
+          </div>
+        )}
 
         {/* ═══════════════════════════════════════════════════════════
            LIBRARY VIEW
@@ -573,12 +640,18 @@ export function ClinicalPathwaysView() {
             ) : (
               <div className="space-y-4">
                 {activations.map((activation, idx) => {
-                  const progress = getProgress(activation);
+                  const p = progressMap[activation.id];
+                  const summary = summarize(activation.id);
                   const isExpanded = expandedActivationId === activation.id;
                   const isCompleted = activation.status === 'COMPLETED';
                   const isAbandoned = activation.status === 'ABANDONED';
                   const isActive = activation.status === 'ACTIVE';
-                  const allStepsDone = progress.completed === progress.total && progress.total > 0;
+                  // A pathway may be completed once no mandatory step is still outstanding —
+                  // matching the backend rule (optional steps need not be done first). Requires a
+                  // LOADED checklist: if progress failed to load (!p), the mandatory state is
+                  // UNKNOWN, so block completion rather than presenting it as done (fail-safe).
+                  const canComplete = !!p && summary.pendingMandatory === 0;
+                  const progressFailed = !p && progressErrors.has(activation.id);
 
                   return (
                     <div
@@ -624,6 +697,11 @@ export function ClinicalPathwaysView() {
                               >
                                 {activation.status}
                               </span>
+                              {isActive && summary.overdue > 0 && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider bg-red-600/15 text-red-600 border border-red-600/25 animate-pulse">
+                                  <AlertTriangle className="w-3 h-3" /> {summary.overdue} overdue
+                                </span>
+                              )}
                             </div>
 
                             {/* Meta */}
@@ -643,20 +721,27 @@ export function ClinicalPathwaysView() {
                               )}
                             </div>
 
-                            {/* Progress bar */}
-                            <div className="flex items-center gap-3">
-                              <div className={`flex-1 h-2.5 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-100'}`}>
-                                <div
-                                  className={`h-full rounded-full transition-all duration-500 ${
-                                    isCompleted ? 'bg-emerald-500' : isAbandoned ? 'bg-red-400' : 'bg-gradient-to-r from-cyan-500 to-cyan-400'
-                                  }`}
-                                  style={{ width: `${progress.percent}%` }}
-                                />
+                            {/* Progress bar — or an explicit "unavailable" state if the checklist failed to load */}
+                            {progressFailed ? (
+                              <div className="flex items-center gap-2 text-[11px] font-bold text-red-500">
+                                <AlertTriangle className="w-3.5 h-3.5" />
+                                Step status unavailable — refresh
                               </div>
-                              <span className={`text-[11px] font-bold whitespace-nowrap ${text.heading}`}>
-                                {progress.completed}/{progress.total} steps ({progress.percent}%)
-                              </span>
-                            </div>
+                            ) : (
+                              <div className="flex items-center gap-3">
+                                <div className={`flex-1 h-2.5 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-100'}`}>
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-500 ${
+                                      isCompleted ? 'bg-emerald-500' : isAbandoned ? 'bg-red-400' : 'bg-gradient-to-r from-cyan-500 to-cyan-400'
+                                    }`}
+                                    style={{ width: `${summary.percent}%` }}
+                                  />
+                                </div>
+                                <span className={`text-[11px] font-bold whitespace-nowrap ${text.heading}`}>
+                                  {summary.completed}/{summary.total} steps ({summary.percent}%)
+                                </span>
+                              </div>
+                            )}
                           </div>
 
                           {/* Actions */}
@@ -670,14 +755,17 @@ export function ClinicalPathwaysView() {
                               {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                               {isExpanded ? 'Collapse' : 'Steps'}
                             </button>
-                            {isActive && allStepsDone && (
+                            {isActive && (
                               <button
                                 onClick={() => handleCompletePathway(activation.id)}
-                                disabled={actionLoading === activation.id}
-                                className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:shadow-lg hover:-translate-y-0.5 rounded-xl transition-all shadow-md shadow-emerald-500/15 disabled:opacity-50"
+                                disabled={actionLoading === activation.id || !canComplete}
+                                title={canComplete ? 'Complete pathway'
+                                  : progressFailed ? 'Step checklist failed to load — refresh before completing'
+                                  : `${summary.pendingMandatory} mandatory step(s) outstanding`}
+                                className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:shadow-lg hover:-translate-y-0.5 rounded-xl transition-all shadow-md shadow-emerald-500/15 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                               >
                                 {actionLoading === activation.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Flag className="w-3.5 h-3.5" />}
-                                Complete
+                                Complete{!canComplete && !progressFailed ? ` (${summary.pendingMandatory})` : ''}
                               </button>
                             )}
                             {isActive && (
@@ -694,8 +782,8 @@ export function ClinicalPathwaysView() {
                         </div>
                       </div>
 
-                      {/* Expanded step checklist */}
-                      {isExpanded && activation.steps && (
+                      {/* Expanded step checklist — driven by live per-activation progress */}
+                      {isExpanded && (
                         <div className="px-5 pb-5">
                           <div
                             className="rounded-xl p-4"
@@ -710,15 +798,39 @@ export function ClinicalPathwaysView() {
                                 Step Checklist
                               </span>
                             </div>
+                            {!p ? (
+                              progressFailed ? (
+                                <div className="flex items-center justify-between gap-3 py-2">
+                                  <p className="text-[11px] font-semibold text-red-500 flex items-center gap-1.5">
+                                    <AlertTriangle className="w-3.5 h-3.5" /> Couldn't load this pathway's step checklist.
+                                  </p>
+                                  <button
+                                    onClick={() => refreshProgress(activation.id)}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20 transition-colors"
+                                  >
+                                    <RefreshCw className="w-3 h-3" /> Retry
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-center py-4">
+                                  <Loader2 className="w-5 h-5 animate-spin text-cyan-500" />
+                                </div>
+                              )
+                            ) : p.steps.length === 0 ? (
+                              <p className={`text-[11px] font-medium ${text.muted}`}>This pathway has no steps configured.</p>
+                            ) : (
                             <div className="space-y-2">
-                              {activation.steps.map((step) => {
-                                const isDone = !!step.completedAt;
-                                const isSkipped = step.wasSkipped;
+                              {p.steps.map((step) => {
+                                const isDone = step.status === 'COMPLETED';
+                                const isSkipped = step.status === 'SKIPPED';
+                                const isOverdue = step.status === 'OVERDUE';
                                 const stepLoading = actionLoading === `${activation.id}-${step.stepId}`;
+                                const timer = (!isDone && !isSkipped)
+                                  ? stepTimer(activation.activatedAt, step.timeframeMinutes, step.isMandatory) : null;
 
                                 return (
                                   <div
-                                    key={step.id}
+                                    key={step.stepId}
                                     className={`flex items-start gap-3 p-3 rounded-xl transition-all ${
                                       isDone || isSkipped ? 'opacity-70' : ''
                                     }`}
@@ -726,13 +838,17 @@ export function ClinicalPathwaysView() {
                                   >
                                     {/* Status indicator */}
                                     <div className="flex-shrink-0 pt-0.5">
-                                      {isDone && !isSkipped ? (
+                                      {isDone ? (
                                         <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                                           <CheckCircle className="w-4 h-4 text-emerald-500" />
                                         </div>
                                       ) : isSkipped ? (
                                         <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
                                           <SkipForward className="w-4 h-4 text-amber-500" />
+                                        </div>
+                                      ) : isOverdue ? (
+                                        <div className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center">
+                                          <AlertTriangle className="w-4 h-4 text-red-500" />
                                         </div>
                                       ) : (
                                         <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? 'bg-white/10' : 'bg-slate-100'}`}>
@@ -743,9 +859,21 @@ export function ClinicalPathwaysView() {
 
                                     {/* Content */}
                                     <div className="flex-1 min-w-0">
-                                      <p className={`text-[12px] font-bold ${isDone || isSkipped ? 'line-through' : ''} ${text.heading}`}>
-                                        {step.stepTitle}
-                                      </p>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <p className={`text-[12px] font-bold ${isDone || isSkipped ? 'line-through' : ''} ${text.heading}`}>
+                                          {step.stepOrder}. {step.stepTitle}
+                                        </p>
+                                        {step.isMandatory && (
+                                          <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/15">
+                                            Required
+                                          </span>
+                                        )}
+                                        {timer && (
+                                          <span className={`text-[9px] font-bold inline-flex items-center gap-0.5 ${timer.overdue ? 'text-red-600' : 'text-amber-500'}`}>
+                                            <Clock className="w-2.5 h-2.5" /> {timer.text}
+                                          </span>
+                                        )}
+                                      </div>
                                       {isDone && step.completedByName && (
                                         <p className={`text-[10px] font-medium mt-0.5 ${text.muted}`}>
                                           Completed by {step.completedByName}
@@ -785,6 +913,7 @@ export function ClinicalPathwaysView() {
                                 );
                               })}
                             </div>
+                            )}
                           </div>
                         </div>
                       )}
