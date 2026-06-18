@@ -2,12 +2,14 @@ package com.smartTriage.smartTriage_server.module.documentation.entity;
 
 import com.smartTriage.smartTriage_server.common.entity.BaseEntity;
 import com.smartTriage.smartTriage_server.common.enums.ClinicalDocumentType;
+import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.vital.entity.VitalSigns;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.UUID;
 
 /**
@@ -133,4 +135,62 @@ public class ClinicalDocument extends BaseEntity {
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
+
+    // ====================================================================
+    // SIGNED-DOCUMENT IMMUTABILITY GUARD (legal record)
+    // ====================================================================
+    // Once a document is signed it is a legal record: its content and identity
+    // must never change and it must never be (soft- or hard-) deleted. The ONLY
+    // permitted post-sign mutation is adding a single co-signature. Corrections
+    // go through amendDocument(), which writes a NEW linked addendum and leaves
+    // the original untouched. Enforced here at the persistence layer — defence in
+    // depth alongside the V85 DB trigger — so that NO code path (not merely the
+    // absence of an edit endpoint) can silently alter or remove a signed record.
+
+    @Transient
+    private boolean wasSignedOnLoad;
+    @Transient
+    private Object[] protectedSnapshot;
+
+    @PostLoad
+    void captureImmutabilitySnapshot() {
+        this.wasSignedOnLoad = this.isSigned;
+        this.protectedSnapshot = protectedState();
+    }
+
+    @PreUpdate
+    void guardSignedImmutability() {
+        // Allow the unsigned -> signed transition and the one-time co-signature;
+        // block any change to a document that was ALREADY signed when loaded.
+        if (wasSignedOnLoad && !Arrays.equals(protectedSnapshot, protectedState())) {
+            throw new ClinicalBusinessException(
+                    "Signed clinical document " + getId() + " is immutable: its content cannot be "
+                    + "edited or deleted. Add a co-signature, or create an amendment for corrections.");
+        }
+    }
+
+    @PreRemove
+    void guardSignedDeletion() {
+        if (this.isSigned) {
+            throw new ClinicalBusinessException(
+                    "Signed clinical document " + getId() + " cannot be deleted. "
+                    + "Create an amendment instead — the legal record must be preserved.");
+        }
+    }
+
+    /**
+     * The fields that are frozen once a document is signed. Co-signature fields and
+     * framework audit columns (updatedAt/version/lastModifiedBy) are deliberately
+     * excluded — adding a co-signature is the one permitted post-sign change.
+     */
+    private Object[] protectedState() {
+        return new Object[] {
+                documentType, title, content, notes,
+                authorUserId, authorName, authorRole, authorLicenseNumber,
+                signedAt, isSigned, isActive(), isAmendment, amendmentReason, templateUsed,
+                visit != null ? visit.getId() : null,
+                vitalSigns != null ? vitalSigns.getId() : null,
+                originalDocument != null ? originalDocument.getId() : null,
+        };
+    }
 }
