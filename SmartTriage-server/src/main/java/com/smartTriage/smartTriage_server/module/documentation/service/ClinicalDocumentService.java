@@ -1,7 +1,9 @@
 package com.smartTriage.smartTriage_server.module.documentation.service;
 
 import com.smartTriage.smartTriage_server.common.enums.ClinicalDocumentType;
+import com.smartTriage.smartTriage_server.common.enums.Designation;
 import com.smartTriage.smartTriage_server.common.enums.NoteType;
+import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.clinical.entity.ClinicalNote;
@@ -71,6 +73,15 @@ public class ClinicalDocumentService {
     private static final DateTimeFormatter DATETIME_FMT = DateTimeFormatter
             .ofPattern("yyyy-MM-dd HH:mm")
             .withZone(ZoneId.of("Africa/Kigali"));
+
+    /**
+     * Doctor designations that may provide a supervisory co-signature — qualified
+     * (non-trainee) clinicians. INTERN and RESIDENT are trainees and cannot
+     * supervise; an undesignated / UNSPECIFIED account also cannot co-sign.
+     */
+    private static final java.util.Set<Designation> SUPERVISING_DESIGNATIONS = java.util.EnumSet.of(
+            Designation.ED_HEAD, Designation.CONSULTANT,
+            Designation.SENIOR_MEDICAL_OFFICER, Designation.MEDICAL_OFFICER);
 
     // ====================================================================
     // CREATE DOCUMENT
@@ -167,6 +178,21 @@ public class ClinicalDocumentService {
         // The co-signature is the authenticated user — recorded with their own
         // id, name, role and license. Never a client-supplied name.
         User coSigner = resolveCurrentUserOrThrow();
+
+        // A co-signature is a SUPERVISOR attesting to a (typically junior) author's
+        // note. It must be a DIFFERENT person from the author — you cannot approve
+        // your own document — and that person must be a supervising clinician.
+        if (coSigner.getId() != null && coSigner.getId().equals(document.getAuthorUserId())) {
+            throw new ClinicalBusinessException(
+                    "You cannot co-sign your own document. A co-signature must be provided by a "
+                    + "different, supervising clinician.");
+        }
+        if (!isSupervisingClinician(coSigner)) {
+            throw new ClinicalBusinessException(
+                    "Co-signing requires a supervising clinician (Medical Officer, Senior Medical "
+                    + "Officer, Consultant or ED Head). Your account does not hold a supervisory "
+                    + "designation, so it cannot provide a supervisory co-signature.");
+        }
 
         document.setCoSignedByUserId(coSigner.getId());
         document.setCoSignedByName(displayNameOf(coSigner));
@@ -618,6 +644,13 @@ public class ClinicalDocumentService {
 
     private static String roleOf(User user) {
         return user.getRole() != null ? user.getRole().name() : null;
+    }
+
+    /** A qualified, non-trainee doctor who may provide a supervisory co-signature. */
+    private static boolean isSupervisingClinician(User user) {
+        return user.getRole() == Role.DOCTOR
+                && user.getDesignation() != null
+                && SUPERVISING_DESIGNATIONS.contains(user.getDesignation());
     }
 
     private static String displayNameOf(User user) {

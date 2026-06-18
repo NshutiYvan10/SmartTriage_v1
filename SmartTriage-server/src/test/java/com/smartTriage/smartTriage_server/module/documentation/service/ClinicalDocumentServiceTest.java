@@ -1,6 +1,7 @@
 package com.smartTriage.smartTriage_server.module.documentation.service;
 
 import com.smartTriage.smartTriage_server.common.enums.ClinicalDocumentType;
+import com.smartTriage.smartTriage_server.common.enums.Designation;
 import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.module.clinical.repository.ClinicalNoteRepository;
 import com.smartTriage.smartTriage_server.module.documentation.dto.AmendDocumentRequest;
@@ -198,6 +199,7 @@ class ClinicalDocumentServiceTest {
         when(documentRepository.save(any(ClinicalDocument.class))).thenAnswer(i -> i.getArgument(0));
 
         User supervisor = user("Carol", "Senior", Role.DOCTOR, "RW-DOC-555");
+        supervisor.setDesignation(Designation.CONSULTANT); // a supervising clinician
         authenticateAs(supervisor);
 
         ClinicalDocumentResponse resp = service.coSignDocument(docId);
@@ -207,6 +209,44 @@ class ClinicalDocumentServiceTest {
         assertThat(resp.getCoSignedByRole()).isEqualTo("DOCTOR");
         assertThat(resp.getCoSignedByLicenseNumber()).isEqualTo("RW-DOC-555");
         assertThat(resp.getCoSignedAt()).isNotNull();
+    }
+
+    @Test
+    void coSignDocument_byTheAuthorThemselves_isRejected() {
+        // Alice authored AND signed the document (authorUserId = Alice).
+        User alice = user("Alice", "Mwangi", Role.DOCTOR, "RW-DOC-001");
+        alice.setDesignation(Designation.CONSULTANT); // even a supervisor can't self-co-sign
+        ClinicalDocument doc = unsignedDoc(alice);
+        UUID docId = UUID.randomUUID();
+        doc.setId(docId);
+        doc.setSigned(true);
+        when(documentRepository.findByIdAndIsActiveTrue(docId)).thenReturn(Optional.of(doc));
+        authenticateAs(alice);
+
+        assertThatThrownBy(() -> service.coSignDocument(docId))
+                .isInstanceOf(com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException.class)
+                .hasMessageContaining("cannot co-sign your own");
+        verify(documentRepository, never()).save(any());
+    }
+
+    @Test
+    void coSignDocument_byNonSupervisingClinician_isRejected() {
+        User alice = user("Alice", "Mwangi", Role.DOCTOR, "RW-DOC-001");
+        ClinicalDocument doc = unsignedDoc(alice);
+        UUID docId = UUID.randomUUID();
+        doc.setId(docId);
+        doc.setSigned(true);
+        when(documentRepository.findByIdAndIsActiveTrue(docId)).thenReturn(Optional.of(doc));
+
+        // A trainee (Resident) is not a supervising clinician and cannot co-sign.
+        User resident = user("Dan", "Trainee", Role.DOCTOR, "RW-DOC-900");
+        resident.setDesignation(Designation.RESIDENT);
+        authenticateAs(resident);
+
+        assertThatThrownBy(() -> service.coSignDocument(docId))
+                .isInstanceOf(com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException.class)
+                .hasMessageContaining("supervising clinician");
+        verify(documentRepository, never()).save(any());
     }
 
     @Test

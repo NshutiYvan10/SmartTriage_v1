@@ -54,7 +54,8 @@ public class ClinicalDocumentController {
     // ====================================================================
 
     @PutMapping("/{id}/sign")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessDocument(authentication, #id)")
     public ResponseEntity<ApiResponse<ClinicalDocumentResponse>> signDocument(@PathVariable UUID id) {
         // The signer is the authenticated user — no signer name/license is accepted
         // from the request body. No one can sign as another person.
@@ -67,7 +68,7 @@ public class ClinicalDocumentController {
     // ====================================================================
 
     @PutMapping("/{id}/co-sign")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR')")
+    @PreAuthorize("hasRole('DOCTOR') and @clinicalAuthz.canAccessDocument(authentication, #id)")
     public ResponseEntity<ApiResponse<ClinicalDocumentResponse>> coSignDocument(@PathVariable UUID id) {
         // The co-signer is the authenticated user — recorded from their session.
         ClinicalDocumentResponse response = documentService.coSignDocument(id);
@@ -79,7 +80,8 @@ public class ClinicalDocumentController {
     // ====================================================================
 
     @PostMapping("/{id}/amend")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessDocument(authentication, #id)")
     public ResponseEntity<ApiResponse<ClinicalDocumentResponse>> amendDocument(
             @PathVariable UUID id,
             @Valid @RequestBody AmendDocumentRequest request) {
