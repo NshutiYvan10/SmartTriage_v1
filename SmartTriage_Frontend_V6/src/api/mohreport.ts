@@ -1,4 +1,4 @@
-import { get, post, put } from './client';
+import { get, post, put, downloadBlob, saveBlob } from './client';
 
 export interface MohReport {
   id: string;
@@ -29,4 +29,9 @@ export const mohReportApi = {
   reject: (id: string, reason: string) => put<MohReport>(`/moh-reports/${id}/reject`, { reason }),
   getForHospital: (hospitalId: string, page = 0) => get<{ content: MohReport[]; totalElements: number }>(`/moh-reports/hospital/${hospitalId}?page=${page}&size=20`),
   get: (id: string) => get<MohReport>(`/moh-reports/${id}`),
+  /** Download the statutory MoH / HMIS return as a PDF (de-identified aggregates). */
+  downloadPdf: async (id: string) => {
+    const { blob, filename } = await downloadBlob(`/moh-reports/${id}/pdf`, `moh-report-${id}.pdf`);
+    saveBlob(blob, filename);
+  },
 };

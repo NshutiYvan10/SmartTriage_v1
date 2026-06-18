@@ -8,7 +8,7 @@ import {
   FileBarChart, Plus, Send, CheckCircle2, XCircle, ChevronDown,
   ChevronRight, Loader2, RefreshCw, Calendar, Clock, Users,
   Activity, Heart, Baby, Bug, Building2, ArrowRight, AlertTriangle,
-  BarChart3, ShieldCheck,
+  BarChart3, ShieldCheck, Download,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
@@ -18,24 +18,26 @@ import { format } from 'date-fns';
 
 /* -- Constants ---------------------------------------------------- */
 
+/* Values MUST match the backend MohReportType enum exactly — a mismatch makes
+   the Generate request fail to deserialize (HTTP 400). */
 const REPORT_TYPES = [
-  { value: 'MONTHLY_SUMMARY', label: 'Monthly Summary' },
-  { value: 'QUARTERLY_SUMMARY', label: 'Quarterly Summary' },
-  { value: 'ANNUAL_SUMMARY', label: 'Annual Summary' },
-  { value: 'DISEASE_SURVEILLANCE', label: 'Disease Surveillance' },
+  { value: 'DAILY_SUMMARY', label: 'Daily Summary' },
+  { value: 'WEEKLY_SURVEILLANCE', label: 'Weekly Surveillance' },
+  { value: 'MONTHLY_STATISTICS', label: 'Monthly Statistics' },
+  { value: 'QUARTERLY_REVIEW', label: 'Quarterly Review' },
+  { value: 'ANNUAL_REPORT', label: 'Annual Report' },
+  { value: 'OUTBREAK_NOTIFICATION', label: 'Outbreak Notification' },
   { value: 'MORTALITY_REVIEW', label: 'Mortality Review' },
-  { value: 'QUALITY_INDICATOR', label: 'Quality Indicator' },
-  { value: 'CUSTOM', label: 'Custom' },
 ] as const;
 
 const REPORT_TYPE_CONFIG: Record<string, { color: string; bg: string }> = {
-  MONTHLY_SUMMARY:      { color: 'text-blue-600',    bg: 'rgba(59,130,246,0.10)' },
-  QUARTERLY_SUMMARY:    { color: 'text-indigo-600',  bg: 'rgba(99,102,241,0.10)' },
-  ANNUAL_SUMMARY:       { color: 'text-violet-600',  bg: 'rgba(139,92,246,0.10)' },
-  DISEASE_SURVEILLANCE: { color: 'text-amber-600',   bg: 'rgba(245,158,11,0.10)' },
-  MORTALITY_REVIEW:     { color: 'text-red-600',     bg: 'rgba(239,68,68,0.10)' },
-  QUALITY_INDICATOR:    { color: 'text-emerald-600', bg: 'rgba(34,197,94,0.10)' },
-  CUSTOM:               { color: 'text-slate-600',   bg: 'rgba(100,116,139,0.10)' },
+  DAILY_SUMMARY:         { color: 'text-blue-600',    bg: 'rgba(59,130,246,0.10)' },
+  WEEKLY_SURVEILLANCE:   { color: 'text-cyan-600',    bg: 'rgba(6,182,212,0.10)' },
+  MONTHLY_STATISTICS:    { color: 'text-indigo-600',  bg: 'rgba(99,102,241,0.10)' },
+  QUARTERLY_REVIEW:      { color: 'text-violet-600',  bg: 'rgba(139,92,246,0.10)' },
+  ANNUAL_REPORT:         { color: 'text-emerald-600', bg: 'rgba(34,197,94,0.10)' },
+  OUTBREAK_NOTIFICATION: { color: 'text-amber-600',   bg: 'rgba(245,158,11,0.10)' },
+  MORTALITY_REVIEW:      { color: 'text-red-600',     bg: 'rgba(239,68,68,0.10)' },
 };
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
@@ -68,7 +70,7 @@ export function MohReportView() {
   const [showForm, setShowForm] = useState(false);
 
   /* Generate form */
-  const [formType, setFormType] = useState('MONTHLY_SUMMARY');
+  const [formType, setFormType] = useState('MONTHLY_STATISTICS');
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
 
@@ -138,6 +140,13 @@ export function MohReportView() {
       await loadReports();
     } catch { /* */ } finally { setActionLoading(null); }
   }, [rejectTarget, rejectReason, loadReports]);
+
+  const handleDownloadPdf = useCallback(async (id: string) => {
+    setActionLoading(`pdf-${id}`);
+    try {
+      await mohReportApi.downloadPdf(id);
+    } catch { /* handled */ } finally { setActionLoading(null); }
+  }, []);
 
   /* -- Input styling helper --------------------------------------- */
   const inputStyle = {
@@ -267,8 +276,8 @@ export function MohReportView() {
         {/* -- MoH Compliance Indicators ----------------------------- */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-fade-up" style={{ animationDelay: '0.1s' } as any}>
           {[
-            { icon: ShieldCheck, label: 'HMIS Compliant', value: 'Yes', color: 'text-emerald-500', bg: 'rgba(34,197,94,0.10)' },
-            { icon: Building2, label: 'DHIS2 Ready', value: 'Active', color: 'text-blue-500', bg: 'rgba(59,130,246,0.10)' },
+            { icon: Download, label: 'PDF Export', value: 'Available', color: 'text-blue-500', bg: 'rgba(59,130,246,0.10)' },
+            { icon: ShieldCheck, label: 'Aggregate Only', value: 'No PII', color: 'text-emerald-500', bg: 'rgba(34,197,94,0.10)' },
             { icon: AlertTriangle, label: 'De-identified', value: 'Enforced', color: 'text-amber-500', bg: 'rgba(245,158,11,0.10)' },
             { icon: BarChart3, label: 'Reports This Period', value: String(totalElements), color: 'text-indigo-500', bg: 'rgba(99,102,241,0.10)' },
           ].map((ind) => (
@@ -339,7 +348,8 @@ export function MohReportView() {
             <div className="space-y-2">
               {reports.map((report, idx) => {
                 const isExpanded = expandedId === report.id;
-                const typeCfg = REPORT_TYPE_CONFIG[report.reportType] || REPORT_TYPE_CONFIG.CUSTOM;
+                const typeCfg = REPORT_TYPE_CONFIG[report.reportType]
+                  || { color: 'text-slate-600', bg: 'rgba(100,116,139,0.10)' };
                 const statusCfg = STATUS_CONFIG[report.status] || STATUS_CONFIG.DRAFT;
                 const isLoading = actionLoading === report.id;
 
@@ -434,6 +444,18 @@ export function MohReportView() {
 
                         {/* Action buttons */}
                         <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100/30 flex-wrap">
+                          {/* PDF export — available for every report state (statutory MoH / HMIS return) */}
+                          <button
+                            onClick={() => handleDownloadPdf(report.id)}
+                            disabled={actionLoading === `pdf-${report.id}`}
+                            className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition-all duration-300 disabled:opacity-50 ${text.body}`}
+                            style={glassInner}
+                          >
+                            {actionLoading === `pdf-${report.id}`
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Download className="w-3.5 h-3.5" />}
+                            Download PDF
+                          </button>
                           {report.status === 'DRAFT' && (
                             <button
                               onClick={() => handleSubmit(report.id)}

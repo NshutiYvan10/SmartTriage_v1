@@ -6,12 +6,15 @@ import com.smartTriage.smartTriage_server.module.reporting.dto.MohReportResponse
 import com.smartTriage.smartTriage_server.module.reporting.dto.RejectReportRequest;
 import com.smartTriage.smartTriage_server.module.reporting.entity.MohReport;
 import com.smartTriage.smartTriage_server.module.reporting.mapper.MohReportMapper;
+import com.smartTriage.smartTriage_server.module.reporting.service.MohReportPdfService;
 import com.smartTriage.smartTriage_server.module.reporting.service.MohReportService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -32,6 +35,7 @@ import java.util.UUID;
 public class MohReportController {
 
     private final MohReportService mohReportService;
+    private final MohReportPdfService mohReportPdfService;
 
     /**
      * Generate a new MoH report.
@@ -110,5 +114,20 @@ public class MohReportController {
     public ResponseEntity<ApiResponse<MohReportResponse>> getReport(@PathVariable UUID id) {
         MohReport report = mohReportService.getReport(id);
         return ResponseEntity.ok(ApiResponse.success(MohReportMapper.toResponse(report)));
+    }
+
+    /**
+     * Download a report as a printable / submittable PDF (statutory MoH / HMIS return).
+     * De-identified aggregate statistics only; same admin / governance gate as the
+     * class. Streamed inline as application/pdf.
+     */
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> downloadReportPdf(@PathVariable UUID id) {
+        byte[] pdf = mohReportPdfService.renderById(id);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"moh-report-" + id + ".pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
     }
 }
