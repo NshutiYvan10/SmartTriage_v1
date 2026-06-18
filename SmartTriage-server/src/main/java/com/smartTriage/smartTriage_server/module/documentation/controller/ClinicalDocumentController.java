@@ -102,7 +102,7 @@ public class ClinicalDocumentController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("@clinicalAuthz.canAccessDocument(authentication, #id)")
     public ResponseEntity<ApiResponse<ClinicalDocumentResponse>> getDocument(@PathVariable UUID id) {
         ClinicalDocumentResponse response = documentService.getDocument(id);
         return ResponseEntity.ok(ApiResponse.success(response));

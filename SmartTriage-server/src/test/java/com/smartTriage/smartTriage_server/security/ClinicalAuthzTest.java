@@ -47,6 +47,8 @@ class ClinicalAuthzTest {
     private com.smartTriage.smartTriage_server.module.isolation.repository.InfectionScreeningRepository infectionScreeningRepository;
     private com.smartTriage.smartTriage_server.module.pathway.repository.PathwayActivationRepository pathwayActivationRepository;
     private com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository labOrderRepository;
+    private VisitRepository visitRepository;
+    private com.smartTriage.smartTriage_server.module.documentation.repository.ClinicalDocumentRepository clinicalDocumentRepository;
     private ClinicalAuthz authz;
 
     private final UUID hospitalId = UUID.randomUUID();
@@ -68,9 +70,12 @@ class ClinicalAuthzTest {
                 mock(com.smartTriage.smartTriage_server.module.pathway.repository.PathwayActivationRepository.class);
         labOrderRepository =
                 mock(com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository.class);
+        visitRepository = mock(VisitRepository.class);
+        clinicalDocumentRepository =
+                mock(com.smartTriage.smartTriage_server.module.documentation.repository.ClinicalDocumentRepository.class);
         authz = new ClinicalAuthz(
                 userRepository,
-                mock(VisitRepository.class),
+                visitRepository,
                 mock(PatientRepository.class),
                 shiftAssignmentService,
                 mock(ClinicalNoteRepository.class),
@@ -83,7 +88,8 @@ class ClinicalAuthzTest {
                 hypoglycemiaEventRepository,
                 infectionScreeningRepository,
                 pathwayActivationRepository,
-                labOrderRepository);
+                labOrderRepository,
+                clinicalDocumentRepository);
     }
 
     @Test
@@ -133,6 +139,38 @@ class ClinicalAuthzTest {
         when(sepsisScreeningRepository.findVisitIdById(missing)).thenReturn(java.util.Optional.empty());
         assertFalse(authz.canAccessSepsisScreening(
                 authFor(user(Role.DOCTOR, null, hospitalId)), missing));
+    }
+
+    // ── canAccessDocument (clinical document GET-by-id, #3 cross-hospital fix) ──
+
+    @Test
+    void canAccessDocument_deniesUnknownDocument() {
+        UUID missing = UUID.randomUUID();
+        when(clinicalDocumentRepository.findVisitIdById(missing)).thenReturn(Optional.empty());
+        assertFalse(authz.canAccessDocument(
+                authFor(user(Role.DOCTOR, null, hospitalId)), missing));
+    }
+
+    @Test
+    void canAccessDocument_deniesAnotherHospitalsDocument() {
+        UUID docId = UUID.randomUUID();
+        UUID visitId = UUID.randomUUID();
+        UUID otherHospital = UUID.randomUUID();
+        when(clinicalDocumentRepository.findVisitIdById(docId)).thenReturn(Optional.of(visitId));
+        when(visitRepository.findHospitalIdByVisitId(visitId)).thenReturn(Optional.of(otherHospital));
+        // Caller is a doctor at `hospitalId`; the document's visit is at otherHospital.
+        assertFalse(authz.canAccessDocument(
+                authFor(user(Role.DOCTOR, null, hospitalId)), docId));
+    }
+
+    @Test
+    void canAccessDocument_allowsOwnHospitalDocument() {
+        UUID docId = UUID.randomUUID();
+        UUID visitId = UUID.randomUUID();
+        when(clinicalDocumentRepository.findVisitIdById(docId)).thenReturn(Optional.of(visitId));
+        when(visitRepository.findHospitalIdByVisitId(visitId)).thenReturn(Optional.of(hospitalId));
+        org.junit.jupiter.api.Assertions.assertTrue(authz.canAccessDocument(
+                authFor(user(Role.DOCTOR, null, hospitalId)), docId));
     }
 
     private Authentication authFor(User user) {

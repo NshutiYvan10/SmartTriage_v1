@@ -9,6 +9,7 @@ import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertR
 import com.smartTriage.smartTriage_server.module.clinical.repository.ClinicalNoteRepository;
 import com.smartTriage.smartTriage_server.module.clinical.repository.DiagnosisRepository;
 import com.smartTriage.smartTriage_server.module.clinical.repository.InvestigationRepository;
+import com.smartTriage.smartTriage_server.module.documentation.repository.ClinicalDocumentRepository;
 import com.smartTriage.smartTriage_server.module.handover.repository.HandoverReportRepository;
 import com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository;
 import com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository;
@@ -109,6 +110,7 @@ public class ClinicalAuthz {
     private final InfectionScreeningRepository infectionScreeningRepository;
     private final PathwayActivationRepository pathwayActivationRepository;
     private final LabOrderRepository labOrderRepository;
+    private final ClinicalDocumentRepository clinicalDocumentRepository;
 
     /**
      * @return true if the authenticated user is attached to {@code hospitalId}.
@@ -652,6 +654,26 @@ public class ClinicalAuthz {
                     .orElse(false);
         } catch (Exception e) {
             log.error("canAccessLabOrder error for order {}: {}", orderId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Hospital-scope authz for a single clinical document — maps document → visit
+     * → {@link #canAccessVisit}, so the GET-by-id endpoint cannot be used to read
+     * another hospital's discharge summary, consent form or death certificate by
+     * enumerating a UUID. Closes the cross-tenant PHI read on GET /documents/{id}
+     * (previously gated only by {@code isAuthenticated()}).
+     */
+    @Transactional(readOnly = true)
+    public boolean canAccessDocument(Authentication authentication, UUID documentId) {
+        try {
+            if (documentId == null) return false;
+            return clinicalDocumentRepository.findVisitIdById(documentId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessDocument error for document {}: {}", documentId, e.getMessage(), e);
             return false;
         }
     }
