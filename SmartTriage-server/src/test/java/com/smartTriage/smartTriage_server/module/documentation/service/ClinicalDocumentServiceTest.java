@@ -136,6 +136,39 @@ class ClinicalDocumentServiceTest {
     }
 
     @Test
+    void createDocument_persistsTypeSpecificStructuredFields() {
+        User alice = user("Alice", "Mwangi", Role.DOCTOR, "RW-DOC-001");
+        authenticateAs(alice);
+        when(visitService.findVisitOrThrow(VISIT)).thenReturn(visit());
+        when(vitalSignsRepository.findFirstByVisitIdAndIsActiveTrueOrderByRecordedAtDesc(VISIT))
+                .thenReturn(Optional.empty());
+        when(documentRepository.save(any(ClinicalDocument.class))).thenAnswer(i -> i.getArgument(0));
+
+        CreateDocumentRequest req = CreateDocumentRequest.builder()
+                .visitId(VISIT)
+                .documentType(ClinicalDocumentType.PROCEDURE_NOTE)
+                .title("Lumbar puncture")
+                .content("Procedure performed at bedside.")
+                .procedurePerformed("Lumbar puncture")
+                .procedureIndication("Suspected meningitis")
+                .procedureFindings("Clear CSF, normal opening pressure")
+                .procedureComplications("None")
+                .procedureOutcome("Well tolerated")
+                .procedurePerformedBy("Dr Alice Mwangi (operator)")
+                .anaesthesiaType("Local")
+                .build();
+
+        ClinicalDocumentResponse resp = service.createDocument(VISIT, req);
+
+        assertThat(resp.getProcedurePerformed()).isEqualTo("Lumbar puncture");
+        assertThat(resp.getProcedureIndication()).isEqualTo("Suspected meningitis");
+        assertThat(resp.getProcedureFindings()).contains("Clear CSF");
+        assertThat(resp.getProcedureOutcome()).isEqualTo("Well tolerated");
+        assertThat(resp.getProcedurePerformedBy()).contains("operator");
+        assertThat(resp.getAnaesthesiaType()).isEqualTo("Local");
+    }
+
+    @Test
     void createDocument_withNoAuthenticatedUser_throwsAccessDenied() {
         SecurityContextHolder.clearContext();
         when(visitService.findVisitOrThrow(VISIT)).thenReturn(visit());

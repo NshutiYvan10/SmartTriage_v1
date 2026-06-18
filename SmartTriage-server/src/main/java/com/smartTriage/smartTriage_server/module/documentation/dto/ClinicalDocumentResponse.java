@@ -55,6 +55,19 @@ public class ClinicalDocumentResponse {
     private String templateUsed;
     private String notes;
 
+    // Type-specific structured fields (procedure / operative / death)
+    private String procedurePerformed;
+    private String procedureIndication;
+    private String procedureFindings;
+    private String procedureComplications;
+    private String procedureOutcome;
+    private String procedurePerformedBy;
+    private String anaesthesiaType;
+    private Instant timeOfDeath;
+    private String causeOfDeath;
+    private String antecedentCauses;
+    private String mannerOfDeath;
+
     // Audit
     private Instant createdAt;
     private Instant updatedAt;

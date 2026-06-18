@@ -111,6 +111,18 @@ public class ClinicalDocumentService {
                 .vitalSigns(latestVitals)
                 .templateUsed(request.getTemplateUsed())
                 .notes(request.getNotes())
+                // Type-specific structured fields (procedure / operative / death).
+                .procedurePerformed(request.getProcedurePerformed())
+                .procedureIndication(request.getProcedureIndication())
+                .procedureFindings(request.getProcedureFindings())
+                .procedureComplications(request.getProcedureComplications())
+                .procedureOutcome(request.getProcedureOutcome())
+                .procedurePerformedBy(request.getProcedurePerformedBy())
+                .anaesthesiaType(request.getAnaesthesiaType())
+                .timeOfDeath(request.getTimeOfDeath())
+                .causeOfDeath(request.getCauseOfDeath())
+                .antecedentCauses(request.getAntecedentCauses())
+                .mannerOfDeath(request.getMannerOfDeath())
                 .build();
 
         document = documentRepository.save(document);
@@ -245,6 +257,18 @@ public class ClinicalDocumentService {
                 .originalDocument(original)
                 .amendedAt(Instant.now())
                 .notes(request.getNotes())
+                // Carry the original's structured fields forward onto the amendment.
+                .procedurePerformed(original.getProcedurePerformed())
+                .procedureIndication(original.getProcedureIndication())
+                .procedureFindings(original.getProcedureFindings())
+                .procedureComplications(original.getProcedureComplications())
+                .procedureOutcome(original.getProcedureOutcome())
+                .procedurePerformedBy(original.getProcedurePerformedBy())
+                .anaesthesiaType(original.getAnaesthesiaType())
+                .timeOfDeath(original.getTimeOfDeath())
+                .causeOfDeath(original.getCauseOfDeath())
+                .antecedentCauses(original.getAntecedentCauses())
+                .mannerOfDeath(original.getMannerOfDeath())
                 .build();
 
         amendment = documentRepository.save(amendment);

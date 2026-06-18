@@ -70,6 +70,17 @@ class ClinicalDocumentImmutabilityTest {
     }
 
     @Test
+    void editingSignedProcedureStructuredField_isRejected() {
+        ClinicalDocument d = signedDoc();
+        d.setProcedureFindings("Original operative findings.");
+        d.captureImmutabilitySnapshot();
+        d.setProcedureFindings("Silently altered findings.");   // tamper a structured field
+        assertThatThrownBy(d::guardSignedImmutability)
+                .isInstanceOf(ClinicalBusinessException.class)
+                .hasMessageContaining("immutable");
+    }
+
+    @Test
     void softDeletingSignedDocument_isRejected() {
         ClinicalDocument d = signedDoc();
         d.captureImmutabilitySnapshot();

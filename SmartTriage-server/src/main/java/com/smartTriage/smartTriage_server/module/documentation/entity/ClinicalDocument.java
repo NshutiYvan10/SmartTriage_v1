@@ -137,6 +137,51 @@ public class ClinicalDocument extends BaseEntity {
     private String notes;
 
     // ====================================================================
+    // TYPE-SPECIFIC STRUCTURED FIELDS (procedure / operative note)
+    // Populated only for PROCEDURE_NOTE / OPERATIVE_NOTE; null otherwise.
+    // ====================================================================
+
+    @Column(name = "procedure_performed")
+    private String procedurePerformed;
+
+    @Column(name = "procedure_indication", columnDefinition = "TEXT")
+    private String procedureIndication;
+
+    @Column(name = "procedure_findings", columnDefinition = "TEXT")
+    private String procedureFindings;
+
+    @Column(name = "procedure_complications", columnDefinition = "TEXT")
+    private String procedureComplications;
+
+    @Column(name = "procedure_outcome", columnDefinition = "TEXT")
+    private String procedureOutcome;
+
+    /** The operating clinician / team as documented (clinical content; the legal
+     *  AUTHOR/signer is the authenticated user recorded separately). */
+    @Column(name = "procedure_performed_by")
+    private String procedurePerformedBy;
+
+    @Column(name = "anaesthesia_type", length = 100)
+    private String anaesthesiaType;
+
+    // ====================================================================
+    // TYPE-SPECIFIC STRUCTURED FIELDS (death certificate)
+    // Populated only for DEATH_CERTIFICATE; null otherwise.
+    // ====================================================================
+
+    @Column(name = "time_of_death")
+    private Instant timeOfDeath;
+
+    @Column(name = "cause_of_death", columnDefinition = "TEXT")
+    private String causeOfDeath;
+
+    @Column(name = "antecedent_causes", columnDefinition = "TEXT")
+    private String antecedentCauses;
+
+    @Column(name = "manner_of_death", length = 40)
+    private String mannerOfDeath;
+
+    // ====================================================================
     // SIGNED-DOCUMENT IMMUTABILITY GUARD (legal record)
     // ====================================================================
     // Once a document is signed it is a legal record: its content and identity
@@ -191,6 +236,10 @@ public class ClinicalDocument extends BaseEntity {
                 visit != null ? visit.getId() : null,
                 vitalSigns != null ? vitalSigns.getId() : null,
                 originalDocument != null ? originalDocument.getId() : null,
+                // Type-specific structured fields are frozen once signed too.
+                procedurePerformed, procedureIndication, procedureFindings,
+                procedureComplications, procedureOutcome, procedurePerformedBy, anaesthesiaType,
+                timeOfDeath, causeOfDeath, antecedentCauses, mannerOfDeath,
         };
     }
 }

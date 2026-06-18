@@ -164,11 +164,28 @@ export function ClinicalDocumentation() {
     setCreating(true);
     try {
       // No author fields are sent — the backend records the authenticated user as author.
+      const isProcedure = createForm.documentType === 'PROCEDURE_NOTE' || createForm.documentType === 'OPERATIVE_NOTE';
+      const isDeath = createForm.documentType === 'DEATH_CERTIFICATE';
       await documentationApi.create({
         visitId: activeVisitId,
         documentType: createForm.documentType,
         title: createForm.title,
         content: createForm.content,
+        ...(isProcedure ? {
+          procedurePerformed: createForm.procedurePerformed,
+          procedureIndication: createForm.procedureIndication,
+          procedureFindings: createForm.procedureFindings,
+          procedureComplications: createForm.procedureComplications,
+          procedureOutcome: createForm.procedureOutcome,
+          procedurePerformedBy: createForm.procedurePerformedBy,
+          anaesthesiaType: createForm.anaesthesiaType,
+        } : {}),
+        ...(isDeath ? {
+          timeOfDeath: createForm.timeOfDeath ? new Date(createForm.timeOfDeath).toISOString() : undefined,
+          causeOfDeath: createForm.causeOfDeath,
+          antecedentCauses: createForm.antecedentCauses,
+          mannerOfDeath: createForm.mannerOfDeath,
+        } : {}),
       });
       setShowCreateForm(false);
       setCreateForm({ documentType: 'PROGRESS_NOTE', title: '', content: '' });
@@ -438,6 +455,33 @@ export function ClinicalDocumentation() {
                   style={glassInner}
                 />
               </div>
+
+              {/* Type-specific structured fields — procedure / operative note */}
+              {(createForm.documentType === 'PROCEDURE_NOTE' || createForm.documentType === 'OPERATIVE_NOTE') && (
+                <div className="space-y-2.5 rounded-xl p-4" style={glassInner}>
+                  <p className={`text-[11px] font-bold uppercase tracking-wider ${text.label}`}>Procedure details</p>
+                  <input value={createForm.procedurePerformed || ''} onChange={(e) => setCreateForm({ ...createForm, procedurePerformed: e.target.value })} placeholder="Procedure performed" className={`w-full px-3 py-2 rounded-lg text-sm ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800'}`} style={glassInner} />
+                  <input value={createForm.procedurePerformedBy || ''} onChange={(e) => setCreateForm({ ...createForm, procedurePerformedBy: e.target.value })} placeholder="Performed by (operator / team)" className={`w-full px-3 py-2 rounded-lg text-sm ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800'}`} style={glassInner} />
+                  <input value={createForm.anaesthesiaType || ''} onChange={(e) => setCreateForm({ ...createForm, anaesthesiaType: e.target.value })} placeholder="Anaesthesia type (if any)" className={`w-full px-3 py-2 rounded-lg text-sm ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800'}`} style={glassInner} />
+                  <textarea value={createForm.procedureIndication || ''} onChange={(e) => setCreateForm({ ...createForm, procedureIndication: e.target.value })} placeholder="Indication" rows={2} className={`w-full px-3 py-2 rounded-lg text-sm ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800'}`} style={glassInner} />
+                  <textarea value={createForm.procedureFindings || ''} onChange={(e) => setCreateForm({ ...createForm, procedureFindings: e.target.value })} placeholder="Findings" rows={2} className={`w-full px-3 py-2 rounded-lg text-sm ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800'}`} style={glassInner} />
+                  <textarea value={createForm.procedureComplications || ''} onChange={(e) => setCreateForm({ ...createForm, procedureComplications: e.target.value })} placeholder="Complications" rows={2} className={`w-full px-3 py-2 rounded-lg text-sm ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800'}`} style={glassInner} />
+                  <textarea value={createForm.procedureOutcome || ''} onChange={(e) => setCreateForm({ ...createForm, procedureOutcome: e.target.value })} placeholder="Outcome" rows={2} className={`w-full px-3 py-2 rounded-lg text-sm ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800'}`} style={glassInner} />
+                </div>
+              )}
+
+              {/* Type-specific structured fields — death certificate */}
+              {createForm.documentType === 'DEATH_CERTIFICATE' && (
+                <div className="space-y-2.5 rounded-xl p-4" style={glassInner}>
+                  <p className={`text-[11px] font-bold uppercase tracking-wider ${text.label}`}>Death certificate details</p>
+                  <label className={`text-[10px] font-bold uppercase ${text.muted}`}>Time of death</label>
+                  <input type="datetime-local" value={createForm.timeOfDeath || ''} onChange={(e) => setCreateForm({ ...createForm, timeOfDeath: e.target.value })} className={`w-full px-3 py-2 rounded-lg text-sm ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner} />
+                  <textarea value={createForm.causeOfDeath || ''} onChange={(e) => setCreateForm({ ...createForm, causeOfDeath: e.target.value })} placeholder="Immediate cause of death" rows={2} className={`w-full px-3 py-2 rounded-lg text-sm ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800'}`} style={glassInner} />
+                  <textarea value={createForm.antecedentCauses || ''} onChange={(e) => setCreateForm({ ...createForm, antecedentCauses: e.target.value })} placeholder="Antecedent / underlying causes" rows={2} className={`w-full px-3 py-2 rounded-lg text-sm ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800'}`} style={glassInner} />
+                  <input value={createForm.mannerOfDeath || ''} onChange={(e) => setCreateForm({ ...createForm, mannerOfDeath: e.target.value })} placeholder="Manner of death (e.g. Natural, Accident)" className={`w-full px-3 py-2 rounded-lg text-sm ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800'}`} style={glassInner} />
+                </div>
+              )}
+
               {/* Submit */}
               <div className="flex items-center justify-end gap-3 pt-2">
                 <button
@@ -631,6 +675,25 @@ export function ClinicalDocumentation() {
                           {doc.content}
                         </div>
                       </div>
+
+                      {/* Type-specific structured details */}
+                      {(doc.procedurePerformed || doc.procedureFindings || doc.procedureOutcome
+                        || doc.causeOfDeath || doc.timeOfDeath) && (
+                        <div className="mt-3 rounded-xl p-4 space-y-1" style={glassInner}>
+                          <label className={`text-[10px] font-bold uppercase tracking-wider block mb-1 ${text.muted}`}>Structured Details</label>
+                          {doc.procedurePerformed && <p className={`text-xs ${text.body}`}><b>Procedure:</b> {doc.procedurePerformed}</p>}
+                          {doc.procedurePerformedBy && <p className={`text-xs ${text.body}`}><b>Performed by:</b> {doc.procedurePerformedBy}</p>}
+                          {doc.anaesthesiaType && <p className={`text-xs ${text.body}`}><b>Anaesthesia:</b> {doc.anaesthesiaType}</p>}
+                          {doc.procedureIndication && <p className={`text-xs ${text.body}`}><b>Indication:</b> {doc.procedureIndication}</p>}
+                          {doc.procedureFindings && <p className={`text-xs ${text.body}`}><b>Findings:</b> {doc.procedureFindings}</p>}
+                          {doc.procedureComplications && <p className={`text-xs ${text.body}`}><b>Complications:</b> {doc.procedureComplications}</p>}
+                          {doc.procedureOutcome && <p className={`text-xs ${text.body}`}><b>Outcome:</b> {doc.procedureOutcome}</p>}
+                          {doc.timeOfDeath && <p className={`text-xs ${text.body}`}><b>Time of death:</b> {format(new Date(doc.timeOfDeath), 'MMM d, yyyy HH:mm')}</p>}
+                          {doc.causeOfDeath && <p className={`text-xs ${text.body}`}><b>Cause of death:</b> {doc.causeOfDeath}</p>}
+                          {doc.antecedentCauses && <p className={`text-xs ${text.body}`}><b>Antecedent causes:</b> {doc.antecedentCauses}</p>}
+                          {doc.mannerOfDeath && <p className={`text-xs ${text.body}`}><b>Manner of death:</b> {doc.mannerOfDeath}</p>}
+                        </div>
+                      )}
 
                       {/* Meta info */}
                       <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3">

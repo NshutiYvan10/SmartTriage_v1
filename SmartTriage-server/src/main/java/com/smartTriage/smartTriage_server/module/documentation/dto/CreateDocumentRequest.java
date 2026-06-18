@@ -8,6 +8,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -36,4 +37,19 @@ public class CreateDocumentRequest {
 
     private String templateUsed;
     private String notes;
+
+    // Type-specific structured fields. Populate for PROCEDURE_NOTE / OPERATIVE_NOTE
+    // (procedure*) or DEATH_CERTIFICATE (*death*); ignored for other types.
+    private String procedurePerformed;
+    private String procedureIndication;
+    private String procedureFindings;
+    private String procedureComplications;
+    private String procedureOutcome;
+    private String procedurePerformedBy;
+    private String anaesthesiaType;
+
+    private Instant timeOfDeath;
+    private String causeOfDeath;
+    private String antecedentCauses;
+    private String mannerOfDeath;
 }
