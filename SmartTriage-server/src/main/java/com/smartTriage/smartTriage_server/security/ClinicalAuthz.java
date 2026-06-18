@@ -303,6 +303,35 @@ public class ClinicalAuthz {
     }
 
     /**
+     * Reporting/analytics read gate — for hospital-wide aggregate reports (Quality
+     * KPIs, MoH statistics, operational analytics). Restricted to the governance /
+     * management / audit readers: SUPER_ADMIN, and the HOSPITAL_ADMIN or READ_ONLY
+     * (safety-officer / auditor) AT THIS HOSPITAL. Deliberately NOT every clinician
+     * — a bedside doctor/nurse/paramedic/lab-tech/registrar has no need for
+     * hospital-wide mortality / LWBS / throughput aggregates, and the Quality
+     * endpoints were previously gated only by hospital membership (any role).
+     */
+    @Transactional(readOnly = true)
+    public boolean canViewHospitalReports(Authentication authentication, UUID hospitalId) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null || hospitalId == null) {
+                return false;
+            }
+            if (user.getRole() == Role.SUPER_ADMIN) {
+                return true;
+            }
+            if (!belongsToHospital(user, hospitalId)) {
+                return false;
+            }
+            return user.getRole() == Role.HOSPITAL_ADMIN || user.getRole() == Role.READ_ONLY;
+        } catch (Exception e) {
+            log.error("canViewHospitalReports error for hospital {}: {}", hospitalId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
      * May this user view the FORENSIC medication-safety override audit?
      *
      * <p>This is a governance / quality surface (hospital safety officer,
@@ -724,6 +753,31 @@ public class ClinicalAuthz {
                     .orElse(false);
         } catch (Exception e) {
             log.error("canAccessHandoverReport error for report {}: {}", reportId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * READ gate for a handover/SBAR report and its PDF. A handover report is a full
+     * clinical patient summary (diagnoses, meds, labs, isolation, disposition), so
+     * reading it requires a CLINICAL role in addition to hospital scope — the
+     * previous {@link #canAccessHandoverReport} was hospital-membership only, which
+     * let a REGISTRAR / LAB_TECHNICIAN / READ_ONLY token enumerate any patient's SBAR
+     * PDF by id. Permitted: SUPER_ADMIN, DOCTOR, NURSE, PARAMEDIC (the same clinical
+     * set allowed to GENERATE a handover), still bounded to the report's hospital.
+     */
+    @Transactional(readOnly = true)
+    public boolean canReadHandoverReport(Authentication authentication, UUID reportId) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null) return false;
+            Role role = user.getRole();
+            boolean clinical = role == Role.SUPER_ADMIN || role == Role.DOCTOR
+                    || role == Role.NURSE || role == Role.PARAMEDIC;
+            if (!clinical) return false;
+            return canAccessHandoverReport(authentication, reportId);
+        } catch (Exception e) {
+            log.error("canReadHandoverReport error for report {}: {}", reportId, e.getMessage(), e);
             return false;
         }
     }

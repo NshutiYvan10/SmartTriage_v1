@@ -35,7 +35,7 @@ public class QualityMetricsController {
      * Get live real-time metrics from active visits (not persisted).
      */
     @GetMapping("/hospital/{hospitalId}/realtime")
-    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    @PreAuthorize("@clinicalAuthz.canViewHospitalReports(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<RealTimeMetricsResponse>> getRealTimeMetrics(
             @PathVariable UUID hospitalId) {
         RealTimeMetricsResponse metrics = qualityMetricsService.getRealTimeMetrics(hospitalId);
@@ -46,7 +46,7 @@ public class QualityMetricsController {
      * Get daily metrics snapshot for a specific date.
      */
     @GetMapping("/hospital/{hospitalId}/date/{date}")
-    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    @PreAuthorize("@clinicalAuthz.canViewHospitalReports(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<QualityMetricSnapshotResponse>> getMetricsByDate(
             @PathVariable UUID hospitalId,
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
@@ -58,7 +58,7 @@ public class QualityMetricsController {
      * Get metrics for a date range.
      */
     @GetMapping("/hospital/{hospitalId}/range")
-    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    @PreAuthorize("@clinicalAuthz.canViewHospitalReports(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<QualityMetricSnapshotResponse>>> getMetricsByRange(
             @PathVariable UUID hospitalId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -75,7 +75,7 @@ public class QualityMetricsController {
      * Get trend data — last N periods for a specific metric period.
      */
     @GetMapping("/hospital/{hospitalId}/trends")
-    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    @PreAuthorize("@clinicalAuthz.canViewHospitalReports(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<TrendDataResponse>> getTrends(
             @PathVariable UUID hospitalId,
             @RequestParam(defaultValue = "DAILY") MetricPeriod period,
@@ -102,7 +102,7 @@ public class QualityMetricsController {
      * Manually trigger metric computation for a specific date.
      */
     @PostMapping("/hospital/{hospitalId}/compute/{date}")
-    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN') and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<QualityMetricSnapshotResponse>> computeMetrics(
             @PathVariable UUID hospitalId,
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {

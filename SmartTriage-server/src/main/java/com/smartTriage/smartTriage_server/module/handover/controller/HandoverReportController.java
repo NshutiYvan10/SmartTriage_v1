@@ -78,7 +78,7 @@ public class HandoverReportController {
      * Acknowledge receipt of a handover report.
      */
     @PutMapping("/{id}/acknowledge")
-    @PreAuthorize("@clinicalAuthz.canAccessHandoverReport(authentication, #id)")
+    @PreAuthorize("@clinicalAuthz.canReadHandoverReport(authentication, #id)")
     public ResponseEntity<ApiResponse<HandoverReportResponse>> acknowledgeHandover(
             @PathVariable UUID id,
             @Valid @RequestBody AcknowledgeHandoverRequest request) {
@@ -129,7 +129,7 @@ public class HandoverReportController {
      * Get a single handover report by ID.
      */
     @GetMapping("/{id}")
-    @PreAuthorize("@clinicalAuthz.canAccessHandoverReport(authentication, #id)")
+    @PreAuthorize("@clinicalAuthz.canReadHandoverReport(authentication, #id)")
     public ResponseEntity<ApiResponse<HandoverReportResponse>> getReport(@PathVariable UUID id) {
         HandoverReport report = handoverReportService.getReport(id);
         return ResponseEntity.ok(ApiResponse.success(HandoverReportMapper.toResponse(report)));
@@ -140,7 +140,7 @@ public class HandoverReportController {
      * physical record-keeping. Contains every on-screen section verbatim.
      */
     @GetMapping("/{id}/pdf")
-    @PreAuthorize("@clinicalAuthz.canAccessHandoverReport(authentication, #id)")
+    @PreAuthorize("@clinicalAuthz.canReadHandoverReport(authentication, #id)")
     public ResponseEntity<byte[]> downloadPdf(@PathVariable UUID id) {
         HandoverPdfService.RenderedPdf pdf = handoverPdfService.renderDocument(id);
         return ResponseEntity.ok()

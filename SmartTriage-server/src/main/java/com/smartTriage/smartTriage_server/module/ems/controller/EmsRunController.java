@@ -148,7 +148,10 @@ public class EmsRunController {
     }
 
     @GetMapping("/hospital/{hospitalId}/inbound")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'PARAMEDIC') "
+    // The inbound board is the RECEIVING hospital's view of incoming ambulances —
+    // ED staff (+ admin) only. Paramedics see their own runs via /runs/mine; they
+    // must NOT read every crew's hospital-wide inbound runs.
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN') "
             + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<EmsRunResponse>>> inbound(@PathVariable UUID hospitalId) {
         return ResponseEntity.ok(ApiResponse.success(emsRunService.getInbound(hospitalId)));

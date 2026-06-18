@@ -167,6 +167,9 @@ export function QualityDashboard() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                {/* Computing a snapshot is an admin-only write; READ_ONLY (auditor)
+                    can view but not trigger a recompute (backend enforces this). */}
+                {user?.role !== 'READ_ONLY' && (
                 <button
                   onClick={handleGenerate}
                   disabled={generating}
@@ -175,6 +178,7 @@ export function QualityDashboard() {
                   {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                   Generate Snapshot
                 </button>
+                )}
                 <button
                   onClick={loadData}
                   className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"

@@ -51,6 +51,7 @@ class ClinicalAuthzTest {
     private com.smartTriage.smartTriage_server.module.documentation.repository.ClinicalDocumentRepository clinicalDocumentRepository;
     private com.smartTriage.smartTriage_server.module.consent.repository.InformedConsentRepository informedConsentRepository;
     private com.smartTriage.smartTriage_server.module.referral.repository.ReferralRepository referralRepository;
+    private HandoverReportRepository handoverReportRepository;
     private ClinicalAuthz authz;
 
     private final UUID hospitalId = UUID.randomUUID();
@@ -79,6 +80,7 @@ class ClinicalAuthzTest {
                 mock(com.smartTriage.smartTriage_server.module.consent.repository.InformedConsentRepository.class);
         referralRepository =
                 mock(com.smartTriage.smartTriage_server.module.referral.repository.ReferralRepository.class);
+        handoverReportRepository = mock(HandoverReportRepository.class);
         authz = new ClinicalAuthz(
                 userRepository,
                 visitRepository,
@@ -87,7 +89,7 @@ class ClinicalAuthzTest {
                 mock(ClinicalNoteRepository.class),
                 mock(DiagnosisRepository.class),
                 mock(InvestigationRepository.class),
-                mock(HandoverReportRepository.class),
+                handoverReportRepository,
                 clinicalAlertRepository,
                 sepsisScreeningRepository,
                 fastTrackActivationRepository,
@@ -217,6 +219,56 @@ class ClinicalAuthzTest {
         when(visitRepository.findHospitalIdByVisitId(visitId)).thenReturn(Optional.of(otherHospital));
         assertFalse(authz.canAccessReferral(
                 authFor(user(Role.DOCTOR, null, hospitalId)), referralId));
+    }
+
+    // ── canViewHospitalReports (R1: quality/aggregate reporting read gate) ──
+
+    @Test
+    void canViewHospitalReports_allowsHospitalAdminAndReadOnly_atOwnHospital() {
+        org.junit.jupiter.api.Assertions.assertTrue(authz.canViewHospitalReports(
+                authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), hospitalId));
+        org.junit.jupiter.api.Assertions.assertTrue(authz.canViewHospitalReports(
+                authFor(user(Role.READ_ONLY, null, hospitalId)), hospitalId));
+    }
+
+    @Test
+    void canViewHospitalReports_deniesBedsideClinicians() {
+        assertFalse(authz.canViewHospitalReports(authFor(user(Role.DOCTOR, null, hospitalId)), hospitalId));
+        assertFalse(authz.canViewHospitalReports(authFor(user(Role.NURSE, null, hospitalId)), hospitalId));
+        assertFalse(authz.canViewHospitalReports(authFor(user(Role.LAB_TECHNICIAN, null, hospitalId)), hospitalId));
+        assertFalse(authz.canViewHospitalReports(authFor(user(Role.REGISTRAR, null, hospitalId)), hospitalId));
+    }
+
+    @Test
+    void canViewHospitalReports_deniesAdminFromAnotherHospital() {
+        assertFalse(authz.canViewHospitalReports(
+                authFor(user(Role.HOSPITAL_ADMIN, null, UUID.randomUUID())), hospitalId));
+    }
+
+    // ── canReadHandoverReport (R1: clinical-role gate on SBAR read/PDF) ──
+
+    @Test
+    void canReadHandoverReport_deniesNonClinicalRoles_beforeAnyLookup() {
+        // No repo stub needed — the clinical-role check fails first.
+        assertFalse(authz.canReadHandoverReport(authFor(user(Role.REGISTRAR, null, hospitalId)), UUID.randomUUID()));
+        assertFalse(authz.canReadHandoverReport(authFor(user(Role.LAB_TECHNICIAN, null, hospitalId)), UUID.randomUUID()));
+        assertFalse(authz.canReadHandoverReport(authFor(user(Role.READ_ONLY, null, hospitalId)), UUID.randomUUID()));
+    }
+
+    @Test
+    void canReadHandoverReport_allowsClinicianAtOwnHospital() {
+        UUID reportId = UUID.randomUUID();
+        when(handoverReportRepository.findHospitalIdByReportId(reportId)).thenReturn(Optional.of(hospitalId));
+        org.junit.jupiter.api.Assertions.assertTrue(authz.canReadHandoverReport(
+                authFor(user(Role.DOCTOR, null, hospitalId)), reportId));
+    }
+
+    @Test
+    void canReadHandoverReport_deniesClinicianFromAnotherHospital() {
+        UUID reportId = UUID.randomUUID();
+        when(handoverReportRepository.findHospitalIdByReportId(reportId)).thenReturn(Optional.of(UUID.randomUUID()));
+        assertFalse(authz.canReadHandoverReport(
+                authFor(user(Role.DOCTOR, null, hospitalId)), reportId));
     }
 
     private Authentication authFor(User user) {
