@@ -49,6 +49,8 @@ class ClinicalAuthzTest {
     private com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository labOrderRepository;
     private VisitRepository visitRepository;
     private com.smartTriage.smartTriage_server.module.documentation.repository.ClinicalDocumentRepository clinicalDocumentRepository;
+    private com.smartTriage.smartTriage_server.module.consent.repository.InformedConsentRepository informedConsentRepository;
+    private com.smartTriage.smartTriage_server.module.referral.repository.ReferralRepository referralRepository;
     private ClinicalAuthz authz;
 
     private final UUID hospitalId = UUID.randomUUID();
@@ -73,6 +75,10 @@ class ClinicalAuthzTest {
         visitRepository = mock(VisitRepository.class);
         clinicalDocumentRepository =
                 mock(com.smartTriage.smartTriage_server.module.documentation.repository.ClinicalDocumentRepository.class);
+        informedConsentRepository =
+                mock(com.smartTriage.smartTriage_server.module.consent.repository.InformedConsentRepository.class);
+        referralRepository =
+                mock(com.smartTriage.smartTriage_server.module.referral.repository.ReferralRepository.class);
         authz = new ClinicalAuthz(
                 userRepository,
                 visitRepository,
@@ -89,7 +95,9 @@ class ClinicalAuthzTest {
                 infectionScreeningRepository,
                 pathwayActivationRepository,
                 labOrderRepository,
-                clinicalDocumentRepository);
+                clinicalDocumentRepository,
+                informedConsentRepository,
+                referralRepository);
     }
 
     @Test
@@ -171,6 +179,44 @@ class ClinicalAuthzTest {
         when(visitRepository.findHospitalIdByVisitId(visitId)).thenReturn(Optional.of(hospitalId));
         org.junit.jupiter.api.Assertions.assertTrue(authz.canAccessDocument(
                 authFor(user(Role.DOCTOR, null, hospitalId)), docId));
+    }
+
+    @Test
+    void canAccessConsent_deniesUnknownConsent() {
+        UUID missing = UUID.randomUUID();
+        when(informedConsentRepository.findVisitIdById(missing)).thenReturn(Optional.empty());
+        assertFalse(authz.canAccessConsent(
+                authFor(user(Role.DOCTOR, null, hospitalId)), missing));
+    }
+
+    @Test
+    void canAccessConsent_deniesAnotherHospitalsConsent() {
+        UUID consentId = UUID.randomUUID();
+        UUID visitId = UUID.randomUUID();
+        UUID otherHospital = UUID.randomUUID();
+        when(informedConsentRepository.findVisitIdById(consentId)).thenReturn(Optional.of(visitId));
+        when(visitRepository.findHospitalIdByVisitId(visitId)).thenReturn(Optional.of(otherHospital));
+        assertFalse(authz.canAccessConsent(
+                authFor(user(Role.DOCTOR, null, hospitalId)), consentId));
+    }
+
+    @Test
+    void canAccessReferral_deniesUnknownReferral() {
+        UUID missing = UUID.randomUUID();
+        when(referralRepository.findVisitIdById(missing)).thenReturn(Optional.empty());
+        assertFalse(authz.canAccessReferral(
+                authFor(user(Role.DOCTOR, null, hospitalId)), missing));
+    }
+
+    @Test
+    void canAccessReferral_deniesAnotherHospitalsReferral() {
+        UUID referralId = UUID.randomUUID();
+        UUID visitId = UUID.randomUUID();
+        UUID otherHospital = UUID.randomUUID();
+        when(referralRepository.findVisitIdById(referralId)).thenReturn(Optional.of(visitId));
+        when(visitRepository.findHospitalIdByVisitId(visitId)).thenReturn(Optional.of(otherHospital));
+        assertFalse(authz.canAccessReferral(
+                authFor(user(Role.DOCTOR, null, hospitalId)), referralId));
     }
 
     private Authentication authFor(User user) {

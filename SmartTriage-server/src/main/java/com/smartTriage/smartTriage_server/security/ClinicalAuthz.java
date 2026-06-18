@@ -9,6 +9,7 @@ import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertR
 import com.smartTriage.smartTriage_server.module.clinical.repository.ClinicalNoteRepository;
 import com.smartTriage.smartTriage_server.module.clinical.repository.DiagnosisRepository;
 import com.smartTriage.smartTriage_server.module.clinical.repository.InvestigationRepository;
+import com.smartTriage.smartTriage_server.module.consent.repository.InformedConsentRepository;
 import com.smartTriage.smartTriage_server.module.documentation.repository.ClinicalDocumentRepository;
 import com.smartTriage.smartTriage_server.module.handover.repository.HandoverReportRepository;
 import com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository;
@@ -17,6 +18,7 @@ import com.smartTriage.smartTriage_server.module.fasttrack.repository.FastTrackA
 import com.smartTriage.smartTriage_server.module.hypoglycemia.repository.HypoglycemiaEventRepository;
 import com.smartTriage.smartTriage_server.module.isolation.repository.InfectionScreeningRepository;
 import com.smartTriage.smartTriage_server.module.pathway.repository.PathwayActivationRepository;
+import com.smartTriage.smartTriage_server.module.referral.repository.ReferralRepository;
 import com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
@@ -111,6 +113,8 @@ public class ClinicalAuthz {
     private final PathwayActivationRepository pathwayActivationRepository;
     private final LabOrderRepository labOrderRepository;
     private final ClinicalDocumentRepository clinicalDocumentRepository;
+    private final InformedConsentRepository informedConsentRepository;
+    private final ReferralRepository referralRepository;
 
     /**
      * @return true if the authenticated user is attached to {@code hospitalId}.
@@ -674,6 +678,38 @@ public class ClinicalAuthz {
                     .orElse(false);
         } catch (Exception e) {
             log.error("canAccessDocument error for document {}: {}", documentId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** Hospital-scope authz for an informed-consent record — consent → visit →
+     *  canAccessVisit, so a consent cannot be read or withdrawn outside its own
+     *  hospital by enumerating a UUID. */
+    @Transactional(readOnly = true)
+    public boolean canAccessConsent(Authentication authentication, UUID consentId) {
+        try {
+            if (consentId == null) return false;
+            return informedConsentRepository.findVisitIdById(consentId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessConsent error for consent {}: {}", consentId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** Hospital-scope authz for a referral / consultation — referral → visit →
+     *  canAccessVisit, so a referral cannot be read, responded to or cancelled
+     *  outside its own hospital by enumerating a UUID. */
+    @Transactional(readOnly = true)
+    public boolean canAccessReferral(Authentication authentication, UUID referralId) {
+        try {
+            if (referralId == null) return false;
+            return referralRepository.findVisitIdById(referralId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessReferral error for referral {}: {}", referralId, e.getMessage(), e);
             return false;
         }
     }

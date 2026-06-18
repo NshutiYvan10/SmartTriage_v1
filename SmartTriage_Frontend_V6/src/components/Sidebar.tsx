@@ -148,6 +148,7 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         { id: 'med-board', label: 'Med Board', icon: Pill, pageId: 'med-board' as AppPage },
         { id: 'ems', label: 'Siren', icon: Siren, pageId: 'ems' as AppPage },
         { id: 'documentation', label: 'Documentation', icon: FileText, pageId: 'documentation' as AppPage },
+        { id: 'consent-referrals', label: 'Consent & Referrals', icon: ShieldCheck, pageId: 'documentation' as AppPage },
         { id: 'handover', label: 'Handover', icon: ClipboardCheck, pageId: 'handover' as AppPage },
       ],
     },

@@ -50,6 +50,7 @@ import { MedicationSafetyView } from './modules/medsafety/MedicationSafetyView';
 import { MedicationSafetyOverridesView } from './modules/medsafety/MedicationSafetyOverridesView';
 import { IcuEscalationView } from './modules/icu/IcuEscalationView';
 import { ClinicalDocumentation } from './modules/documentation/ClinicalDocumentation';
+import { ConsentReferralView } from './modules/consent/ConsentReferralView';
 import { HandoverView } from './modules/handover/HandoverView';
 import { SafetyIncidentView } from './modules/safety/SafetyIncidentView';
 import { MohReportView } from './modules/mohreport/MohReportView';
@@ -219,6 +220,7 @@ function AppContent() {
             <Route path="/icu" element={<RoleGuard page="icu"><IcuEscalationView /></RoleGuard>} />
             {/* Documentation & Handover */}
             <Route path="/documentation" element={<RoleGuard page="documentation"><ClinicalDocumentation /></RoleGuard>} />
+            <Route path="/consent-referrals" element={<RoleGuard page="documentation"><ConsentReferralView /></RoleGuard>} />
             <Route path="/handover" element={<RoleGuard page="handover"><HandoverView /></RoleGuard>} />
             {/* Administration & Governance */}
             <Route path="/safety-incidents" element={<RoleGuard page="safety-incidents"><SafetyIncidentView /></RoleGuard>} />
