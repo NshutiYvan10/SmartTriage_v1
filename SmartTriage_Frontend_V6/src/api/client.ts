@@ -94,6 +94,19 @@ async function refreshAccessToken(): Promise<boolean> {
   }
 }
 
+/**
+ * Ensure an in-memory ACCESS token is available, refreshing from the persisted refresh
+ * token if needed. The access token lives only in memory, so after a page reload it is null
+ * until the first 401→refresh — which would otherwise leave the authenticated WebSocket
+ * (which now REQUIRES a token at CONNECT) unable to connect until some REST call happens.
+ * The WS layer calls this on (re)connect so realtime comes back immediately after a reload.
+ * Returns true if a usable access token is present afterwards.
+ */
+export async function ensureAccessToken(): Promise<boolean> {
+  if (accessToken) return true;
+  return refreshAccessToken();
+}
+
 // ── Core request function ──
 
 export class ApiError extends Error {

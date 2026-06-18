@@ -97,7 +97,8 @@ public class ClinicalAlertController {
     }
 
     @PatchMapping("/{alertId}/acknowledge")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessAlert(authentication, #alertId)")
     public ResponseEntity<ApiResponse<ClinicalAlertResponse>> acknowledgeAlert(
             @PathVariable UUID alertId,
             // B5 — optional acknowledge/dismiss comment. Previously the

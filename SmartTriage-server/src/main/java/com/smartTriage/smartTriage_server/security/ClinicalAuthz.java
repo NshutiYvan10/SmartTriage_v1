@@ -153,6 +153,25 @@ public class ClinicalAuthz {
     }
 
     /**
+     * @return true if the alert identified by {@code alertId} belongs to a visit at the
+     *         authenticated user's hospital. Resolves alert→visit→hospital via projection.
+     *         Used to hospital-scope the generic acknowledge endpoint so a clinician at one
+     *         hospital cannot acknowledge another hospital's alert by id.
+     */
+    @Transactional(readOnly = true)
+    public boolean canAccessAlert(Authentication authentication, UUID alertId) {
+        try {
+            if (alertId == null) return false;
+            Optional<UUID> visitId = clinicalAlertRepository.findVisitIdById(alertId);
+            if (visitId.isEmpty()) return false; // unknown id — deny, no existence leak
+            return canAccessVisit(authentication, visitId.get());
+        } catch (Exception e) {
+            log.error("canAccessAlert error for alert {}: {}", alertId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
      * @return true when the {@code targetUserId} is the caller themselves OR
      *         belongs to the caller's hospital. Used by endpoints keyed on a
      *         user id (e.g. {@code /alerts/doctor/{doctorId}}) so a DOCTOR

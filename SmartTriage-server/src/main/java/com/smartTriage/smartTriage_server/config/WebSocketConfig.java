@@ -1,6 +1,10 @@
 package com.smartTriage.smartTriage_server.config;
 
+import com.smartTriage.smartTriage_server.security.StompAuthChannelInterceptor;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
@@ -27,7 +31,20 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  */
 @Configuration
 @EnableWebSocketMessageBroker
+@RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    private final StompAuthChannelInterceptor stompAuthChannelInterceptor;
+
+    /**
+     * Allowed SockJS handshake origins. Defaults to "*" so local dev is unchanged; set
+     * {@code smarttriage.websocket.allowed-origins} (comma-separated) to the real frontend
+     * origin(s) in production. NB the primary tenant-isolation control is the JWT CONNECT
+     * auth + per-destination SUBSCRIBE authz in {@link StompAuthChannelInterceptor} — origin
+     * locking is defence-in-depth (an attacker still cannot connect without a valid token).
+     */
+    @Value("${smarttriage.websocket.allowed-origins:*}")
+    private String[] allowedOrigins;
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
@@ -38,13 +55,21 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         registry.setApplicationDestinationPrefixes("/app");
     }
 
+    /**
+     * Register the auth interceptor on the inbound channel so it sees CONNECT (authenticate)
+     * and SUBSCRIBE (authorise) frames before they reach the broker.
+     */
+    @Override
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        registration.interceptors(stompAuthChannelInterceptor);
+    }
+
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // WebSocket endpoint — clients connect here
-        // withSockJS() enables SockJS fallback (required for the frontend SockJS
-        // client)
+        // withSockJS() enables SockJS fallback (required for the frontend SockJS client)
         registry.addEndpoint("/ws/smarttriage")
-                .setAllowedOriginPatterns("*") // Configure properly in production
+                .setAllowedOriginPatterns(allowedOrigins)
                 .withSockJS();
     }
 }

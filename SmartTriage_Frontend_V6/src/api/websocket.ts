@@ -1,6 +1,7 @@
 /* ── WebSocket Client for Real-Time Features ── */
 import { Client, IMessage } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
+import { getAccessToken } from './client';
 
 const WS_URL = '/ws/smarttriage';
 
@@ -85,6 +86,14 @@ export function connectWebSocket(onConnect?: () => void): Client {
     reconnectDelay: 5000,
     heartbeatIncoming: 4000,
     heartbeatOutgoing: 4000,
+    // Authenticate the STOMP CONNECT with the current access token. Set fresh on EVERY
+    // (re)connect so a token refreshed since the last attempt is used — the backend rejects
+    // a CONNECT without a valid bearer token (per-tenant WebSocket security), so a stale
+    // token here would otherwise wedge the reconnect loop.
+    beforeConnect: () => {
+      const token = getAccessToken();
+      stompClient!.connectHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+    },
     onConnect: () => {
       console.log('[WS] Connected to SmartTriage WebSocket');
       // Flush BEFORE the caller's onConnect so any callbacks they

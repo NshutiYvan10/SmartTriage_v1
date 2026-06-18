@@ -17,6 +17,7 @@ import {
   subscribeConnectionState,
   getConnectionGeneration,
 } from '@/api/websocket';
+import { ensureAccessToken } from '@/api/client';
 import type { ClinicalAlertResponse, AlertType, EdZone } from '@/api/types';
 import type { AIAlert } from '@/types';
 
@@ -111,11 +112,20 @@ export function useWebSocket(myZone?: EdZone | null) {
 
   useEffect(() => {
     if (!user || connected.current) return;
+    connected.current = true; // guard re-entry synchronously (the connect below is async)
+    let alive = true;
 
     const hospitalId = user.hospitalId || 'a0000000-0000-0000-0000-000000000001';
 
-    connectWebSocket(() => {
-      console.log('[useWebSocket] Connected, subscribing to hospital + user + zone topics');
+    // Ensure an in-memory access token before opening the socket. The backend now requires
+    // a valid bearer token at STOMP CONNECT, and after a page reload the access token is null
+    // until refreshed — without this, realtime would stay dark until the first REST
+    // 401→refresh. Best-effort: even if it fails, we still activate (beforeConnect re-reads
+    // the token on each 5s retry, so the channel recovers once a token appears).
+    ensureAccessToken().catch(() => {}).finally(() => {
+      if (!alive) return;
+      connectWebSocket(() => {
+        console.log('[useWebSocket] Connected, subscribing to hospital + user + zone topics');
 
       // Subscribe to hospital-wide alerts
       const unsubAlerts = subscribeToAlerts(hospitalId, (alert: any) => {
@@ -144,11 +154,11 @@ export function useWebSocket(myZone?: EdZone | null) {
         });
         unsubFns.current.push(unsubZone);
       }
+      });
     });
 
-    connected.current = true;
-
     return () => {
+      alive = false;
       unsubFns.current.forEach((fn) => fn());
       unsubFns.current = [];
       disconnectWebSocket();

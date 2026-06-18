@@ -21,6 +21,10 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
 
         Optional<ClinicalAlert> findByIdAndIsActiveTrue(UUID id);
 
+        /** Projection for alert-scoped authz — the visit id an alert belongs to. */
+        @Query("SELECT a.visit.id FROM ClinicalAlert a WHERE a.id = :id")
+        Optional<UUID> findVisitIdById(@Param("id") UUID id);
+
         Page<ClinicalAlert> findByVisitIdAndIsActiveTrueOrderByCreatedAtDesc(UUID visitId, Pageable pageable);
 
         /**
