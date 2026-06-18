@@ -303,7 +303,7 @@ export function Dashboard() {
                   </div>
                   <div className={`px-5 py-3 border-t ${isDark ? 'border-white/10' : 'border-gray-200/80'}`} style={glassSubtleBg}>
                     <button
-                      onClick={() => { setShowNotifications(false); navigate('/alert-dashboard'); }}
+                      onClick={() => { setShowNotifications(false); navigate('/alerts'); }}
                       className={`text-sm font-bold ${isDark ? 'text-cyan-400 hover:text-cyan-300 hover:bg-white/5' : 'text-primary-700 hover:text-primary-900 hover:bg-primary-700/5'} w-full text-center py-2 rounded-xl transition-all duration-300`}
                     >
                       View All Alerts →
@@ -838,7 +838,7 @@ export function Dashboard() {
               </div>
               {zoneAlerts.length > 0 && (
                 <button
-                  onClick={() => navigate('/alert-dashboard')}
+                  onClick={() => navigate('/alerts')}
                   className={`mt-3 w-full text-center py-2 rounded-xl text-[12px] font-bold transition-all ${isDark ? 'text-cyan-300 hover:bg-white/5' : 'text-cyan-700 hover:bg-cyan-50'}`}
                 >
                   View all {zoneAlerts.length} alert{zoneAlerts.length === 1 ? '' : 's'} →

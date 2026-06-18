@@ -279,7 +279,7 @@ export function AlertPanel({ alerts, onAcknowledge, onClose }: AlertPanelProps) 
       {/* Footer — view all */}
       <div className={`px-5 py-3 border-t ${isDark ? 'border-white/10' : 'border-gray-200/70'}`} style={headerBg}>
         <button
-          onClick={() => { onClose?.(); navigate('/alert-dashboard'); }}
+          onClick={() => { onClose?.(); navigate('/alerts'); }}
           className={`w-full text-center py-2 rounded-xl text-[12px] font-bold transition-all inline-flex items-center justify-center gap-1.5 ${isDark ? 'text-cyan-300 hover:bg-white/5' : 'text-cyan-700 hover:bg-cyan-50'}`}
         >
           Open Alert Center

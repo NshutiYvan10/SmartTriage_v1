@@ -155,13 +155,15 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
       label: 'Analytics',
       items: [
         {
-          id: 'alerts', label: 'AI Alerts', icon: BellRing, pageId: 'alerts' as AppPage,
+          // Single canonical Alert Center (the live, store-driven AlertsView). The former
+          // duplicate "Alert Center" entry pointed at a stale REST-only page that has been
+          // removed; both nav items resolved to the same data, so they are merged into one.
+          id: 'alerts', label: 'Alert Center', icon: BellRing, pageId: 'alerts' as AppPage,
           // Live unack count, with red ring when at least one CRITICAL is
           // pending so the sidebar reflects actual urgency.
           badge: unackAlertCount > 0 ? String(unackAlertCount) : undefined,
           badgeColor: criticalUnackCount > 0 ? 'bg-rose-500 animate-pulse' : 'bg-amber-500',
         },
-        { id: 'alert-dashboard', label: 'Alert Center', icon: ShieldAlert, pageId: 'alerts' as AppPage },
         { id: 'med-safety/overrides', label: 'Override Audit', icon: Pill, pageId: 'med-safety-overrides' as AppPage },
         { id: 'quality', label: 'Quality Metrics', icon: BarChart3, pageId: 'quality' as AppPage },
         { id: 'prediction', label: 'Surge Prediction', icon: TrendingUp, pageId: 'prediction' as AppPage },

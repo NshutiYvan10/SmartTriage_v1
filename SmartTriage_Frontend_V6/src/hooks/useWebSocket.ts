@@ -115,7 +115,16 @@ export function useWebSocket(myZone?: EdZone | null) {
     connected.current = true; // guard re-entry synchronously (the connect below is async)
     let alive = true;
 
-    const hospitalId = user.hospitalId || 'a0000000-0000-0000-0000-000000000001';
+    // No demo-hospital fallback: every real user is hospital-scoped. Subscribing a real
+    // session to a hard-coded placeholder hospital would (pre-Batch-3) have leaked that
+    // hospital's alerts and (post-Batch-3) just be rejected by the SUBSCRIBE authz. If a
+    // user somehow has no hospitalId, skip the hospital/zone topics and keep only the
+    // user-targeted one.
+    const hospitalId = user.hospitalId || null;
+    if (!hospitalId) {
+      console.warn('[useWebSocket] No hospitalId on the authenticated user — subscribing to '
+        + 'user-targeted alerts only (hospital/zone topics skipped).');
+    }
 
     // Ensure an in-memory access token before opening the socket. The backend now requires
     // a valid bearer token at STOMP CONNECT, and after a page reload the access token is null
@@ -127,11 +136,13 @@ export function useWebSocket(myZone?: EdZone | null) {
       connectWebSocket(() => {
         console.log('[useWebSocket] Connected, subscribing to hospital + user + zone topics');
 
-      // Subscribe to hospital-wide alerts
-      const unsubAlerts = subscribeToAlerts(hospitalId, (alert: any) => {
-        dedupeAndAdd(alert);
-      });
-      unsubFns.current.push(unsubAlerts);
+      // Subscribe to hospital-wide alerts (only when the user is hospital-scoped)
+      if (hospitalId) {
+        const unsubAlerts = subscribeToAlerts(hospitalId, (alert: any) => {
+          dedupeAndAdd(alert);
+        });
+        unsubFns.current.push(unsubAlerts);
+      }
 
       // Subscribe to user-targeted alerts (for zone-routed doctor notifications)
       if (user.id) {
@@ -147,12 +158,14 @@ export function useWebSocket(myZone?: EdZone | null) {
       // RESUS + ACUTE + PEDIATRIC receives alerts for all three.
       // Dedup against backendId in dedupeAndAdd keeps overlapping
       // hospital-wide + zone topics from double-rendering.
-      for (const zone of coveredZones) {
-        console.log(`[useWebSocket] Subscribing to zone: ${zone}`);
-        const unsubZone = subscribeToZoneAlerts(hospitalId, zone, (alert: ClinicalAlertResponse) => {
-          dedupeAndAdd(alert);
-        });
-        unsubFns.current.push(unsubZone);
+      if (hospitalId) {
+        for (const zone of coveredZones) {
+          console.log(`[useWebSocket] Subscribing to zone: ${zone}`);
+          const unsubZone = subscribeToZoneAlerts(hospitalId, zone, (alert: ClinicalAlertResponse) => {
+            dedupeAndAdd(alert);
+          });
+          unsubFns.current.push(unsubZone);
+        }
       }
       });
     });

@@ -23,7 +23,6 @@ import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { ActivateAccountPage } from './pages/ActivateAccountPage';
 import { VisitDetailPage } from './modules/visit/VisitDetailPage';
-import { AlertDashboard } from './modules/alerts/AlertDashboard';
 import { IoTDeviceManagement } from './modules/iot/IoTDeviceManagement';
 import { HospitalManagement } from './modules/admin/HospitalManagement';
 import { UserManagement } from './modules/admin/UserManagement';
@@ -176,7 +175,9 @@ function AppContent() {
             <Route path="/monitoring" element={<RoleGuard page="monitoring"><ConstantMonitoring /></RoleGuard>} />
             <Route path="/monitoring/:patientId" element={<RoleGuard page="monitoring"><VitalMonitoring /></RoleGuard>} />
             <Route path="/alerts" element={<RoleGuard page="alerts"><AlertsView /></RoleGuard>} />
-            <Route path="/alert-dashboard" element={<RoleGuard page="alerts"><AlertDashboard /></RoleGuard>} />
+            {/* Legacy route — the stale REST-only "Alert Center" page was removed; the live
+                AlertsView at /alerts is now the single canonical Alert Center. */}
+            <Route path="/alert-dashboard" element={<Navigate to="/alerts" replace />} />
             <Route path="/iot-devices" element={<RoleGuard page="iot-devices"><IoTDeviceManagement /></RoleGuard>} />
             <Route path="/lab" element={<RoleGuard page="lab"><LabOrdersView /></RoleGuard>} />
             <Route path="/med-queue" element={<RoleGuard page="med-queue"><NurseMedicationQueue /></RoleGuard>} />

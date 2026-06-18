@@ -10,8 +10,8 @@ import {
   Loader2, RefreshCw, X, MessageSquare, ExternalLink, BellRing,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { useAlertStore } from '@/store/alertStore';
 import { alertApi } from '@/api/alerts';
-import { subscribeToAlerts } from '@/api/websocket';
 import { categoryOf, styleFor } from '@/utils/alertCategory';
 import type { ClinicalAlertResponse } from '@/api/types';
 import { formatDistanceToNow } from 'date-fns';
@@ -90,27 +90,33 @@ export function AlertsView() {
     }
   }, [hospitalId]);
 
-  useEffect(() => { loadAlerts(); }, [loadAlerts]);
-
-  // Live WebSocket subscription. Replaces the previous 30-second poll
-  // so a CRITICAL alert appears here instantly, not on the next tick.
-  // The hospital topic catches everything; cross-zone reach is the
-  // server's responsibility to gate. Backstop refresh every 5 minutes
-  // catches the rare case of a missed frame during reconnect.
+  // Live updates WITHOUT a private WS subscription. AlertsView used to call
+  // subscribeToAlerts(hospitalId) itself — but the WS client allows only ONE subscriber
+  // per topic, so that clobbered the app-root useWebSocket subscription that feeds the
+  // global alert store (the sidebar badge + CriticalAlertNotifier). After this page
+  // unmounted, the hospital-alert topic was left with no subscriber until the next WS
+  // reconnect, leaving the global notifier deaf to new alerts. Instead we OBSERVE the
+  // shared store (which useWebSocket keeps live) and re-fetch the authoritative list when
+  // a new alert lands; a 5-minute backstop catches escalation-updates / missed frames.
+  // Signature (not just length) so we also re-fetch on an IN-PLACE upsert — an escalation
+  // re-broadcast bumps an existing alert's escalationTier/severity without changing the
+  // count, and an ack flips acknowledged. Keying on length alone would leave the canonical
+  // Alert Center lagging its own re-escalation alarm until the 5-min backstop. sumTier moves
+  // on every escalation (the scheduler increments the tier); unackCount moves on any ack.
+  const liveAlertSignature = useAlertStore((s) => {
+    let sumTier = 0;
+    let unack = 0;
+    for (const a of s.alerts) {
+      sumTier += a.escalationTier ?? 0;
+      if (!a.acknowledged) unack += 1;
+    }
+    return `${s.alerts.length}:${sumTier}:${unack}`;
+  });
+  useEffect(() => { loadAlerts(); }, [loadAlerts, liveAlertSignature]);
   useEffect(() => {
     if (!hospitalId) return;
-    const unsub = subscribeToAlerts(hospitalId, (incoming) => {
-      setAlerts((prev) => {
-        // Dedupe by id — the server publishes both create and update
-        // events, and the user-targeted topic may overlap with the
-        // hospital topic.
-        const next = prev.filter((a) => a.id !== incoming.id);
-        next.unshift(incoming);
-        return next;
-      });
-    });
     const iv = setInterval(loadAlerts, 5 * 60 * 1000);
-    return () => { unsub(); clearInterval(iv); };
+    return () => clearInterval(iv);
   }, [hospitalId, loadAlerts]);
 
   // ── Filtering ──
@@ -146,6 +152,9 @@ export function AlertsView() {
   const handleAcknowledge = async (alertId: string) => {
     try {
       await alertApi.acknowledge(alertId);
+      // Reflect the ack in the SHARED store so the sidebar badge + CriticalAlertNotifier
+      // update immediately (no-op if the alert isn't in the live store).
+      useAlertStore.getState().acknowledgeAlert(alertId, user?.id ?? 'me');
       loadAlerts();
     } catch (err) { console.error(err); }
   };
@@ -173,6 +182,8 @@ export function AlertsView() {
           ? `[Dismissed]${note ? ` ${note}` : ''}`
           : note || undefined;
       await alertApi.acknowledge(dialogAlertId, payloadNote);
+      // Keep the shared store (badge + notifier) in sync with the ack/dismiss.
+      useAlertStore.getState().acknowledgeAlert(dialogAlertId, user?.id ?? 'me', payloadNote);
       setDialogOpen(false);
       loadAlerts();
     } catch (err) {
