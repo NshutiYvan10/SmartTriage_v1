@@ -46,6 +46,8 @@ public class VisitResponse {
     private DispositionType dispositionType;
     private Instant dispositionTime;
     private String dispositionNotes;
+    private String dispositionDestinationWard;
+    private String dispositionReceivingFacility;
     private String referringFacility;
     @JsonProperty("isPediatric")
     private boolean isPediatric;

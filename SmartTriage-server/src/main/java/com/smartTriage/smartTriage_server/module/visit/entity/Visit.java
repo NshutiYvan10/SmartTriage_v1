@@ -86,6 +86,14 @@ public class Visit extends BaseEntity {
     @Column(name = "disposition_notes", columnDefinition = "TEXT")
     private String dispositionNotes;
 
+    /** Destination ward for an ADMITTED_TO_WARD / ICU_ADMISSION disposition. */
+    @Column(name = "disposition_destination_ward")
+    private String dispositionDestinationWard;
+
+    /** Receiving facility for a TRANSFERRED disposition. */
+    @Column(name = "disposition_receiving_facility")
+    private String dispositionReceivingFacility;
+
     @Column(name = "referring_facility")
     private String referringFacility;
 

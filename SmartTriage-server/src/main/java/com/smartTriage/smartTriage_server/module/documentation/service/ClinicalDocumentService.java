@@ -301,6 +301,10 @@ public class ClinicalDocumentService {
     public ClinicalDocumentResponse generateDischargeSummary(UUID visitId) {
         Visit visit = visitService.findVisitOrThrow(visitId);
         Patient patient = visit.getPatient();
+        // The summary is COMPILED by the system but AUTHORED by the requesting
+        // clinician — so it is attributable and can be signed (no anonymous SYSTEM
+        // author). This is the discharge summary required before a discharge home.
+        User author = resolveCurrentUserOrThrow();
 
         StringBuilder sb = new StringBuilder();
         sb.append("=== DISCHARGE SUMMARY ===\n");
@@ -463,6 +467,12 @@ public class ClinicalDocumentService {
         if (visit.getDispositionTime() != null) {
             sb.append("Time: ").append(DATETIME_FMT.format(visit.getDispositionTime())).append("\n");
         }
+        if (visit.getDispositionDestinationWard() != null) {
+            sb.append("Destination Ward: ").append(visit.getDispositionDestinationWard()).append("\n");
+        }
+        if (visit.getDispositionReceivingFacility() != null) {
+            sb.append("Receiving Facility: ").append(visit.getDispositionReceivingFacility()).append("\n");
+        }
         if (visit.getDispositionNotes() != null) {
             sb.append("Notes: ").append(visit.getDispositionNotes()).append("\n");
         }
@@ -484,8 +494,10 @@ public class ClinicalDocumentService {
                 .title("Discharge Summary — " + patient.getFirstName() + " " + patient.getLastName()
                        + " — " + visit.getVisitNumber())
                 .content(sb.toString())
-                .authorName("SYSTEM (Auto-generated)")
-                .authorRole("System")
+                .authorUserId(author.getId())
+                .authorName(displayNameOf(author))
+                .authorRole(roleOf(author))
+                .authorLicenseNumber(author.getProfessionalLicense())
                 .vitalSigns(latestVitals)
                 .templateUsed("AUTO_DISCHARGE_SUMMARY")
                 .build();

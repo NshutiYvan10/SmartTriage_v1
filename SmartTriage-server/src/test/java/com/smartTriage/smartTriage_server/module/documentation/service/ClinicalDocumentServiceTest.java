@@ -22,7 +22,11 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.data.domain.Page;
 
+import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
+
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,6 +34,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -166,6 +171,48 @@ class ClinicalDocumentServiceTest {
         assertThat(resp.getProcedureOutcome()).isEqualTo("Well tolerated");
         assertThat(resp.getProcedurePerformedBy()).contains("operator");
         assertThat(resp.getAnaesthesiaType()).isEqualTo("Local");
+    }
+
+    @Test
+    void generateDischargeSummary_isAuthoredByTheAuthenticatedClinician_notSystem() {
+        User alice = user("Alice", "Mwangi", Role.DOCTOR, "RW-DOC-001");
+        authenticateAs(alice);
+
+        Patient p = new Patient();
+        p.setId(UUID.randomUUID());
+        p.setFirstName("Jane");
+        p.setLastName("Doe");
+        Visit v = new Visit();
+        v.setId(VISIT);
+        v.setVisitNumber("V-DOC-1");
+        v.setArrivalTime(Instant.now());
+        v.setPatient(p);
+        when(visitService.findVisitOrThrow(VISIT)).thenReturn(v);
+        when(vitalSignsRepository.findFirstByVisitIdAndIsActiveTrueOrderByRecordedAtDesc(VISIT))
+                .thenReturn(Optional.empty());
+        when(vitalSignsRepository.findByVisitIdAndIsActiveTrueOrderByRecordedAtDesc(eq(VISIT), any()))
+                .thenReturn(Page.empty());
+        when(triageRecordRepository.findByVisitIdAndIsActiveTrueOrderByTriageTimeDesc(eq(VISIT), any()))
+                .thenReturn(Page.empty());
+        when(clinicalNoteRepository.findByVisitIdAndIsActiveTrueOrderByRecordedAtAsc(VISIT))
+                .thenReturn(List.of());
+        when(medicationRepository.findByVisitIdAndIsActiveTrueOrderByPrescribedAtAsc(VISIT))
+                .thenReturn(List.of());
+        when(labOrderRepository.findByVisitIdAndIsActiveTrueOrderByOrderedAtDesc(eq(VISIT), any()))
+                .thenReturn(Page.empty());
+        when(documentRepository.save(any(ClinicalDocument.class))).thenAnswer(i -> i.getArgument(0));
+
+        ClinicalDocumentResponse resp = service.generateDischargeSummary(VISIT);
+
+        ArgumentCaptor<ClinicalDocument> cap = ArgumentCaptor.forClass(ClinicalDocument.class);
+        verify(documentRepository).save(cap.capture());
+        ClinicalDocument saved = cap.getValue();
+        assertThat(saved.getDocumentType()).isEqualTo(ClinicalDocumentType.DISCHARGE_SUMMARY);
+        // Attributable to the authenticated clinician — NOT the old anonymous SYSTEM author.
+        assertThat(saved.getAuthorUserId()).isEqualTo(alice.getId());
+        assertThat(saved.getAuthorName()).isEqualTo("Alice Mwangi");
+        assertThat(saved.getAuthorName()).doesNotContain("SYSTEM");
+        assertThat(resp.getAuthorUserId()).isEqualTo(alice.getId());
     }
 
     @Test

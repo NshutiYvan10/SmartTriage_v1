@@ -33,6 +33,8 @@ public final class VisitMapper {
                 .dispositionType(visit.getDispositionType())
                 .dispositionTime(visit.getDispositionTime())
                 .dispositionNotes(visit.getDispositionNotes())
+                .dispositionDestinationWard(visit.getDispositionDestinationWard())
+                .dispositionReceivingFacility(visit.getDispositionReceivingFacility())
                 .referringFacility(visit.getReferringFacility())
                 .isPediatric(visit.isPediatric())
                 .retriageCount(visit.getRetriageCount())

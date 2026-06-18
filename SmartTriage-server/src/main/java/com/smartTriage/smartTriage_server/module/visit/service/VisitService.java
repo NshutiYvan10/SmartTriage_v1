@@ -1,8 +1,10 @@
 package com.smartTriage.smartTriage_server.module.visit.service;
 
+import com.smartTriage.smartTriage_server.common.enums.ClinicalDocumentType;
 import com.smartTriage.smartTriage_server.common.enums.DispositionType;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.VisitStatus;
+import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.bed.service.BedService;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
@@ -58,6 +60,9 @@ public class VisitService {
     /** B4 — pushes a visit event after commit so dashboards refresh live when a
      *  returning patient is admitted to a new visit. */
     private final com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher realTimeEventPublisher;
+    /** #7 — used to require a real discharge summary document before a discharge
+     *  disposition is recorded (no cycle: this is the repository, not the service). */
+    private final com.smartTriage.smartTriage_server.module.documentation.repository.ClinicalDocumentRepository clinicalDocumentRepository;
 
     private static final AtomicLong visitCounter = new AtomicLong(0);
 
@@ -367,10 +372,26 @@ public class VisitService {
     public VisitResponse recordDisposition(UUID visitId, DispositionRequest request) {
         Visit visit = findVisitOrThrow(visitId);
 
+        // #7 — a discharge home must be backed by a real discharge summary document,
+        // not just a disposition flag. Require one to EXIST before recording the
+        // discharge (generating it is a one-click, attributable action; this checks
+        // existence only — it never blocks on a pending signature, so a patient is
+        // never trapped over paperwork).
+        if (request.getDispositionType() == DispositionType.DISCHARGED_HOME
+                && !clinicalDocumentRepository.existsByVisitIdAndDocumentTypeAndIsActiveTrue(
+                        visitId, ClinicalDocumentType.DISCHARGE_SUMMARY)) {
+            throw new ClinicalBusinessException(
+                    "A discharge summary is required before discharging this patient home. "
+                    + "Generate (and sign) the discharge summary first.");
+        }
+
         // Set disposition fields
         visit.setDispositionType(request.getDispositionType());
         visit.setDispositionTime(Instant.now());
         visit.setDispositionNotes(request.getNotes());
+        // #7 data-loss fix — persist the destination (previously silently discarded).
+        visit.setDispositionDestinationWard(request.getDestinationWard());
+        visit.setDispositionReceivingFacility(request.getReceivingFacility());
 
         // Map DispositionType → VisitStatus
         VisitStatus finalStatus = mapDispositionToStatus(request.getDispositionType());

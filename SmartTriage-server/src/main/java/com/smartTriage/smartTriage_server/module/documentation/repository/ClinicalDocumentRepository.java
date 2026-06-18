@@ -38,4 +38,8 @@ public interface ClinicalDocumentRepository extends JpaRepository<ClinicalDocume
 
     Optional<ClinicalDocument> findFirstByVisitIdAndDocumentTypeAndIsActiveTrueOrderByCreatedAtDesc(
             UUID visitId, ClinicalDocumentType documentType);
+
+    /** Does an active document of this type exist for the visit? Used to require a
+     *  real discharge summary before a discharge disposition is recorded. */
+    boolean existsByVisitIdAndDocumentTypeAndIsActiveTrue(UUID visitId, ClinicalDocumentType documentType);
 }
