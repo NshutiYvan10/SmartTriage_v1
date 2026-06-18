@@ -55,11 +55,10 @@ public class ClinicalDocumentController {
 
     @PutMapping("/{id}/sign")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
-    public ResponseEntity<ApiResponse<ClinicalDocumentResponse>> signDocument(
-            @PathVariable UUID id,
-            @Valid @RequestBody SignDocumentRequest request) {
-        ClinicalDocumentResponse response = documentService.signDocument(
-                id, request.getSignerName(), request.getLicenseNumber());
+    public ResponseEntity<ApiResponse<ClinicalDocumentResponse>> signDocument(@PathVariable UUID id) {
+        // The signer is the authenticated user — no signer name/license is accepted
+        // from the request body. No one can sign as another person.
+        ClinicalDocumentResponse response = documentService.signDocument(id);
         return ResponseEntity.ok(ApiResponse.success("Document electronically signed", response));
     }
 
@@ -69,10 +68,9 @@ public class ClinicalDocumentController {
 
     @PutMapping("/{id}/co-sign")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR')")
-    public ResponseEntity<ApiResponse<ClinicalDocumentResponse>> coSignDocument(
-            @PathVariable UUID id,
-            @Valid @RequestBody CoSignDocumentRequest request) {
-        ClinicalDocumentResponse response = documentService.coSignDocument(id, request.getCoSignerName());
+    public ResponseEntity<ApiResponse<ClinicalDocumentResponse>> coSignDocument(@PathVariable UUID id) {
+        // The co-signer is the authenticated user — recorded from their session.
+        ClinicalDocumentResponse response = documentService.coSignDocument(id);
         return ResponseEntity.ok(ApiResponse.success("Document co-signed", response));
     }
 

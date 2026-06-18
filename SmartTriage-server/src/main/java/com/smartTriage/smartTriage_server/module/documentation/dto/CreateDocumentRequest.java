@@ -31,11 +31,9 @@ public class CreateDocumentRequest {
     @NotBlank(message = "Content is required")
     private String content;
 
-    @NotBlank(message = "Author name is required")
-    private String authorName;
+    // Author identity (name/role/license) is NOT accepted from the client — it is
+    // derived server-side from the authenticated user. Any value sent is ignored.
 
-    private String authorRole;
-    private String authorLicenseNumber;
     private String templateUsed;
     private String notes;
 }

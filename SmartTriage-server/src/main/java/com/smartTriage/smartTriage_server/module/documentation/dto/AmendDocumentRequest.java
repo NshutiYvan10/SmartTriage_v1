@@ -22,10 +22,8 @@ public class AmendDocumentRequest {
     @NotBlank(message = "Amended content is required")
     private String content;
 
-    @NotBlank(message = "Author name is required")
-    private String authorName;
+    // The amendment's author is derived server-side from the authenticated user —
+    // never accepted from the client.
 
-    private String authorRole;
-    private String authorLicenseNumber;
     private String notes;
 }

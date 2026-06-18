@@ -19,6 +19,7 @@ import com.smartTriage.smartTriage_server.module.medication.repository.Medicatio
 import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
 import com.smartTriage.smartTriage_server.module.triage.entity.TriageRecord;
 import com.smartTriage.smartTriage_server.module.triage.repository.TriageRecordRepository;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.visit.service.VisitService;
 import com.smartTriage.smartTriage_server.module.vital.entity.VitalSigns;
@@ -28,6 +29,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -76,6 +79,7 @@ public class ClinicalDocumentService {
     @Transactional
     public ClinicalDocumentResponse createDocument(UUID visitId, CreateDocumentRequest request) {
         Visit visit = visitService.findVisitOrThrow(visitId);
+        User author = resolveCurrentUserOrThrow();
 
         // Auto-attach latest vitals
         VitalSigns latestVitals = vitalSignsRepository
@@ -87,9 +91,12 @@ public class ClinicalDocumentService {
                 .documentType(request.getDocumentType())
                 .title(request.getTitle())
                 .content(request.getContent())
-                .authorName(request.getAuthorName())
-                .authorRole(request.getAuthorRole())
-                .authorLicenseNumber(request.getAuthorLicenseNumber())
+                // Author identity is ALWAYS derived from the authenticated user —
+                // any author name/role/license in the request body is ignored.
+                .authorUserId(author.getId())
+                .authorName(displayNameOf(author))
+                .authorRole(roleOf(author))
+                .authorLicenseNumber(author.getProfessionalLicense())
                 .vitalSigns(latestVitals)
                 .templateUsed(request.getTemplateUsed())
                 .notes(request.getNotes())
@@ -97,9 +104,9 @@ public class ClinicalDocumentService {
 
         document = documentRepository.save(document);
 
-        log.info("Clinical document created for visit {} — type:{} title:'{}' author:{}",
+        log.info("Clinical document created for visit {} — type:{} title:'{}' authorUserId:{} author:{}",
                 visit.getVisitNumber(), document.getDocumentType(),
-                document.getTitle(), document.getAuthorName());
+                document.getTitle(), document.getAuthorUserId(), document.getAuthorName());
 
         return ClinicalDocumentMapper.toResponse(document);
     }
@@ -109,7 +116,7 @@ public class ClinicalDocumentService {
     // ====================================================================
 
     @Transactional
-    public ClinicalDocumentResponse signDocument(UUID documentId, String signerName, String licenseNumber) {
+    public ClinicalDocumentResponse signDocument(UUID documentId) {
         ClinicalDocument document = findDocumentOrThrow(documentId);
 
         if (document.isSigned()) {
@@ -118,15 +125,22 @@ public class ClinicalDocumentService {
                     + "Use amendment to make corrections.");
         }
 
+        // The electronic signature is the authenticated user — the signer name and
+        // license number are taken from that user's own record, NEVER from the
+        // request. No one can sign as another person.
+        User signer = resolveCurrentUserOrThrow();
+
         document.setSigned(true);
         document.setSignedAt(Instant.now());
-        document.setAuthorName(signerName);
-        document.setAuthorLicenseNumber(licenseNumber);
+        document.setAuthorUserId(signer.getId());
+        document.setAuthorName(displayNameOf(signer));
+        document.setAuthorRole(roleOf(signer));
+        document.setAuthorLicenseNumber(signer.getProfessionalLicense());
 
         document = documentRepository.save(document);
 
-        log.info("Document electronically signed — id:{} signer:{} license:{}",
-                document.getId(), signerName, licenseNumber);
+        log.info("Document electronically signed — id:{} signerUserId:{} signer:{} license:{}",
+                document.getId(), signer.getId(), document.getAuthorName(), document.getAuthorLicenseNumber());
 
         return ClinicalDocumentMapper.toResponse(document);
     }
@@ -136,7 +150,7 @@ public class ClinicalDocumentService {
     // ====================================================================
 
     @Transactional
-    public ClinicalDocumentResponse coSignDocument(UUID documentId, String coSignerName) {
+    public ClinicalDocumentResponse coSignDocument(UUID documentId) {
         ClinicalDocument document = findDocumentOrThrow(documentId);
 
         if (!document.isSigned()) {
@@ -150,12 +164,20 @@ public class ClinicalDocumentService {
                     "Document has already been co-signed by " + document.getCoSignedByName());
         }
 
-        document.setCoSignedByName(coSignerName);
+        // The co-signature is the authenticated user — recorded with their own
+        // id, name, role and license. Never a client-supplied name.
+        User coSigner = resolveCurrentUserOrThrow();
+
+        document.setCoSignedByUserId(coSigner.getId());
+        document.setCoSignedByName(displayNameOf(coSigner));
+        document.setCoSignedByRole(roleOf(coSigner));
+        document.setCoSignedByLicenseNumber(coSigner.getProfessionalLicense());
         document.setCoSignedAt(Instant.now());
 
         document = documentRepository.save(document);
 
-        log.info("Document co-signed — id:{} co-signer:{}", document.getId(), coSignerName);
+        log.info("Document co-signed — id:{} coSignerUserId:{} co-signer:{}",
+                document.getId(), coSigner.getId(), document.getCoSignedByName());
 
         return ClinicalDocumentMapper.toResponse(document);
     }
@@ -173,6 +195,10 @@ public class ClinicalDocumentService {
                     "Only signed documents can be amended. Unsigned documents can be edited directly.");
         }
 
+        // The amendment's author is the authenticated user making the correction —
+        // never a client-supplied name.
+        User amender = resolveCurrentUserOrThrow();
+
         // Auto-attach latest vitals
         VitalSigns latestVitals = vitalSignsRepository
                 .findFirstByVisitIdAndIsActiveTrueOrderByRecordedAtDesc(original.getVisit().getId())
@@ -183,9 +209,10 @@ public class ClinicalDocumentService {
                 .documentType(original.getDocumentType())
                 .title("AMENDMENT: " + original.getTitle())
                 .content(request.getContent())
-                .authorName(request.getAuthorName())
-                .authorRole(request.getAuthorRole())
-                .authorLicenseNumber(request.getAuthorLicenseNumber())
+                .authorUserId(amender.getId())
+                .authorName(displayNameOf(amender))
+                .authorRole(roleOf(amender))
+                .authorLicenseNumber(amender.getProfessionalLicense())
                 .vitalSigns(latestVitals)
                 .isAmendment(true)
                 .amendmentReason(request.getAmendmentReason())
@@ -196,8 +223,8 @@ public class ClinicalDocumentService {
 
         amendment = documentRepository.save(amendment);
 
-        log.info("Document amended — original:{} amendment:{} reason:'{}'",
-                original.getId(), amendment.getId(), request.getAmendmentReason());
+        log.info("Document amended — original:{} amendment:{} amenderUserId:{} reason:'{}'",
+                original.getId(), amendment.getId(), amender.getId(), request.getAmendmentReason());
 
         return ClinicalDocumentMapper.toResponse(amendment);
     }
@@ -561,5 +588,50 @@ public class ClinicalDocumentService {
     public ClinicalDocument findDocumentOrThrow(UUID id) {
         return documentRepository.findByIdAndIsActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException("ClinicalDocument", "id", id));
+    }
+
+    // ====================================================================
+    // AUTHENTICATED-AUTHOR RESOLUTION
+    // ====================================================================
+
+    /**
+     * Resolve the authenticated {@link User} from the security context. Throws if
+     * the principal is missing or not a {@code User} — a legally significant
+     * clinical document must always be attributable to a real authenticated user,
+     * so an anonymous author/signature is a hard failure rather than a silently
+     * client-supplied identity. Mirrors the proven attribution pattern used by
+     * {@code ClinicalNoteService}.
+     */
+    private User resolveCurrentUserOrThrow() {
+        Object principal = null;
+        try {
+            principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        } catch (Exception e) {
+            log.warn("No authentication present when authoring/signing a clinical document");
+        }
+        if (principal instanceof User) {
+            return (User) principal;
+        }
+        throw new AccessDeniedException(
+                "Clinical documents require an authenticated user; principal=" + principal);
+    }
+
+    private static String roleOf(User user) {
+        return user.getRole() != null ? user.getRole().name() : null;
+    }
+
+    private static String displayNameOf(User user) {
+        String first = user.getFirstName();
+        String last = user.getLastName();
+        if ((first == null || first.isBlank()) && (last == null || last.isBlank())) {
+            return user.getEmail();
+        }
+        StringBuilder sb = new StringBuilder();
+        if (first != null && !first.isBlank()) sb.append(first.trim());
+        if (last != null && !last.isBlank()) {
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(last.trim());
+        }
+        return sb.toString();
     }
 }

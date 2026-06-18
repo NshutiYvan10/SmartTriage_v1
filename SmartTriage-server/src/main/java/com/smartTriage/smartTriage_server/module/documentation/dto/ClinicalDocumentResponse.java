@@ -27,13 +27,19 @@ public class ClinicalDocumentResponse {
     private String title;
     private String content;
 
-    // Legal compliance
+    // Legal compliance — author/signer identity is server-derived from the
+    // authenticated user. authorUserId is the verifiable link; name/role/license
+    // are the snapshot recorded at signing time.
+    private UUID authorUserId;
     private String authorName;
     private String authorRole;
     private String authorLicenseNumber;
     private Instant signedAt;
     private boolean isSigned;
+    private UUID coSignedByUserId;
     private String coSignedByName;
+    private String coSignedByRole;
+    private String coSignedByLicenseNumber;
     private Instant coSignedAt;
 
     // Vitals snapshot

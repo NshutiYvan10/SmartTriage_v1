@@ -15,37 +15,55 @@ import type { ClinicalDocument, CreateDocumentRequest } from '@/api/documentatio
 import { format } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
 
-// ── Document type config ──
+// ── Document type config (must match backend ClinicalDocumentType enum) ──
 const DOC_TYPES = [
   'ALL',
-  'TRIAGE_ASSESSMENT',
-  'CLINICAL_NOTE',
+  'INITIAL_ASSESSMENT',
+  'PROGRESS_NOTE',
   'PROCEDURE_NOTE',
+  'OPERATIVE_NOTE',
+  'CONSULTATION_NOTE',
+  'NURSING_ASSESSMENT',
+  'TRIAGE_NARRATIVE',
   'DISCHARGE_SUMMARY',
-  'HANDOVER',
-  'CONSENT_FORM',
-  'REFERRAL_LETTER',
+  'TRANSFER_SUMMARY',
+  'HANDOVER_DOCUMENT',
+  'INFORMED_CONSENT',
+  'DEATH_CERTIFICATE',
+  'AGAINST_MEDICAL_ADVICE',
 ] as const;
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   ALL: 'All',
-  TRIAGE_ASSESSMENT: 'Triage Assessment',
-  CLINICAL_NOTE: 'Clinical Note',
+  INITIAL_ASSESSMENT: 'Initial Assessment',
+  PROGRESS_NOTE: 'Progress Note',
   PROCEDURE_NOTE: 'Procedure Note',
+  OPERATIVE_NOTE: 'Operative Note',
+  CONSULTATION_NOTE: 'Consultation Note',
+  NURSING_ASSESSMENT: 'Nursing Assessment',
+  TRIAGE_NARRATIVE: 'Triage Narrative',
   DISCHARGE_SUMMARY: 'Discharge Summary',
-  HANDOVER: 'Handover',
-  CONSENT_FORM: 'Consent Form',
-  REFERRAL_LETTER: 'Referral Letter',
+  TRANSFER_SUMMARY: 'Transfer Summary',
+  HANDOVER_DOCUMENT: 'Handover',
+  INFORMED_CONSENT: 'Informed Consent',
+  DEATH_CERTIFICATE: 'Death Certificate',
+  AGAINST_MEDICAL_ADVICE: 'Against Medical Advice',
 };
 
 const DOC_TYPE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  TRIAGE_ASSESSMENT: { bg: 'rgba(139,92,246,0.08)', text: 'text-violet-600', border: '1px solid rgba(139,92,246,0.2)' },
-  CLINICAL_NOTE:     { bg: 'rgba(59,130,246,0.08)',  text: 'text-blue-600',   border: '1px solid rgba(59,130,246,0.2)' },
-  PROCEDURE_NOTE:    { bg: 'rgba(245,158,11,0.08)',  text: 'text-amber-600',  border: '1px solid rgba(245,158,11,0.2)' },
-  DISCHARGE_SUMMARY: { bg: 'rgba(34,197,94,0.08)',   text: 'text-emerald-600', border: '1px solid rgba(34,197,94,0.2)' },
-  HANDOVER:          { bg: 'rgba(6,182,212,0.08)',   text: 'text-cyan-600',   border: '1px solid rgba(6,182,212,0.2)' },
-  CONSENT_FORM:      { bg: 'rgba(100,116,139,0.08)', text: 'text-slate-600',  border: '1px solid rgba(100,116,139,0.2)' },
-  REFERRAL_LETTER:   { bg: 'rgba(244,63,94,0.08)',   text: 'text-rose-600',   border: '1px solid rgba(244,63,94,0.2)' },
+  INITIAL_ASSESSMENT:     { bg: 'rgba(139,92,246,0.08)', text: 'text-violet-600',  border: '1px solid rgba(139,92,246,0.2)' },
+  PROGRESS_NOTE:          { bg: 'rgba(59,130,246,0.08)', text: 'text-blue-600',    border: '1px solid rgba(59,130,246,0.2)' },
+  PROCEDURE_NOTE:         { bg: 'rgba(245,158,11,0.08)', text: 'text-amber-600',   border: '1px solid rgba(245,158,11,0.2)' },
+  OPERATIVE_NOTE:         { bg: 'rgba(234,88,12,0.08)',  text: 'text-orange-600',  border: '1px solid rgba(234,88,12,0.2)' },
+  CONSULTATION_NOTE:      { bg: 'rgba(14,165,233,0.08)', text: 'text-sky-600',     border: '1px solid rgba(14,165,233,0.2)' },
+  NURSING_ASSESSMENT:     { bg: 'rgba(16,185,129,0.08)', text: 'text-emerald-600', border: '1px solid rgba(16,185,129,0.2)' },
+  TRIAGE_NARRATIVE:       { bg: 'rgba(139,92,246,0.08)', text: 'text-violet-600',  border: '1px solid rgba(139,92,246,0.2)' },
+  DISCHARGE_SUMMARY:      { bg: 'rgba(34,197,94,0.08)',  text: 'text-emerald-600', border: '1px solid rgba(34,197,94,0.2)' },
+  TRANSFER_SUMMARY:       { bg: 'rgba(6,182,212,0.08)',  text: 'text-cyan-600',    border: '1px solid rgba(6,182,212,0.2)' },
+  HANDOVER_DOCUMENT:      { bg: 'rgba(6,182,212,0.08)',  text: 'text-cyan-600',    border: '1px solid rgba(6,182,212,0.2)' },
+  INFORMED_CONSENT:       { bg: 'rgba(100,116,139,0.08)', text: 'text-slate-600',  border: '1px solid rgba(100,116,139,0.2)' },
+  DEATH_CERTIFICATE:      { bg: 'rgba(100,116,139,0.08)', text: 'text-slate-600',  border: '1px solid rgba(100,116,139,0.2)' },
+  AGAINST_MEDICAL_ADVICE: { bg: 'rgba(244,63,94,0.08)',  text: 'text-rose-600',    border: '1px solid rgba(244,63,94,0.2)' },
 };
 
 function getDocTypeStyle(type: string) {
@@ -73,7 +91,7 @@ export function ClinicalDocumentation() {
   // ── Create form state ──
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [createForm, setCreateForm] = useState<Partial<CreateDocumentRequest>>({
-    documentType: 'CLINICAL_NOTE',
+    documentType: 'PROGRESS_NOTE',
     title: '',
     content: '',
   });
@@ -83,7 +101,9 @@ export function ClinicalDocumentation() {
   const [signDialogOpen, setSignDialogOpen] = useState(false);
   const [signDialogMode, setSignDialogMode] = useState<'sign' | 'cosign' | 'amend'>('sign');
   const [signDocId, setSignDocId] = useState<string | null>(null);
-  const [signForm, setSignForm] = useState({ signerName: '', licenseNumber: '', coSignerName: '', content: '', amendmentReason: '' });
+  // Sign / co-sign carry no identity input — the signer is the authenticated user.
+  // Only amend needs free-text fields (reason + updated content).
+  const [signForm, setSignForm] = useState({ content: '', amendmentReason: '' });
   const [signing, setSigning] = useState(false);
 
   // ── Generating state ──
@@ -143,17 +163,15 @@ export function ClinicalDocumentation() {
     if (!activeVisitId || !createForm.title || !createForm.content || !createForm.documentType) return;
     setCreating(true);
     try {
+      // No author fields are sent — the backend records the authenticated user as author.
       await documentationApi.create({
         visitId: activeVisitId,
         documentType: createForm.documentType,
         title: createForm.title,
         content: createForm.content,
-        authorName: user?.fullName || user?.username || 'Unknown',
-        authorRole: user?.role || 'NURSE',
-        authorLicenseNumber: '',
       });
       setShowCreateForm(false);
-      setCreateForm({ documentType: 'CLINICAL_NOTE', title: '', content: '' });
+      setCreateForm({ documentType: 'PROGRESS_NOTE', title: '', content: '' });
       loadDocuments();
     } catch (err) {
       console.error('[ClinicalDocumentation] Create failed:', err);
@@ -166,7 +184,7 @@ export function ClinicalDocumentation() {
   const openSignDialog = (mode: 'sign' | 'cosign' | 'amend', docId: string) => {
     setSignDialogMode(mode);
     setSignDocId(docId);
-    setSignForm({ signerName: user?.fullName || '', licenseNumber: '', coSignerName: user?.fullName || '', content: '', amendmentReason: '' });
+    setSignForm({ content: '', amendmentReason: '' });
     setSignDialogOpen(true);
   };
 
@@ -175,11 +193,12 @@ export function ClinicalDocumentation() {
     setSigning(true);
     try {
       if (signDialogMode === 'sign') {
-        await documentationApi.sign(signDocId, { signerName: signForm.signerName, licenseNumber: signForm.licenseNumber });
+        // Signer = authenticated user; no name/license is sent.
+        await documentationApi.sign(signDocId);
       } else if (signDialogMode === 'cosign') {
-        await documentationApi.coSign(signDocId, { coSignerName: signForm.coSignerName });
+        await documentationApi.coSign(signDocId);
       } else if (signDialogMode === 'amend') {
-        await documentationApi.amend(signDocId, { content: signForm.content, amendmentReason: signForm.amendmentReason, authorName: user?.fullName || '' });
+        await documentationApi.amend(signDocId, { content: signForm.content, amendmentReason: signForm.amendmentReason });
       }
       setSignDialogOpen(false);
       loadDocuments();
@@ -188,7 +207,7 @@ export function ClinicalDocumentation() {
     } finally {
       setSigning(false);
     }
-  }, [signDocId, signDialogMode, signForm, user, loadDocuments]);
+  }, [signDocId, signDialogMode, signForm, loadDocuments]);
 
   // ── Generate actions ──
   const handleGenerateDischarge = useCallback(async () => {
@@ -379,7 +398,7 @@ export function ClinicalDocumentation() {
               <div>
                 <label className={`text-xs font-bold uppercase tracking-wider mb-1.5 block ${text.label}`}>Document Type</label>
                 <select
-                  value={createForm.documentType || 'CLINICAL_NOTE'}
+                  value={createForm.documentType || 'PROGRESS_NOTE'}
                   onChange={(e) => setCreateForm({ ...createForm, documentType: e.target.value })}
                   className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all ${
                     isDark ? 'text-white' : 'text-slate-800'
@@ -749,49 +768,26 @@ export function ClinicalDocumentation() {
                 </div>
               </div>
               <div className="p-5 space-y-4">
-                {signDialogMode === 'sign' && (
-                  <>
-                    <div>
-                      <label className={`text-xs font-bold uppercase tracking-wider mb-1.5 block ${text.label}`}>Signer Name</label>
-                      <input
-                        type="text"
-                        value={signForm.signerName}
-                        onChange={(e) => setSignForm({ ...signForm, signerName: e.target.value })}
-                        placeholder="Full name..."
-                        className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                          isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                        }`}
-                        style={glassInner}
-                      />
+                {(signDialogMode === 'sign' || signDialogMode === 'cosign') && (
+                  <div className="rounded-xl p-4" style={glassInner}>
+                    <div className="flex items-start gap-3">
+                      <div
+                        className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                        style={{ backgroundColor: signDialogMode === 'sign' ? 'rgba(34,197,94,0.12)' : 'rgba(139,92,246,0.12)' }}
+                      >
+                        <Shield className={`w-4 h-4 ${signDialogMode === 'sign' ? 'text-emerald-500' : 'text-violet-500'}`} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className={`text-sm font-bold ${text.heading}`}>
+                          {signDialogMode === 'sign' ? 'Sign as' : 'Co-sign as'} {user?.fullName || 'your account'}
+                          {user?.role ? <span className={`ml-1 font-medium ${text.muted}`}>({user.role})</span> : null}
+                        </p>
+                        <p className={`text-[11px] mt-1 leading-relaxed ${text.muted}`}>
+                          This electronic signature is bound to your authenticated account and recorded
+                          server-side with your name and license. It cannot be entered on behalf of anyone else.
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <label className={`text-xs font-bold uppercase tracking-wider mb-1.5 block ${text.label}`}>License Number</label>
-                      <input
-                        type="text"
-                        value={signForm.licenseNumber}
-                        onChange={(e) => setSignForm({ ...signForm, licenseNumber: e.target.value })}
-                        placeholder="Medical license number..."
-                        className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                          isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                        }`}
-                        style={glassInner}
-                      />
-                    </div>
-                  </>
-                )}
-                {signDialogMode === 'cosign' && (
-                  <div>
-                    <label className={`text-xs font-bold uppercase tracking-wider mb-1.5 block ${text.label}`}>Co-signer Name</label>
-                    <input
-                      type="text"
-                      value={signForm.coSignerName}
-                      onChange={(e) => setSignForm({ ...signForm, coSignerName: e.target.value })}
-                      placeholder="Co-signer full name..."
-                      className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                        isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                      }`}
-                      style={glassInner}
-                    />
                   </div>
                 )}
                 {signDialogMode === 'amend' && (

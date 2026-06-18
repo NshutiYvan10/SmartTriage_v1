@@ -8,6 +8,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * ClinicalDocument — a legally compliant clinical document for an ED visit.
@@ -54,13 +55,24 @@ public class ClinicalDocument extends BaseEntity {
     // LEGAL COMPLIANCE
     // ====================================================================
 
+    /**
+     * Author identity is ALWAYS derived from the authenticated principal — never
+     * from a client-supplied request body. {@code authorUserId} is the FK to the
+     * signing/authoring {@link com.smartTriage.smartTriage_server.module.user.entity.User};
+     * the name/role/license fields are immutable snapshots taken from that user's
+     * record at authoring/signing time (so the displayed signature stays stable
+     * even if the user's profile later changes).
+     */
+    @Column(name = "author_user_id")
+    private UUID authorUserId;
+
     @Column(name = "author_name", nullable = false)
     private String authorName;
 
     @Column(name = "author_role")
     private String authorRole;
 
-    @Column(name = "author_license_number")
+    @Column(name = "author_license_number", length = 50)
     private String authorLicenseNumber;
 
     @Column(name = "signed_at")
@@ -70,8 +82,18 @@ public class ClinicalDocument extends BaseEntity {
     @Builder.Default
     private boolean isSigned = false;
 
+    // Co-signer identity — also derived from the authenticated principal.
+    @Column(name = "co_signed_by_user_id")
+    private UUID coSignedByUserId;
+
     @Column(name = "co_signed_by_name")
     private String coSignedByName;
+
+    @Column(name = "co_signed_by_role")
+    private String coSignedByRole;
+
+    @Column(name = "co_signed_by_license_number", length = 50)
+    private String coSignedByLicenseNumber;
 
     @Column(name = "co_signed_at")
     private Instant coSignedAt;
