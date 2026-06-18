@@ -7,7 +7,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Activity, FileText, Stethoscope, ClipboardList,
+  ArrowLeft, Activity, FileText, FileSignature, Stethoscope, ClipboardList,
   FlaskConical, Pill, BellRing, Heart, Thermometer,
   Wind, Droplets, Brain, Clock, User, AlertTriangle, ChevronRight,
   Plus, Send, CheckCircle2, XCircle, Eye, Loader2, RefreshCw, LogOut,
@@ -19,6 +19,7 @@ import { FastTrackPanel } from './FastTrackPanel';
 import { HypoglycemiaPanel } from './HypoglycemiaPanel';
 import { IsolationPanel } from './IsolationPanel';
 import { PathwayPanel } from './PathwayPanel';
+import { HandoverPanel } from './HandoverPanel';
 import { PrehospitalTab } from '@/modules/ems/PrehospitalTab';
 import { DiagnosisPanel } from './DiagnosisPanel';
 import { InvestigationPanel } from './InvestigationPanel';
@@ -125,6 +126,9 @@ const TABS = [
   // Clinical pathways — protocol checklists (malaria, seizure, obstetric, snakebite, …).
   { id: 'pathways', label: 'Pathways', icon: Route },
   { id: 'medications', label: 'Medications', icon: Pill },
+  // Handover/SBAR — generate + download the per-visit PDF for the treating
+  // clinician (no longer only via the cross-zone shift-lead HandoverView).
+  { id: 'handover', label: 'Handover', icon: FileSignature },
   { id: 'alerts', label: 'Alerts', icon: BellRing },
   { id: 'disposition', label: 'Disposition', icon: LogOut },
 ] as const;
@@ -821,6 +825,7 @@ export function VisitDetailPage() {
           {activeTab === 'isolation' && <IsolationPanel visitId={visit.id} onChanged={loadData} />}
           {activeTab === 'pathways' && <PathwayPanel visitId={visit.id} onChanged={loadData} />}
           {activeTab === 'medications' && <MedicationsTab medications={medications} showForm={showMedicationForm} setShowForm={setShowMedicationForm} onSubmit={handlePrescribeMedication} onAction={handleMedicationAction} formLoading={formLoading} patient={patient} visit={visit} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
+          {activeTab === 'handover' && <HandoverPanel visitId={visit.id} />}
           {activeTab === 'alerts' && <AlertsTab alerts={visitAlerts} onAcknowledge={handleAcknowledgeAlert} visit={visit} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'disposition' && <DispositionTab visit={visit} onDisposition={handleRecordDisposition} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
         </div>
