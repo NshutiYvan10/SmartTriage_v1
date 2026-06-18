@@ -109,7 +109,9 @@ class SepsisServiceTest {
         assertEquals(2, s.getSirsScore());
         // A positive screen is persisted as a CRITICAL alert AND pushed in real time.
         verify(alertRepo).save(any(ClinicalAlert.class));
-        verify(publisher, atLeastOnce()).publishHospitalAlert(eq(hospitalId), any());
+        // Owned fan-out now routes through the after-commit helper (hospital + zone + zone
+        // doctor + charge nurse) so a rolled-back screening never pushes a phantom alert.
+        verify(publisher, atLeastOnce()).publishOwnedAlertAfterCommit(eq(hospitalId), any(), any(), any());
     }
 
     @Test

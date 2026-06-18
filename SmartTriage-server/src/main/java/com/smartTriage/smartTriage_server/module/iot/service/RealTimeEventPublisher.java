@@ -114,6 +114,43 @@ public class RealTimeEventPublisher {
         log.info("Published user alert to {} (Tier {})", topic, alertResponse.getEscalationTier());
     }
 
+    /**
+     * Fan an owned clinical alert out to its accountable audience AFTER the current
+     * transaction commits — so a detection whose transaction later ROLLS BACK never pushes
+     * a phantom alert (clicking it would 404). Falls back to an immediate publish when there
+     * is no active transaction (schedulers / tests). Best-effort: a STOMP failure is logged,
+     * never propagated into the caller's transaction.
+     *
+     * <p>Recipients: the hospital board, the patient's zone (if non-null), and each distinct
+     * user id (zone doctor / ordering doctor / charge nurses). The CALLER must resolve the
+     * {@code userIds} and build {@code resp} BEFORE calling — lazy associations cannot be
+     * read once the session closes post-commit.
+     */
+    public void publishOwnedAlertAfterCommit(UUID hospitalId, EdZone zone,
+            ClinicalAlertResponse resp, java.util.Collection<UUID> userIds) {
+        if (hospitalId == null || resp == null) return;
+        final java.util.Set<UUID> uniqueUsers = userIds == null
+                ? java.util.Set.of()
+                : userIds.stream().filter(java.util.Objects::nonNull)
+                        .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        Runnable fire = () -> {
+            try {
+                publishHospitalAlert(hospitalId, resp);
+                if (zone != null) publishZoneAlert(hospitalId, zone, resp);
+                for (UUID uid : uniqueUsers) publishUserAlert(uid, resp);
+            } catch (Exception e) {
+                log.warn("Failed to publish owned clinical alert {}: {}", resp.getId(), e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { fire.run(); }
+            });
+        } else {
+            fire.run();
+        }
+    }
+
     // ====================================================================
     // BED OCCUPANCY TOPICS
     // ====================================================================

@@ -785,22 +785,23 @@ public class EmsRunService {
         UUID hospitalId = run.getHospital().getId();
         try {
             ClinicalAlertResponse resp = ClinicalAlertMapper.toResponse(alert);
-            realTimeEventPublisher.publishHospitalAlert(hospitalId, resp);
-            if (critical) {
-                realTimeEventPublisher.publishZoneAlert(hospitalId, EdZone.RESUS, resp);
-            }
+            // Resolve the charge nurse(s) in-transaction, then fan out AFTER COMMIT so a
+            // rolled-back pre-registration never pushes a phantom inbound-CRITICAL alert.
             List<User> chargeNurses = shiftAssignmentService.getChargeNurse(hospitalId);
             if (chargeNurses.isEmpty()) {
-                // The hospital-wide + RESUS-zone alerts still reach on-duty staff,
-                // but the intended primary recipient is missing — make it visible.
+                // The intended primary recipient is missing — make it visible. A CRITICAL
+                // inbound still reaches the RESUS board; a non-critical one has no zone
+                // target yet (not triaged), so it falls back to the hospital-wide board only.
                 log.warn("[ems] No on-shift charge nurse at hospital {} to receive the inbound pre-arrival "
-                        + "for run {} — relying on hospital-wide + zone broadcast.", hospitalId, run.getId());
+                        + "for run {} — relying on hospital-wide{} broadcast.",
+                        hospitalId, run.getId(), critical ? " + RESUS-zone" : " (no zone target — non-critical)");
             }
-            for (User cn : chargeNurses) {
-                if (cn != null && cn.getId() != null) {
-                    realTimeEventPublisher.publishUserAlert(cn.getId(), resp);
-                }
-            }
+            List<UUID> userIds = chargeNurses.stream()
+                    .filter(cn -> cn != null && cn.getId() != null).map(User::getId).toList();
+            // Pre-arrivals are not yet triaged into a zone; a CRITICAL inbound is routed to
+            // the RESUS board so the resus team preps the bay.
+            realTimeEventPublisher.publishOwnedAlertAfterCommit(
+                    hospitalId, critical ? EdZone.RESUS : null, resp, userIds);
         } catch (Exception e) {
             log.warn("[ems] Pre-arrival alert routing failed for run {}: {}", run.getId(), e.getMessage());
         }

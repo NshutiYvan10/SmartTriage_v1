@@ -378,25 +378,26 @@ public class SepsisService {
 
     /**
      * Push a sepsis alert in real time to the zone board, the accountable zone
-     * doctor, and the charge nurse(s) in parallel — so a CRITICAL detection is
-     * seen immediately, not only on a later REST refresh. Best-effort: a STOMP
-     * failure must never break the screening transaction. Reused for the bundle
-     * monitor's escalation alerts too.
+     * doctor, and the charge nurse(s) — so a CRITICAL detection is seen immediately,
+     * not only on a later REST refresh. Deferred to AFTER COMMIT (via
+     * publishOwnedAlertAfterCommit) so a rolled-back screening never pushes a phantom
+     * alert; best-effort so a STOMP failure never breaks the screening transaction.
+     * Sole caller is the in-transaction detection path (generateSepsisAlert); the
+     * @Scheduled bundle monitor publishes its escalations through its own path.
      */
     void publishSepsisAlert(ClinicalAlert alert, UUID hospitalId, EdZone zone, User zoneDoctor) {
         try {
             if (hospitalId == null || alert == null) return;
             var resp = ClinicalAlertMapper.toResponse(alert);
-            realTimeEventPublisher.publishHospitalAlert(hospitalId, resp);
-            if (zone != null) {
-                realTimeEventPublisher.publishZoneAlert(hospitalId, zone, resp);
-            }
-            if (zoneDoctor != null) {
-                realTimeEventPublisher.publishUserAlert(zoneDoctor.getId(), resp);
-            }
+            // Resolve recipient ids in-transaction (lazy lookups can't run post-commit),
+            // then fan out AFTER COMMIT so a rolled-back screening never pushes a phantom
+            // CRITICAL sepsis alert to every connected clinician.
+            java.util.List<UUID> userIds = new java.util.ArrayList<>();
+            if (zoneDoctor != null) userIds.add(zoneDoctor.getId());
             for (User cn : shiftAssignmentService.getChargeNurse(hospitalId)) {
-                realTimeEventPublisher.publishUserAlert(cn.getId(), resp);
+                if (cn != null) userIds.add(cn.getId());
             }
+            realTimeEventPublisher.publishOwnedAlertAfterCommit(hospitalId, zone, resp, userIds);
         } catch (Exception e) {
             log.warn("Failed to publish sepsis alert {}: {}",
                     alert != null ? alert.getId() : null, e.getMessage());

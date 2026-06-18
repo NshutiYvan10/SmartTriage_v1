@@ -101,30 +101,43 @@ public class AlertEscalationService {
         log.info("TIER 1 ALERT: {} patient {} → {} zone → {} | Alert ID: {}",
                 category, patientName, targetZone, doctorLabel, alert.getId());
 
-        // Push WebSocket notification
-        ClinicalAlertResponse response = ClinicalAlertMapper.toResponse(alert);
+        // The alert row is now persisted. Everything below (WS pushes, shift lookups,
+        // the no-doctor auto-Tier-2) is BEST-EFFORT — wrapped so a broker hiccup
+        // (MessagingException) or a shift-lookup DB blip can NEVER propagate out of this
+        // method. If it did, the caller (TriageService.performTriage) would catch it and run
+        // its fallback, which would persist a SECOND DOCTOR_NOTIFICATION for the same patient
+        // (a duplicate page) — and a propagated exception would also roll back the entire
+        // triage transaction. A dropped live push is harmless: the @Scheduled escalation loop
+        // re-finds the unacknowledged Tier-1 alert and escalates it within ~2 min.
+        try {
+            ClinicalAlertResponse response = ClinicalAlertMapper.toResponse(alert);
 
-        // Send to zone topic (zone doctor + nurses in that zone)
-        eventPublisher.publishZoneAlert(hospitalId, targetZone, response);
+            // Send to zone topic (zone doctor + nurses in that zone)
+            eventPublisher.publishZoneAlert(hospitalId, targetZone, response);
 
-        // Also send to hospital-wide alert topic (all dashboards)
-        eventPublisher.publishHospitalAlert(hospitalId, response);
+            // Also send to hospital-wide alert topic (all dashboards)
+            eventPublisher.publishHospitalAlert(hospitalId, response);
 
-        // Notify the target zone doctor directly via user-targeted topic
-        if (targetDoctor != null) {
-            eventPublisher.publishUserAlert(targetDoctor.getId(), response);
-        }
+            // Notify the target zone doctor directly via user-targeted topic
+            if (targetDoctor != null) {
+                eventPublisher.publishUserAlert(targetDoctor.getId(), response);
+            }
 
-        // Notify the charge nurse on duty via user-targeted topic (Tier 1 recipient)
-        List<User> chargeNurses = shiftAssignmentService.getChargeNurse(hospitalId);
-        for (User cn : chargeNurses) {
-            eventPublisher.publishUserAlert(cn.getId(), response);
-        }
+            // Notify the charge nurse on duty via user-targeted topic (Tier 1 recipient)
+            List<User> chargeNurses = shiftAssignmentService.getChargeNurse(hospitalId);
+            for (User cn : chargeNurses) {
+                eventPublisher.publishUserAlert(cn.getId(), response);
+            }
 
-        // If zone has no doctor assigned, immediately escalate to Tier 2
-        if (targetDoctor == null) {
-            log.warn("No doctor assigned to {} zone — auto-escalating to Tier 2", targetZone);
-            escalateToTier2(alert, hospitalId);
+            // If zone has no doctor assigned, immediately escalate to Tier 2
+            if (targetDoctor == null) {
+                log.warn("No doctor assigned to {} zone — auto-escalating to Tier 2", targetZone);
+                escalateToTier2(alert, hospitalId);
+            }
+        } catch (Exception e) {
+            log.error("TIER 1 alert {} saved but live routing failed ({}). The scheduled "
+                    + "escalation loop will re-page it; not propagating to avoid a duplicate "
+                    + "fallback alert / triage rollback.", alert.getId(), e.getMessage());
         }
 
         return alert;

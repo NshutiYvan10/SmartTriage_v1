@@ -505,16 +505,14 @@ public class FastTrackService {
         try {
             if (hospitalId == null || alert == null) return;
             var resp = ClinicalAlertMapper.toResponse(alert);
-            realTimeEventPublisher.publishHospitalAlert(hospitalId, resp);
-            if (zone != null) {
-                realTimeEventPublisher.publishZoneAlert(hospitalId, zone, resp);
-            }
-            if (zoneDoctor != null) {
-                realTimeEventPublisher.publishUserAlert(zoneDoctor.getId(), resp);
-            }
+            // Resolve recipient ids in-transaction, then fan out AFTER COMMIT so a
+            // rolled-back activation never pushes a phantom CRITICAL fast-track alert.
+            java.util.List<UUID> userIds = new java.util.ArrayList<>();
+            if (zoneDoctor != null) userIds.add(zoneDoctor.getId());
             for (User cn : shiftAssignmentService.getChargeNurse(hospitalId)) {
-                realTimeEventPublisher.publishUserAlert(cn.getId(), resp);
+                if (cn != null) userIds.add(cn.getId());
             }
+            realTimeEventPublisher.publishOwnedAlertAfterCommit(hospitalId, zone, resp, userIds);
         } catch (Exception e) {
             log.warn("Failed to publish fast-track alert {}: {}",
                     alert != null ? alert.getId() : null, e.getMessage());

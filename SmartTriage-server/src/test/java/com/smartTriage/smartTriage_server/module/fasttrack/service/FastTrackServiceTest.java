@@ -107,7 +107,9 @@ class FastTrackServiceTest {
         ArgumentCaptor<ClinicalAlert> cap = ArgumentCaptor.forClass(ClinicalAlert.class);
         verify(alertRepo).save(cap.capture());
         assertEquals(AlertType.FAST_TRACK_ACTIVATED, cap.getValue().getAlertType());
-        verify(publisher, atLeastOnce()).publishHospitalAlert(eq(hospitalId), any());
+        // Owned fan-out now routes through the after-commit helper (hospital + zone + zone
+        // doctor + charge nurse) so a rolled-back activation never pushes a phantom alert.
+        verify(publisher, atLeastOnce()).publishOwnedAlertAfterCommit(eq(hospitalId), any(), any(), any());
     }
 
     @Test
