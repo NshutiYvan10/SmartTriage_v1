@@ -14,6 +14,8 @@ public final class MohReportMapper {
     public static MohReportResponse toResponse(MohReport report) {
         MohReportResponse.MohReportResponseBuilder builder = MohReportResponse.builder()
                 .id(report.getId())
+                .reportLevel(report.getReportLevel())
+                .includedHospitalCount(report.getIncludedHospitalCount())
                 .reportType(report.getReportType())
                 .reportPeriodStart(report.getReportPeriodStart())
                 .reportPeriodEnd(report.getReportPeriodEnd())

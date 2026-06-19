@@ -1,6 +1,7 @@
 package com.smartTriage.smartTriage_server.module.reporting.controller;
 
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
+import com.smartTriage.smartTriage_server.module.reporting.dto.GenerateNationalReportRequest;
 import com.smartTriage.smartTriage_server.module.reporting.dto.GenerateReportRequest;
 import com.smartTriage.smartTriage_server.module.reporting.dto.MohReportResponse;
 import com.smartTriage.smartTriage_server.module.reporting.dto.RejectReportRequest;
@@ -57,10 +58,41 @@ public class MohReportController {
     }
 
     /**
+     * Generate a NATIONAL rollup aggregated across all active hospitals. SUPER_ADMIN only —
+     * this is the national health-authority view, not a single hospital's report.
+     */
+    @PostMapping("/national/generate")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<ApiResponse<MohReportResponse>> generateNationalReport(
+            @Valid @RequestBody GenerateNationalReportRequest request) {
+        log.info("Generating NATIONAL {} report", request.getReportType());
+
+        MohReport report = mohReportService.generateNationalReport(
+                request.getReportType(),
+                request.getPeriodStart(),
+                request.getPeriodEnd());
+
+        return ResponseEntity.ok(ApiResponse.success(
+                "National report generated successfully", MohReportMapper.toResponse(report)));
+    }
+
+    /**
+     * List NATIONAL rollups with pagination. SUPER_ADMIN only.
+     */
+    @GetMapping("/national")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<ApiResponse<Page<MohReportResponse>>> getNationalReports(Pageable pageable) {
+        Page<MohReportResponse> reports = mohReportService
+                .getNationalReports(pageable)
+                .map(MohReportMapper::toResponse);
+        return ResponseEntity.ok(ApiResponse.success(reports));
+    }
+
+    /**
      * Submit a report for MoH review.
      */
     @PutMapping("/{id}/submit")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
+    @PreAuthorize("@clinicalAuthz.canSubmitMohReport(authentication, #id)")
     public ResponseEntity<ApiResponse<MohReportResponse>> submitReport(@PathVariable UUID id) {
         log.info("Submitting report {}", id);
         MohReport report = mohReportService.submitReport(id);
@@ -111,6 +143,7 @@ public class MohReportController {
      * Get a single report by ID.
      */
     @GetMapping("/{id}")
+    @PreAuthorize("@clinicalAuthz.canViewMohReport(authentication, #id)")
     public ResponseEntity<ApiResponse<MohReportResponse>> getReport(@PathVariable UUID id) {
         MohReport report = mohReportService.getReport(id);
         return ResponseEntity.ok(ApiResponse.success(MohReportMapper.toResponse(report)));
@@ -122,6 +155,7 @@ public class MohReportController {
      * class. Streamed inline as application/pdf.
      */
     @GetMapping("/{id}/pdf")
+    @PreAuthorize("@clinicalAuthz.canViewMohReport(authentication, #id)")
     public ResponseEntity<byte[]> downloadReportPdf(@PathVariable UUID id) {
         byte[] pdf = mohReportPdfService.renderById(id);
         return ResponseEntity.ok()

@@ -1,15 +1,19 @@
 package com.smartTriage.smartTriage_server.module.reporting.service;
 
 import com.smartTriage.smartTriage_server.common.enums.MohReportType;
+import com.smartTriage.smartTriage_server.common.enums.ReportLevel;
 import com.smartTriage.smartTriage_server.common.enums.ReportStatus;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.reporting.engine.MohReportGenerator;
 import com.smartTriage.smartTriage_server.module.reporting.entity.MohReport;
 import com.smartTriage.smartTriage_server.module.reporting.repository.MohReportRepository;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,9 +65,34 @@ public class MohReportService {
                 break;
         }
 
+        report.setGeneratedByName(resolveActorName());
         report = mohReportRepository.save(report);
         log.info("Report generated and saved with ID: {}", report.getId());
         return report;
+    }
+
+    /**
+     * Generate a NATIONAL de-identified rollup across all active hospitals for a period.
+     * SUPER_ADMIN-only (enforced at the controller); produces one report with hospital == null
+     * and reportLevel == NATIONAL.
+     */
+    @Transactional
+    public MohReport generateNationalReport(MohReportType type, LocalDate periodStart, LocalDate periodEnd) {
+        log.info("Generating NATIONAL {} report from {} to {}", type, periodStart, periodEnd);
+        MohReport report = mohReportGenerator.generateNationalSummary(type, periodStart, periodEnd);
+        report.setGeneratedByName(resolveActorName());
+        report = mohReportRepository.save(report);
+        log.info("National report generated and saved with ID: {} ({} hospitals)",
+                report.getId(), report.getIncludedHospitalCount());
+        return report;
+    }
+
+    /**
+     * List national rollups with pagination (SUPER_ADMIN national view).
+     */
+    public Page<MohReport> getNationalReports(Pageable pageable) {
+        return mohReportRepository.findByReportLevelAndIsActiveTrueOrderByReportPeriodStartDesc(
+                ReportLevel.NATIONAL, pageable);
     }
 
     /**
@@ -155,6 +184,21 @@ public class MohReportService {
     private MohReport findReport(UUID reportId) {
         return mohReportRepository.findByIdAndIsActiveTrue(reportId)
                 .orElseThrow(() -> new ResourceNotFoundException("MohReport", "id", reportId));
+    }
+
+    /**
+     * Name of the authenticated user generating the report, snapshotted for the record.
+     * Returns null for non-user (e.g. system/scheduled) callers rather than throwing —
+     * generation must not be blocked by an unusual security context.
+     */
+    private String resolveActorName() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof User user) {
+            String name = ((user.getFirstName() == null ? "" : user.getFirstName()) + " "
+                    + (user.getLastName() == null ? "" : user.getLastName())).trim();
+            return name.isEmpty() ? user.getEmail() : name;
+        }
+        return null;
     }
 
     /**

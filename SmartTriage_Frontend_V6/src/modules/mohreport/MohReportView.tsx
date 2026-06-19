@@ -8,13 +8,18 @@ import {
   FileBarChart, Plus, Send, CheckCircle2, XCircle, ChevronDown,
   ChevronRight, Loader2, RefreshCw, Calendar, Clock, Users,
   Activity, Heart, Baby, Bug, Building2, ArrowRight, AlertTriangle,
-  BarChart3, ShieldCheck, Download,
+  BarChart3, ShieldCheck, Download, Globe,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
 import { mohReportApi } from '@/api/mohreport';
 import type { MohReport } from '@/api/mohreport';
+import { hospitalApi } from '@/api/hospitals';
+import type { HospitalResponse } from '@/api/types';
 import { format } from 'date-fns';
+
+/** Sentinel scope value for the national (cross-hospital) rollup. */
+const NATIONAL = 'NATIONAL';
 
 /* -- Constants ---------------------------------------------------- */
 
@@ -58,7 +63,16 @@ function getTypeLabel(type: string): string {
 export function MohReportView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
-  const hospitalId = user?.hospitalId || '';
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const userHospitalId = user?.hospitalId || '';
+
+  /* Scope of the page: 'NATIONAL' (cross-hospital rollup) or a single hospitalId.
+     SUPER_ADMIN may switch between National and any hospital; everyone else is
+     pinned to their own hospital. */
+  const [selectedScope, setSelectedScope] = useState<string>(NATIONAL);
+  const scope = isSuperAdmin ? selectedScope : userHospitalId;
+  const isNational = scope === NATIONAL;
+  const [hospitals, setHospitals] = useState<HospitalResponse[]>([]);
 
   /* -- State ------------------------------------------------------ */
   const [reports, setReports] = useState<MohReport[]>([]);
@@ -80,10 +94,12 @@ export function MohReportView() {
 
   /* -- Data loading ----------------------------------------------- */
   const loadReports = useCallback(async () => {
-    if (!hospitalId) return;
+    if (!scope) return; // non-super-admin whose hospital isn't loaded yet
     setLoading(true);
     try {
-      const res = await mohReportApi.getForHospital(hospitalId, page);
+      const res = scope === NATIONAL
+        ? await mohReportApi.getNational(page)
+        : await mohReportApi.getForHospital(scope, page);
       setReports(res.content);
       setTotalElements(res.totalElements);
     } catch {
@@ -91,18 +107,35 @@ export function MohReportView() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, page]);
+  }, [scope, page]);
 
   useEffect(() => {
     loadReports();
   }, [loadReports]);
 
+  /* SUPER_ADMIN: load the hospital list so they can scope to a single hospital. */
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    hospitalApi.getAll(0, 200)
+      .then((res) => setHospitals(res.content.filter((h) => h.active)))
+      .catch(() => { /* keep National-only if the list fails */ });
+  }, [isSuperAdmin]);
+
+  /* Reset to page 0 whenever the scope changes. */
+  useEffect(() => {
+    setPage(0);
+  }, [scope]);
+
   /* -- Actions ---------------------------------------------------- */
   const handleGenerate = useCallback(async () => {
-    if (!hospitalId || !periodStart || !periodEnd) return;
+    if (!scope || !periodStart || !periodEnd) return;
     setActionLoading('generate');
     try {
-      await mohReportApi.generate({ hospitalId, reportType: formType, periodStart, periodEnd });
+      if (scope === NATIONAL) {
+        await mohReportApi.generateNational({ reportType: formType, periodStart, periodEnd });
+      } else {
+        await mohReportApi.generate({ hospitalId: scope, reportType: formType, periodStart, periodEnd });
+      }
       setShowForm(false);
       setPeriodStart('');
       setPeriodEnd('');
@@ -112,7 +145,7 @@ export function MohReportView() {
     } finally {
       setActionLoading(null);
     }
-  }, [hospitalId, formType, periodStart, periodEnd, loadReports]);
+  }, [scope, formType, periodStart, periodEnd, loadReports]);
 
   const handleSubmit = useCallback(async (id: string) => {
     setActionLoading(id);
@@ -198,6 +231,41 @@ export function MohReportView() {
             </div>
           </div>
         </div>
+
+        {/* -- Scope selector (SUPER_ADMIN only) -------------------- */}
+        {isSuperAdmin && (
+          <div className="rounded-2xl p-4 animate-fade-up flex items-center gap-3 flex-wrap" style={glassCard}>
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ backgroundColor: isNational ? 'rgba(16,185,129,0.12)' : 'rgba(59,130,246,0.12)' }}
+            >
+              {isNational
+                ? <Globe className="w-4.5 h-4.5 text-emerald-500" />
+                : <Building2 className="w-4.5 h-4.5 text-blue-500" />}
+            </div>
+            <div className="flex-1 min-w-[220px]">
+              <label className={`block text-[10px] font-bold ${text.muted} uppercase tracking-wider mb-1`}>Reporting Scope</label>
+              <select
+                value={selectedScope}
+                onChange={(e) => setSelectedScope(e.target.value)}
+                className={`w-full px-3 py-2 rounded-xl text-sm ${text.heading} focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all duration-300`}
+                style={inputStyle}
+              >
+                <option value={NATIONAL}>National — all hospitals (de-identified rollup)</option>
+                {hospitals.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name}{h.hospitalCode ? ` (${h.hospitalCode})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className={`text-[11px] ${text.muted} max-w-xs`}>
+              {isNational
+                ? 'Aggregated across every active hospital. Generate, submit, and review national MoH returns.'
+                : 'Single-hospital reports for the selected facility.'}
+            </p>
+          </div>
+        )}
 
         {/* -- Generate Form ---------------------------------------- */}
         {showForm && (
@@ -377,6 +445,15 @@ export function MohReportView() {
                             <span className={`text-[10px] font-bold ${statusCfg.color} px-2 py-0.5 rounded-md uppercase tracking-wider`} style={{ background: statusCfg.bg }}>
                               {statusCfg.label}
                             </span>
+                            {report.reportLevel === 'NATIONAL' ? (
+                              <span className="text-[10px] font-bold text-emerald-600 px-2 py-0.5 rounded-md uppercase tracking-wider inline-flex items-center gap-1" style={{ background: 'rgba(16,185,129,0.10)' }}>
+                                <Globe className="w-2.5 h-2.5" /> National · {report.includedHospitalCount ?? 0} hosp
+                              </span>
+                            ) : report.hospitalName ? (
+                              <span className={`text-[10px] font-semibold ${text.muted} px-2 py-0.5 rounded-md inline-flex items-center gap-1`} style={{ background: 'rgba(100,116,139,0.10)' }}>
+                                <Building2 className="w-2.5 h-2.5" /> {report.hospitalName}
+                              </span>
+                            ) : null}
                           </div>
                           <p className={`text-[12px] font-semibold ${text.heading} truncate`}>
                             {format(new Date(report.reportPeriodStart), 'dd MMM yyyy')} — {format(new Date(report.reportPeriodEnd), 'dd MMM yyyy')}

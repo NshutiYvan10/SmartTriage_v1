@@ -1,6 +1,7 @@
 package com.smartTriage.smartTriage_server.module.reporting.dto;
 
 import com.smartTriage.smartTriage_server.common.enums.MohReportType;
+import com.smartTriage.smartTriage_server.common.enums.ReportLevel;
 import com.smartTriage.smartTriage_server.common.enums.ReportStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -22,6 +23,8 @@ public class MohReportResponse {
     private UUID id;
     private UUID hospitalId;
     private String hospitalName;
+    private ReportLevel reportLevel;
+    private Integer includedHospitalCount;
 
     private MohReportType reportType;
     private Instant reportPeriodStart;

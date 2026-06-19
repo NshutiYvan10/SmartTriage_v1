@@ -3,6 +3,7 @@ package com.smartTriage.smartTriage_server.security;
 import com.smartTriage.smartTriage_server.common.enums.AlertType;
 import com.smartTriage.smartTriage_server.common.enums.Designation;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
+import com.smartTriage.smartTriage_server.common.enums.ReportLevel;
 import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.common.enums.ShiftFunction;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
@@ -19,6 +20,7 @@ import com.smartTriage.smartTriage_server.module.hypoglycemia.repository.Hypogly
 import com.smartTriage.smartTriage_server.module.isolation.repository.InfectionScreeningRepository;
 import com.smartTriage.smartTriage_server.module.pathway.repository.PathwayActivationRepository;
 import com.smartTriage.smartTriage_server.module.referral.repository.ReferralRepository;
+import com.smartTriage.smartTriage_server.module.reporting.repository.MohReportRepository;
 import com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
@@ -115,6 +117,7 @@ public class ClinicalAuthz {
     private final ClinicalDocumentRepository clinicalDocumentRepository;
     private final InformedConsentRepository informedConsentRepository;
     private final ReferralRepository referralRepository;
+    private final MohReportRepository mohReportRepository;
 
     /**
      * @return true if the authenticated user is attached to {@code hospitalId}.
@@ -327,6 +330,66 @@ public class ClinicalAuthz {
             return user.getRole() == Role.HOSPITAL_ADMIN || user.getRole() == Role.READ_ONLY;
         } catch (Exception e) {
             log.error("canViewHospitalReports error for hospital {}: {}", hospitalId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Object-level read gate for a single MoH report by id (JSON + PDF). NATIONAL rollups
+     * are SUPER_ADMIN-only; a HOSPITAL report is readable only by the SUPER_ADMIN or the
+     * HOSPITAL_ADMIN/READ_ONLY of THAT report's hospital. Closes the by-id IDOR hole where
+     * the class-level role gate alone let any admin/read-only read national or other-hospital
+     * reports by guessing/holding the UUID. Denies on unknown id (no existence leak).
+     */
+    @Transactional(readOnly = true)
+    public boolean canViewMohReport(Authentication authentication, UUID reportId) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null || reportId == null) {
+                return false;
+            }
+            if (user.getRole() == Role.SUPER_ADMIN) {
+                return true;
+            }
+            ReportLevel level = mohReportRepository.findReportLevelById(reportId).orElse(null);
+            if (level == null || level == ReportLevel.NATIONAL) {
+                return false; // unknown/inactive, or national (super-admin only)
+            }
+            UUID hospitalId = mohReportRepository.findHospitalIdById(reportId).orElse(null);
+            return hospitalId != null && canViewHospitalReports(authentication, hospitalId);
+        } catch (Exception e) {
+            log.error("canViewMohReport error for report {}: {}", reportId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Object-level gate for advancing a MoH report's lifecycle (submit). NATIONAL rollups
+     * may only be submitted by SUPER_ADMIN (the national governance owner); a HOSPITAL report
+     * may be submitted by the SUPER_ADMIN or the HOSPITAL_ADMIN of THAT hospital. Prevents a
+     * hospital admin from submitting a national rollup or another hospital's report by id.
+     */
+    @Transactional(readOnly = true)
+    public boolean canSubmitMohReport(Authentication authentication, UUID reportId) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null || reportId == null) {
+                return false;
+            }
+            if (user.getRole() == Role.SUPER_ADMIN) {
+                return true;
+            }
+            if (user.getRole() != Role.HOSPITAL_ADMIN) {
+                return false;
+            }
+            ReportLevel level = mohReportRepository.findReportLevelById(reportId).orElse(null);
+            if (level == null || level == ReportLevel.NATIONAL) {
+                return false; // unknown/inactive, or national (super-admin only)
+            }
+            UUID hospitalId = mohReportRepository.findHospitalIdById(reportId).orElse(null);
+            return hospitalId != null && belongsToHospital(user, hospitalId);
+        } catch (Exception e) {
+            log.error("canSubmitMohReport error for report {}: {}", reportId, e.getMessage(), e);
             return false;
         }
     }

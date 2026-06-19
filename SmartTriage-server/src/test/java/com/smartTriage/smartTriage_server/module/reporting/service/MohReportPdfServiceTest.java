@@ -68,6 +68,26 @@ class MohReportPdfServiceTest {
     }
 
     @Test
+    void rendersValidPdfForNationalRollup() {
+        // National report: no hospital, reportLevel NATIONAL, included-hospital count set —
+        // exercises the national-header branch.
+        MohReport r = MohReport.builder()
+                .reportLevel(com.smartTriage.smartTriage_server.common.enums.ReportLevel.NATIONAL)
+                .includedHospitalCount(42)
+                .reportType(MohReportType.MONTHLY_STATISTICS)
+                .reportPeriodStart(Instant.parse("2026-05-01T00:00:00Z"))
+                .reportPeriodEnd(Instant.parse("2026-06-01T00:00:00Z"))
+                .generatedAt(Instant.now())
+                .generatedByName("MoH Analyst")
+                .status(ReportStatus.GENERATED)
+                .totalEdVisits(125000)
+                .mortalityCount(430)
+                .build();
+
+        assertIsPdf(service.render(r));
+    }
+
+    @Test
     void rendersValidPdfForSparseReport() {
         // No hospital, all aggregate fields null — exercises the "—" / fallback branches.
         MohReport r = MohReport.builder()

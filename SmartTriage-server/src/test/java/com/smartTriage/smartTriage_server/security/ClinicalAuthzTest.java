@@ -2,6 +2,7 @@ package com.smartTriage.smartTriage_server.security;
 
 import com.smartTriage.smartTriage_server.common.enums.AlertType;
 import com.smartTriage.smartTriage_server.common.enums.Designation;
+import com.smartTriage.smartTriage_server.common.enums.ReportLevel;
 import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
@@ -51,6 +52,7 @@ class ClinicalAuthzTest {
     private com.smartTriage.smartTriage_server.module.documentation.repository.ClinicalDocumentRepository clinicalDocumentRepository;
     private com.smartTriage.smartTriage_server.module.consent.repository.InformedConsentRepository informedConsentRepository;
     private com.smartTriage.smartTriage_server.module.referral.repository.ReferralRepository referralRepository;
+    private com.smartTriage.smartTriage_server.module.reporting.repository.MohReportRepository mohReportRepository;
     private HandoverReportRepository handoverReportRepository;
     private ClinicalAuthz authz;
 
@@ -80,6 +82,8 @@ class ClinicalAuthzTest {
                 mock(com.smartTriage.smartTriage_server.module.consent.repository.InformedConsentRepository.class);
         referralRepository =
                 mock(com.smartTriage.smartTriage_server.module.referral.repository.ReferralRepository.class);
+        mohReportRepository =
+                mock(com.smartTriage.smartTriage_server.module.reporting.repository.MohReportRepository.class);
         handoverReportRepository = mock(HandoverReportRepository.class);
         authz = new ClinicalAuthz(
                 userRepository,
@@ -99,7 +103,8 @@ class ClinicalAuthzTest {
                 labOrderRepository,
                 clinicalDocumentRepository,
                 informedConsentRepository,
-                referralRepository);
+                referralRepository,
+                mohReportRepository);
     }
 
     @Test
@@ -283,6 +288,60 @@ class ClinicalAuthzTest {
         lenient().when(userRepository.findHospitalIdByUserId(u.getId()))
                 .thenReturn(Optional.ofNullable(atHospital));
         return u;
+    }
+
+    // ── canViewMohReport / canSubmitMohReport (R5 object-level authz) ──
+
+    @Test
+    void superAdminCanViewNationalReport() {
+        UUID reportId = UUID.randomUUID();
+        // National report — only SUPER_ADMIN; super-admin short-circuits before any lookup.
+        assertTrue(authz.canViewMohReport(authFor(user(Role.SUPER_ADMIN, null, null)), reportId));
+    }
+
+    @Test
+    void hospitalAdminAndReadOnlyCannotViewNationalReportById() {
+        UUID reportId = UUID.randomUUID();
+        when(mohReportRepository.findReportLevelById(reportId)).thenReturn(Optional.of(ReportLevel.NATIONAL));
+        assertFalse(authz.canViewMohReport(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), reportId));
+        assertFalse(authz.canViewMohReport(authFor(user(Role.READ_ONLY, null, hospitalId)), reportId));
+    }
+
+    @Test
+    void hospitalAdminCanViewOwnHospitalReportButNotAnotherHospitals() {
+        UUID reportId = UUID.randomUUID();
+        when(mohReportRepository.findReportLevelById(reportId)).thenReturn(Optional.of(ReportLevel.HOSPITAL));
+        when(mohReportRepository.findHospitalIdById(reportId)).thenReturn(Optional.of(hospitalId));
+        assertTrue(authz.canViewMohReport(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), reportId));
+        // A HOSPITAL_ADMIN at a DIFFERENT hospital must not read this hospital's report by id.
+        assertFalse(authz.canViewMohReport(authFor(user(Role.HOSPITAL_ADMIN, null, UUID.randomUUID())), reportId));
+    }
+
+    @Test
+    void canViewMohReport_deniesUnknownReportForNonSuperAdmin() {
+        UUID reportId = UUID.randomUUID();
+        when(mohReportRepository.findReportLevelById(reportId)).thenReturn(Optional.empty());
+        assertFalse(authz.canViewMohReport(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), reportId));
+    }
+
+    @Test
+    void hospitalAdminCannotSubmitNationalReport_butSuperAdminCan() {
+        UUID reportId = UUID.randomUUID();
+        when(mohReportRepository.findReportLevelById(reportId)).thenReturn(Optional.of(ReportLevel.NATIONAL));
+        assertFalse(authz.canSubmitMohReport(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), reportId));
+        // SUPER_ADMIN short-circuits — national submission is the national governance owner's job.
+        assertTrue(authz.canSubmitMohReport(authFor(user(Role.SUPER_ADMIN, null, null)), reportId));
+    }
+
+    @Test
+    void hospitalAdminCanSubmitOwnHospitalReportOnly() {
+        UUID reportId = UUID.randomUUID();
+        when(mohReportRepository.findReportLevelById(reportId)).thenReturn(Optional.of(ReportLevel.HOSPITAL));
+        when(mohReportRepository.findHospitalIdById(reportId)).thenReturn(Optional.of(hospitalId));
+        assertTrue(authz.canSubmitMohReport(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), reportId));
+        assertFalse(authz.canSubmitMohReport(authFor(user(Role.HOSPITAL_ADMIN, null, UUID.randomUUID())), reportId));
+        // READ_ONLY may read (elsewhere) but never advance lifecycle.
+        assertFalse(authz.canSubmitMohReport(authFor(user(Role.READ_ONLY, null, hospitalId)), reportId));
     }
 
     // ── canAuditSafetyOverrides ──────────────────────────────────────

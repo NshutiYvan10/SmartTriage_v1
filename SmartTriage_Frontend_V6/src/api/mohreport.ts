@@ -2,7 +2,10 @@ import { get, post, put, downloadBlob, saveBlob } from './client';
 
 export interface MohReport {
   id: string;
-  hospitalId: string;
+  hospitalId: string | null;
+  hospitalName?: string | null;
+  reportLevel?: string; // HOSPITAL | NATIONAL
+  includedHospitalCount?: number | null;
   reportType: string;
   reportPeriodStart: string;
   reportPeriodEnd: string;
@@ -24,6 +27,10 @@ export interface MohReport {
 
 export const mohReportApi = {
   generate: (data: { hospitalId: string; reportType: string; periodStart: string; periodEnd: string }) => post<MohReport>('/moh-reports/generate', data),
+  /** SUPER_ADMIN: generate a national rollup aggregated across all active hospitals. */
+  generateNational: (data: { reportType: string; periodStart: string; periodEnd: string }) => post<MohReport>('/moh-reports/national/generate', data),
+  /** SUPER_ADMIN: list national rollups. */
+  getNational: (page = 0) => get<{ content: MohReport[]; totalElements: number }>(`/moh-reports/national?page=${page}&size=20`),
   submit: (id: string) => put<MohReport>(`/moh-reports/${id}/submit`),
   accept: (id: string) => put<MohReport>(`/moh-reports/${id}/accept`),
   reject: (id: string, reason: string) => put<MohReport>(`/moh-reports/${id}/reject`, { reason }),

@@ -117,6 +117,46 @@ public class MohReportGenerator {
         return report;
     }
 
+    /**
+     * Generate a NATIONAL de-identified rollup across all active hospitals for a date range.
+     *
+     * Visits from every active hospital in the period are pooled into a single list and run
+     * through the same {@link #populateReportData} logic used per hospital. This yields exact
+     * national SUMs for the count fields and correct visit-weighted national averages for wait
+     * time and length of stay (the mean is taken over the pooled visit set, not a naive
+     * average-of-hospital-averages). The report has no owning hospital (hospital == null) and
+     * records how many hospitals it spanned.
+     */
+    public MohReport generateNationalSummary(MohReportType type, LocalDate periodStart, LocalDate periodEnd) {
+        log.info("Generating NATIONAL MoH {} rollup from {} to {}", type, periodStart, periodEnd);
+
+        Instant start = periodStart.atStartOfDay(KIGALI).toInstant();
+        Instant end = periodEnd.plusDays(1).atStartOfDay(KIGALI).toInstant();
+
+        List<Hospital> hospitals = hospitalRepository.findByIsActiveTrue();
+        List<Visit> pooledVisits = new ArrayList<>();
+        for (Hospital h : hospitals) {
+            pooledVisits.addAll(getVisitsForPeriod(h.getId(), start, end));
+        }
+
+        MohReport report = MohReport.builder()
+                .hospital(null)
+                .reportLevel(ReportLevel.NATIONAL)
+                .includedHospitalCount(hospitals.size())
+                .reportType(type)
+                .reportPeriodStart(start)
+                .reportPeriodEnd(end)
+                .generatedAt(Instant.now())
+                .status(ReportStatus.GENERATED)
+                .build();
+
+        populateReportData(report, pooledVisits);
+
+        log.info("National {} rollup generated across {} hospitals: {} ED visits",
+                type, hospitals.size(), report.getTotalEdVisits());
+        return report;
+    }
+
     // ====================================================================
     // PRIVATE HELPERS
     // ====================================================================

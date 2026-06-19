@@ -2,6 +2,7 @@ package com.smartTriage.smartTriage_server.module.reporting.entity;
 
 import com.smartTriage.smartTriage_server.common.entity.BaseEntity;
 import com.smartTriage.smartTriage_server.common.enums.MohReportType;
+import com.smartTriage.smartTriage_server.common.enums.ReportLevel;
 import com.smartTriage.smartTriage_server.common.enums.ReportStatus;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import jakarta.persistence.*;
@@ -26,9 +27,27 @@ import java.time.Instant;
 @Builder
 public class MohReport extends BaseEntity {
 
+    /**
+     * Owning hospital — null for a NATIONAL rollup (see {@link #reportLevel}).
+     */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "hospital_id", nullable = false)
+    @JoinColumn(name = "hospital_id")
     private Hospital hospital;
+
+    /**
+     * Aggregation level. HOSPITAL (single hospital, the default) or NATIONAL
+     * (pooled across all active hospitals, hospital is null).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "report_level", nullable = false, length = 20)
+    @Builder.Default
+    private ReportLevel reportLevel = ReportLevel.HOSPITAL;
+
+    /**
+     * Number of hospitals aggregated — populated only for NATIONAL reports.
+     */
+    @Column(name = "included_hospital_count")
+    private Integer includedHospitalCount;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "report_type", nullable = false, length = 30)

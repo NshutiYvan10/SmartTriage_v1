@@ -55,13 +55,20 @@ public class MohReportPdfService {
             PdfWriter.getInstance(doc, out);
             doc.open();
 
-            String hospitalName = r.getHospital() != null && r.getHospital().getName() != null
-                    ? r.getHospital().getName() : "Hospital";
+            boolean national = r.getReportLevel() == com.smartTriage.smartTriage_server.common.enums.ReportLevel.NATIONAL;
             doc.add(p("Ministry of Health — Emergency Department Return", H1));
-            doc.add(p(hospitalName
-                    + (r.getHospital() != null && r.getHospital().getHospitalCode() != null
-                        ? "  (" + r.getHospital().getHospitalCode() + ")" : ""), H2));
-            doc.add(p("Report type: " + r.getReportType()
+            if (national) {
+                int n = r.getIncludedHospitalCount() != null ? r.getIncludedHospitalCount() : 0;
+                doc.add(p("National rollup — " + n + " hospital" + (n == 1 ? "" : "s"), H2));
+            } else {
+                String hospitalName = r.getHospital() != null && r.getHospital().getName() != null
+                        ? r.getHospital().getName() : "Hospital";
+                doc.add(p(hospitalName
+                        + (r.getHospital() != null && r.getHospital().getHospitalCode() != null
+                            ? "  (" + r.getHospital().getHospitalCode() + ")" : ""), H2));
+            }
+            doc.add(p("Level: " + r.getReportLevel()
+                    + "    Report type: " + r.getReportType()
                     + "    Status: " + r.getStatus(), VALUE));
             doc.add(p("Period: " + fmtD(r.getReportPeriodStart()) + " to " + fmtD(r.getReportPeriodEnd()), VALUE));
             doc.add(p("Generated: " + fmtDt(r.getGeneratedAt())
