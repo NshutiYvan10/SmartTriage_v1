@@ -57,10 +57,11 @@ public class MedicationSafetyController {
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR')")
     public ResponseEntity<ApiResponse<MedicationSafetyCheckResponse>> overrideSafetyCheck(
             @PathVariable UUID checkId,
-            @RequestParam String reason,
-            @RequestParam String overriddenBy) {
+            @Valid @RequestBody OverrideSafetyCheckRequest request) {
+        // The overriding clinician is resolved from the authenticated principal in the
+        // service — never from the request — so the forensic record cannot be spoofed.
         MedicationSafetyCheckResponse response = medicationSafetyService.overrideSafetyCheck(
-                checkId, reason, overriddenBy);
+                checkId, request.getReason());
         return ResponseEntity.ok(ApiResponse.success("Safety check overridden", response));
     }
 

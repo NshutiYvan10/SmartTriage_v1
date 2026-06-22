@@ -5,11 +5,14 @@ import com.smartTriage.smartTriage_server.common.enums.AlertType;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
+import com.smartTriage.smartTriage_server.module.alert.mapper.ClinicalAlertMapper;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import com.smartTriage.smartTriage_server.module.hospital.service.HospitalService;
+import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher;
 import com.smartTriage.smartTriage_server.module.medication.entity.MedicationAdministration;
 import com.smartTriage.smartTriage_server.module.medication.service.MedicationService;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.medsafety.dto.*;
 import com.smartTriage.smartTriage_server.module.medsafety.engine.MedicationSafetyEngine;
 import com.smartTriage.smartTriage_server.module.medsafety.engine.MedicationSafetyResult;
@@ -57,6 +60,7 @@ public class MedicationSafetyService {
     private final VisitService visitService;
     private final MedicationService medicationService;
     private final HospitalService hospitalService;
+    private final RealTimeEventPublisher realTimeEventPublisher;
 
     // ====================================================================
     // VALIDATE PRESCRIPTION
@@ -111,10 +115,16 @@ public class MedicationSafetyService {
     // ====================================================================
 
     /**
-     * Allow clinician to override a safety check with documented reason.
+     * Allow a clinician to override a failed safety check with a documented reason.
+     *
+     * The overriding clinician is resolved from the authenticated principal — never from
+     * the request — so the forensic "overridden by" cannot be spoofed. Overriding a safety
+     * check is a point-of-harm bypass, so it emits a {@code MEDICATION_EMERGENCY_OVERRIDE}
+     * alert (visible on the Override Audit page) and pushes it in real time to the hospital
+     * + zone topics, exactly like the prescribe/administration override paths.
      */
     @Transactional
-    public MedicationSafetyCheckResponse overrideSafetyCheck(UUID checkId, String reason, String overriddenBy) {
+    public MedicationSafetyCheckResponse overrideSafetyCheck(UUID checkId, String reason) {
         MedicationSafetyCheck check = safetyCheckRepository.findByIdAndIsActiveTrue(checkId)
                 .orElseThrow(() -> new ResourceNotFoundException("MedicationSafetyCheck", "id", checkId));
 
@@ -126,15 +136,60 @@ public class MedicationSafetyService {
             throw new ClinicalBusinessException("Override reason is required for safety check override");
         }
 
-        check.setOverriddenBy(overriddenBy);
+        String actorName = formatUserName(resolveCurrentUser());
+        if (actorName == null) {
+            // Endpoint is authenticated (DOCTOR/SUPER_ADMIN); a missing principal means we
+            // must not attribute the override to nobody — fail closed rather than record a lie.
+            throw new ClinicalBusinessException("Cannot resolve the overriding clinician from the security context");
+        }
+
+        check.setOverriddenBy(actorName);
         check.setOverrideReason(reason);
         check.setOverriddenAt(Instant.now());
 
         check = safetyCheckRepository.save(check);
 
-        log.info("Medication safety check {} overridden by {} — reason: {}", checkId, overriddenBy, reason);
+        raiseSafetyCheckOverrideAlert(check, actorName, reason);
+
+        log.warn("Medication safety check {} overridden by {} — reason: {}", checkId, actorName, reason);
 
         return MedicationSafetyMapper.toCheckResponse(check);
+    }
+
+    /**
+     * Forensic + real-time alert for a safety-check override (a point-of-harm bypass of a
+     * BLOCK/WARNING). Message shape is parser-compatible with the Override Audit page
+     * ({@code "<actor> overrode … for '<drug>'"}). Best-effort publish — a STOMP failure
+     * must never roll back the override transaction.
+     */
+    private void raiseSafetyCheckOverrideAlert(MedicationSafetyCheck check, String actorName, String reason) {
+        Visit visit = check.getVisit();
+        String failed = describeFailedChecks(check);
+        ClinicalAlert alert = ClinicalAlert.builder()
+                .visit(visit)
+                .alertType(AlertType.MEDICATION_EMERGENCY_OVERRIDE)
+                .severity(AlertSeverity.CRITICAL)
+                .title("MEDICATION SAFETY OVERRIDE: " + check.getDrugName())
+                .message(String.format(
+                        "%s overrode medication safety check for '%s'. Override reason: %s.%s",
+                        actorName,
+                        check.getDrugName() != null ? check.getDrugName() : "(unknown drug)",
+                        reason,
+                        failed.isEmpty() ? "" : " Failed checks: " + failed))
+                .autoGenerated(true)
+                .build();
+        clinicalAlertRepository.save(alert);
+        publishAlert(alert, visit);
+    }
+
+    /** Summarise which sub-checks failed, for the override audit message. */
+    private String describeFailedChecks(MedicationSafetyCheck check) {
+        List<String> parts = new java.util.ArrayList<>();
+        if (!check.isAllergyCheckPassed() && check.getAllergyWarning() != null) parts.add(check.getAllergyWarning());
+        if (!check.isDoseCheckPassed() && check.getDoseWarning() != null) parts.add(check.getDoseWarning());
+        if (!check.isInteractionCheckPassed() && check.getInteractionWarning() != null) parts.add(check.getInteractionWarning());
+        if (!check.isDuplicateTherapyCheckPassed() && check.getDuplicateWarning() != null) parts.add(check.getDuplicateWarning());
+        return String.join("; ", parts);
     }
 
     // ====================================================================
@@ -275,6 +330,7 @@ public class MedicationSafetyService {
                     .autoGenerated(true)
                     .build();
             clinicalAlertRepository.save(alert);
+            publishAlert(alert, visit);
 
             log.warn("CRITICAL medication safety alert generated for drug '{}' on visit {}",
                     medication.getDrugName(), visit.getId());
@@ -293,9 +349,53 @@ public class MedicationSafetyService {
                     .autoGenerated(true)
                     .build();
             clinicalAlertRepository.save(alert);
+            publishAlert(alert, visit);
 
             log.warn("HIGH medication safety alert generated for drug '{}' on visit {}",
                     medication.getDrugName(), visit.getId());
         }
+    }
+
+    /**
+     * Push a medication-safety alert to the hospital + (when known) zone topics so a charge
+     * nurse / safety lead is notified the moment it happens — not only on a later audit-page
+     * refresh. Best-effort: a STOMP failure must never roll back the persistence transaction.
+     */
+    private void publishAlert(ClinicalAlert alert, Visit visit) {
+        try {
+            if (visit == null || visit.getHospital() == null) return;
+            var resp = ClinicalAlertMapper.toResponse(alert);
+            UUID hospitalId = visit.getHospital().getId();
+            realTimeEventPublisher.publishHospitalAlert(hospitalId, resp);
+            if (visit.getCurrentEdZone() != null) {
+                realTimeEventPublisher.publishZoneAlert(hospitalId, visit.getCurrentEdZone(), resp);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to publish medication-safety alert {}: {}",
+                    alert != null ? alert.getId() : null, e.getMessage());
+        }
+    }
+
+    /** Authenticated principal (the acting clinician), or null for a non-user security context. */
+    private User resolveCurrentUser() {
+        try {
+            var auth = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+            if (auth == null) return null;
+            Object principal = auth.getPrincipal();
+            return (principal instanceof User user) ? user : null;
+        } catch (Exception e) {
+            log.debug("Could not resolve current user from SecurityContext: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** "First Last" — falls back to email when names are blank; null when there is no user. */
+    private String formatUserName(User u) {
+        if (u == null) return null;
+        String first = u.getFirstName() != null ? u.getFirstName().trim() : "";
+        String last = u.getLastName() != null ? u.getLastName().trim() : "";
+        String joined = (first + " " + last).trim();
+        return joined.isEmpty() ? u.getEmail() : joined;
     }
 }

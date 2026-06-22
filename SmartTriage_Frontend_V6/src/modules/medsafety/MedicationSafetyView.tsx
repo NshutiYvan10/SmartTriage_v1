@@ -171,7 +171,6 @@ export function MedicationSafetyView() {
     try {
       await medsafetyApi.override(overrideCheckId, {
         reason: overrideReason,
-        overriddenBy: user?.fullName || user?.username || '',
       });
       setOverrideDialogOpen(false);
       loadChecks();

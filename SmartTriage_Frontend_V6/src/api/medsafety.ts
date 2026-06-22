@@ -54,7 +54,8 @@ export interface ValidatePrescriptionRequest {
 
 export const medsafetyApi = {
   validate: (data: ValidatePrescriptionRequest) => post<MedicationSafetyCheck>('/med-safety/validate', data),
-  override: (checkId: string, data: { reason: string; overriddenBy: string }) => put<MedicationSafetyCheck>(`/med-safety/${checkId}/override`, data),
+  // The overriding clinician is taken from the authenticated session server-side — never sent by the client.
+  override: (checkId: string, data: { reason: string }) => put<MedicationSafetyCheck>(`/med-safety/${checkId}/override`, data),
   getForVisit: (visitId: string) => get<MedicationSafetyCheck[]>(`/med-safety/visit/${visitId}`),
   getFormulary: (hospitalId: string, page = 0) => get<{ content: DrugFormulary[]; totalElements: number }>(`/med-safety/formulary/${hospitalId}?page=${page}&size=50`),
   searchFormulary: (query: string) => get<DrugFormulary[]>(`/med-safety/formulary/search?query=${encodeURIComponent(query)}`),

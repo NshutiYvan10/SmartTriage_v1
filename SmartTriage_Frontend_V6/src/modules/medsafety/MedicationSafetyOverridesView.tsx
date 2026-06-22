@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
+import { useAlertStore } from '@/store/alertStore';
 import { alertApi } from '@/api/alerts';
 import type { ClinicalAlertResponse, AlertSeverity } from '@/api/types';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -224,6 +225,23 @@ export function MedicationSafetyOverridesView() {
   }, [hospitalId, range]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Live update: override-alert creation now publishes to the hospital alert topic, which
+  // the app-root WebSocket subscriber folds into the alert store. We OBSERVE that store's
+  // signature (rather than open our own subscription, which would clobber the single global
+  // sub) and re-fetch the audit list when a new override lands or an existing one is acked —
+  // plus a 5-minute backstop for any missed frame. Mirrors AlertsView.
+  const liveAlertSignature = useAlertStore((s) => {
+    let unack = 0;
+    for (const a of s.alerts) if (!a.acknowledged) unack += 1;
+    return `${s.alerts.length}:${unack}`;
+  });
+  useEffect(() => { load(); }, [load, liveAlertSignature]);
+  useEffect(() => {
+    if (!hospitalId) return;
+    const id = setInterval(load, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [load, hospitalId]);
 
   /* ── Acknowledge a single override ─────────────────────────── */
   const handleAcknowledge = useCallback(async (alertId: string) => {
