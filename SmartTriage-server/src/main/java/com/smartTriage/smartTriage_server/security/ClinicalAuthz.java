@@ -395,6 +395,35 @@ public class ClinicalAuthz {
     }
 
     /**
+     * Cross-hospital patient SAFETY-SUMMARY read gate (Phase 1 — federated identity).
+     *
+     * <p>This is the deliberate "safety floor": demographics + allergies + blood type + active
+     * meds + chronic problems + emergency contacts, shared across SmartTriage hospitals so a
+     * returning patient is recognised instead of re-registered. It therefore DELIBERATELY does
+     * NOT scope to the caller's hospital ({@code canAccessHospital}) — cross-hospital read is the
+     * whole point. It is role-gated to the clinical/registration roles that register or treat
+     * patients (SUPER_ADMIN, DOCTOR, NURSE, REGISTRAR, PARAMEDIC); admins/lab/read-only are denied.
+     * It does NOT open the deep clinical record — that stays hospital-owned (a later phase).
+     * Every read is separately written to the audit log.
+     */
+    @Transactional(readOnly = true)
+    public boolean canReadCrossHospitalSafetySummary(Authentication authentication) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null) {
+                return false;
+            }
+            return switch (user.getRole()) {
+                case SUPER_ADMIN, DOCTOR, NURSE, REGISTRAR, PARAMEDIC -> true;
+                default -> false;
+            };
+        } catch (Exception e) {
+            log.error("canReadCrossHospitalSafetySummary error: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
      * May this user view the FORENSIC medication-safety override audit?
      *
      * <p>This is a governance / quality surface (hospital safety officer,

@@ -39,6 +39,9 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
 
     Optional<Patient> findByMedicalRecordNumberAndHospitalIdAndIsActiveTrue(String mrn, UUID hospitalId);
 
+    /** All local patient rows linked to one shared cross-hospital identity (safety-summary fan-out). */
+    List<Patient> findByPersonIdentityIdAndIsActiveTrue(UUID personIdentityId);
+
     // ── Tier 3: soft identifiers (multiple matches possible) ──
     //
     // These return List<> rather than Optional<> because the same phone /

@@ -53,6 +53,8 @@ public class PatientIdentityService {
 
     private final PatientRepository patientRepository;
     private final VisitRepository visitRepository;
+    /** Phase 1 — link a resolved placeholder to the shared cross-hospital identity once it gains a national ID. */
+    private final PersonIdentityService personIdentityService;
 
     /**
      * Resolve a placeholder patient's identity. Returns the resulting
@@ -102,7 +104,11 @@ public class PatientIdentityService {
         placeholder.setLastName(request.getLastName().trim());
         if (request.getDateOfBirth() != null)  placeholder.setDateOfBirth(request.getDateOfBirth());
         if (request.getGender() != null)       placeholder.setGender(request.getGender());
-        if (request.getNationalId() != null)   placeholder.setNationalId(request.getNationalId().trim());
+        if (request.getNationalId() != null) {
+            placeholder.setNationalId(request.getNationalId().trim());
+            // Now that the patient has a national ID, link them to the shared cross-hospital identity.
+            placeholder.setPersonIdentity(personIdentityService.findOrCreate(placeholder.getNationalId()));
+        }
         if (request.getPhoneNumber() != null)  placeholder.setPhoneNumber(request.getPhoneNumber().trim());
         if (request.getAddress() != null)      placeholder.setAddress(request.getAddress().trim());
 

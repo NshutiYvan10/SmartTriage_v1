@@ -46,6 +46,8 @@ public class PatientService {
     private final PatientRepository patientRepository;
     private final VisitRepository visitRepository;
     private final HospitalService hospitalService;
+    /** Phase 1 — links this hospital's local patient row to the shared cross-hospital identity. */
+    private final PersonIdentityService personIdentityService;
     /** B4 — pushes a visit event after commit so dashboards refresh live when a
      *  new patient is admitted. */
     private final com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher realTimeEventPublisher;
@@ -80,6 +82,7 @@ public class PatientService {
         Patient patient = PatientMapper.toEntity(request);
         patient.setHospital(hospital);
         patient.setMedicalRecordNumber(generateMRN(hospital.getHospitalCode()));
+        linkSharedIdentity(patient);
         applyStructuredLocation(patient,
                 request.getProvinceId(), request.getDistrictId(),
                 request.getSectorId(), request.getCellId(), request.getVillageId());
@@ -147,6 +150,7 @@ public class PatientService {
                 .build();
         patient.setHospital(hospital);
         patient.setMedicalRecordNumber(generateMRN(hospital.getHospitalCode()));
+        linkSharedIdentity(patient);
         applyStructuredLocation(patient,
                 request.getProvinceId(), request.getDistrictId(),
                 request.getSectorId(), request.getCellId(), request.getVillageId());
@@ -286,6 +290,15 @@ public class PatientService {
 
     private static String blankToNull(String s) {
         return (s == null || s.isBlank()) ? null : s.trim();
+    }
+
+    /**
+     * Phase 1 — link this local patient row to the shared cross-hospital identity when a national
+     * ID is present, so a returning patient is recognised at another SmartTriage hospital instead
+     * of re-registered blank. No national ID (e.g. unidentified placeholders) → stays local.
+     */
+    private void linkSharedIdentity(Patient patient) {
+        patient.setPersonIdentity(personIdentityService.findOrCreate(patient.getNationalId()));
     }
 
     /**

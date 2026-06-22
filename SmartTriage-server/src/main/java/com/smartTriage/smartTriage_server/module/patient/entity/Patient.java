@@ -174,6 +174,15 @@ public class Patient extends BaseEntity {
     @JoinColumn(name = "hospital_id", nullable = false)
     private Hospital hospital;
 
+    /**
+     * Shared cross-hospital identity (Phase 1). Null for patients with no national ID
+     * (e.g. unidentified placeholders) — they stay purely local. Set on registration when a
+     * national ID is present, linking this hospital's local row to the one shared {@link PersonIdentity}.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "person_identity_id")
+    private PersonIdentity personIdentity;
+
     // ═══════════════════════════════════════════════════════════════
     // Unidentified-patient identity placeholder (V44 — Direct Resus)
     //
