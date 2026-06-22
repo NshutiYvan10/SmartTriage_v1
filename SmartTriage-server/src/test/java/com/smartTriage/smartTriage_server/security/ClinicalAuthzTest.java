@@ -276,6 +276,29 @@ class ClinicalAuthzTest {
                 authFor(user(Role.DOCTOR, null, hospitalId)), reportId));
     }
 
+    // ── canAccessVisit (the per-visit gate behind handover GENERATE, sepsis, etc.) ──
+
+    @Test
+    void canAccessVisit_allowsDoctorAtVisitHospital_deniesOtherHospital() {
+        UUID visitId = UUID.randomUUID();
+        when(visitRepository.findHospitalIdByVisitId(visitId)).thenReturn(Optional.of(hospitalId));
+        // Bedside doctor at the visit's hospital may generate a handover — no shift-lead authority needed.
+        assertTrue(authz.canAccessVisit(authFor(user(Role.DOCTOR, null, hospitalId)), visitId));
+        // A doctor at a DIFFERENT hospital must not (cross-tenant).
+        assertFalse(authz.canAccessVisit(authFor(user(Role.DOCTOR, null, UUID.randomUUID())), visitId));
+    }
+
+    @Test
+    void canAccessVisit_deniesUnknownVisit_allowsSuperAdmin() {
+        UUID unknownVisit = UUID.randomUUID();
+        when(visitRepository.findHospitalIdByVisitId(unknownVisit)).thenReturn(Optional.empty());
+        assertFalse(authz.canAccessVisit(authFor(user(Role.DOCTOR, null, hospitalId)), unknownVisit));
+
+        UUID knownVisit = UUID.randomUUID();
+        when(visitRepository.findHospitalIdByVisitId(knownVisit)).thenReturn(Optional.of(UUID.randomUUID()));
+        assertTrue(authz.canAccessVisit(authFor(user(Role.SUPER_ADMIN, null, null)), knownVisit));
+    }
+
     private Authentication authFor(User user) {
         return new UsernamePasswordAuthenticationToken(user, null);
     }

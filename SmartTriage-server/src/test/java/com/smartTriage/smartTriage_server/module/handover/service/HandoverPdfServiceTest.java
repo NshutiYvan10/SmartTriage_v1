@@ -70,4 +70,39 @@ class HandoverPdfServiceTest {
         p.setPlaceholderAssignedAt(Instant.now());
         assertIsPdf(service.render(report(p)));
     }
+
+    @Test
+    void rendersValidPdfWithV73AndMedicationSections() {
+        // The V73 sections (prehospital / acute protocols / procedures-documents) and the
+        // V67 medication-audit section must render into the PDF — they were added after the
+        // original PDF test and were previously unexercised.
+        Hospital h = new Hospital();
+        h.setName("Kigali Emergency Hospital");
+        h.setHospitalCode("KGL-ED");
+        Patient p = new Patient();
+        p.setFirstName("Jean");
+        p.setLastName("Uwimana");
+        Visit v = new Visit();
+        v.setVisitNumber("V-V73-1");
+        v.setPatient(p);
+
+        HandoverReport report = HandoverReport.builder()
+                .hospital(h)
+                .visit(v)
+                .reportType(HandoverReportType.SHIFT_HANDOVER)
+                .generatedAt(Instant.now())
+                .generatedByName("Dr Test")
+                .patientSummary("Name: Jean Uwimana\nLocation: Zone ACUTE, Bed 3")
+                .prehospitalSummary("EMS: SAMU (SAMU-7). Mechanism: RTA — motorcycle vs car. "
+                        + "Field triage: ORANGE (TEWS 5). Interventions: cervical collar, IV access.")
+                .acuteProtocols("SEPSIS: screening positive, bundle started 14:10.\n"
+                        + "FAST TRACK: STEMI pathway active, cath lab notified.")
+                .proceduresDocuments("PROCEDURE NOTE — Wound closure, left forearm (signed, Dr Mukamana).")
+                .medicationAudit("Order: Heparin 5000 units SC q12h. Dose 1 given 14:00 by RN Keza, "
+                        + "witnessed by RN Niyonsaba.")
+                .planOfCare("Doctor of Record: Dr Habimana\nClinical Impression: ACS, await troponin.")
+                .build();
+
+        assertIsPdf(service.render(report));
+    }
 }
