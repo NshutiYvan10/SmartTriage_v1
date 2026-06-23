@@ -3,17 +3,22 @@ package com.smartTriage.smartTriage_server.module.lab.controller;
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.module.lab.dto.*;
 import com.smartTriage.smartTriage_server.module.lab.service.LabOrderService;
+import com.smartTriage.smartTriage_server.module.lab.entity.LabOrder;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -236,6 +241,66 @@ public class LabOrderController {
     public ResponseEntity<ApiResponse<List<LabOrderResponse>>> getAwaitingVerification(
             @PathVariable UUID hospitalId) {
         return ResponseEntity.ok(ApiResponse.success(labOrderService.getAwaitingVerification(hospitalId)));
+    }
+
+    // ====================================================================
+    // REPORTING PACK (lab tech + hospital governance)
+    // ====================================================================
+
+    /**
+     * Lab reporting pack PDF — workload + turnaround summary over a date window. Lab-departmental
+     * + governance audience: LAB_TECHNICIAN and HOSPITAL_ADMIN at their own hospital (and
+     * SUPER_ADMIN); clinical staff (DOCTOR/NURSE) are not a lab-reporting audience.
+     */
+    @GetMapping("/hospital/{hospitalId}/report/pdf")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN', 'HOSPITAL_ADMIN') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    public ResponseEntity<byte[]> downloadReportPdf(
+            @PathVariable UUID hospitalId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        byte[] pdf = labOrderService.renderReportPdf(hospitalId, from, to);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"lab-report_" + from + "_" + to + ".pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
+    }
+
+    /** Lab reporting pack as raw CSV — one row per order in the window (same audience as the PDF). */
+    @GetMapping("/hospital/{hospitalId}/report/csv")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN', 'HOSPITAL_ADMIN') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    public ResponseEntity<String> downloadReportCsv(
+            @PathVariable UUID hospitalId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        List<LabOrder> rows = labOrderService.getOrdersForReport(hospitalId, from, to);
+        StringBuilder sb = new StringBuilder(
+                "OrderNumber,Test,Priority,Status,OrderedAt,ResultedAt,VerifiedAt,TurnaroundMin,"
+                + "Critical,Abnormal,EnteredBy\n");
+        for (LabOrder o : rows) {
+            sb.append(csv(o.getOrderNumber())).append(',').append(csv(o.getTestName())).append(',')
+              .append(csv(o.getPriority())).append(',').append(csv(o.getStatus())).append(',')
+              .append(csv(o.getOrderedAt())).append(',').append(csv(o.getResultedAt())).append(',')
+              .append(csv(o.getVerifiedAt())).append(',').append(csv(o.getTurnaroundMinutes())).append(',')
+              .append(o.isCritical()).append(',').append(o.isAbnormal()).append(',')
+              .append(csv(o.getEnteredByName())).append('\n');
+        }
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"lab-report_" + from + "_" + to + ".csv\"")
+                .body(sb.toString());
+    }
+
+    private static String csv(Object value) {
+        if (value == null) return "";
+        String s = value.toString();
+        if (s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r")) {
+            return "\"" + s.replace("\"", "\"\"") + "\"";
+        }
+        return s;
     }
 
     // ====================================================================

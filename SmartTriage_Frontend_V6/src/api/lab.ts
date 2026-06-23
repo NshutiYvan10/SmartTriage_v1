@@ -1,4 +1,4 @@
-import { get, post, put } from './client';
+import { get, post, put, downloadBlob } from './client';
 
 export type LabOrderStatus =
   | 'ORDERED'
@@ -264,4 +264,11 @@ export const labApi = {
 
   releaseWithoutVerification: (orderId: string, body: OverrideVerificationRequest) =>
     post<LabOrder>(`/lab/${orderId}/release-without-verification`, body),
+
+  /** Lab reporting pack — PDF summary over a date window (ISO yyyy-MM-dd). Returns blob + filename. */
+  downloadReportPdf: (hospitalId: string, from: string, to: string) =>
+    downloadBlob(`/lab/hospital/${hospitalId}/report/pdf?from=${from}&to=${to}`, `lab-report_${from}_${to}.pdf`),
+  /** Lab reporting pack — raw orders CSV over a date window. Returns blob + filename. */
+  downloadReportCsv: (hospitalId: string, from: string, to: string) =>
+    downloadBlob(`/lab/hospital/${hospitalId}/report/csv?from=${from}&to=${to}`, `lab-report_${from}_${to}.csv`),
 };

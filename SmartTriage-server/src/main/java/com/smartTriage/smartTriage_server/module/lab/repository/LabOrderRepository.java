@@ -47,6 +47,15 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
     Page<LabOrder> findPendingOrders(
             @Param("hospitalId") UUID hospitalId, Pageable pageable);
 
+    /** All orders for a hospital ordered within a window — for the lab reporting pack (newest first). */
+    @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+            "AND o.isActive = true AND o.orderedAt BETWEEN :from AND :to " +
+            "ORDER BY o.orderedAt DESC")
+    List<LabOrder> findForReport(
+            @Param("hospitalId") UUID hospitalId,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
+
     /**
      * Unacknowledged critical results for a hospital.
      */

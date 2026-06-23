@@ -66,6 +66,25 @@ public class LabOrderService {
     private final ShiftAssignmentService shiftAssignmentService;
     private final LabPanelComponentRepository labPanelComponentRepository;
     private final LabResultComponentRepository labResultComponentRepository;
+    private final LabReportPdfService labReportPdfService;
+
+    private static final java.time.ZoneId KIGALI = java.time.ZoneId.of("Africa/Kigali");
+
+    /** Lab orders for a hospital within a date window (inclusive of {@code to}) — for the reporting pack. */
+    public java.util.List<com.smartTriage.smartTriage_server.module.lab.entity.LabOrder> getOrdersForReport(
+            java.util.UUID hospitalId, java.time.LocalDate from, java.time.LocalDate to) {
+        return labOrderRepository.findForReport(hospitalId,
+                from.atStartOfDay(KIGALI).toInstant(),
+                to.plusDays(1).atStartOfDay(KIGALI).toInstant());
+    }
+
+    /** Render the lab reporting-pack PDF for a hospital + date window. Hospital name from the record. */
+    public byte[] renderReportPdf(java.util.UUID hospitalId, java.time.LocalDate from, java.time.LocalDate to) {
+        String hospitalName = hospitalRepository.findByIdAndIsActiveTrue(hospitalId)
+                .map(com.smartTriage.smartTriage_server.module.hospital.entity.Hospital::getName)
+                .orElse("Hospital");
+        return labReportPdfService.render(hospitalName, from, to, getOrdersForReport(hospitalId, from, to));
+    }
 
     // ====================================================================
     // ORDER LAB

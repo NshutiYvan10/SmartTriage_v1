@@ -15,9 +15,10 @@ import {
   FlaskConical, Clock, AlertTriangle, Loader2, RefreshCw,
   Inbox, Activity, Beaker, CheckCircle2, XCircle, Phone,
   ClipboardCheck, AlertOctagon, History as HistoryIcon, Search,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Download, FileText,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { saveBlob } from '@/api/client';
 import { labApi } from '@/api/lab';
 import type { LabOrder, LabOrderStatus, LabPriority } from '@/api/lab';
 import { subscribeToLabOrders } from '@/api/websocket';
@@ -108,7 +109,35 @@ export function LabOrdersView() {
   const isHeadLabTech = user?.designation === 'HEAD_LAB_TECHNICIAN';
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [reportBusy, setReportBusy] = useState(false);
   const [toast, setToast] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  // ── Lab reporting pack (last 30 days) ──
+  const reportRange = () => {
+    const to = new Date().toISOString().slice(0, 10);
+    const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    return { from, to };
+  };
+  const handleReportPdf = async () => {
+    if (!hospitalId) return;
+    setReportBusy(true);
+    try {
+      const { from, to } = reportRange();
+      const { blob, filename } = await labApi.downloadReportPdf(hospitalId, from, to);
+      saveBlob(blob, filename);
+    } catch { /* surfaced via toast below */ setToast({ type: 'err', text: 'Report download failed' }); }
+    finally { setReportBusy(false); }
+  };
+  const handleReportCsv = async () => {
+    if (!hospitalId) return;
+    setReportBusy(true);
+    try {
+      const { from, to } = reportRange();
+      const { blob, filename } = await labApi.downloadReportCsv(hospitalId, from, to);
+      saveBlob(blob, filename);
+    } catch { setToast({ type: 'err', text: 'CSV download failed' }); }
+    finally { setReportBusy(false); }
+  };
   const flash = (type: 'ok' | 'err', text: string) => {
     setToast({ type, text });
     setTimeout(() => setToast(null), 3500);
@@ -296,6 +325,22 @@ export function LabOrdersView() {
                     <span className="text-white text-xs font-bold">{critical.length} CRITICAL UNACK</span>
                   </div>
                 )}
+                <button
+                  onClick={handleReportPdf}
+                  disabled={reportBusy}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 text-white text-xs font-bold hover:bg-white/25 transition-colors disabled:opacity-50"
+                  title="Lab reporting pack (PDF) — last 30 days"
+                >
+                  {reportBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />} Report PDF
+                </button>
+                <button
+                  onClick={handleReportCsv}
+                  disabled={reportBusy}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 text-white text-xs font-bold hover:bg-white/25 transition-colors disabled:opacity-50"
+                  title="Lab orders CSV — last 30 days"
+                >
+                  <Download className="w-3.5 h-3.5" /> CSV
+                </button>
                 <button
                   onClick={load}
                   className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center hover:bg-white/25 transition-colors"
