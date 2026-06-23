@@ -15,10 +15,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Siren, Plus, RefreshCw, Loader2, CheckCircle2, AlertOctagon,
   Send, MapPin, Clock, Activity, ClipboardList, Wifi, WifiOff,
-  ShieldAlert, HeartPulse, ChevronDown, ChevronUp,
+  ShieldAlert, HeartPulse, ChevronDown, ChevronUp, Download,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { emsApi } from '@/api/ems';
+import { saveBlob } from '@/api/client';
 import type { EmsRun, EmsRunStatus, FieldTriageCategory, PatientHistory } from '@/api/ems';
 import { subscribeToEmsRuns, getStompClient } from '@/api/websocket';
 import { formatDistanceToNow } from 'date-fns';
@@ -233,6 +234,19 @@ function ConnectivityPill({ online, lastSync }: { online: boolean; lastSync: Dat
 function RunCard({ run, glassCard, glassInner, text, isDark, onOpen, onPreregister, onConfirmArrival, onToggleLights }: any) {
   const stat: EmsRunStatus = run.status;
   const [showHistory, setShowHistory] = useState(false);
+  const [downloadingPcr, setDownloadingPcr] = useState(false);
+
+  const downloadPcr = async () => {
+    setDownloadingPcr(true);
+    try {
+      const { blob, filename } = await emsApi.downloadPcr(run.id);
+      saveBlob(blob, filename);
+    } catch (e) {
+      console.error('[EMS] PCR download failed', e);
+    } finally {
+      setDownloadingPcr(false);
+    }
+  };
   return (
     <div className={`rounded-2xl p-4 ${run.lightsActive ? 'ring-2 ring-rose-500/50' : ''}`} style={glassCard}>
       <div className="flex items-start justify-between mb-2 gap-2">
@@ -309,6 +323,11 @@ function RunCard({ run, glassCard, glassInner, text, isDark, onOpen, onPreregist
             <HeartPulse className="w-4 h-4" /> History {showHistory ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
         )}
+        {/* PCR PDF — a permanent run artifact, available for any status. */}
+        <button onClick={downloadPcr} disabled={downloadingPcr}
+          className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-bold disabled:opacity-50 ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+          {downloadingPcr ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} PCR
+        </button>
       </div>
 
       {showHistory && <PatientHistoryPanel runId={run.id} text={text} glassInner={glassInner} />}

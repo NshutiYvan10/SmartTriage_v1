@@ -93,7 +93,8 @@ class EmsRunServiceFieldTriageTest {
                 visitRepository, patientRepository, nameService, userRepository,
                 clinicalAlertRepository, realTimeEventPublisher, clinicalAuthz,
                 hospitalRepository, shiftAssignmentService,
-                tewsCalculator, pediatricTewsCalculator, decisionEngine, pediatricDecisionEngine);
+                tewsCalculator, pediatricTewsCalculator, decisionEngine, pediatricDecisionEngine,
+                mock(EmsPcrPdfService.class));
 
         Hospital hospital = new Hospital();
         run = EmsRun.builder()

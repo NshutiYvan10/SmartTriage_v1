@@ -1,5 +1,5 @@
 /* ── EMS / Paramedic API ── */
-import { get, post, patch } from './client';
+import { get, post, patch, downloadBlob } from './client';
 
 export type EmsRunStatus =
   | 'DISPATCHED' | 'EN_ROUTE' | 'ARRIVED' | 'HANDED_OFF' | 'CANCELLED';
@@ -274,4 +274,7 @@ export const emsApi = {
 
   getByVisit: (visitId: string) =>
     get<EmsRun | null>(`/ems/visits/${visitId}`),
+
+  /** Download the run's Patient Care Report (PCR) as a PDF (blob + filename from the server). */
+  downloadPcr: (id: string) => downloadBlob(`/ems/runs/${id}/pcr`, `pcr-${id}.pdf`),
 };

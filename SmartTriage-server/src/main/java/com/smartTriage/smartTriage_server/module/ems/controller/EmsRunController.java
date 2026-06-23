@@ -5,7 +5,9 @@ import com.smartTriage.smartTriage_server.module.ems.dto.*;
 import com.smartTriage.smartTriage_server.module.ems.service.EmsRunService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -139,6 +141,21 @@ public class EmsRunController {
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PARAMEDIC', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'READ_ONLY')")
     public ResponseEntity<ApiResponse<EmsRunResponse>> getById(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(emsRunService.getById(id)));
+    }
+
+    /**
+     * Download the run's Patient Care Report (PCR) as a PDF — the standard pre-hospital handoff
+     * artifact. Same audience + per-run scope as {@link #getById} (a paramedic gets only their own
+     * runs; ED staff/admin only runs at their hospital; super-admin any — enforced in the service).
+     */
+    @GetMapping("/runs/{id}/pcr")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PARAMEDIC', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'READ_ONLY')")
+    public ResponseEntity<byte[]> downloadPcr(@PathVariable UUID id) {
+        var pdf = emsRunService.renderPcr(id);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + pdf.filename() + "\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf.bytes());
     }
 
     @GetMapping("/runs/mine")

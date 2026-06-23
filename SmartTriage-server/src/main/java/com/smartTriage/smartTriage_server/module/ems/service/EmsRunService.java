@@ -94,6 +94,7 @@ public class EmsRunService {
     private final PediatricTewsCalculator pediatricTewsCalculator;
     private final RwandaTriageDecisionEngine decisionEngine;
     private final RwandaPediatricTriageDecisionEngine pediatricDecisionEngine;
+    private final EmsPcrPdfService emsPcrPdfService;
 
     /** Patients younger than this use the KFH pediatric form/engine. */
     private static final int PEDIATRIC_AGE_CEILING_YEARS = 13;
@@ -646,6 +647,20 @@ public class EmsRunService {
         List<EmsIntervention> ivs = interventionRepository
                 .findByEmsRunIdAndIsActiveTrueOrderByGivenAtAsc(runId);
         return EmsRunMapper.toResponse(run, ivs);
+    }
+
+    /**
+     * Render the run's Patient Care Report (PCR) PDF. Authorization is the SAME as {@link #getById}
+     * ({@code findOrThrow} → {@code assertCallerMayAccess}: a paramedic may only render their own
+     * run, ED staff/admin only runs at their hospital, super-admin any). Runs inside this read-only
+     * transaction so the PDF service can resolve the lazy visit/patient/hospital associations.
+     */
+    public EmsPcrPdfService.RenderedPdf renderPcr(UUID runId) {
+        EmsRun run = findOrThrow(runId);
+        List<EmsIntervention> ivs = interventionRepository
+                .findByEmsRunIdAndIsActiveTrueOrderByGivenAtAsc(runId);
+        return new EmsPcrPdfService.RenderedPdf(
+                emsPcrPdfService.render(run, ivs), emsPcrPdfService.filename(run));
     }
 
     public List<EmsRunResponse> getInbound(UUID hospitalId) {

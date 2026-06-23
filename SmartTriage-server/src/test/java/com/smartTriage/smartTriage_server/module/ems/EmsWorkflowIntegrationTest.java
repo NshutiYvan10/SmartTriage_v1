@@ -19,6 +19,7 @@ import com.smartTriage.smartTriage_server.module.ems.dto.FieldTriageRequest;
 import com.smartTriage.smartTriage_server.module.ems.dto.PreregisterRequest;
 import com.smartTriage.smartTriage_server.module.ems.dto.RerouteRequest;
 import com.smartTriage.smartTriage_server.module.ems.dto.TransferOfCareRequest;
+import com.smartTriage.smartTriage_server.module.ems.service.EmsPcrPdfService;
 import com.smartTriage.smartTriage_server.module.ems.service.EmsRunService;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import com.smartTriage.smartTriage_server.module.hospital.repository.HospitalRepository;
@@ -33,10 +34,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -240,6 +243,26 @@ class EmsWorkflowIntegrationTest extends AbstractIntegrationTest {
         // Patient row is hospital-scoped — a silent cross-hospital move is refused.
         assertThrows(ClinicalBusinessException.class, () ->
                 emsRunService.reroute(run.getId(), RerouteRequest.builder().hospitalId(other.getId()).build()));
+    }
+
+    @Test
+    void pcr_rendersForOwnerParamedic_andDeniesAnotherParamedic() {
+        actAs(paramedic);
+        EmsRunResponse run = newRun(hospital);
+        emsRunService.computeFieldTriage(run.getId(),
+                FieldTriageRequest.builder().hasCardiacArrest(true).build());
+
+        // The owning paramedic gets a valid PCR PDF.
+        EmsPcrPdfService.RenderedPdf pdf = emsRunService.renderPcr(run.getId());
+        assertTrue(pdf.bytes().length > 800, "PCR PDF should be non-trivial");
+        assertEquals("%PDF", new String(pdf.bytes(), 0, 4, StandardCharsets.US_ASCII), "PDF magic bytes");
+        assertTrue(pdf.filename().startsWith("pcr-"), "filename is the PCR convention");
+
+        // A DIFFERENT paramedic must NOT render this run's PCR (owner-scope authz on the new path).
+        User otherMedic = seedUser("medic2-" + UUID.randomUUID().toString().substring(0, 8),
+                Role.PARAMEDIC, Designation.PARAMEDIC, hospital);
+        actAs(otherMedic);
+        assertThrows(AccessDeniedException.class, () -> emsRunService.renderPcr(run.getId()));
     }
 
     @Test
