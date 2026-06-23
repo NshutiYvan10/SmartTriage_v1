@@ -335,6 +335,33 @@ public class ClinicalAuthz {
     }
 
     /**
+     * Read gate for the REGISTRAR reporting pack (intake log, unidentified-patient reconciliation
+     * queue, census). This is OPERATIONAL desk reporting — distinct from the governance-tier
+     * {@link #canViewHospitalReports} (which deliberately excludes the registrar). Allowed:
+     * SUPER_ADMIN (any hospital); REGISTRAR + HOSPITAL_ADMIN at their own hospital. Clinical roles
+     * (DOCTOR/NURSE/LAB_TECHNICIAN/PARAMEDIC) are not a registration-desk reporting audience.
+     */
+    @Transactional(readOnly = true)
+    public boolean canAccessRegistrarReports(Authentication authentication, UUID hospitalId) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null || hospitalId == null) {
+                return false;
+            }
+            if (user.getRole() == Role.SUPER_ADMIN) {
+                return true;
+            }
+            if (!belongsToHospital(user, hospitalId)) {
+                return false;
+            }
+            return user.getRole() == Role.REGISTRAR || user.getRole() == Role.HOSPITAL_ADMIN;
+        } catch (Exception e) {
+            log.error("canAccessRegistrarReports error for hospital {}: {}", hospitalId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
      * Object-level read gate for a single MoH report by id (JSON + PDF). NATIONAL rollups
      * are SUPER_ADMIN-only; a HOSPITAL report is readable only by the SUPER_ADMIN or the
      * HOSPITAL_ADMIN/READ_ONLY of THAT report's hospital. Closes the by-id IDOR hole where

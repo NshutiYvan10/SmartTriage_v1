@@ -13,6 +13,7 @@ import { VitalMonitoring } from './modules/vitals/VitalMonitoring';
 import { ConstantMonitoring } from './modules/monitoring/ConstantMonitoring';
 import { AlertsView } from './modules/alerts/AlertsView';
 import { ReportsView } from './modules/reports/ReportsView';
+import { RegistrarReportsView } from './modules/registrar-reports/RegistrarReportsView';
 import { SettingsView } from './modules/settings/SettingsView';
 import { NotificationsPage } from './modules/notifications/NotificationsPage';
 import { ProfilePage } from './modules/profile/ProfilePage';
@@ -201,6 +202,7 @@ function AppContent() {
             <Route path="/my-schedule" element={<RoleGuard page="my-schedule"><MySchedulePage /></RoleGuard>} />
             <Route path="/audit-trail" element={<RoleGuard page="audit-trail"><AuditTrail /></RoleGuard>} />
             <Route path="/reports" element={<RoleGuard page="reports"><ReportsView /></RoleGuard>} />
+            <Route path="/registrar-reports" element={<RoleGuard page="registrar-reports"><RegistrarReportsView /></RoleGuard>} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<RoleGuard page="settings"><SettingsView /></RoleGuard>} />

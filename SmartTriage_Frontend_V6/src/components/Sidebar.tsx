@@ -36,6 +36,7 @@ import {
   ClipboardCheck,
   FileBarChart,
   Scale,
+  UserX,
 } from 'lucide-react';
 import { useThemeStore } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
@@ -168,6 +169,10 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         { id: 'quality', label: 'Quality Metrics', icon: BarChart3, pageId: 'quality' as AppPage },
         { id: 'audit-trail', label: 'Audit Trail', icon: ScrollText, pageId: 'audit-trail' as AppPage },
         { id: 'reports', label: 'Reports', icon: BarChart3, pageId: 'reports' as AppPage },
+        // R11 — registrar front-desk reporting (intake log, the
+        // identity-reconciliation queue, census). Surfaced for the
+        // REGISTRAR (their primary reporting surface) and HOSPITAL_ADMIN.
+        { id: 'registrar-reports', label: 'Registrar Reports', icon: UserX, pageId: 'registrar-reports' as AppPage },
       ],
     },
     {

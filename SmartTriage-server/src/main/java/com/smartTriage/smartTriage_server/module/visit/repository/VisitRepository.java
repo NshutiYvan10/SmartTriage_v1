@@ -46,6 +46,10 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
 
         Page<Visit> findByPatientIdAndIsActiveTrue(UUID patientId, Pageable pageable);
 
+        /** Registrar intake log — all visits that arrived within a window (newest first). R11. */
+        List<Visit> findByHospitalIdAndArrivalTimeBetweenAndIsActiveTrueOrderByArrivalTimeDesc(
+                UUID hospitalId, Instant from, Instant to);
+
         // JOIN FETCH on the patient association so the mapper's
         // `visit.getPatient().getFirstName()` doesn't trigger a lazy
         // SELECT per visit (the dashboard's N+1 backend slowness). One

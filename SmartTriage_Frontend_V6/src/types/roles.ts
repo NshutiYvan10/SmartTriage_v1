@@ -20,6 +20,7 @@ export type AppPage =
   | 'alerts'
   | 'audit-trail'
   | 'reports'
+  | 'registrar-reports'
   | 'settings'
   | 'admin'
   | 'admin-hospitals'
@@ -187,7 +188,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   HOSPITAL_ADMIN: [
     'dashboard', 'admin', 'admin-users', 'iot-devices', 'admin-beds',
     'settings', 'notifications', 'profile',
-    'audit-trail', 'reports', 'quality',
+    'audit-trail', 'reports', 'quality', 'registrar-reports',
     'safety-incidents', 'med-safety-overrides', 'moh-reports',
     // Shift management — READ-ONLY governance view. The editor UI
     // suppresses mutate controls when role === 'HOSPITAL_ADMIN'; the
@@ -265,6 +266,10 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   REGISTRAR: [
     'dashboard', 'entry', 'patients',
     'notifications', 'profile',
+    // Operational front-desk reporting (R11): intake log, the
+    // unidentified-patient reconciliation queue (a safety follow-up
+    // surface), and a live census. Hospital-scoped.
+    'registrar-reports',
   ],
 
   // ── Pre-hospital / transport ──

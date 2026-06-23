@@ -507,4 +507,49 @@ class ClinicalAuthzTest {
         assertFalse(authz.canAccessCrossHospitalDeepRecord(
                 new UsernamePasswordAuthenticationToken("not-a-user", null)));
     }
+
+    // ── canAccessRegistrarReports (R11 — front-desk operational reporting) ──
+
+    @Test
+    void canAccessRegistrarReports_allowsRegistrarAndHospitalAdmin_atOwnHospital() {
+        assertTrue(authz.canAccessRegistrarReports(
+                authFor(user(Role.REGISTRAR, null, hospitalId)), hospitalId));
+        assertTrue(authz.canAccessRegistrarReports(
+                authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), hospitalId));
+    }
+
+    @Test
+    void canAccessRegistrarReports_allowsSuperAdminAnyHospital() {
+        // SUPER_ADMIN short-circuits before the hospital-scope check.
+        assertTrue(authz.canAccessRegistrarReports(
+                authFor(user(Role.SUPER_ADMIN, null, null)), hospitalId));
+    }
+
+    @Test
+    void canAccessRegistrarReports_deniesClinicalAndReadOnlyRoles() {
+        // Operational desk reporting is NOT a clinical-role need. READ_ONLY is the
+        // governance auditor (canViewHospitalReports) — deliberately NOT this audience.
+        assertFalse(authz.canAccessRegistrarReports(authFor(user(Role.DOCTOR, null, hospitalId)), hospitalId));
+        assertFalse(authz.canAccessRegistrarReports(authFor(user(Role.NURSE, null, hospitalId)), hospitalId));
+        assertFalse(authz.canAccessRegistrarReports(authFor(user(Role.LAB_TECHNICIAN, null, hospitalId)), hospitalId));
+        assertFalse(authz.canAccessRegistrarReports(authFor(user(Role.PARAMEDIC, null, hospitalId)), hospitalId));
+        assertFalse(authz.canAccessRegistrarReports(authFor(user(Role.READ_ONLY, null, hospitalId)), hospitalId));
+    }
+
+    @Test
+    void canAccessRegistrarReports_deniesRegistrarFromAnotherHospital() {
+        assertFalse(authz.canAccessRegistrarReports(
+                authFor(user(Role.REGISTRAR, null, UUID.randomUUID())), hospitalId));
+        assertFalse(authz.canAccessRegistrarReports(
+                authFor(user(Role.HOSPITAL_ADMIN, null, UUID.randomUUID())), hospitalId));
+    }
+
+    @Test
+    void canAccessRegistrarReports_deniesNullAuthOrPrincipalOrHospital() {
+        assertFalse(authz.canAccessRegistrarReports(null, hospitalId));
+        assertFalse(authz.canAccessRegistrarReports(
+                new UsernamePasswordAuthenticationToken("not-a-user", null), hospitalId));
+        assertFalse(authz.canAccessRegistrarReports(
+                authFor(user(Role.REGISTRAR, null, hospitalId)), null));
+    }
 }

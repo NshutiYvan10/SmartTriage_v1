@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import {
   FileText, TrendingUp, Users, AlertTriangle, BarChart3, Baby, Printer,
-  ChevronRight, FlaskConical, Siren, ShieldAlert, ClipboardList, Pill,
+  ChevronRight, FlaskConical, Siren, ShieldAlert, ClipboardList, Pill, UserX,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { usePatientStore } from '@/store/patientStore';
@@ -54,6 +54,7 @@ const REPORT_LINKS: ReportLink[] = [
   { page: 'med-safety-overrides', path: '/med-safety/overrides', name: 'Override Audit', description: 'Medication-safety + break-the-glass governance', icon: Pill, iconBg: 'rgba(244,63,94,0.1)', iconColor: 'text-rose-500' },
   { page: 'lab', path: '/lab', name: 'Laboratory Reporting', description: 'Turnaround / workload pack (PDF + CSV)', icon: FlaskConical, iconBg: 'rgba(34,197,94,0.12)', iconColor: 'text-emerald-500' },
   { page: 'ems', path: '/ems', name: 'EMS / Pre-hospital', description: 'Paramedic runs + Patient Care Report (PDF)', icon: Siren, iconBg: 'rgba(251,146,60,0.12)', iconColor: 'text-orange-500' },
+  { page: 'registrar-reports', path: '/registrar-reports', name: 'Registrar Reporting', description: 'Intake log, identity-reconciliation queue & census (CSV)', icon: UserX, iconBg: 'rgba(20,184,166,0.12)', iconColor: 'text-teal-500' },
 ];
 
 export function ReportsView() {

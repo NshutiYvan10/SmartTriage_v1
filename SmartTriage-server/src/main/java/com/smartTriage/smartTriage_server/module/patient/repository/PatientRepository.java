@@ -21,6 +21,14 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
     Page<Patient> findByHospitalIdAndIsActiveTrue(UUID hospitalId, Pageable pageable);
 
     /**
+     * Active unidentified ("John Doe") patients at a hospital, oldest placeholder first — the
+     * registrar's identity-reconciliation follow-up queue (R11). Hospital-scoped, unlike the
+     * global {@code findUnidentifiedOlderThan} used by the scheduler.
+     */
+    List<Patient> findByHospitalIdAndIsUnidentifiedTrueAndIsActiveTrueOrderByPlaceholderAssignedAtAsc(
+            UUID hospitalId);
+
+    /**
      * Lightweight projection used by ClinicalAuthz to verify a patient
      * belongs to a given hospital without hydrating the entity. Returns
      * empty when the patient id does not exist.
