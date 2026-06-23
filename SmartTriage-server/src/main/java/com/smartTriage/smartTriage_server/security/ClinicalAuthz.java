@@ -424,6 +424,53 @@ public class ClinicalAuthz {
     }
 
     /**
+     * Who may RECORD/withdraw a cross-hospital data-sharing consent (Phase 2). Captured at the desk
+     * by the registrar/clinician with the patient, so the registration-capable clinical roles
+     * (SUPER_ADMIN, DOCTOR, NURSE, REGISTRAR). Role-only (consent is keyed on the cross-hospital
+     * identity, so hospital scoping doesn't apply); each write is separately audited.
+     */
+    @Transactional(readOnly = true)
+    public boolean canManageDataSharingConsent(Authentication authentication) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null) {
+                return false;
+            }
+            return switch (user.getRole()) {
+                case SUPER_ADMIN, DOCTOR, NURSE, REGISTRAR -> true;
+                default -> false;
+            };
+        } catch (Exception e) {
+            log.error("canManageDataSharingConsent error: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Who may ATTEMPT a cross-hospital DEEP-record read (Phase 2). Treating clinicians only —
+     * SUPER_ADMIN, DOCTOR, NURSE, PARAMEDIC (REGISTRAR excluded: the deep clinical record is not a
+     * registration need; paramedic kept for pre-arrival/emergency lookup). This is only the ROLE
+     * gate — the actual disclosure is gated DATA-side in the service by consent OR break-the-glass,
+     * and the read deliberately bypasses hospital scope (cross-hospital is the point).
+     */
+    @Transactional(readOnly = true)
+    public boolean canAccessCrossHospitalDeepRecord(Authentication authentication) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null) {
+                return false;
+            }
+            return switch (user.getRole()) {
+                case SUPER_ADMIN, DOCTOR, NURSE, PARAMEDIC -> true;
+                default -> false;
+            };
+        } catch (Exception e) {
+            log.error("canAccessCrossHospitalDeepRecord error: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
      * May this user view the FORENSIC medication-safety override audit?
      *
      * <p>This is a governance / quality surface (hospital safety officer,

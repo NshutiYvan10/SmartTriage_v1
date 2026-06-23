@@ -463,4 +463,48 @@ class ClinicalAuthzTest {
         assertFalse(authz.canAcknowledgeSafetyOverride(
                 authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), missing));
     }
+
+    // ── canManageDataSharingConsent (Phase 2 — who may record/withdraw consent) ──
+
+    @Test
+    void registrationCapableRolesCanManageDataSharingConsent() {
+        // Registrar captures the opt-in at the desk; clinicians may too. Role-only (no hospital scope).
+        assertTrue(authz.canManageDataSharingConsent(authFor(user(Role.SUPER_ADMIN, null, null))));
+        assertTrue(authz.canManageDataSharingConsent(authFor(user(Role.DOCTOR, null, hospitalId))));
+        assertTrue(authz.canManageDataSharingConsent(authFor(user(Role.NURSE, null, hospitalId))));
+        assertTrue(authz.canManageDataSharingConsent(authFor(user(Role.REGISTRAR, null, hospitalId))));
+    }
+
+    @Test
+    void nonRegistrationRolesCannotManageDataSharingConsent() {
+        assertFalse(authz.canManageDataSharingConsent(authFor(user(Role.PARAMEDIC, null, hospitalId))));
+        assertFalse(authz.canManageDataSharingConsent(authFor(user(Role.LAB_TECHNICIAN, null, hospitalId))));
+        assertFalse(authz.canManageDataSharingConsent(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId))));
+        assertFalse(authz.canManageDataSharingConsent(authFor(user(Role.READ_ONLY, null, hospitalId))));
+        assertFalse(authz.canManageDataSharingConsent(null));
+        assertFalse(authz.canManageDataSharingConsent(
+                new UsernamePasswordAuthenticationToken("not-a-user", null)));
+    }
+
+    // ── canAccessCrossHospitalDeepRecord (Phase 2 — who may ATTEMPT a deep read) ──
+
+    @Test
+    void treatingCliniciansCanAttemptCrossHospitalDeepRecord() {
+        // REGISTRAR excluded — the deep clinical record is not a registration need.
+        assertTrue(authz.canAccessCrossHospitalDeepRecord(authFor(user(Role.SUPER_ADMIN, null, null))));
+        assertTrue(authz.canAccessCrossHospitalDeepRecord(authFor(user(Role.DOCTOR, null, hospitalId))));
+        assertTrue(authz.canAccessCrossHospitalDeepRecord(authFor(user(Role.NURSE, null, hospitalId))));
+        assertTrue(authz.canAccessCrossHospitalDeepRecord(authFor(user(Role.PARAMEDIC, null, hospitalId))));
+    }
+
+    @Test
+    void nonTreatingRolesCannotAttemptCrossHospitalDeepRecord() {
+        assertFalse(authz.canAccessCrossHospitalDeepRecord(authFor(user(Role.REGISTRAR, null, hospitalId))));
+        assertFalse(authz.canAccessCrossHospitalDeepRecord(authFor(user(Role.LAB_TECHNICIAN, null, hospitalId))));
+        assertFalse(authz.canAccessCrossHospitalDeepRecord(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId))));
+        assertFalse(authz.canAccessCrossHospitalDeepRecord(authFor(user(Role.READ_ONLY, null, hospitalId))));
+        assertFalse(authz.canAccessCrossHospitalDeepRecord(null));
+        assertFalse(authz.canAccessCrossHospitalDeepRecord(
+                new UsernamePasswordAuthenticationToken("not-a-user", null)));
+    }
 }
