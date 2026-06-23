@@ -11,6 +11,8 @@ import com.smartTriage.smartTriage_server.module.quality.service.QualityMetricsS
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -96,6 +98,58 @@ public class QualityMetricsController {
                 .build();
 
         return ResponseEntity.ok(ApiResponse.success(trend));
+    }
+
+    /**
+     * Export the hospital's quality-metric snapshots over a date range as CSV — one row per
+     * snapshot, every metric column. Governance/admin reporting; same read gate as the dashboard.
+     */
+    @GetMapping("/hospital/{hospitalId}/export/csv")
+    @PreAuthorize("@clinicalAuthz.canViewHospitalReports(authentication, #hospitalId)")
+    public ResponseEntity<String> exportCsv(
+            @PathVariable UUID hospitalId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        List<QualityMetricSnapshot> rows = qualityMetricsService.getMetricsByRange(hospitalId, from, to);
+        StringBuilder sb = new StringBuilder(
+                "Date,Period,TotalPatients,Admissions,Discharges,Transfers,Deaths,LWBS,Pediatric,"
+                + "Red,Orange,Yellow,Green,Blue,AvgTEWS,AvgWaitMin,DoorToTriageMin,DoorToPhysicianMin,"
+                + "TotalEdStayMin,PctSeenWithinTarget,SepsisScreeningRate,SepsisBundleCompliance,"
+                + "CriticalLabTurnaroundMin,MedicationErrors,SafetyIncidents,PeakOccupancy,AvgOccupancy,"
+                + "IcuUtilizationPct,EdUtilizationPct,EdMortalityRatePct,MortalityWithin24h\n");
+        for (QualityMetricSnapshot m : rows) {
+            sb.append(csv(m.getSnapshotDate())).append(',').append(csv(m.getSnapshotPeriod())).append(',')
+              .append(csv(m.getTotalPatients())).append(',').append(csv(m.getTotalAdmissions())).append(',')
+              .append(csv(m.getTotalDischarges())).append(',').append(csv(m.getTotalTransfers())).append(',')
+              .append(csv(m.getTotalDeaths())).append(',').append(csv(m.getTotalLeftWithoutBeingSeen())).append(',')
+              .append(csv(m.getPediatricPatients())).append(',')
+              .append(csv(m.getRedPatients())).append(',').append(csv(m.getOrangePatients())).append(',')
+              .append(csv(m.getYellowPatients())).append(',').append(csv(m.getGreenPatients())).append(',')
+              .append(csv(m.getBluePatients())).append(',').append(csv(m.getAverageTewsScore())).append(',')
+              .append(csv(m.getAverageWaitTimeMinutes())).append(',').append(csv(m.getAverageDoorToTriageMinutes())).append(',')
+              .append(csv(m.getAverageDoorToPhysicianMinutes())).append(',').append(csv(m.getAverageTotalEdStayMinutes())).append(',')
+              .append(csv(m.getPercentSeenWithinTarget())).append(',').append(csv(m.getSepsisScreeningRate())).append(',')
+              .append(csv(m.getSepsisBundleComplianceRate())).append(',').append(csv(m.getCriticalLabTurnaroundMinutes())).append(',')
+              .append(csv(m.getMedicationErrorCount())).append(',').append(csv(m.getSafetyIncidentCount())).append(',')
+              .append(csv(m.getPeakEdOccupancy())).append(',').append(csv(m.getAverageEdOccupancy())).append(',')
+              .append(csv(m.getIcuBedUtilizationPercent())).append(',').append(csv(m.getEdBedUtilizationPercent())).append(',')
+              .append(csv(m.getEdMortalityRate())).append(',').append(csv(m.getMortalityWithin24Hours())).append('\n');
+        }
+        String filename = "quality-metrics_" + from + "_" + to + ".csv";
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(sb.toString());
+    }
+
+    /** CSV-escape a cell: quote when it contains a comma, quote, or newline; blank for null. */
+    private static String csv(Object value) {
+        if (value == null) return "";
+        String s = value.toString();
+        if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
+            return "\"" + s.replace("\"", "\"\"") + "\"";
+        }
+        return s;
     }
 
     /**

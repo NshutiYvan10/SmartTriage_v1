@@ -1,4 +1,4 @@
-import { get, post, put } from './client';
+import { get, post, put, downloadBlob } from './client';
 
 export interface SafetyIncident {
   id: string;
@@ -46,4 +46,10 @@ export const safetyApi = {
   close: (id: string, data: { lessonsLearned: string }) => put<SafetyIncident>(`/safety/incidents/${id}/close`, data),
   getForHospital: (hospitalId: string, page = 0) => get<{ content: SafetyIncident[]; totalElements: number }>(`/safety/incidents/hospital/${hospitalId}?page=${page}&size=20`),
   get: (id: string) => get<SafetyIncident>(`/safety/incidents/${id}`),
+  /** Server-side CSV of the incident register in a window (ISO instants). Returns blob + filename. */
+  exportCsv: (hospitalId: string, from: string, to: string) =>
+    downloadBlob(`/safety/incidents/hospital/${hospitalId}/export/csv?from=${from}&to=${to}`, 'safety-incidents.csv'),
+  /** Printable single-incident report PDF. Returns blob + filename. */
+  downloadPdf: (id: string) =>
+    downloadBlob(`/safety/incidents/${id}/pdf`, `safety-incident-${id}.pdf`),
 };

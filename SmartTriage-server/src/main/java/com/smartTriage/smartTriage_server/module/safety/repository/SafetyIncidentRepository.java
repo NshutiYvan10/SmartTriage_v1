@@ -25,6 +25,10 @@ public interface SafetyIncidentRepository extends JpaRepository<SafetyIncident, 
     Page<SafetyIncident> findByHospitalIdAndIncidentTypeAndIsActiveTrueOrderByIncidentDateTimeDesc(
             UUID hospitalId, IncidentType type, Pageable pageable);
 
+    /** Full incident register for a hospital over a date window — for CSV export (newest first). */
+    List<SafetyIncident> findByHospitalIdAndIncidentDateTimeBetweenAndIsActiveTrueOrderByIncidentDateTimeDesc(
+            UUID hospitalId, Instant from, Instant to);
+
     @Query("SELECT i FROM SafetyIncident i WHERE i.hospital.id = :hospitalId " +
             "AND i.isActive = true AND i.status != 'CLOSED' " +
             "ORDER BY i.incidentDateTime DESC")

@@ -8,11 +8,12 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   BarChart3, RefreshCw, Loader2, TrendingUp, TrendingDown,
   Minus, Users, Activity, Clock, ShieldCheck, AlertTriangle,
-  Heart, Bed, ArrowUpRight, ArrowDownRight, Zap,
+  Heart, Bed, ArrowUpRight, ArrowDownRight, Zap, Download,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
 import { qualityApi } from '@/api/quality';
+import { saveBlob } from '@/api/client';
 import type { QualityMetricSnapshot } from '@/api/quality';
 import { format } from 'date-fns';
 
@@ -136,6 +137,23 @@ export function QualityDashboard() {
     }
   };
 
+  /* ── Export the last 90 days of snapshots as CSV ── */
+  const [exporting, setExporting] = useState(false);
+  const handleExportCsv = async () => {
+    if (!hospitalId) return;
+    setExporting(true);
+    try {
+      const to = format(new Date(), 'yyyy-MM-dd');
+      const from = format(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
+      const { blob, filename } = await qualityApi.exportCsv(hospitalId, from, to);
+      saveBlob(blob, filename);
+    } catch (err) {
+      console.error('Failed to export quality CSV:', err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   /* ── Helper to get previous value for delta ── */
   const prevVal = (key: keyof QualityMetricSnapshot): number | null => {
     if (!previous) return null;
@@ -179,6 +197,15 @@ export function QualityDashboard() {
                   Generate Snapshot
                 </button>
                 )}
+                <button
+                  onClick={handleExportCsv}
+                  disabled={exporting}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 border border-white/15 text-white text-xs font-bold hover:bg-white/15 transition-colors disabled:opacity-50"
+                  title="Download the last 90 days of quality snapshots as CSV"
+                >
+                  {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  Export CSV
+                </button>
                 <button
                   onClick={loadData}
                   className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"

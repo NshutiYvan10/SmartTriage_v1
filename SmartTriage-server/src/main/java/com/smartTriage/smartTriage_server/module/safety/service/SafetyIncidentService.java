@@ -44,6 +44,7 @@ public class SafetyIncidentService {
     private final HospitalRepository hospitalRepository;
     private final VisitRepository visitRepository;
     private final ClinicalAlertRepository clinicalAlertRepository;
+    private final SafetyIncidentPdfService safetyIncidentPdfService;
 
     private static final DateTimeFormatter DATE_PREFIX_FORMATTER = DateTimeFormatter
             .ofPattern("yyyyMMdd")
@@ -290,6 +291,23 @@ public class SafetyIncidentService {
      */
     public SafetyIncident getIncident(UUID incidentId) {
         return findActiveIncident(incidentId);
+    }
+
+    /** The full incident register for a hospital over a date window — for CSV export. */
+    public List<SafetyIncident> getIncidentsForExport(UUID hospitalId, Instant from, Instant to) {
+        return incidentRepository
+                .findByHospitalIdAndIncidentDateTimeBetweenAndIsActiveTrueOrderByIncidentDateTimeDesc(
+                        hospitalId, from, to);
+    }
+
+    /**
+     * Render a single incident's report PDF. Runs in this service's read-only transaction so the
+     * lazy hospital association resolves while the PDF is built.
+     */
+    public SafetyIncidentPdfService.RenderedPdf renderIncidentPdf(UUID incidentId) {
+        SafetyIncident incident = findActiveIncident(incidentId);
+        return new SafetyIncidentPdfService.RenderedPdf(
+                safetyIncidentPdfService.render(incident), safetyIncidentPdfService.filename(incident));
     }
 
     /**

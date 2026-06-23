@@ -1,4 +1,4 @@
-import { get, post } from './client';
+import { get, post, downloadBlob } from './client';
 
 export interface QualityMetricSnapshot {
   id: string;
@@ -33,4 +33,7 @@ export const qualityApi = {
   getForHospital: (hospitalId: string, page = 0) => get<{ content: QualityMetricSnapshot[]; totalElements: number }>(`/quality/hospital/${hospitalId}?page=${page}&size=30`),
   getLatest: (hospitalId: string) => get<QualityMetricSnapshot>(`/quality/hospital/${hospitalId}/latest`),
   getByDateRange: (hospitalId: string, from: string, to: string) => get<QualityMetricSnapshot[]>(`/quality/hospital/${hospitalId}/range?from=${from}&to=${to}`),
+  /** Server-side CSV of all snapshots in the date range (ISO yyyy-MM-dd). Returns blob + filename. */
+  exportCsv: (hospitalId: string, from: string, to: string) =>
+    downloadBlob(`/quality/hospital/${hospitalId}/export/csv?from=${from}&to=${to}`, `quality-metrics_${from}_${to}.csv`),
 };
