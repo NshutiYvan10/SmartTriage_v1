@@ -269,6 +269,19 @@ export function subscribeToFastTrack(
 }
 
 /**
+ * Subscribe to governance events for a hospital — fires when one of its clinicians breaks the
+ * glass to access a cross-hospital deep record. Dedicated topic (same rationale as the others);
+ * payload is a small { eventType, eventId, actorName, accessedAt } map. The Override Audit page's
+ * break-the-glass feed refetches on any event.
+ */
+export function subscribeToGovernance(
+  hospitalId: string,
+  callback: (event: any) => void
+): () => void {
+  return subscribeToTopic(`/topic/governance/${hospitalId}`, callback);
+}
+
+/**
  * Subscribe to hypoglycemia events for a hospital. Dedicated topic (same
  * one-subscriber-per-topic rationale as sepsis/fast-track). Payload is a small
  * { eventType, visitId } map; refetch on any event.

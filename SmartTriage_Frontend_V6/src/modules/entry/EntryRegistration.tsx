@@ -35,6 +35,7 @@ import type { UserResponse, PatientResponse } from '@/api/types';
 import { PatientLookupPanel } from './PatientLookupPanel';
 import { PatientHistoryPanel } from './PatientHistoryPanel';
 import { PatientProfilePanel } from './PatientProfilePanel';
+import { CrossHospitalSafetyBanner } from './CrossHospitalSafetyBanner';
 import { RwandaLocationPicker } from '@/components/RwandaLocationPicker';
 
 /* ─── Constants ─── */
@@ -776,6 +777,16 @@ export function EntryRegistration() {
               Search again
             </button>
           </div>
+        )}
+
+        {/* ── Cross-hospital safety banner (Phase 3) ──
+            For a returning patient with a national ID, surface life-critical flags recorded at
+            OTHER SmartTriage hospitals and offer data-sharing consent capture. Non-blocking. */}
+        {existingPatientId && mode === 'register' && pickedPatient?.nationalId && (
+          <CrossHospitalSafetyBanner
+            nationalId={pickedPatient.nationalId}
+            patientName={`${pickedPatient.firstName ?? ''} ${pickedPatient.lastName ?? ''}`.trim() || undefined}
+          />
         )}
 
         {/* ── Returning-patient context block ──

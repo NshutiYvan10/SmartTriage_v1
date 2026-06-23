@@ -48,6 +48,7 @@ import { useAlertStore } from '@/store/alertStore';
 import { alertApi } from '@/api/alerts';
 import type { ClinicalAlertResponse, AlertSeverity } from '@/api/types';
 import { format, formatDistanceToNow } from 'date-fns';
+import { BreakTheGlassIncidents } from './BreakTheGlassIncidents';
 
 /* ── Override classes ─────────────────────────────────────────── */
 
@@ -689,6 +690,9 @@ export function MedicationSafetyOverridesView() {
             </div>
           </>
         )}
+
+        {/* ── Cross-hospital break-the-glass governance feed (Phase 3) ── */}
+        {hospitalId && <BreakTheGlassIncidents hospitalId={hospitalId} />}
       </div>
     </div>
   );

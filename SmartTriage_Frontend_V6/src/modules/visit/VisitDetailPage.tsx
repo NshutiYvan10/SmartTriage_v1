@@ -11,7 +11,7 @@ import {
   FlaskConical, Pill, BellRing, Heart, Thermometer,
   Wind, Droplets, Brain, Clock, User, AlertTriangle, ChevronRight,
   Plus, Send, CheckCircle2, XCircle, Eye, Loader2, RefreshCw, LogOut,
-  TrendingUp, Sparkles, Siren, UserCheck, ShieldAlert, Zap, Route,
+  TrendingUp, Sparkles, Siren, UserCheck, ShieldAlert, Zap, Route, Globe,
 } from 'lucide-react';
 import { ClinicalSignsTab } from './ClinicalSignsTab';
 import { SepsisPanel } from './SepsisPanel';
@@ -20,6 +20,7 @@ import { HypoglycemiaPanel } from './HypoglycemiaPanel';
 import { IsolationPanel } from './IsolationPanel';
 import { PathwayPanel } from './PathwayPanel';
 import { HandoverPanel } from './HandoverPanel';
+import { CrossHospitalPanel } from './CrossHospitalPanel';
 import { PrehospitalTab } from '@/modules/ems/PrehospitalTab';
 import { DiagnosisPanel } from './DiagnosisPanel';
 import { InvestigationPanel } from './InvestigationPanel';
@@ -129,6 +130,9 @@ const TABS = [
   // Handover/SBAR — generate + download the per-visit PDF for the treating
   // clinician (no longer only via the cross-zone shift-lead HandoverView).
   { id: 'handover', label: 'Handover', icon: FileSignature },
+  // Cross-hospital record — bounded clinical history from other SmartTriage hospitals,
+  // gated by the patient's data-sharing consent or an emergency break-the-glass override.
+  { id: 'cross-hospital', label: 'Cross-Hospital', icon: Globe },
   { id: 'alerts', label: 'Alerts', icon: BellRing },
   { id: 'disposition', label: 'Disposition', icon: LogOut },
 ] as const;
@@ -242,6 +246,12 @@ export function VisitDetailPage() {
   // Patient is fetched separately (visit only carries patientId).
   // Used for allergy cross-checking at prescribe time.
   const [patient, setPatient] = useState<PatientResponse | null>(null);
+
+  // Cross-hospital record tab: only for treating clinicians (backend enforces
+  // canAccessCrossHospitalDeepRecord) AND only when the patient has a national ID
+  // (the cross-hospital identity anchor). UX gate — disclosure is gated server-side.
+  const canViewCrossHospital = !!patient?.nationalId && !!user
+    && (user.role === 'DOCTOR' || user.role === 'NURSE' || user.role === 'SUPER_ADMIN');
   // Workflow 2 — structured allergy records. The prescribe-time
   // safety check prefers these over the legacy free-text column on
   // patient.knownAllergies because they carry per-row severity +
@@ -768,7 +778,7 @@ export function VisitDetailPage() {
 
           {/* ── Tabs ── */}
           <div className="flex overflow-x-auto gap-1 px-4 py-2" style={{ borderTop: isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)' }}>
-            {TABS.map((tab) => {
+            {TABS.filter((tab) => tab.id !== 'cross-hospital' || canViewCrossHospital).map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
@@ -826,6 +836,7 @@ export function VisitDetailPage() {
           {activeTab === 'pathways' && <PathwayPanel visitId={visit.id} onChanged={loadData} />}
           {activeTab === 'medications' && <MedicationsTab medications={medications} showForm={showMedicationForm} setShowForm={setShowMedicationForm} onSubmit={handlePrescribeMedication} onAction={handleMedicationAction} formLoading={formLoading} patient={patient} visit={visit} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'handover' && <HandoverPanel visitId={visit.id} />}
+          {activeTab === 'cross-hospital' && <CrossHospitalPanel nationalId={patient?.nationalId ?? null} />}
           {activeTab === 'alerts' && <AlertsTab alerts={visitAlerts} onAcknowledge={handleAcknowledgeAlert} visit={visit} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'disposition' && <DispositionTab visit={visit} onDisposition={handleRecordDisposition} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
         </div>
