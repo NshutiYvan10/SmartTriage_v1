@@ -34,7 +34,6 @@ import {
   BedDouble,
   ArrowRightLeft,
   ClipboardCheck,
-  TrendingUp,
   FileBarChart,
   Scale,
 } from 'lucide-react';
@@ -167,7 +166,6 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         },
         { id: 'med-safety/overrides', label: 'Override Audit', icon: Pill, pageId: 'med-safety-overrides' as AppPage },
         { id: 'quality', label: 'Quality Metrics', icon: BarChart3, pageId: 'quality' as AppPage },
-        { id: 'prediction', label: 'Surge Prediction', icon: TrendingUp, pageId: 'prediction' as AppPage },
         { id: 'audit-trail', label: 'Audit Trail', icon: ScrollText, pageId: 'audit-trail' as AppPage },
         { id: 'reports', label: 'Reports', icon: BarChart3, pageId: 'reports' as AppPage },
       ],

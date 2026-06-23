@@ -56,7 +56,6 @@ import { SafetyIncidentView } from './modules/safety/SafetyIncidentView';
 import { MohReportView } from './modules/mohreport/MohReportView';
 import { GovernanceAdmin } from './modules/governance/GovernanceAdmin';
 import { QualityDashboard } from './modules/quality/QualityDashboard';
-import { SurgePredictionView } from './modules/prediction/SurgePredictionView';
 import { LabOrdersView } from './modules/lab/LabOrdersView';
 import { NurseMedicationQueue } from './modules/medication/NurseMedicationQueue';
 import { MedicationBoard } from './modules/medication/MedicationBoard';
@@ -227,7 +226,6 @@ function AppContent() {
             <Route path="/moh-reports" element={<RoleGuard page="moh-reports"><MohReportView /></RoleGuard>} />
             <Route path="/governance" element={<RoleGuard page="governance"><GovernanceAdmin /></RoleGuard>} />
             <Route path="/quality" element={<RoleGuard page="quality"><QualityDashboard /></RoleGuard>} />
-            <Route path="/prediction" element={<RoleGuard page="prediction"><SurgePredictionView /></RoleGuard>} />
           </Routes>
           </ErrorBoundary>
         </div>

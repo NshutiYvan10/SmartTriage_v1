@@ -33,7 +33,6 @@ export { icuApi } from './icu';
 export { safetyApi } from './safety';
 export { handoverApi } from './handover';
 export { qualityApi } from './quality';
-export { predictionApi } from './prediction';
 export { mohReportApi } from './mohreport';
 export { governanceApi } from './governance';
 export { connectWebSocket, disconnectWebSocket, subscribeToVitals, subscribeToAlerts, subscribeToZoneAlerts, subscribeToUserAlerts, subscribeToDevices, subscribeToTriageChanges, subscribeToBedChanges, subscribeToLabOrders, subscribeToMedications } from './websocket';

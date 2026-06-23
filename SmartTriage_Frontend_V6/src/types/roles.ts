@@ -49,7 +49,6 @@ export type AppPage =
   | 'safety-incidents'
   | 'handover'
   | 'quality'
-  | 'prediction'
   | 'moh-reports'
   | 'governance'
   | 'shift-planner'
@@ -172,7 +171,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   SUPER_ADMIN: [
     'dashboard', 'admin', 'admin-hospitals', 'admin-users', 'iot-devices',
     'settings', 'notifications', 'profile',
-    'audit-trail', 'reports', 'quality', 'prediction',
+    'audit-trail', 'reports', 'quality',
     'moh-reports', 'governance', 'safety-incidents',
   ],
 
