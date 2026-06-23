@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine,
+  ResponsiveContainer,
 } from 'recharts';
 import { usePatientStore } from '@/store/patientStore';
 import { useAlertStore } from '@/store/alertStore';
@@ -21,6 +21,8 @@ import { Patient, TriageCategory } from '@/types';
 import { getCategoryColor } from '@/utils/tewsCalculator';
 import { safeFormatDistanceToNow } from '@/utils/safeDate';
 import { useMyShift, getZoneForCategory } from '@/hooks/useMyShift';
+import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
+import { ShiftSummaryCard } from './ShiftSummaryCard';
 import { ShiftStartBanner } from '@/components/ShiftStartBanner';
 import { CriticalLabBanner } from '@/modules/lab/CriticalLabBanner';
 import { InboundEmsBoard } from '@/modules/ems/InboundEmsBoard';
@@ -36,6 +38,7 @@ export function Dashboard() {
   const acknowledgeAlert = useAlertStore((state) => state.acknowledgeAlert);
   const acknowledgeAlertApi = useAlertStore((state) => state.acknowledgeAlertApi);
   const { zone: myZone, assignment: myShiftAssignment } = useMyShift();
+  const { canSeeAllZones } = useCanSeeAllZones();
 
   // Zone label for display
   const ZONE_LABELS: Record<string, string> = {
@@ -155,6 +158,24 @@ export function Dashboard() {
 
   const unreadAlerts = zoneAlerts.filter((a) => !a.acknowledgedAt).length;
 
+  // Real arrivals-by-hour over the last 12 hours, from each patient's arrival timestamp.
+  const arrivalsByHour = useMemo(() => {
+    const now = Date.now();
+    const buckets = Array.from({ length: 12 }, (_, i) => {
+      const slot = new Date(now - (11 - i) * 3_600_000);
+      return { time: `${slot.getHours().toString().padStart(2, '0')}:00`, arrivals: 0 };
+    });
+    const startMs = now - 12 * 3_600_000;
+    for (const p of displayPatients) {
+      const t = p.arrivalTimestamp ? new Date(p.arrivalTimestamp).getTime() : NaN;
+      if (Number.isNaN(t) || t < startMs) continue;
+      const idx = 11 - Math.floor((now - t) / 3_600_000);
+      if (idx >= 0 && idx < 12) buckets[idx].arrivals += 1;
+    }
+    return buckets;
+  }, [displayPatients]);
+  const arrivalsLast12h = arrivalsByHour.reduce((s, b) => s + b.arrivals, 0);
+
   return (
     <div className="min-h-full">
       <div className="p-5 space-y-4">
@@ -179,6 +200,10 @@ export function Dashboard() {
           assignment={myShiftAssignment}
           patients={displayPatients}
         />
+
+        {/* Charge-nurse / shift-lead shift summary (R10) — live census by zone, staffing &
+            gaps, open criticals, pending handovers. Self-hides for non-cross-zone users. */}
+        {canSeeAllZones && <ShiftSummaryCard />}
 
         {/* ── Row 1: Header ── */}
         <div className="relative z-10 flex items-center justify-between animate-fade-in">
@@ -486,8 +511,6 @@ export function Dashboard() {
             unit="patients"
             subtitle="In department"
             icon={Users}
-            trendValue="+12%"
-            trendDirection="up"
             accentColor="border-cyan-400"
             accentBg="bg-cyan-50/80"
             accentText="text-cyan-600"
@@ -512,8 +535,6 @@ export function Dashboard() {
             unit="score"
             subtitle="Severity index"
             icon={Activity}
-            trendValue="-2.1%"
-            trendDirection="down"
             accentColor="border-slate-400"
             accentBg="bg-slate-50/80"
             accentText="text-slate-600"
@@ -560,44 +581,18 @@ export function Dashboard() {
           >
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className={`text-base font-extrabold ${text.heading} tracking-tight`}>Patient Flow</h3>
-                <p className={`text-xs ${text.body} font-medium mt-0.5`}>Arrivals vs discharges — real-time</p>
+                <h3 className={`text-base font-extrabold ${text.heading} tracking-tight`}>Patient Arrivals</h3>
+                <p className={`text-xs ${text.body} font-medium mt-0.5`}>Arrivals per hour — last 12 hours{myZone ? ` · ${ZONE_LABELS[myZone] || myZone} zone` : ''}</p>
               </div>
-              <div className="flex items-center gap-4">
-                {[
-                  { label: 'Arrivals', value: '24', color: 'text-cyan-600' },
-                  { label: 'Discharged', value: '18', color: 'text-slate-600' },
-                  { label: 'Throughput', value: '75%', color: 'text-emerald-600' },
-                ].map((s, i) => (
-                  <div
-                    key={s.label}
-                    className="text-center px-3 py-1.5 rounded-xl"
-                    style={glassInnerItem}
-                  >
-                    <p className={`text-lg font-extrabold ${s.color} animate-number-pop`} style={{ animationDelay: `${i * 0.1}s` }}>{s.value}</p>
-                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">{s.label}</p>
-                  </div>
-                ))}
+              <div className="text-center px-3 py-1.5 rounded-xl" style={glassInnerItem}>
+                <p className="text-lg font-extrabold text-cyan-600 animate-number-pop">{arrivalsLast12h}</p>
+                <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Last 12h</p>
               </div>
             </div>
             <div className="h-[210px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
-                  data={[
-                    { time: '06:00', arrivals: 2, discharged: 0, capacity: 12 },
-                    { time: '07:00', arrivals: 3, discharged: 1, capacity: 12 },
-                    { time: '08:00', arrivals: 5, discharged: 1, capacity: 12 },
-                    { time: '09:00', arrivals: 7, discharged: 2, capacity: 12 },
-                    { time: '10:00', arrivals: 9, discharged: 3, capacity: 12 },
-                    { time: '11:00', arrivals: 11, discharged: 5, capacity: 12 },
-                    { time: '12:00', arrivals: 14, discharged: 7, capacity: 12 },
-                    { time: '13:00', arrivals: 16, discharged: 9, capacity: 12 },
-                    { time: '14:00', arrivals: 18, discharged: 11, capacity: 12 },
-                    { time: '15:00', arrivals: 20, discharged: 13, capacity: 12 },
-                    { time: '16:00', arrivals: 22, discharged: 15, capacity: 12 },
-                    { time: '17:00', arrivals: 23, discharged: 17, capacity: 12 },
-                    { time: '18:00', arrivals: 24, discharged: 18, capacity: 12 },
-                  ]}
+                  data={arrivalsByHour}
                   margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
                 >
                   <defs>
@@ -605,29 +600,21 @@ export function Dashboard() {
                       <stop offset="5%" stopColor="#0284c7" stopOpacity={0.15} />
                       <stop offset="95%" stopColor="#0284c7" stopOpacity={0} />
                     </linearGradient>
-                    <linearGradient id="gradDischarged" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#22d3ee" stopOpacity={0} />
-                    </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.15)" vertical={false} />
                   <XAxis dataKey="time" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                   <Tooltip
                     contentStyle={tooltipStyle}
                     labelStyle={{ fontWeight: 700, fontSize: 12, color: isDark ? '#e2e8f0' : '#1e293b', marginBottom: 4 }}
                     itemStyle={{ fontSize: 11, padding: '1px 0', color: isDark ? '#cbd5e1' : undefined }}
                   />
-                  <ReferenceLine y={12} stroke="#ef4444" strokeDasharray="6 4" strokeWidth={1.5} label={{ value: 'Capacity', position: 'right', fill: '#ef4444', fontSize: 10, fontWeight: 600 }} />
                   <Area type="monotone" dataKey="arrivals" name="Arrivals" stroke="#0284c7" strokeWidth={2.5} fill="url(#gradArrivals)" dot={false} activeDot={{ r: 5, stroke: '#0284c7', strokeWidth: 2, fill: '#fff' }} />
-                  <Area type="monotone" dataKey="discharged" name="Discharged" stroke="#22d3ee" strokeWidth={2.5} fill="url(#gradDischarged)" dot={false} activeDot={{ r: 5, stroke: '#22d3ee', strokeWidth: 2, fill: '#fff' }} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
             <div className="flex items-center justify-center gap-6 mt-3">
-              <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-sky-600" /><span className="text-[11px] text-slate-500 font-medium">Arrivals</span></div>
-              <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-cyan-400" /><span className="text-[11px] text-slate-500 font-medium">Discharged</span></div>
-              <div className="flex items-center gap-2"><span className="w-5 h-0 border-t-2 border-dashed border-red-400" /><span className="text-[11px] text-slate-500 font-medium">Capacity</span></div>
+              <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-sky-600" /><span className="text-[11px] text-slate-500 font-medium">Arrivals (hourly)</span></div>
             </div>
           </div>
 
