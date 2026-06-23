@@ -52,4 +52,22 @@ public class BreakTheGlassEvent extends BaseEntity {
 
     @Column(name = "accessed_at", nullable = false)
     private Instant accessedAt;
+
+    // ── Governance review overlay (Phase 3) — NOT forensic facts; a reviewer's sign-off. ──
+
+    @Column(name = "acknowledged", nullable = false)
+    @Builder.Default
+    private boolean acknowledged = false;
+
+    @Column(name = "acknowledged_by_user_id")
+    private UUID acknowledgedByUserId;
+
+    @Column(name = "acknowledged_by_name")
+    private String acknowledgedByName;
+
+    @Column(name = "acknowledged_at")
+    private Instant acknowledgedAt;
+
+    @Column(name = "acknowledgment_note", columnDefinition = "TEXT")
+    private String acknowledgmentNote;
 }

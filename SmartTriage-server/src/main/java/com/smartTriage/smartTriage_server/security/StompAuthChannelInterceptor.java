@@ -59,7 +59,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private static final String TOPIC_PREFIX = "/topic/";
     private static final Set<String> HOSPITAL_FAMILIES = Set.of(
             "alerts", "devices", "beds", "lab", "medications", "ems", "visits",
-            "sepsis", "fasttrack", "hypoglycemia", "isolation", "pathway");
+            "sepsis", "fasttrack", "hypoglycemia", "isolation", "pathway", "governance");
     private static final Set<String> VISIT_FAMILIES = Set.of("vitals", "trend", "triage");
 
     @Override

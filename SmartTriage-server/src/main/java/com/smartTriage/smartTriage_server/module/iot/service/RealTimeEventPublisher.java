@@ -502,4 +502,39 @@ public class RealTimeEventPublisher {
             fire.run();
         }
     }
+
+    // ====================================================================
+    // GOVERNANCE TOPIC (break-the-glass overrides)
+    // ====================================================================
+
+    /**
+     * Push a lightweight governance event to the actor-hospital's dedicated topic. The Override
+     * Audit page's break-the-glass feed subscribes here and re-fetches on any event. Visitless and
+     * hospital-scoped — break-the-glass has no Visit, so it is NOT a {@code ClinicalAlert}.
+     */
+    public void publishGovernanceEvent(UUID hospitalId, Map<String, Object> payload) {
+        String topic = "/topic/governance/" + hospitalId;
+        messagingTemplate.convertAndSend(topic, (Object) payload);
+        log.debug("Published governance event {} to {}", payload.get("eventType"), topic);
+    }
+
+    /** After-commit variant (so a refetch sees the saved override); immediate when no tx. Best-effort. */
+    public void publishGovernanceEventAfterCommit(UUID hospitalId, Map<String, Object> payload) {
+        if (hospitalId == null) return;
+        Runnable fire = () -> {
+            try {
+                publishGovernanceEvent(hospitalId, payload);
+            } catch (Exception e) {
+                log.warn("Failed to publish governance event for hospital {}: {}", hospitalId, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override public void afterCommit() { fire.run(); }
+                    });
+        } else {
+            fire.run();
+        }
+    }
 }

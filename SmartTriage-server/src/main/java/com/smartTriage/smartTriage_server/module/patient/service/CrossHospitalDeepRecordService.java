@@ -73,6 +73,7 @@ public class CrossHospitalDeepRecordService {
     private final BreakTheGlassEventRepository breakTheGlassEventRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher realTimeEventPublisher;
 
     @Transactional
     public CrossHospitalDeepRecordResponse getByNationalId(String nationalId, String breakTheGlassReason) {
@@ -127,7 +128,7 @@ public class CrossHospitalDeepRecordService {
         }
         String priorState = priorConsentState(identity.getNationalId());
         UUID hospitalId = userRepository.findHospitalIdByUserId(actor.getId()).orElse(null);
-        breakTheGlassEventRepository.save(BreakTheGlassEvent.builder()
+        BreakTheGlassEvent event = breakTheGlassEventRepository.save(BreakTheGlassEvent.builder()
                 .personIdentity(identity)
                 .actorUserId(actor.getId())
                 .actorName(displayNameOf(actor))
@@ -139,6 +140,17 @@ public class CrossHospitalDeepRecordService {
                 .build());
         log.warn("BREAK-THE-GLASS deep-record access by {} for identity {} (prior consent: {})",
                 actor.getId(), identity.getId(), priorState);
+
+        // Notify the actor's-hospital governance team in real time — AFTER COMMIT so a rolled-back
+        // override never pushes a phantom. Audience = actor's hospital only (the team with authority
+        // to review this clinician). Visitless governance event, not a ClinicalAlert.
+        if (hospitalId != null) {
+            realTimeEventPublisher.publishGovernanceEventAfterCommit(hospitalId, java.util.Map.of(
+                    "eventType", "BREAK_THE_GLASS_ACCESS",
+                    "eventId", event.getId().toString(),
+                    "actorName", event.getActorName(),
+                    "accessedAt", event.getAccessedAt().toString()));
+        }
     }
 
     private String priorConsentState(String nationalId) {
