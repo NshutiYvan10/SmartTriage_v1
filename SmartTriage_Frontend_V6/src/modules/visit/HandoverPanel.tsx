@@ -109,7 +109,7 @@ export function HandoverPanel({ visitId }: { visitId: string }) {
         )}
 
         {error && (
-          <p className="text-[11px] font-medium text-rose-600 mt-2">{error}</p>
+          <p className={`text-[11px] font-medium mt-2 ${isDark ? 'text-rose-300' : 'text-rose-600'}`}>{error}</p>
         )}
       </div>
 
@@ -126,11 +126,11 @@ export function HandoverPanel({ visitId }: { visitId: string }) {
                   {(r.reportType || '').replace(/_/g, ' ')}
                 </span>
                 {r.isAcknowledged ? (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600">
+                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>
                     <CheckCircle className="w-3 h-3" /> Acknowledged{r.receivedByName ? ` · ${r.receivedByName}` : ''}
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600">
+                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>
                     <Clock className="w-3 h-3" /> Pending acknowledgement
                   </span>
                 )}

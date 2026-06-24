@@ -210,44 +210,50 @@ export function DoctorWorkspace() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="min-h-full">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
 
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className={`text-2xl font-black tracking-tight ${text.heading}`}>
-            Doctor Workspace
-          </h1>
-          <div className="flex items-center gap-3 mt-1">
-            {myZone ? (
-              <span className={`inline-flex items-center gap-1.5 text-sm font-bold ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`}>
-                <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
-                {ZONE_LABELS[myZone] || myZone}
-              </span>
-            ) : (
-              <span className={`text-sm ${text.muted}`}>No zone assigned — showing all patients</span>
-            )}
-            {myShift && (
-              <span className={`text-xs px-2 py-0.5 rounded-lg ${isDark ? 'bg-slate-700/50 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
-                {myShift.shiftFunction?.replace(/_/g, ' ')}
-              </span>
-            )}
-            {myShift?.isShiftLead && (
-              <span
-                title="You hold the shift-lead badge"
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-600 text-white text-[10px] font-bold uppercase tracking-wider shadow-sm shadow-amber-500/30"
-              >
-                <Crown className="w-3 h-3" />
-                Shift Lead
-              </span>
-            )}
+      {/* ── Header Banner ── */}
+      <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+        <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center shrink-0">
+              <Stethoscope className="w-5 h-5 text-cyan-300" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-white tracking-tight leading-tight">
+                Doctor Workspace
+              </h1>
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
+                {myZone ? (
+                  <span className="inline-flex items-center gap-1.5 text-sm font-bold text-cyan-300">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                    {ZONE_LABELS[myZone] || myZone}
+                  </span>
+                ) : (
+                  <span className="text-sm text-white/50">No zone assigned — showing all patients</span>
+                )}
+                {myShift && (
+                  <span className="text-xs px-2 py-0.5 rounded-lg bg-white/10 text-white/70">
+                    {myShift.shiftFunction?.replace(/_/g, ' ')}
+                  </span>
+                )}
+                {myShift?.isShiftLead && (
+                  <span
+                    title="You hold the shift-lead badge"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-600 text-white text-[10px] font-bold uppercase tracking-wider shadow-sm shadow-amber-500/30"
+                  >
+                    <Crown className="w-3 h-3" />
+                    Shift Lead
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2">
           <button
             onClick={() => { loadData(); refreshShift(); }}
-            className={`p-2.5 rounded-xl transition-all ${isDark ? 'hover:bg-white/5 text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}
+            className="p-2.5 rounded-xl transition-all hover:bg-white/10 text-white/70"
           >
             <RefreshCw className="w-5 h-5" />
           </button>
@@ -311,7 +317,7 @@ export function DoctorWorkspace() {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="Search by name, visit #, complaint…"
-            className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+            className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body} ${isDark ? 'placeholder-slate-500' : 'placeholder-slate-400'}`}
             style={glassInner}
           />
         </div>
@@ -327,8 +333,8 @@ export function DoctorWorkspace() {
               onClick={() => setStatusFilter(f.key)}
               className={`px-3 py-2 text-[11px] font-bold rounded-xl transition-all ${
                 statusFilter === f.key
-                  ? isDark ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-blue-50 text-blue-600 border border-blue-200'
-                  : isDark ? 'text-slate-400 hover:bg-white/5' : 'text-slate-500 hover:bg-slate-50'
+                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                  : `${text.body} hover:bg-white/5 border border-transparent`
               }`}
             >
               {f.label}
@@ -377,6 +383,7 @@ export function DoctorWorkspace() {
           }}
         />
       )}
+      </div>
     </div>
   );
 }
@@ -502,9 +509,7 @@ function PatientCard({ visit, index, isDark, text, glassCard, bed, onAccept, onP
           {!isNewPatient && !isUnderCare && (
             <button
               onClick={onView}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold rounded-xl transition-all ${
-                isDark ? 'text-slate-400 hover:bg-white/5' : 'text-slate-500 hover:bg-slate-50'
-              }`}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold rounded-xl transition-all ${text.body} hover:bg-white/5`}
             >
               <Eye className="w-3.5 h-3.5" /> View
             </button>

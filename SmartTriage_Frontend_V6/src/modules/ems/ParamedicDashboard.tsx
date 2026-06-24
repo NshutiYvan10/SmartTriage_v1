@@ -31,20 +31,20 @@ const STATUS_LABEL: Record<EmsRunStatus, string> = {
   HANDED_OFF: 'Handed off', CANCELLED: 'Cancelled',
 };
 const STATUS_CHIP: Record<EmsRunStatus, string> = {
-  DISPATCHED: 'bg-slate-500/15 text-slate-500',
-  EN_ROUTE: 'bg-amber-500/15 text-amber-500',
-  ARRIVED: 'bg-indigo-500/15 text-indigo-500',
-  HANDED_OFF: 'bg-emerald-500/15 text-emerald-500',
-  CANCELLED: 'bg-slate-500/15 text-slate-400',
+  DISPATCHED: 'bg-slate-500/20 text-slate-300 border border-slate-500/30',
+  EN_ROUTE: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
+  ARRIVED: 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30',
+  HANDED_OFF: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+  CANCELLED: 'bg-slate-500/20 text-slate-400 border border-slate-500/30',
 };
 function triageColor(c: FieldTriageCategory | null): string {
   switch (c) {
-    case 'RED':    return 'bg-rose-500/15 text-rose-600 ring-1 ring-rose-500/30';
-    case 'ORANGE': return 'bg-amber-500/15 text-amber-600 ring-1 ring-amber-500/30';
-    case 'YELLOW': return 'bg-yellow-500/15 text-yellow-700 ring-1 ring-yellow-500/30';
-    case 'GREEN':  return 'bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/30';
-    case 'BLUE':   return 'bg-blue-500/15 text-blue-600 ring-1 ring-blue-500/30';
-    default:       return 'bg-slate-500/15 text-slate-500';
+    case 'RED':    return 'bg-rose-500/20 text-rose-300 border border-rose-500/30';
+    case 'ORANGE': return 'bg-amber-500/20 text-amber-300 border border-amber-500/30';
+    case 'YELLOW': return 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30';
+    case 'GREEN':  return 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+    case 'BLUE':   return 'bg-blue-500/20 text-blue-300 border border-blue-500/30';
+    default:       return 'bg-slate-500/20 text-slate-300 border border-slate-500/30';
   }
 }
 
@@ -136,8 +136,8 @@ export function ParamedicDashboard() {
 
         {toast && (
           <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-base font-semibold animate-fade-up ${
-            toast.type === 'ok' ? 'bg-emerald-500/15 text-emerald-600 border border-emerald-500/20'
-              : 'bg-rose-500/15 text-rose-600 border border-rose-500/20'}`}>
+            toast.type === 'ok' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+              : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}`}>
             {toast.type === 'ok' ? <CheckCircle2 className="w-5 h-5" /> : <AlertOctagon className="w-5 h-5" />}
             {toast.text}
           </div>
@@ -265,7 +265,7 @@ function RunCard({ run, glassCard, glassInner, text, isDark, onOpen, onPreregist
             </span>
           )}
           {run.preArrivalAckedAt && (
-            <span className="text-xs font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-600 inline-flex items-center gap-1">
+            <span className="text-xs font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 inline-flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5" /> ED acknowledged
             </span>
           )}
@@ -273,7 +273,7 @@ function RunCard({ run, glassCard, glassInner, text, isDark, onOpen, onPreregist
         <span className={`text-xs ${text.muted}`}>{formatDistanceToNow(new Date(run.dispatchedAt), { addSuffix: true })}</span>
       </div>
       {run.preArrivalAckedAt && (
-        <div className="text-sm text-emerald-600 flex items-center gap-1 mb-2">
+        <div className="text-sm text-emerald-400 flex items-center gap-1 mb-2">
           <CheckCircle2 className="w-4 h-4" /> Received by {run.preArrivalAckedByName ?? 'ED'} · {formatDistanceToNow(new Date(run.preArrivalAckedAt), { addSuffix: true })}
         </div>
       )}
@@ -352,7 +352,7 @@ function PatientHistoryPanel({ runId, text, glassInner }: any) {
   return (
     <div className="rounded-xl px-3 py-2.5 mt-3 text-sm" style={glassInner}>
       {loading ? (
-        <div className="flex items-center gap-2 text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading history…</div>
+        <div className={`flex items-center gap-2 ${text.muted}`}><Loader2 className="w-4 h-4 animate-spin" /> Loading history…</div>
       ) : !data || !data.known ? (
         <div className={text.muted}>{data?.unidentified ? `${data.displayName ?? 'Unidentified'} — no chart history yet.` : 'No linked patient history.'}</div>
       ) : (

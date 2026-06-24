@@ -31,6 +31,7 @@ import type {
   VitalSignsResponse,
 } from '@/api/types';
 import { useMyShift } from '@/hooks/useMyShift';
+import { useTheme } from '@/hooks/useTheme';
 
 type Window = 'shift' | '1h' | '4h' | '8h' | '24h';
 
@@ -48,6 +49,7 @@ export function RecentActivityBanner({
   vitals, triageHistory, notes, diagnoses, investigations, medications, alerts,
 }: Props) {
   const { assignment } = useMyShift();
+  const { glassCard, glassInner, text } = useTheme();
   const shiftStartIso = assignment?.startedAt ?? null;
 
   const [window, setWindow] = useState<Window>(shiftStartIso ? 'shift' : '8h');
@@ -94,17 +96,17 @@ export function RecentActivityBanner({
   const cutoffLabel = formatCutoffLabel(cutoff);
 
   return (
-    <section className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+    <section style={glassCard} className="rounded-2xl p-4">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-blue-50 border border-blue-200 inline-flex items-center justify-center">
-            <Activity className="w-4 h-4 text-blue-700" />
+          <div className="w-8 h-8 rounded-full bg-blue-500/20 border border-blue-500/30 inline-flex items-center justify-center">
+            <Activity className="w-4 h-4 text-blue-300" />
           </div>
           <div>
-            <div className="text-[11px] uppercase font-bold text-gray-400 tracking-wide">
+            <div className={`text-[11px] uppercase font-bold ${text.muted} tracking-wide`}>
               Recent activity
             </div>
-            <div className="text-sm font-bold text-gray-900">
+            <div className={`text-sm font-bold ${text.heading}`}>
               {totalEvents === 0
                 ? 'No new events in this window'
                 : `${totalEvents} event${totalEvents === 1 ? '' : 's'} since ${cutoffLabel}`}
@@ -112,11 +114,12 @@ export function RecentActivityBanner({
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <Clock className="w-3.5 h-3.5 text-gray-400" />
+          <Clock className={`w-3.5 h-3.5 ${text.muted}`} />
           <select
             value={window}
             onChange={(e) => setWindow(e.target.value as Window)}
-            className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white"
+            style={glassInner}
+            className={`text-xs rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
             aria-label="Activity window"
           >
             {shiftStartIso && <option value="shift">Since my shift started</option>}
@@ -131,17 +134,17 @@ export function RecentActivityBanner({
       {totalEvents > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2 text-[12px]">
           <Pill_ icon={<Activity className="w-3.5 h-3.5" />} label="Vitals"
-                count={counts.vitals} accent="text-cyan-700 bg-cyan-50 border-cyan-200" />
+                count={counts.vitals} accent="text-cyan-300 bg-cyan-500/20 border-cyan-500/30" />
           <Pill_ icon={<Stethoscope className="w-3.5 h-3.5" />} label="Triage"
-                count={counts.triage} accent="text-rose-700 bg-rose-50 border-rose-200" />
+                count={counts.triage} accent="text-rose-300 bg-rose-500/20 border-rose-500/30" />
           <Pill_ icon={<FileText className="w-3.5 h-3.5" />} label="Notes"
-                count={counts.notes} accent="text-indigo-700 bg-indigo-50 border-indigo-200" />
+                count={counts.notes} accent="text-indigo-300 bg-indigo-500/20 border-indigo-500/30" />
           <Pill_ icon={<ClipboardList className="w-3.5 h-3.5" />} label="Diagnoses"
-                count={counts.diagnoses} accent="text-amber-700 bg-amber-50 border-amber-200" />
+                count={counts.diagnoses} accent="text-amber-300 bg-amber-500/20 border-amber-500/30" />
           <Pill_ icon={<FlaskConical className="w-3.5 h-3.5" />}
                 label="Lab orders / results"
                 count={counts.investigationsOrdered + counts.investigationsResulted}
-                accent="text-emerald-700 bg-emerald-50 border-emerald-200"
+                accent="text-emerald-300 bg-emerald-500/20 border-emerald-500/30"
                 subtext={
                   counts.investigationsResulted > 0
                     ? `${counts.investigationsResulted} result${counts.investigationsResulted === 1 ? '' : 's'} back`
@@ -150,14 +153,14 @@ export function RecentActivityBanner({
           <Pill_ icon={<Pill className="w-3.5 h-3.5" />}
                 label="Meds"
                 count={counts.medsPrescribed + counts.medsAdministered}
-                accent="text-violet-700 bg-violet-50 border-violet-200"
+                accent="text-violet-300 bg-violet-500/20 border-violet-500/30"
                 subtext={
                   counts.medsAdministered > 0
                     ? `${counts.medsAdministered} given`
                     : undefined
                 } />
           <Pill_ icon={<AlertTriangle className="w-3.5 h-3.5" />} label="Alerts"
-                count={counts.alerts} accent="text-red-700 bg-red-50 border-red-200" />
+                count={counts.alerts} accent="text-red-300 bg-red-500/20 border-red-500/30" />
         </div>
       )}
     </section>

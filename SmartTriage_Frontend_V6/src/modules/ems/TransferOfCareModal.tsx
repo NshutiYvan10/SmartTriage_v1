@@ -39,8 +39,8 @@ export function TransferOfCareModal({ run, receivedByName, onClose, onSaved }: P
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="rounded-2xl p-6 max-w-2xl w-full max-h-[95vh] overflow-y-auto animate-fade-up" style={glassCard}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+      <div className="rounded-2xl p-6 max-w-2xl w-full max-h-[95vh] overflow-y-auto shadow-2xl animate-scale-in" style={glassCard}>
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center">
@@ -52,7 +52,7 @@ export function TransferOfCareModal({ run, receivedByName, onClose, onSaved }: P
             </div>
           </div>
           <button onClick={onClose} className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}>
-            <X className="w-4 h-4 text-slate-400" />
+            <X className={`w-4 h-4 ${text.muted}`} />
           </button>
         </div>
 

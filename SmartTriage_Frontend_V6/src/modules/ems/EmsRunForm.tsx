@@ -328,7 +328,7 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm" style={{ background: 'rgba(2,11,20,0.55)' }}>
       <div className="rounded-2xl p-4 sm:p-6 max-w-2xl w-full max-h-[96vh] overflow-y-auto animate-fade-up" style={glassCard}>
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
@@ -413,7 +413,7 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
 // ─────────────────────────────────────────────────────────────────
 
 function Step1Patient({ draft, setDraft, destinations, text, glassInner, isDark }: any) {
-  const inputClass = `w-full px-3 py-3 rounded-xl text-base outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
+  const inputClass = `w-full px-3 py-3 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
   return (
     <div className="space-y-4">
       <h4 className={`text-base font-bold ${text.heading}`}>Patient, incident &amp; destination</h4>
@@ -476,7 +476,7 @@ function Step1Patient({ draft, setDraft, destinations, text, glassInner, isDark 
 // ─────────────────────────────────────────────────────────────────
 
 function Step2Vitals({ draft, setDraft, mobility, setMobility, avpu, setAvpu, trauma, setTrauma, text, glassInner, isDark }: any) {
-  const inputClass = `w-full px-3 py-3 rounded-xl text-base outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
+  const inputClass = `w-full px-3 py-3 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
   const numField = (key: string, label: string, ph?: string) => (
     <div>
       <Label text={text}>{label}</Label>
@@ -544,7 +544,7 @@ function Step2Vitals({ draft, setDraft, mobility, setMobility, avpu, setAvpu, tr
 // ─────────────────────────────────────────────────────────────────
 
 function Step3Triage({ run, flags, setFlags, isChild, setIsChild, reason, setReason, computing, onCompute, pendingDowngrade, onConfirmDowngrade, text, glassInner, isDark }: any) {
-  const inputClass = `w-full px-3 py-3 rounded-xl text-base outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
+  const inputClass = `w-full px-3 py-3 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
   const toggle = (k: string) => setFlags({ ...flags, [k]: !flags[k] });
   const emergency = EMERGENCY_SIGNS.filter((s) => !s.peds || isChild);
 
@@ -651,7 +651,7 @@ function Step4Treatments({ run, text, glassInner, isDark, onChanged }: any) {
   const [staged, setStaged] = useState<InterventionPreset & { givenByName?: string; outcome?: string; notes?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inputClass = `w-full px-3 py-2.5 rounded-xl text-base outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
+  const inputClass = `w-full px-3 py-2.5 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
 
   async function save() {
     if (!staged || !staged.detail.trim()) { setError('Description is required'); return; }
@@ -769,7 +769,7 @@ function Step4Treatments({ run, text, glassInner, isDark, onChanged }: any) {
 // ─────────────────────────────────────────────────────────────────
 
 function Step5Send({ draft, setDraft, text, glassInner, isDark, run, onToggleLights }: any) {
-  const inputClass = `w-full px-3 py-3 rounded-xl text-base outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
+  const inputClass = `w-full px-3 py-3 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
   const lights = !!run?.lightsActive;
   return (
     <div className="space-y-4">

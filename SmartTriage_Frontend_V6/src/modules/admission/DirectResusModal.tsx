@@ -18,6 +18,7 @@ import {
   AlertTriangle, Truck, BedDouble, Heart, Loader2, Siren, X,
 } from 'lucide-react';
 import { directResusApi } from '@/api/directResus';
+import { useTheme } from '@/hooks/useTheme';
 import type {
   ArrivalMode,
   DirectResusAdmissionRequest,
@@ -47,6 +48,8 @@ export function DirectResusModal({
   onClose,
   onSuccess,
 }: Props) {
+  const { glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const [reason, setReason] = useState('');
   const [isPediatric, setIsPediatric] = useState(initialIsPediatric);
   const [ambulancePreArrival, setTruckPreArrival] = useState(false);
@@ -85,11 +88,13 @@ export function DirectResusModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      style={{ background: 'rgba(2,11,20,0.55)' }}
       onClick={submitting ? undefined : onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden bg-white border border-rose-200"
+        style={glassCard}
+        className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header — emergency red, signals seriousness */}
@@ -123,8 +128,8 @@ export function DirectResusModal({
         <div className="p-5 space-y-4">
           {/* Reason — required, short clinical phrase */}
           <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-              Clinical reason <span className="text-rose-600">*</span>
+            <label className={`block text-[11px] font-bold uppercase tracking-wider ${text.muted} mb-1.5`}>
+              Clinical reason <span className="text-rose-500">*</span>
             </label>
             <input
               autoFocus
@@ -132,18 +137,22 @@ export function DirectResusModal({
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. cardiac arrest, GSW to chest, severe airway compromise"
               maxLength={500}
-              className="w-full px-3 py-2.5 rounded-lg text-sm outline-none border border-slate-300 bg-slate-50 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
+              style={glassInner}
+              className={`w-full px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
             />
-            <p className="text-[10px] text-slate-500 mt-1">
+            <p className={`text-[10px] ${text.muted} mt-1`}>
               One short clinical phrase. This becomes the admission's audit anchor.
             </p>
           </div>
 
           {/* Toggles — pediatric + ambulance pre-arrival */}
           <div className="grid grid-cols-2 gap-3">
-            <label className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-              isPediatric ? 'bg-cyan-50 border-cyan-300' : 'bg-slate-50 border-slate-200 hover:border-slate-300'
-            }`}>
+            <label
+              style={isPediatric ? undefined : glassInner}
+              className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                isPediatric ? 'bg-cyan-500/20 border-cyan-500/30' : 'border-transparent hover:bg-white/5'
+              }`}
+            >
               <input
                 type="checkbox"
                 checked={isPediatric}
@@ -151,18 +160,21 @@ export function DirectResusModal({
                 className="w-4 h-4 accent-cyan-600"
               />
               <div>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                  <Heart className="w-3 h-3 text-cyan-600" /> Pediatric (under 13)
+                <div className={`flex items-center gap-1.5 text-xs font-bold ${text.heading}`}>
+                  <Heart className="w-3 h-3 text-cyan-500" /> Pediatric (under 13)
                 </div>
-                <p className="text-[10px] text-slate-500 leading-tight mt-0.5">
+                <p className={`text-[10px] ${text.muted} leading-tight mt-0.5`}>
                   Triggers pediatric kit prep
                 </p>
               </div>
             </label>
 
-            <label className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-              ambulancePreArrival ? 'bg-amber-50 border-amber-300' : 'bg-slate-50 border-slate-200 hover:border-slate-300'
-            }`}>
+            <label
+              style={ambulancePreArrival ? undefined : glassInner}
+              className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                ambulancePreArrival ? 'bg-amber-500/20 border-amber-500/30' : 'border-transparent hover:bg-white/5'
+              }`}
+            >
               <input
                 type="checkbox"
                 checked={ambulancePreArrival}
@@ -170,10 +182,10 @@ export function DirectResusModal({
                 className="w-4 h-4 accent-amber-600"
               />
               <div>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                  <Truck className="w-3 h-3 text-amber-600" /> Truck call-ahead
+                <div className={`flex items-center gap-1.5 text-xs font-bold ${text.heading}`}>
+                  <Truck className="w-3 h-3 text-amber-500" /> Truck call-ahead
                 </div>
-                <p className="text-[10px] text-slate-500 leading-tight mt-0.5">
+                <p className={`text-[10px] ${text.muted} leading-tight mt-0.5`}>
                   Patient inbound, not yet arrived
                 </p>
               </div>
@@ -183,8 +195,8 @@ export function DirectResusModal({
           {/* Estimated gender — only relevant for unidentified */}
           {isUnidentified && (
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                Apparent gender <span className="text-slate-400 font-normal">(optional, for med-dosing)</span>
+              <label className={`block text-[11px] font-bold uppercase tracking-wider ${text.muted} mb-1.5`}>
+                Apparent gender <span className={`${text.muted} font-normal`}>(optional, for med-dosing)</span>
               </label>
               <div className="grid grid-cols-2 gap-2">
                 {(['MALE', 'FEMALE'] as const).map((g) => (
@@ -192,10 +204,11 @@ export function DirectResusModal({
                     key={g}
                     type="button"
                     onClick={() => setEstimatedGender(estimatedGender === g ? '' : g)}
+                    style={estimatedGender === g ? undefined : glassInner}
                     className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
                       estimatedGender === g
-                        ? 'bg-slate-800 text-white border-slate-800'
-                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
+                        ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                        : `${text.body} border-transparent hover:bg-white/5`
                     }`}
                   >
                     {g}
@@ -208,8 +221,8 @@ export function DirectResusModal({
           {/* Pre-arrival notes — only if ambulance call-ahead */}
           {ambulancePreArrival && (
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                Pre-hospital notes <span className="text-slate-400 font-normal">(optional)</span>
+              <label className={`block text-[11px] font-bold uppercase tracking-wider ${text.muted} mb-1.5`}>
+                Pre-hospital notes <span className={`${text.muted} font-normal`}>(optional)</span>
               </label>
               <textarea
                 value={preArrivalNotes}
@@ -217,15 +230,16 @@ export function DirectResusModal({
                 rows={2}
                 maxLength={2000}
                 placeholder="e.g. ETA 5 min, intubated en route, adrenaline x1"
-                className="w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300 bg-slate-50 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                style={glassInner}
+                className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
               />
             </div>
           )}
 
           {/* What happens next — set expectations */}
-          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
-            <p className="text-[11px] font-bold text-slate-700 mb-1">What happens on submit</p>
-            <ul className="text-[10px] text-slate-600 space-y-0.5 leading-relaxed">
+          <div style={glassInner} className="rounded-lg p-3">
+            <p className={`text-[11px] font-bold ${text.label} mb-1`}>What happens on submit</p>
+            <ul className={`text-[10px] ${text.body} space-y-0.5 leading-relaxed`}>
               <li>• Patient placed in RESUS bed with monitor (if available)</li>
               <li>• Auto-RED triage record created — back-fill clinical detail later</li>
               <li>• Resus team alerted on /alerts/{`{hospital}/RESUS`} (CRITICAL)</li>
@@ -240,22 +254,22 @@ export function DirectResusModal({
 
           {/* Error */}
           {error && (
-            <div className="rounded-lg p-3 flex items-start gap-2 bg-rose-50 border border-rose-200">
-              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-rose-600" />
+            <div className="rounded-lg p-3 flex items-start gap-2 bg-rose-500/20 border border-rose-500/30">
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-rose-400" />
               <div>
-                <p className="text-xs font-bold text-rose-800">Admission failed</p>
-                <p className="text-[10px] text-rose-700 mt-0.5">{error}</p>
+                <p className="text-xs font-bold text-rose-300">Admission failed</p>
+                <p className="text-[10px] text-rose-300/90 mt-0.5">{error}</p>
               </div>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-200 bg-slate-50/60">
+        <div className="flex items-center justify-end gap-2 px-5 py-3" style={{ borderTop: borderStyle }}>
           <button
             onClick={onClose}
             disabled={submitting}
-            className="px-3 py-2 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+            className={`px-3 py-2 rounded-lg text-xs font-bold ${text.body} hover:bg-white/5 disabled:opacity-50`}
           >
             Cancel
           </button>

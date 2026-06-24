@@ -84,7 +84,7 @@ function formatMinutes(m: number): string {
 }
 
 const TIER_STYLES: Record<IdentityOverdueTier, { bg: string; text: string; border: string }> = {
-  none: { bg: 'bg-slate-100',  text: 'text-slate-600', border: 'border border-slate-200' },
-  soft: { bg: 'bg-amber-100',  text: 'text-amber-800', border: 'border border-amber-300' },
-  hard: { bg: 'bg-rose-100',   text: 'text-rose-800',  border: 'border border-rose-300' },
+  none: { bg: 'bg-slate-500/20', text: 'text-slate-300', border: 'border border-slate-500/30' },
+  soft: { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border border-amber-500/30' },
+  hard: { bg: 'bg-rose-500/20',  text: 'text-rose-300',  border: 'border border-rose-500/30' },
 };

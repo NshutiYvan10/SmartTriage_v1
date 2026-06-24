@@ -53,25 +53,25 @@ const BUCKET_TONE: Record<Exclude<ChangeBucket, 'UNCHANGED'>, {
 }> = {
   NEW: {
     label: 'New since triage',
-    className: 'bg-red-500/10 text-red-700 border-red-500/30',
+    className: 'bg-red-500/20 text-red-300 border-red-500/30',
     Icon: Plus,
     description: 'Signs that appeared after the baseline triage assessment.',
   },
   WORSENING: {
     label: 'Worsening',
-    className: 'bg-orange-500/10 text-orange-700 border-orange-500/30',
+    className: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
     Icon: ArrowUpRight,
     description: 'Signs that have explicitly worsened, or crossed from a good state to a bad one.',
   },
   IMPROVING: {
     label: 'Improving',
-    className: 'bg-cyan-500/10 text-cyan-700 border-cyan-500/30',
+    className: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
     Icon: ArrowDownRight,
     description: 'Signs that are improving, or have crossed back from a bad state to a good one.',
   },
   RESOLVED: {
     label: 'Resolved',
-    className: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30',
+    className: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
     Icon: Check,
     description: 'Signs that were present at triage and are now absent.',
   },
@@ -214,7 +214,7 @@ function BucketBlock({
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={`text-xs font-bold ${text.heading}`}>{label}</span>
                   {c.latest.numericValue != null && (
-                    <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-amber-500/15 text-amber-700">
+                    <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-amber-500/20 text-amber-300">
                       {c.latest.numericValue}
                     </span>
                   )}

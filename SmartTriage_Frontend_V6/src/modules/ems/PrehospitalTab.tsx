@@ -12,12 +12,12 @@ import { useTheme } from '@/hooks/useTheme';
 
 function triageChip(c: FieldTriageCategory | null): string {
   switch (c) {
-    case 'RED':    return 'bg-rose-500/15 text-rose-500';
-    case 'ORANGE': return 'bg-amber-500/15 text-amber-500';
-    case 'YELLOW': return 'bg-yellow-500/15 text-yellow-600';
-    case 'GREEN':  return 'bg-emerald-500/15 text-emerald-500';
-    case 'BLUE':   return 'bg-blue-500/15 text-blue-500';
-    default:       return 'bg-slate-500/15 text-slate-500';
+    case 'RED':    return 'bg-rose-500/20 text-rose-300 border border-rose-500/30';
+    case 'ORANGE': return 'bg-amber-500/20 text-amber-300 border border-amber-500/30';
+    case 'YELLOW': return 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30';
+    case 'GREEN':  return 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+    case 'BLUE':   return 'bg-blue-500/20 text-blue-300 border border-blue-500/30';
+    default:       return 'bg-slate-500/20 text-slate-300 border border-slate-500/30';
   }
 }
 
@@ -100,8 +100,8 @@ export function PrehospitalTab({ visitId, edTriageCategory }: Props) {
           <p className={`text-[11px] mt-1.5 ${text.muted}`}>Engine: {run.fieldTriageDecisionPath}</p>
         )}
         {discordant && (
-          <div className="mt-3 rounded-xl p-2 bg-amber-500/10 ring-1 ring-amber-500/20 flex items-start gap-2">
-            <AlertOctagon className="w-3.5 h-3.5 text-amber-500 mt-0.5" />
+          <div className="mt-3 rounded-xl p-2 bg-amber-500/20 border border-amber-500/30 flex items-start gap-2">
+            <AlertOctagon className="w-3.5 h-3.5 text-amber-400 mt-0.5" />
             <p className={`text-[11px] ${text.body}`}>
               Field-vs-ED discordance: paramedic called <b>{run.fieldTriageCategory}</b>, ED triaged <b>{edTriageCategory}</b>.
             </p>

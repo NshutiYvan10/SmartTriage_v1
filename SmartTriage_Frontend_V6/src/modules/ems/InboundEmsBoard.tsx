@@ -12,7 +12,6 @@ import { useAuthStore } from '@/store/authStore';
 import { emsApi } from '@/api/ems';
 import type { EmsRun, FieldTriageCategory } from '@/api/ems';
 import { subscribeToEmsRuns } from '@/api/websocket';
-import { useTheme } from '@/hooks/useTheme';
 import { TransferOfCareModal } from './TransferOfCareModal';
 
 function triageColor(c: FieldTriageCategory | null | undefined): string {
@@ -27,7 +26,6 @@ function triageColor(c: FieldTriageCategory | null | undefined): string {
 }
 
 export function InboundEmsBoard() {
-  const { glassCard, glassInner, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const nurseName = user?.fullName ?? '';

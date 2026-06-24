@@ -42,11 +42,11 @@ import { ChangesSinceTriageCard } from './ChangesSinceTriageCard';
 import { buildSignTimelines } from './clinicalSignDiff';
 
 const STATUS_TONE: Record<ClinicalSignStatus, { label: string; className: string }> = {
-  PRESENT:    { label: 'PRESENT',    className: 'text-red-700 bg-red-100 border-red-300' },
-  ABSENT:     { label: 'ABSENT',     className: 'text-emerald-700 bg-emerald-100 border-emerald-300' },
-  IMPROVING:  { label: 'IMPROVING',  className: 'text-cyan-700 bg-cyan-100 border-cyan-300' },
-  WORSENING:  { label: 'WORSENING',  className: 'text-orange-700 bg-orange-100 border-orange-300' },
-  UNKNOWN:    { label: 'UNKNOWN',    className: 'text-slate-700 bg-slate-100 border-slate-300' },
+  PRESENT:    { label: 'PRESENT',    className: 'text-red-300 bg-red-500/20 border-red-500/30' },
+  ABSENT:     { label: 'ABSENT',     className: 'text-emerald-300 bg-emerald-500/20 border-emerald-500/30' },
+  IMPROVING:  { label: 'IMPROVING',  className: 'text-cyan-300 bg-cyan-500/20 border-cyan-500/30' },
+  WORSENING:  { label: 'WORSENING',  className: 'text-orange-300 bg-orange-500/20 border-orange-500/30' },
+  UNKNOWN:    { label: 'UNKNOWN',    className: 'text-slate-300 bg-slate-500/20 border-slate-500/30' },
 };
 
 const ALL_STATUSES: ClinicalSignStatus[] = ['PRESENT', 'ABSENT', 'IMPROVING', 'WORSENING', 'UNKNOWN'];
@@ -155,8 +155,8 @@ export function ClinicalSignsTab({ visitId, glassCard, glassInner, isDark, text,
 
       {error && (
         <div className="rounded-2xl p-3 border border-red-500/30 bg-red-500/10 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
-          <span className="text-xs text-red-700 font-medium">{error}</span>
+          <AlertTriangle className="w-4 h-4 text-red-300 flex-shrink-0" />
+          <span className="text-xs text-red-300 font-medium">{error}</span>
         </div>
       )}
 
@@ -186,20 +186,20 @@ export function ClinicalSignsTab({ visitId, glassCard, glassInner, isDark, text,
       <div className="flex items-center gap-2">
         <button
           onClick={() => setView('current')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
             view === 'current'
-              ? 'bg-slate-800 text-white'
-              : `${text.muted} hover:bg-white/5`
+              ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+              : `${text.body} hover:bg-white/5 border-transparent`
           }`}
         >
           Current State
         </button>
         <button
           onClick={() => setView('timeline')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
             view === 'timeline'
-              ? 'bg-slate-800 text-white'
-              : `${text.muted} hover:bg-white/5`
+              ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+              : `${text.body} hover:bg-white/5 border-transparent`
           }`}
         >
           Timeline ({history.length})
@@ -327,12 +327,12 @@ function CurrentStateView({
                             </span>
                           )}
                           {tl.length >= 2 && (
-                            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-700">
+                            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">
                               {tl.length} events
                             </span>
                           )}
                           {e.numericValue != null && (
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700">
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
                               {def?.numericLabel?.replace(/\(.+\)/, '').trim() || 'value'}: {e.numericValue}
                             </span>
                           )}
@@ -416,7 +416,7 @@ function TimelineView({
                 </span>
               )}
               {isFirst && !isBaselineCluster && (
-                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-700">
+                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">
                   Latest
                 </span>
               )}
@@ -434,7 +434,7 @@ function TimelineView({
                       {statusTone.label}
                     </span>
                     {e.numericValue != null && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700">
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
                         {e.numericValue}
                       </span>
                     )}
@@ -561,13 +561,13 @@ function RecordPanel({
       <button
         type="button"
         onClick={addEntry}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 transition-colors"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 transition-colors"
       >
         <Plus className="w-3 h-3" /> Add another sign
       </button>
 
       {submitError && (
-        <p className="text-[11px] font-medium text-red-600">{submitError}</p>
+        <p className="text-[11px] font-medium text-red-300">{submitError}</p>
       )}
 
       <div className="flex items-center gap-3 pt-2">
@@ -603,6 +603,7 @@ function SignEntryRow({
 }) {
   const [search, setSearch] = useState('');
   const [showPicker, setShowPicker] = useState(!entry.signCode);
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
 
   const def: ClinicalSignDefinition | undefined = entry.signCode ? SIGN_BY_CODE[entry.signCode] : undefined;
 
@@ -626,7 +627,7 @@ function SignEntryRow({
   }, [search, knownSignCodes]);
 
   return (
-    <div className="rounded-xl p-3 border border-slate-300/20" style={glassInner}>
+    <div className="rounded-xl p-3" style={{ ...glassInner, border: borderStyle }}>
       <div className="flex items-center justify-between mb-2">
         <span className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>
           Entry {index + 1}
@@ -655,7 +656,7 @@ function SignEntryRow({
                   {CATEGORY_LABEL[def.category]}
                 </span>
                 {knownSignCodes.includes(def.code) && (
-                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-700">
+                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">
                     On record
                   </span>
                 )}
@@ -680,10 +681,11 @@ function SignEntryRow({
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search clinical signs (e.g. chest pain, convulsions)…"
                 autoFocus={!def}
-                className={`w-full pl-9 pr-3 py-2 rounded-lg text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'} bg-white/50`}
+                style={glassInner}
+                className={`w-full pl-9 pr-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body} ${isDark ? 'placeholder-slate-500' : 'placeholder-slate-400'}`}
               />
             </div>
-            <div className="rounded-lg border border-slate-300/30 max-h-40 overflow-y-auto">
+            <div className="rounded-lg max-h-40 overflow-y-auto" style={{ border: borderStyle }}>
               {filtered.length === 0 ? (
                 <p className={`text-xs text-center py-3 ${text.muted}`}>No matches</p>
               ) : filtered.slice(0, 30).map((sd) => {
@@ -697,13 +699,13 @@ function SignEntryRow({
                       setShowPicker(false);
                       setSearch('');
                     }}
-                    className="w-full text-left px-3 py-1.5 hover:bg-cyan-500/10 transition-colors border-b border-slate-200/10 last:border-0"
+                    className="w-full text-left px-3 py-1.5 hover:bg-cyan-500/10 transition-colors border-b border-white/5 last:border-0"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className={`text-xs font-semibold ${text.heading}`}>{sd.label}</span>
                       <div className="flex items-center gap-1.5">
                         {isOnRecord && (
-                          <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-cyan-500/15 text-cyan-700">On record</span>
+                          <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-300">On record</span>
                         )}
                         <span className={`text-[9px] font-bold uppercase ${CATEGORY_TONE[sd.category].text}`}>
                           {sd.category.replace(/_/g, ' ')}
@@ -754,7 +756,8 @@ function SignEntryRow({
               value={entry.numericValue ?? ''}
               onChange={(e) => onChange({ numericValue: e.target.value === '' ? null : Number(e.target.value) })}
               placeholder="e.g. 4.2"
-              className={`w-full px-3 py-2 rounded-lg text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'} bg-white/50`}
+              style={glassInner}
+              className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body} ${isDark ? 'placeholder-slate-500' : 'placeholder-slate-400'}`}
             />
           </div>
         )}
@@ -770,7 +773,8 @@ function SignEntryRow({
               onChange={(e) => onChange({ notes: e.target.value })}
               placeholder="What changed, what was done, what to watch."
               rows={2}
-              className={`w-full px-3 py-2 rounded-lg text-sm outline-none resize-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'} bg-white/50`}
+              style={glassInner}
+              className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 resize-none ${text.body} ${isDark ? 'placeholder-slate-500' : 'placeholder-slate-400'}`}
             />
           </div>
         )}
