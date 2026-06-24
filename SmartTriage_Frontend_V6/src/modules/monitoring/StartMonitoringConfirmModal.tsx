@@ -11,6 +11,7 @@
  */
 import { useState } from 'react';
 import { Activity, AlertTriangle, CheckCircle2, X } from 'lucide-react';
+import { useTheme } from '@/hooks/useTheme';
 
 interface Props {
   patientName: string;
@@ -27,9 +28,14 @@ export default function StartMonitoringConfirmModal({
   onConfirm,
   onClose,
 }: Props) {
+  const { glassCard, isDark, text } = useTheme();
   const [confirmed, setConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const borderStyle = isDark
+    ? '1px solid rgba(2,132,199,0.12)'
+    : '1px solid rgba(203,213,225,0.3)';
 
   const handleStart = async () => {
     if (!confirmed || submitting) return;
@@ -50,17 +56,18 @@ export default function StartMonitoringConfirmModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden mx-4 animate-fade-up"
+        style={glassCard}
+        className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden mx-4 animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 px-5 py-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-              <Activity className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+              <Activity className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
               <h3 className="text-sm font-bold text-white">Start Continuous Monitoring</h3>
-              <p className="text-[10px] text-white/80 mt-0.5">Confirm sensor placement</p>
+              <p className="text-[10px] text-white/50 mt-0.5">Confirm sensor placement</p>
             </div>
           </div>
           <button
@@ -73,26 +80,26 @@ export default function StartMonitoringConfirmModal({
         </div>
 
         <div className="px-5 py-5 space-y-4">
-          <div className="text-sm text-slate-700 leading-relaxed">
+          <div className={`text-sm leading-relaxed ${text.body}`}>
             You are starting continuous monitoring for{' '}
-            <span className="font-semibold text-slate-900">{patientName}</span>
+            <span className={`font-semibold ${text.heading}`}>{patientName}</span>
             {bedCode && (
               <>
-                {' '}on bed <span className="font-semibold text-slate-900">{bedCode}</span>
+                {' '}on bed <span className={`font-semibold ${text.heading}`}>{bedCode}</span>
               </>
             )}
             {deviceLabel && (
               <>
                 {' '}with monitor{' '}
-                <span className="font-semibold text-slate-900">{deviceLabel}</span>
+                <span className={`font-semibold ${text.heading}`}>{deviceLabel}</span>
               </>
             )}
             .
           </div>
 
-          <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-3 flex items-start gap-2.5">
-            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-800 leading-relaxed">
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-3 py-3 flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <p className={`text-xs leading-relaxed ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
               The system will treat all incoming readings as the patient's
               vitals and may auto-retriage based on them. Confirm probes
               are placed on the patient and a waveform is visible on the
@@ -105,33 +112,36 @@ export default function StartMonitoringConfirmModal({
               type="checkbox"
               checked={confirmed}
               onChange={(e) => setConfirmed(e.target.checked)}
-              className="mt-0.5 w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/30"
+              className="mt-0.5 w-4 h-4 rounded border-slate-300 text-emerald-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
             />
-            <span className="text-sm text-slate-700">
-              <span className="font-semibold">Sensors are placed on the patient</span> and a
+            <span className={`text-sm ${text.body}`}>
+              <span className={`font-semibold ${text.heading}`}>Sensors are placed on the patient</span> and a
               valid waveform is visible. Start continuous monitoring now.
             </span>
           </label>
 
           {error && (
-            <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+            <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-3 py-2 text-xs text-red-500">
               {error}
             </div>
           )}
         </div>
 
-        <div className="px-5 py-3.5 bg-slate-50 flex items-center justify-end gap-2">
+        <div
+          style={{ borderTop: borderStyle }}
+          className={`px-5 py-3.5 flex items-center justify-end gap-2 ${isDark ? 'bg-white/5' : 'bg-slate-50/60'}`}
+        >
           <button
             onClick={onClose}
             disabled={submitting}
-            className="px-4 py-2 text-xs font-bold rounded-xl bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-50"
+            className={`px-4 py-2 text-xs font-bold rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-50 ${text.label}`}
           >
             Cancel
           </button>
           <button
             onClick={handleStart}
             disabled={!confirmed || submitting}
-            className="px-4 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2 disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
+            className="px-4 py-2 text-xs font-bold rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
             {submitting ? 'Starting…' : 'Start Monitoring'}

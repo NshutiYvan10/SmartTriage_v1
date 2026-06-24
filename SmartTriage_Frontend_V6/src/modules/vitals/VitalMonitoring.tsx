@@ -34,7 +34,8 @@ import { ClinicalNotesPanel } from './ClinicalNotesPanel';
 export function VitalMonitoring() {
   const { patientId } = useParams<{ patientId: string }>();
   const navigate = useNavigate();
-  const { isDark, glassCard } = useTheme();
+  const { isDark, glassCard, glassInner, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const storePatient = usePatientStore((state) => state.getPatient(patientId!));
   const vitals = useVitalStore((state) => state.getVitals(patientId!));
   const getVitalHistory = useVitalStore((state) => state.getVitalHistory);
@@ -77,14 +78,14 @@ export function VitalMonitoring() {
 
   if (!patient) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-[#020b14]' : ''}`}>
+      <div className="min-h-full flex items-center justify-center p-4 lg:p-6">
         <div className="text-center">
-          <AlertTriangle className={`w-12 h-12 mx-auto mb-3 ${isDark ? 'text-slate-500' : 'text-gray-400'}`} />
-          <h3 className={`text-base font-semibold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Patient Not Found</h3>
-          <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>The patient record could not be located</p>
+          <AlertTriangle className={`w-12 h-12 mx-auto mb-3 ${text.muted}`} />
+          <h3 className={`text-base font-semibold mb-2 ${text.heading}`}>Patient Not Found</h3>
+          <p className={`text-sm mb-4 ${text.body}`}>The patient record could not be located</p>
           <button
             onClick={() => navigate('/monitoring')}
-            className="px-4 py-2 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-lg hover:from-slate-700 hover:to-slate-600 transition-all text-sm"
+            className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-all text-sm"
           >
             Return to Monitoring
           </button>
@@ -133,21 +134,21 @@ export function VitalMonitoring() {
   } : null;
 
  return (
-    <div className={`min-h-screen p-6 ${isDark ? 'bg-[#020b14]' : 'bg-gradient-to-br from-gray-50 to-gray-100'}`}>
-      <div className="max-w-7xl mx-auto">
-        
+    <div className="min-h-full">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
+
         {/* Header with Navigation */}
-        <div className="mb-4">
+        <div>
           <button
             onClick={() => navigate('/monitoring')}
-            className={`flex items-center gap-2 mb-3 transition-all duration-300 text-sm ${isDark ? 'text-slate-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
+            className={`flex items-center gap-2 mb-3 transition-all duration-300 text-sm ${text.body} hover:opacity-80`}
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Monitoring
           </button>
           
-          <div className="rounded-3xl overflow-hidden" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
-            <div className="bg-gradient-to-r from-slate-800 via-slate-700 to-cyan-700 px-6 py-4 relative">
+          <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+            <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 relative">
               <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iYSIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBwYXR0ZXJuVHJhbnNmb3JtPSJyb3RhdGUoNDUpIj48cmVjdCB3aWR0aD0iMSIgaGVpZ2h0PSI0MCIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjA1KSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3QgZmlsbD0idXJsKCNhKSIgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiLz48L3N2Zz4=')] opacity-50" />
               <div className="relative flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -190,12 +191,12 @@ export function VitalMonitoring() {
         </div>
 
         {/* Live Status Bar */}
-        <div className={`mb-4 rounded-xl p-3 shadow-sm border ${
+        <div className={`rounded-xl p-3 border ${
           hasActiveDevice
-            ? (isDark ? 'bg-green-500/10 border-green-500/20' : 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200')
+            ? 'bg-green-500/10 border-green-500/20'
             : pairedDevices.length > 0
-              ? (isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-200')
-              : (isDark ? 'bg-slate-500/10 border-slate-500/20' : 'bg-gradient-to-r from-slate-50 to-gray-50 border-slate-200')
+              ? 'bg-amber-500/10 border-amber-500/20'
+              : 'bg-slate-500/10 border-slate-500/20'
         }`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -205,26 +206,26 @@ export function VitalMonitoring() {
                 }`}></div>
                 <span className={`text-sm font-semibold ${
                   hasActiveDevice
-                    ? (isDark ? 'text-green-300' : 'text-green-900')
+                    ? 'text-green-300'
                     : pairedDevices.length > 0
-                      ? (isDark ? 'text-amber-300' : 'text-amber-900')
-                      : (isDark ? 'text-slate-400' : 'text-slate-600')
+                      ? 'text-amber-300'
+                      : text.body
                 }`}>
                   {hasActiveDevice ? 'Live Monitoring Active' : pairedDevices.length > 0 ? 'Device Connected' : 'No Device Assigned'}
                 </span>
               </div>
-              <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+              <span className={`text-xs ${text.muted}`}>
                 Last update: {currentVitals?.timestamp ? new Date(currentVitals.timestamp).toLocaleTimeString() : '—'}
               </span>
               {activeDeviceCount > 0 && (
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isDark ? 'text-emerald-300 bg-emerald-500/15' : 'text-emerald-600 bg-emerald-100'}`}>
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full text-emerald-300 bg-emerald-500/15">
                   {activeDeviceCount} device{activeDeviceCount > 1 ? 's' : ''} streaming
                 </span>
               )}
             </div>
             <div className="flex items-center gap-2">
               {pairedDevices.length > 0 && deviceSummary.lowestBattery < 30 && (
-                <span className={`flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${isDark ? 'text-amber-300 bg-amber-500/15 border-amber-500/30' : 'text-amber-600 bg-amber-50 border-amber-200'}`}>
+                <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border text-amber-300 bg-amber-500/15 border-amber-500/30">
                   <BatteryWarning className="w-3 h-3" />
                   Battery {Math.round(deviceSummary.lowestBattery)}%
                 </span>
@@ -235,8 +236,8 @@ export function VitalMonitoring() {
                   autoRefresh
                     ? 'bg-green-600 text-white'
                     : isDark
-                      ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      ? 'bg-white/10 text-slate-300 hover:bg-white/20'
+                      : 'bg-white/10 text-slate-700 hover:bg-black/5'
                 }`}
               >
                 {autoRefresh ? 'Auto-refresh ON' : 'Auto-refresh OFF'}
@@ -247,20 +248,20 @@ export function VitalMonitoring() {
 
         {/* ── IoT Device Status Panel ── */}
         {pairedDevices.length > 0 ? (
-          <div className={`mb-4 rounded-xl shadow-md p-4 ${isDark ? glassCard + ' border border-white/10' : 'bg-white border border-gray-200'}`}>
+          <div className="rounded-2xl p-4" style={glassCard}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className={`text-sm font-bold flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                <MonitorSmartphone className={`w-4 h-4 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
+              <h3 className={`text-sm font-bold flex items-center gap-2 ${text.heading}`}>
+                <MonitorSmartphone className="w-4 h-4 text-cyan-400" />
                 Connected IoT Devices
-                <span className={`text-xs font-medium ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>({pairedDevices.length})</span>
+                <span className={`text-xs font-medium ${text.muted}`}>({pairedDevices.length})</span>
               </h3>
               <div className="flex items-center gap-2">
                 <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${
                   deviceSummary.overallHealth === 'HEALTHY'
-                    ? (isDark ? 'bg-green-500/15 text-green-300 border-green-500/30' : 'bg-green-50 text-green-700 border-green-200')
+                    ? 'bg-green-500/15 text-green-300 border-green-500/30'
                     : deviceSummary.overallHealth === 'WARNING'
-                      ? (isDark ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200')
-                      : (isDark ? 'bg-red-500/15 text-red-300 border-red-500/30' : 'bg-red-50 text-red-700 border-red-200')
+                      ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                      : 'bg-red-500/15 text-red-300 border-red-500/30'
                 }`}>
                   {deviceSummary.overallHealth === 'HEALTHY' ? 'All Healthy' :
                    deviceSummary.overallHealth === 'WARNING' ? 'Needs Attention' : 'Critical'}
@@ -279,35 +280,35 @@ export function VitalMonitoring() {
                     key={device.id}
                     className={`rounded-xl border transition-all duration-300 overflow-hidden ${
                       device.connectionStatus === 'CONNECTED'
-                        ? 'bg-gradient-to-r from-green-50/50 via-emerald-50/20 to-white border-green-200'
+                        ? 'bg-green-500/10 border-green-500/30'
                         : device.connectionStatus === 'RECONNECTING'
-                          ? 'bg-gradient-to-r from-amber-50/50 via-yellow-50/20 to-white border-amber-200'
-                          : 'bg-gradient-to-r from-gray-50 via-gray-50/30 to-white border-gray-200'
+                          ? 'bg-amber-500/10 border-amber-500/30'
+                          : isDark ? 'bg-white/5 border-white/10' : 'bg-slate-500/5 border-slate-300/40'
                     }`}
                   >
                     <div className="flex">
                       {/* ═══ LEFT: Device Info & Metrics ═══ */}
-                      <div className="w-[42%] p-3 border-r border-gray-200/60 flex flex-col">
+                      <div className="w-[42%] p-3 flex flex-col" style={{ borderRight: borderStyle }}>
                         {/* Device Header */}
                         <div className="flex items-center gap-2 mb-2">
                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
                             device.connectionStatus === 'CONNECTED'
-                              ? 'bg-green-100'
+                              ? 'bg-green-500/20'
                               : device.connectionStatus === 'RECONNECTING'
-                                ? 'bg-amber-100'
-                                : 'bg-gray-100'
+                                ? 'bg-amber-500/20'
+                                : isDark ? 'bg-white/10' : 'bg-slate-500/10'
                           }`}>
                             {device.connectionStatus === 'CONNECTED' ? (
-                              <Wifi className="w-4 h-4 text-green-600" />
+                              <Wifi className="w-4 h-4 text-green-500" />
                             ) : device.connectionStatus === 'RECONNECTING' ? (
-                              <Radio className="w-4 h-4 text-amber-600 animate-pulse" />
+                              <Radio className="w-4 h-4 text-amber-500 animate-pulse" />
                             ) : (
-                              <WifiOff className="w-4 h-4 text-gray-400" />
+                              <WifiOff className="w-4 h-4 text-slate-400" />
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-bold text-gray-800 truncate">{device.name}</p>
-                            <p className="text-[10px] text-gray-400 truncate">{typeMeta.shortLabel} · {device.manufacturer}</p>
+                            <p className={`text-xs font-bold truncate ${text.heading}`}>{device.name}</p>
+                            <p className={`text-[10px] truncate ${text.muted}`}>{typeMeta.shortLabel} · {device.manufacturer}</p>
                           </div>
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${connMeta.bgColor} ${connMeta.textColor} border ${connMeta.borderColor}`}>
                             {connMeta.label}
@@ -316,28 +317,28 @@ export function VitalMonitoring() {
 
                         {/* Model & Serial */}
                         <div className="grid grid-cols-2 gap-1.5 mb-2">
-                          <div className="flex items-center gap-1.5 bg-gray-50/80 rounded-md px-2 py-1">
-                            <Cpu className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                          <div className="flex items-center gap-1.5 rounded-md px-2 py-1" style={glassInner}>
+                            <Cpu className={`w-3 h-3 flex-shrink-0 ${text.muted}`} />
                             <div className="min-w-0">
-                              <p className="text-[8px] text-gray-400 uppercase tracking-wide">Model</p>
-                              <p className="text-[10px] font-semibold text-gray-700 truncate">{device.model}</p>
+                              <p className={`text-[8px] uppercase tracking-wide ${text.muted}`}>Model</p>
+                              <p className={`text-[10px] font-semibold truncate ${text.label}`}>{device.model}</p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1.5 bg-gray-50/80 rounded-md px-2 py-1">
-                            <Hash className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                          <div className="flex items-center gap-1.5 rounded-md px-2 py-1" style={glassInner}>
+                            <Hash className={`w-3 h-3 flex-shrink-0 ${text.muted}`} />
                             <div className="min-w-0">
-                              <p className="text-[8px] text-gray-400 uppercase tracking-wide">S/N</p>
-                              <p className="text-[10px] font-semibold text-gray-700 truncate">{device.serialNumber}</p>
+                              <p className={`text-[8px] uppercase tracking-wide ${text.muted}`}>S/N</p>
+                              <p className={`text-[10px] font-semibold truncate ${text.label}`}>{device.serialNumber}</p>
                             </div>
                           </div>
                         </div>
 
                         {/* Firmware & Streaming Status */}
                         <div className="grid grid-cols-2 gap-1.5 mb-2">
-                          <div className={`flex items-center gap-1.5 rounded-md px-2 py-1 ${
+                          <div className={`flex items-center gap-1.5 rounded-md px-2 py-1 border ${
                             device.health.firmwareUpToDate
-                              ? 'bg-green-50/60 border border-green-100/60'
-                              : 'bg-amber-50/60 border border-amber-100/60'
+                              ? 'bg-green-500/10 border-green-500/20'
+                              : 'bg-amber-500/10 border-amber-500/20'
                           }`}>
                             {device.health.firmwareUpToDate ? (
                               <ShieldCheck className="w-3 h-3 text-green-500 flex-shrink-0" />
@@ -345,28 +346,28 @@ export function VitalMonitoring() {
                               <ShieldAlert className="w-3 h-3 text-amber-500 flex-shrink-0" />
                             )}
                             <div className="min-w-0">
-                              <p className="text-[8px] text-gray-400 uppercase tracking-wide">Firmware</p>
+                              <p className={`text-[8px] uppercase tracking-wide ${text.muted}`}>Firmware</p>
                               <p className={`text-[10px] font-semibold truncate ${
-                                device.health.firmwareUpToDate ? 'text-green-700' : 'text-amber-700'
+                                device.health.firmwareUpToDate ? 'text-green-400' : 'text-amber-400'
                               }`}>
                                 v{device.firmwareVersion}
                               </p>
                             </div>
                           </div>
-                          <div className={`flex items-center gap-1.5 rounded-md px-2 py-1 ${
+                          <div className={`flex items-center gap-1.5 rounded-md px-2 py-1 border ${
                             device.isStreaming
-                              ? 'bg-blue-50/60 border border-blue-100/60'
-                              : 'bg-gray-50/60 border border-gray-100/60'
+                              ? 'bg-blue-500/10 border-blue-500/20'
+                              : isDark ? 'bg-white/5 border-white/10' : 'bg-slate-500/5 border-slate-300/40'
                           }`}>
                             {device.isStreaming ? (
                               <Play className="w-3 h-3 text-blue-500 flex-shrink-0" />
                             ) : (
-                              <Pause className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                              <Pause className="w-3 h-3 text-slate-400 flex-shrink-0" />
                             )}
                             <div className="min-w-0">
-                              <p className="text-[8px] text-gray-400 uppercase tracking-wide">Stream</p>
+                              <p className={`text-[8px] uppercase tracking-wide ${text.muted}`}>Stream</p>
                               <p className={`text-[10px] font-semibold truncate ${
-                                device.isStreaming ? 'text-blue-700' : 'text-gray-500'
+                                device.isStreaming ? 'text-blue-400' : text.body
                               }`}>
                                 {device.isStreaming ? `${(1000 / device.samplingIntervalMs).toFixed(0)}Hz` : 'Paused'}
                               </p>
@@ -377,7 +378,7 @@ export function VitalMonitoring() {
                         {/* Device Metrics — Battery / Signal / Uptime */}
                         <div className="grid grid-cols-3 gap-1.5 mb-2">
                           {/* Battery */}
-                          <div className="text-center bg-white/60 rounded-lg py-1.5 border border-gray-100/60">
+                          <div className="text-center rounded-lg py-1.5" style={glassInner}>
                             <div className="flex items-center justify-center gap-1 mb-0.5">
                               {device.health.batteryPercent > 50 ? (
                                 <BatteryFull className={`w-3.5 h-3.5 ${getBatteryColor(device.health.batteryPercent)}`} />
@@ -390,35 +391,35 @@ export function VitalMonitoring() {
                             <p className={`text-xs font-bold ${getBatteryColor(device.health.batteryPercent)}`}>
                               {Math.round(device.health.batteryPercent)}%
                             </p>
-                            <p className="text-[8px] text-gray-400">Battery</p>
+                            <p className={`text-[8px] ${text.muted}`}>Battery</p>
                           </div>
 
                           {/* Signal */}
-                          <div className="text-center bg-white/60 rounded-lg py-1.5 border border-gray-100/60">
+                          <div className="text-center rounded-lg py-1.5" style={glassInner}>
                             <div className="flex items-center justify-center gap-0.5 mb-0.5 h-[14px]">
                               {[1, 2, 3, 4].map((bar) => (
                                 <div
                                   key={bar}
                                   className={`w-1 rounded-sm transition-all ${
-                                    bar <= sigMeta.bars ? sigMeta.color : 'bg-gray-200'
+                                    bar <= sigMeta.bars ? sigMeta.color : 'bg-slate-500/30'
                                   }`}
                                   style={{ height: `${bar * 3 + 2}px` }}
                                 />
                               ))}
                             </div>
                             <p className={`text-xs font-bold ${sigMeta.textColor}`}>{sigMeta.label}</p>
-                            <p className="text-[8px] text-gray-400">Signal</p>
+                            <p className={`text-[8px] ${text.muted}`}>Signal</p>
                           </div>
 
                           {/* Uptime */}
-                          <div className="text-center bg-white/60 rounded-lg py-1.5 border border-gray-100/60">
+                          <div className="text-center rounded-lg py-1.5" style={glassInner}>
                             <div className="flex items-center justify-center gap-1 mb-0.5">
-                              <Clock className="w-3.5 h-3.5 text-gray-400" />
+                              <Clock className={`w-3.5 h-3.5 ${text.muted}`} />
                             </div>
-                            <p className="text-xs font-bold text-gray-700">
+                            <p className={`text-xs font-bold ${text.label}`}>
                               {formatDeviceUptime(device.health.uptimeMinutes)}
                             </p>
-                            <p className="text-[8px] text-gray-400">Uptime</p>
+                            <p className={`text-[8px] ${text.muted}`}>Uptime</p>
                           </div>
                         </div>
 
@@ -427,17 +428,17 @@ export function VitalMonitoring() {
                           {/* Data Quality */}
                           <div className="mb-1.5">
                             <div className="flex items-center justify-between mb-0.5">
-                              <span className="text-[8px] font-bold text-gray-400 uppercase tracking-wide flex items-center gap-1">
+                              <span className={`text-[8px] font-bold uppercase tracking-wide flex items-center gap-1 ${text.muted}`}>
                                 <BarChart3 className="w-2.5 h-2.5" /> Data Quality
                               </span>
                               <span className={`text-[9px] font-bold ${
-                                device.health.dataDropRate < 0.02 ? 'text-green-600' :
-                                device.health.dataDropRate < 0.1 ? 'text-amber-600' : 'text-red-600'
+                                device.health.dataDropRate < 0.02 ? 'text-green-400' :
+                                device.health.dataDropRate < 0.1 ? 'text-amber-400' : 'text-red-400'
                               }`}>
                                 {((1 - device.health.dataDropRate) * 100).toFixed(1)}%
                               </span>
                             </div>
-                            <div className="w-full h-1.5 bg-gray-200/60 rounded-full overflow-hidden">
+                            <div className="w-full h-1.5 bg-slate-500/20 rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full transition-all ${
                                   device.health.dataDropRate < 0.02 ? 'bg-green-500' :
@@ -449,7 +450,7 @@ export function VitalMonitoring() {
                           </div>
 
                           {/* Paired Since + Errors footer */}
-                          <div className="flex items-center justify-between text-[9px] text-gray-400">
+                          <div className={`flex items-center justify-between text-[9px] ${text.muted}`}>
                             <span className="flex items-center gap-0.5">
                               <CircleDot className="w-2.5 h-2.5" />
                               {device.pairedAt ? `Paired ${getConnectionDuration(device)}` : 'Not paired'}
@@ -465,7 +466,7 @@ export function VitalMonitoring() {
 
                       {/* ═══ RIGHT: Live Vital Channels ═══ */}
                       <div className="flex-1 p-3">
-                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Live Vital Channels</p>
+                        <p className={`text-[9px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Live Vital Channels</p>
                         <div className="space-y-1">
                           {(() => {
                             const vitalChannels: { key: string; label: string; unit: string; icon: React.ComponentType<any>; color: string; format: (v: number) => string }[] = [
@@ -517,34 +518,34 @@ export function VitalMonitoring() {
                                 return (
                                   <div
                                     key={ch.key}
-                                    className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all ${
+                                    className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all border ${
                                       status === 'critical'
-                                        ? 'bg-red-50/80 border border-red-200/60'
+                                        ? 'bg-red-500/10 border-red-500/20'
                                         : status === 'warning'
-                                          ? 'bg-amber-50/80 border border-amber-200/60'
-                                          : 'bg-white/60 border border-gray-100'
+                                          ? 'bg-amber-500/10 border-amber-500/20'
+                                          : isDark ? 'bg-white/5 border-white/10' : 'bg-slate-500/5 border-slate-300/40'
                                     }`}
                                   >
                                     <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                                       status === 'critical' ? 'bg-red-500 animate-pulse' :
                                       status === 'warning' ? 'bg-amber-500' :
-                                      device.connectionStatus === 'CONNECTED' ? 'bg-green-500 animate-pulse' : 'bg-gray-300'
+                                      device.connectionStatus === 'CONNECTED' ? 'bg-green-500 animate-pulse' : 'bg-slate-400'
                                     }`} />
                                     <ChIcon className={`w-3 h-3 flex-shrink-0 ${ch.color}`} />
-                                    <span className="text-[10px] font-semibold text-gray-600 flex-1 truncate">{ch.label}</span>
+                                    <span className={`text-[10px] font-semibold flex-1 truncate ${text.body}`}>{ch.label}</span>
                                     <span className={`text-xs font-extrabold tabular-nums ${
-                                      status === 'critical' ? 'text-red-700' :
-                                      status === 'warning' ? 'text-amber-700' : 'text-gray-800'
+                                      status === 'critical' ? 'text-red-400' :
+                                      status === 'warning' ? 'text-amber-400' : text.heading
                                     }`}>
                                       {latestVal !== null ? ch.format(latestVal) : '—'}
                                     </span>
-                                    <span className="text-[9px] text-gray-400 w-8">{ch.unit}</span>
+                                    <span className={`text-[9px] w-8 ${text.muted}`}>{ch.unit}</span>
                                     {trendDir === 'up' ? (
                                       <TrendingUp className="w-3 h-3 text-red-400 flex-shrink-0" />
                                     ) : trendDir === 'down' ? (
                                       <TrendingDown className="w-3 h-3 text-blue-400 flex-shrink-0" />
                                     ) : (
-                                      <Minus className="w-3 h-3 text-gray-300 flex-shrink-0" />
+                                      <Minus className={`w-3 h-3 flex-shrink-0 ${text.muted}`} />
                                     )}
                                   </div>
                                 );
@@ -560,11 +561,11 @@ export function VitalMonitoring() {
 
             {/* Coverage Summary */}
             {deviceSummary.uncoveredVitals.length > 0 && (
-              <div className={`mt-3 p-2.5 rounded-lg border flex items-start gap-2 ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
-                <AlertTriangle className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${isDark ? 'text-amber-400' : 'text-amber-500'}`} />
+              <div className="mt-3 p-2.5 rounded-lg border flex items-start gap-2 bg-amber-500/10 border-amber-500/20">
+                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-amber-400" />
                 <div>
-                  <p className={`text-xs font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Uncovered Vitals</p>
-                  <p className={`text-[11px] mt-0.5 ${isDark ? 'text-amber-400/80' : 'text-amber-600'}`}>
+                  <p className="text-xs font-semibold text-amber-300">Uncovered Vitals</p>
+                  <p className="text-[11px] mt-0.5 text-amber-400/80">
                     No connected device is providing: {deviceSummary.uncoveredVitals.map((v) =>
                       v.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase()).trim()
                     ).join(', ')}
@@ -574,22 +575,22 @@ export function VitalMonitoring() {
             )}
           </div>
         ) : (
-          <div className={`mb-4 rounded-xl shadow-md p-6 text-center ${isDark ? glassCard + ' border border-white/10' : 'bg-white border border-gray-200'}`}>
-            <MonitorSmartphone className={`w-10 h-10 mx-auto mb-3 ${isDark ? 'text-slate-500' : 'text-gray-300'}`} />
-            <h4 className={`text-sm font-bold mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>No Device Assigned</h4>
-            <p className={`text-xs mb-4 max-w-sm mx-auto ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+          <div className="rounded-2xl p-6 text-center" style={glassCard}>
+            <MonitorSmartphone className={`w-10 h-10 mx-auto mb-3 ${text.muted}`} />
+            <h4 className={`text-sm font-bold mb-1 ${text.heading}`}>No Device Assigned</h4>
+            <p className={`text-xs mb-4 max-w-sm mx-auto ${text.body}`}>
               Assign an IoT monitor to this patient via the IoT Devices page to enable real-time vital streaming.
             </p>
             <button
               onClick={() => navigate('/iot-devices')}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white text-xs font-bold rounded-xl hover:-translate-y-0.5 transition-all shadow-md"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl transition-all"
             >
               <Cpu className="w-3.5 h-3.5" /> Go to IoT Devices
             </button>
           </div>
         )}
-        <div className="mb-4">
-          <div className={`flex items-center gap-1.5 rounded-2xl p-1.5 ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white/80 border border-gray-200/60'}`} style={{ backdropFilter: 'blur(12px)' }}>
+        <div>
+          <div className="flex items-center gap-1.5 rounded-2xl p-1.5" style={glassCard}>
             {[
               { id: 'vitals', label: 'Current Vitals', icon: Heart },
               { id: 'trends', label: 'Vital Trends', icon: TrendingUp },
@@ -605,14 +606,12 @@ export function VitalMonitoring() {
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-300 ${
                     isActive
-                      ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md shadow-slate-800/20'
-                      : isDark
-                        ? 'text-slate-400 hover:bg-white/5'
-                        : 'text-gray-600 hover:bg-white/60'
+                      ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                      : `${text.body} hover:bg-white/5`
                   }`}
                 >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : isDark ? 'text-slate-500' : 'text-gray-400'}`} />
-                  <span className={`font-bold ${isActive ? 'text-white' : isDark ? 'text-slate-300' : 'text-gray-800'}`}>{tab.label}</span>
+                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-cyan-400' : text.muted}`} />
+                  <span className={`font-bold ${isActive ? 'text-cyan-400' : text.label}`}>{tab.label}</span>
                 </button>
               );
             })}
@@ -621,10 +620,10 @@ export function VitalMonitoring() {
 
         {/* Tab Content */}
         {activeTab === 'vitals' && !currentVitals && (
-          <div className={`rounded-2xl p-8 text-center ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
-            <Activity className={`w-10 h-10 mx-auto mb-3 ${isDark ? 'text-slate-500' : 'text-gray-300'}`} />
-            <h4 className={`text-sm font-bold mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>No Vital Data Available</h4>
-            <p className={`text-xs max-w-sm mx-auto ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+          <div className="rounded-2xl p-8 text-center" style={glassCard}>
+            <Activity className={`w-10 h-10 mx-auto mb-3 ${text.muted}`} />
+            <h4 className={`text-sm font-bold mb-1 ${text.heading}`}>No Vital Data Available</h4>
+            <p className={`text-xs max-w-sm mx-auto ${text.body}`}>
               Vital signs will appear here once an IoT device is assigned and streaming, or vitals are recorded manually.
             </p>
           </div>
@@ -776,24 +775,24 @@ export function VitalMonitoring() {
 
         {activeTab === 'alerts' && (
           <div className="space-y-4">
-            <div className={`rounded-xl shadow-md p-4 ${isDark ? glassCard + ' border border-white/10' : 'bg-white border border-gray-200'}`}>
-              <h3 className={`text-sm font-bold mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            <div className="rounded-2xl p-4" style={glassCard}>
+              <h3 className={`text-sm font-bold mb-3 flex items-center gap-2 ${text.heading}`}>
                 <Bell className="w-4 h-4" />
                 Active Alerts
               </h3>
               <div className="space-y-3">
                 {patient.aiAlerts && patient.aiAlerts.length > 0 ? (
                   patient.aiAlerts.map((alert, i) => (
-                    <div key={i} className={`flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
-                      <AlertTriangle className={`w-4 h-4 mt-0.5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
+                    <div key={i} className="flex items-start gap-2 p-3 rounded-lg border bg-amber-500/10 border-amber-500/20">
+                      <AlertTriangle className="w-4 h-4 mt-0.5 text-amber-400" />
                       <div className="flex-1">
-                        <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{alert.message}</div>
-                        <div className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{alert.timestamp.toLocaleString()}</div>
+                        <div className={`text-sm font-medium ${text.heading}`}>{alert.message}</div>
+                        <div className={`text-xs mt-0.5 ${text.muted}`}>{alert.timestamp.toLocaleString()}</div>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className={`text-center py-6 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                  <div className={`text-center py-6 ${text.muted}`}>
                     <Bell className="w-10 h-10 mx-auto mb-2 opacity-30" />
                     <p className="text-sm">No active alerts at this time</p>
                   </div>
@@ -802,18 +801,18 @@ export function VitalMonitoring() {
             </div>
 
             {/* AI Monitoring Status */}
-            <div className={`rounded-xl shadow-md p-4 ${isDark ? glassCard + ' border border-white/10' : 'bg-white border border-gray-200'}`}>
-              <h3 className={`text-sm font-bold mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            <div className="rounded-2xl p-4" style={glassCard}>
+              <h3 className={`text-sm font-bold mb-3 flex items-center gap-2 ${text.heading}`}>
                 <Stethoscope className="w-4 h-4" />
                 AI Monitoring Status
               </h3>
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-green-500/15' : 'bg-green-100'}`}>
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-green-500/15">
                   <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></div>
                 </div>
                 <div className="flex-1">
-                  <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Continuous AI Monitoring Active</div>
-                  <div className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                  <div className={`text-sm font-medium ${text.heading}`}>Continuous AI Monitoring Active</div>
+                  <div className={`text-xs mt-0.5 ${text.muted}`}>
                     The system is actively monitoring vital signs and will alert if deterioration is detected
                   </div>
                 </div>
@@ -825,17 +824,17 @@ export function VitalMonitoring() {
         {activeTab === 'devices' && (
           <div className="space-y-4">
             {/* Device Fleet Overview */}
-            <div className={`rounded-xl shadow-md p-4 ${isDark ? glassCard + ' border border-white/10' : 'bg-white border border-gray-200'}`}>
-              <h3 className={`text-sm font-bold mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                <MonitorSmartphone className={`w-4 h-4 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
+            <div className="rounded-2xl p-4" style={glassCard}>
+              <h3 className={`text-sm font-bold mb-3 flex items-center gap-2 ${text.heading}`}>
+                <MonitorSmartphone className="w-4 h-4 text-cyan-400" />
                 Device Fleet — Patient {patient.fullName}
               </h3>
 
               {pairedDevices.length === 0 ? (
-                <div className={`text-center py-8 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                <div className={`text-center py-8 ${text.muted}`}>
                   <Unplug className="w-12 h-12 mx-auto mb-3 opacity-30" />
                   <p className="text-sm font-medium">No IoT devices paired</p>
-                  <p className={`text-xs mt-1 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>Devices will be automatically provisioned when monitoring begins</p>
+                  <p className={`text-xs mt-1 ${text.muted}`}>Devices will be automatically provisioned when monitoring begins</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -849,33 +848,33 @@ export function VitalMonitoring() {
                         key={device.id}
                         className={`rounded-xl border p-4 transition-all duration-300 ${
                           device.connectionStatus === 'CONNECTED'
-                            ? 'bg-gradient-to-r from-green-50/60 to-white border-green-200'
+                            ? 'bg-green-500/10 border-green-500/30'
                             : device.connectionStatus === 'RECONNECTING'
-                              ? 'bg-gradient-to-r from-amber-50/60 to-white border-amber-200'
-                              : 'bg-gradient-to-r from-gray-50 to-white border-gray-200'
+                              ? 'bg-amber-500/10 border-amber-500/30'
+                              : isDark ? 'bg-white/5 border-white/10' : 'bg-slate-500/5 border-slate-300/40'
                         }`}
                       >
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-3">
                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                               device.connectionStatus === 'CONNECTED'
-                                ? 'bg-green-100'
+                                ? 'bg-green-500/20'
                                 : device.connectionStatus === 'RECONNECTING'
-                                  ? 'bg-amber-100'
-                                  : 'bg-gray-100'
+                                  ? 'bg-amber-500/20'
+                                  : isDark ? 'bg-white/10' : 'bg-slate-500/10'
                             }`}>
                               {device.connectionStatus === 'CONNECTED' ? (
-                                <PlugZap className="w-5 h-5 text-green-600" />
+                                <PlugZap className="w-5 h-5 text-green-500" />
                               ) : (
-                                <WifiOff className="w-5 h-5 text-gray-400" />
+                                <WifiOff className="w-5 h-5 text-slate-400" />
                               )}
                             </div>
                             <div>
-                              <p className="text-sm font-bold text-gray-900">{device.name}</p>
-                              <p className="text-xs text-gray-500">
+                              <p className={`text-sm font-bold ${text.heading}`}>{device.name}</p>
+                              <p className={`text-xs ${text.body}`}>
                                 {typeMeta.label} · {device.manufacturer} {device.model}
                               </p>
-                              <p className="text-[10px] text-gray-400 mt-0.5">
+                              <p className={`text-[10px] mt-0.5 ${text.muted}`}>
                                 SN: {device.serialNumber} · FW: {device.firmwareVersion}
                               </p>
                             </div>
@@ -887,10 +886,10 @@ export function VitalMonitoring() {
 
                         {/* Device Stats Grid */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          <div className="bg-white/80 rounded-lg p-2.5 border border-gray-100">
-                            <p className="text-[10px] text-gray-400 font-medium mb-1">Battery</p>
+                          <div className="rounded-lg p-2.5" style={glassInner}>
+                            <p className={`text-[10px] font-medium mb-1 ${text.muted}`}>Battery</p>
                             <div className="flex items-center gap-2">
-                              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="flex-1 h-2 bg-slate-500/20 rounded-full overflow-hidden">
                                 <div
                                   className={`h-full rounded-full transition-all duration-500 ${getBatteryBgColor(device.health.batteryPercent)}`}
                                   style={{ width: `${device.health.batteryPercent}%` }}
@@ -902,14 +901,14 @@ export function VitalMonitoring() {
                             </div>
                           </div>
 
-                          <div className="bg-white/80 rounded-lg p-2.5 border border-gray-100">
-                            <p className="text-[10px] text-gray-400 font-medium mb-1">Signal Quality</p>
+                          <div className="rounded-lg p-2.5" style={glassInner}>
+                            <p className={`text-[10px] font-medium mb-1 ${text.muted}`}>Signal Quality</p>
                             <div className="flex items-center gap-2">
                               <div className="flex items-center gap-0.5">
                                 {[1, 2, 3, 4].map((bar) => (
                                   <div
                                     key={bar}
-                                    className={`w-1.5 rounded-sm ${bar <= sigMeta.bars ? sigMeta.color : 'bg-gray-200'}`}
+                                    className={`w-1.5 rounded-sm ${bar <= sigMeta.bars ? sigMeta.color : 'bg-slate-500/30'}`}
                                     style={{ height: `${bar * 4 + 2}px` }}
                                   />
                                 ))}
@@ -918,25 +917,25 @@ export function VitalMonitoring() {
                             </div>
                           </div>
 
-                          <div className="bg-white/80 rounded-lg p-2.5 border border-gray-100">
-                            <p className="text-[10px] text-gray-400 font-medium mb-1">Uptime</p>
-                            <p className="text-xs font-bold text-gray-700">{formatDeviceUptime(device.health.uptimeMinutes)}</p>
+                          <div className="rounded-lg p-2.5" style={glassInner}>
+                            <p className={`text-[10px] font-medium mb-1 ${text.muted}`}>Uptime</p>
+                            <p className={`text-xs font-bold ${text.label}`}>{formatDeviceUptime(device.health.uptimeMinutes)}</p>
                           </div>
 
-                          <div className="bg-white/80 rounded-lg p-2.5 border border-gray-100">
-                            <p className="text-[10px] text-gray-400 font-medium mb-1">Connected Since</p>
-                            <p className="text-xs font-bold text-gray-700">{getConnectionDuration(device)}</p>
+                          <div className="rounded-lg p-2.5" style={glassInner}>
+                            <p className={`text-[10px] font-medium mb-1 ${text.muted}`}>Connected Since</p>
+                            <p className={`text-xs font-bold ${text.label}`}>{getConnectionDuration(device)}</p>
                           </div>
                         </div>
 
                         {/* Provided Vitals */}
-                        <div className="mt-3 pt-3 border-t border-gray-100">
-                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1.5">Vitals Provided</p>
+                        <div className="mt-3 pt-3" style={{ borderTop: borderStyle }}>
+                          <p className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Vitals Provided</p>
                           <div className="flex flex-wrap gap-1.5">
                             {device.providedVitals.map((vital) => (
                               <span
                                 key={vital}
-                                className="text-[10px] font-semibold bg-cyan-50 text-cyan-700 px-2 py-0.5 rounded-md border border-cyan-100"
+                                className="text-[10px] font-semibold bg-cyan-500/15 text-cyan-400 px-2 py-0.5 rounded-md border border-cyan-500/30"
                               >
                                 {vital.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase()).trim()}
                               </span>
@@ -946,8 +945,8 @@ export function VitalMonitoring() {
 
                         {/* Connection Log (last 5) */}
                         {device.connectionLog.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-gray-100">
-                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1.5">Recent Events</p>
+                          <div className="mt-3 pt-3" style={{ borderTop: borderStyle }}>
+                            <p className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Recent Events</p>
                             <div className="space-y-1">
                               {device.connectionLog.slice(-5).reverse().map((evt, i) => (
                                 <div key={i} className="flex items-center gap-2 text-[11px]">
@@ -956,12 +955,12 @@ export function VitalMonitoring() {
                                     evt.event === 'PAIRED' ? 'bg-cyan-500' :
                                     evt.event === 'DISCONNECTED' || evt.event === 'SIGNAL_LOST' ? 'bg-red-500' :
                                     evt.event === 'BATTERY_LOW' ? 'bg-amber-500' :
-                                    'bg-gray-400'
+                                    'bg-slate-400'
                                   }`} />
-                                  <span className="text-gray-500 font-medium w-14 flex-shrink-0">
+                                  <span className={`font-medium w-14 flex-shrink-0 ${text.muted}`}>
                                     {new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                   </span>
-                                  <span className="text-gray-700">{evt.details}</span>
+                                  <span className={text.body}>{evt.details}</span>
                                 </div>
                               ))}
                             </div>
@@ -975,47 +974,47 @@ export function VitalMonitoring() {
             </div>
 
             {/* Data Quality & Coverage */}
-            <div className={`rounded-xl shadow-md p-4 ${isDark ? glassCard + ' border border-white/10' : 'bg-white border border-gray-200'}`}>
-              <h3 className={`text-sm font-bold mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                <Radio className={`w-4 h-4 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
+            <div className="rounded-2xl p-4" style={glassCard}>
+              <h3 className={`text-sm font-bold mb-3 flex items-center gap-2 ${text.heading}`}>
+                <Radio className="w-4 h-4 text-cyan-400" />
                 Data Quality & Coverage
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-3 border border-green-200">
-                  <p className="text-[10px] text-green-600 font-bold uppercase tracking-wider mb-1">Connected</p>
-                  <p className="text-2xl font-extrabold text-green-700">{deviceSummary.connectedDevices}</p>
-                  <p className="text-[10px] text-green-500">of {deviceSummary.totalDevices} devices</p>
+                <div className="rounded-xl p-3 border bg-green-500/10 border-green-500/30">
+                  <p className="text-[10px] text-green-400 font-bold uppercase tracking-wider mb-1">Connected</p>
+                  <p className="text-2xl font-extrabold text-green-300">{deviceSummary.connectedDevices}</p>
+                  <p className="text-[10px] text-green-400/80">of {deviceSummary.totalDevices} devices</p>
                 </div>
-                <div className="bg-gradient-to-br from-cyan-50 to-blue-50 rounded-xl p-3 border border-cyan-200">
-                  <p className="text-[10px] text-cyan-600 font-bold uppercase tracking-wider mb-1">Vitals Covered</p>
-                  <p className="text-2xl font-extrabold text-cyan-700">{deviceSummary.coveredVitals.length}</p>
-                  <p className="text-[10px] text-cyan-500">of 8 parameters</p>
+                <div className="rounded-xl p-3 border bg-cyan-500/10 border-cyan-500/30">
+                  <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider mb-1">Vitals Covered</p>
+                  <p className="text-2xl font-extrabold text-cyan-300">{deviceSummary.coveredVitals.length}</p>
+                  <p className="text-[10px] text-cyan-400/80">of 8 parameters</p>
                 </div>
                 <div className={`rounded-xl p-3 border ${
                   deviceSummary.lowestBattery > 50
-                    ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200'
+                    ? 'bg-green-500/10 border-green-500/30'
                     : deviceSummary.lowestBattery > 20
-                      ? 'bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-200'
-                      : 'bg-gradient-to-br from-red-50 to-orange-50 border-red-200'
+                      ? 'bg-amber-500/10 border-amber-500/30'
+                      : 'bg-red-500/10 border-red-500/30'
                 }`}>
-                  <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: deviceSummary.lowestBattery > 50 ? '#059669' : deviceSummary.lowestBattery > 20 ? '#d97706' : '#dc2626' }}>
+                  <p className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${deviceSummary.lowestBattery > 50 ? 'text-green-400' : deviceSummary.lowestBattery > 20 ? 'text-amber-400' : 'text-red-400'}`}>
                     Min Battery
                   </p>
-                  <p className="text-2xl font-extrabold" style={{ color: deviceSummary.lowestBattery > 50 ? '#047857' : deviceSummary.lowestBattery > 20 ? '#b45309' : '#b91c1c' }}>
+                  <p className={`text-2xl font-extrabold ${deviceSummary.lowestBattery > 50 ? 'text-green-300' : deviceSummary.lowestBattery > 20 ? 'text-amber-300' : 'text-red-300'}`}>
                     {Math.round(deviceSummary.lowestBattery)}%
                   </p>
                 </div>
                 <div className={`rounded-xl p-3 border ${
                   deviceSummary.overallHealth === 'HEALTHY'
-                    ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200'
+                    ? 'bg-green-500/10 border-green-500/30'
                     : deviceSummary.overallHealth === 'WARNING'
-                      ? 'bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-200'
-                      : 'bg-gradient-to-br from-red-50 to-orange-50 border-red-200'
+                      ? 'bg-amber-500/10 border-amber-500/30'
+                      : 'bg-red-500/10 border-red-500/30'
                 }`}>
-                  <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: deviceSummary.overallHealth === 'HEALTHY' ? '#059669' : deviceSummary.overallHealth === 'WARNING' ? '#d97706' : '#dc2626' }}>
+                  <p className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${deviceSummary.overallHealth === 'HEALTHY' ? 'text-green-400' : deviceSummary.overallHealth === 'WARNING' ? 'text-amber-400' : 'text-red-400'}`}>
                     Overall Health
                   </p>
-                  <p className="text-lg font-extrabold" style={{ color: deviceSummary.overallHealth === 'HEALTHY' ? '#047857' : deviceSummary.overallHealth === 'WARNING' ? '#b45309' : '#b91c1c' }}>
+                  <p className={`text-lg font-extrabold ${deviceSummary.overallHealth === 'HEALTHY' ? 'text-green-300' : deviceSummary.overallHealth === 'WARNING' ? 'text-amber-300' : 'text-red-300'}`}>
                     {deviceSummary.overallHealth}
                   </p>
                 </div>
@@ -1046,7 +1045,7 @@ interface VitalCardProps {
 }
 
 const VitalCard: React.FC<VitalCardProps> = ({ label, value, unit, icon: Icon, status, trend, range, subtitle }) => {
-  const { isDark } = useTheme();
+  const { isDark, text } = useTheme();
 
   const getStatusStyles = () => {
     if (isDark) {
@@ -1115,14 +1114,14 @@ const VitalCard: React.FC<VitalCardProps> = ({ label, value, unit, icon: Icon, s
     switch (trend) {
       case 'up': return <TrendingUp className="w-3 h-3 text-red-500" />;
       case 'down': return <TrendingDown className="w-3 h-3 text-blue-500" />;
-      default: return <Minus className="w-3 h-3 text-gray-400" />;
+      default: return <Minus className={`w-3 h-3 ${text.muted}`} />;
     }
   };
 
   const styles = getStatusStyles();
 
   return (
-    <div className={`rounded-2xl border-2 ${styles.border} ${styles.bg} p-4 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 ring-1 ${styles.ring} relative overflow-hidden group ${isDark ? '' : 'bg-white'}`}>
+    <div className={`rounded-2xl border-2 ${styles.border} ${styles.bg} p-4 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 ring-1 ${styles.ring} relative overflow-hidden group`}>
       <div className={`absolute inset-0 bg-gradient-to-r ${isDark ? 'from-white/5' : 'from-white/10'} to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300`}></div>
       <div className="relative">
         <div className="flex items-center justify-between mb-3">
@@ -1130,20 +1129,20 @@ const VitalCard: React.FC<VitalCardProps> = ({ label, value, unit, icon: Icon, s
             <div className={`w-8 h-8 rounded-lg ${styles.iconBg} flex items-center justify-center`}>
               <Icon className={`w-4 h-4 ${styles.iconColor}`} />
             </div>
-            <span className={`text-sm font-semibold ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>{label}</span>
+            <span className={`text-sm font-semibold ${text.label}`}>{label}</span>
           </div>
           {getTrendIcon()}
         </div>
         <div className="space-y-2">
           <div className="flex items-baseline gap-1">
             <span className={`text-2xl font-bold ${styles.valueColor} tracking-tight`}>{value}</span>
-            {unit && <span className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{unit}</span>}
+            {unit && <span className={`text-sm font-medium ${text.body}`}>{unit}</span>}
           </div>
           {subtitle && (
-            <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{subtitle}</p>
+            <p className={`text-xs font-medium ${text.body}`}>{subtitle}</p>
           )}
           {range && (
-            <p className={`text-xs px-2 py-1 rounded-md ${isDark ? 'text-slate-400 bg-white/5' : 'text-gray-500 bg-white/60'}`}>Normal: {range}</p>
+            <p className={`text-xs px-2 py-1 rounded-md ${isDark ? 'text-slate-400 bg-white/5' : 'text-slate-500 bg-white/60'}`}>Normal: {range}</p>
           )}
         </div>
       </div>
@@ -1158,11 +1157,11 @@ const TrendChartCard: React.FC<{
   color: string;
   unit: string;
 }> = ({ title, data, dataKey, color, unit }) => {
-  const { isDark } = useTheme();
+  const { isDark, glassCard, text } = useTheme();
 
   return (
-    <div className={`rounded-xl shadow-md p-4 ${isDark ? 'bg-[rgba(12,74,110,0.12)] backdrop-blur-xl border border-white/10' : 'bg-white border border-gray-200'}`}>
-      <h4 className={`text-base font-bold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>{title}</h4>
+    <div className="rounded-2xl p-4" style={glassCard}>
+      <h4 className={`text-base font-bold mb-3 ${text.heading}`}>{title}</h4>
       <div className="h-48">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>

@@ -195,8 +195,8 @@ function MonitoringShowcase({ allPatients, onNavigate }: { allPatients: Monitore
           {/* Left: Trend selector pills */}
           <div className="lg:w-52 flex lg:flex-col gap-1.5 p-3 lg:py-4 overflow-x-auto lg:overflow-x-visible flex-shrink-0" style={{ borderRight: isDark ? '1px solid rgba(2,132,199,0.18)' : '1px solid rgba(203,213,225,0.2)' }}>
             <div className="hidden lg:flex flex-col gap-1 px-2 pb-3 mb-1" style={{ borderBottom: isDark ? '1px solid rgba(2,132,199,0.15)' : '1px solid rgba(203,213,225,0.15)' }}>
-              <span className="text-2xl font-bold text-slate-800">{total}</span>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Monitored</span>
+              <span className={`text-2xl font-bold ${text.heading}`}>{total}</span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Monitored</span>
               <div className="flex items-center gap-1.5 mt-1">
                 <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
                 <span className="text-[10px] text-red-600 font-semibold">{alertCount} alert{alertCount !== 1 ? 's' : ''}</span>
@@ -220,11 +220,11 @@ function MonitoringShowcase({ allPatients, onNavigate }: { allPatients: Monitore
                   } : {}}
                 >
                   <div className={`w-2.5 h-2.5 rounded-full ${cat.dotColor} flex-shrink-0 ${isActive ? 'animate-pulse' : ''}`} />
-                  <span className={`text-xs font-bold flex-1 text-left ${isActive ? cat.textColor : 'text-slate-500'}`}>
+                  <span className={`text-xs font-bold flex-1 text-left ${isActive ? cat.textColor : text.body}`}>
                     {cat.label}
                   </span>
                   <span className={`text-xs font-bold min-w-[20px] text-center px-1.5 py-0.5 rounded-md ${
-                    isActive ? `${cat.badgeBg} ${cat.textColor} border ${cat.badgeBorder}` : 'text-slate-400'
+                    isActive ? `${cat.badgeBg} ${cat.textColor} border ${cat.badgeBorder}` : text.muted
                   }`}>
                     {count}
                   </span>
@@ -247,14 +247,14 @@ function MonitoringShowcase({ allPatients, onNavigate }: { allPatients: Monitore
                       {activePatients.length} patient{activePatients.length !== 1 ? 's' : ''}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400 font-medium mt-0.5">{active.sublabel}</p>
+                  <p className={`text-[11px] ${text.muted} font-medium mt-0.5`}>{active.sublabel}</p>
                 </div>
               </div>
 
               {activePatients.length === 0 ? (
                 <div className="py-8 text-center rounded-xl" style={glassInner}>
                   <ActiveIcon className="w-8 h-8 mx-auto mb-2" style={{ color: active.accentColor, opacity: 0.3 }} />
-                  <p className="text-xs text-slate-400 font-medium">No patients with this trend</p>
+                  <p className={`text-xs ${text.muted} font-medium`}>No patients with this trend</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
@@ -275,10 +275,10 @@ function MonitoringShowcase({ allPatients, onNavigate }: { allPatients: Monitore
                         {patient.fullName.split(' ').map(n => n[0]).join('').slice(0, 2)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-slate-700 truncate group-hover:text-cyan-600 transition-colors">
+                        <p className={`text-sm font-semibold ${text.label} truncate group-hover:text-cyan-600 transition-colors`}>
                           {patient.fullName}
                         </p>
-                        <p className="text-[10px] text-slate-400 font-medium truncate">
+                        <p className={`text-[10px] ${text.muted} font-medium truncate`}>
                           {patient.age}y · {patient.chiefComplaint}
                         </p>
                       </div>
@@ -297,7 +297,7 @@ function MonitoringShowcase({ allPatients, onNavigate }: { allPatients: Monitore
                     </button>
                   ))}
                   {activePatients.length > 4 && (
-                    <div className="flex items-center justify-center px-3 py-2 rounded-xl text-[11px] font-semibold text-slate-400" style={glassInner}>
+                    <div className={`flex items-center justify-center px-3 py-2 rounded-xl text-[11px] font-semibold ${text.muted}`} style={glassInner}>
                       +{activePatients.length - 4} more patient{activePatients.length - 4 > 1 ? 's' : ''}
                     </div>
                   )}
@@ -784,9 +784,9 @@ export function ConstantMonitoring() {
         boxShadow: status === 'critical' ? '0 2px 8px rgba(239,68,68,0.1)' : status === 'warning' ? '0 2px 8px rgba(245,158,11,0.1)' : '0 1px 4px rgba(0,0,0,0.03)',
       }}
     >
-      <Icon className={`w-3.5 h-3.5 ${status === 'critical' ? 'text-red-500' : status === 'warning' ? 'text-amber-500' : 'text-slate-400'}`} />
-      <span className={`text-xs font-extrabold tabular-nums ${status === 'critical' ? 'text-red-700' : status === 'warning' ? 'text-amber-700' : 'text-slate-700'}`}>{value}</span>
-      <span className="text-[9px] text-slate-400 font-medium">{unit}</span>
+      <Icon className={`w-3.5 h-3.5 ${status === 'critical' ? 'text-red-500' : status === 'warning' ? 'text-amber-500' : text.muted}`} />
+      <span className={`text-xs font-extrabold tabular-nums ${status === 'critical' ? 'text-red-700' : status === 'warning' ? 'text-amber-700' : text.label}`}>{value}</span>
+      <span className={`text-[9px] ${text.muted} font-medium`}>{unit}</span>
     </div>
   );
 
@@ -847,12 +847,8 @@ export function ConstantMonitoring() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search patient name or complaint..."
-                className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all duration-300"
-                style={{
-                  background: isDark ? 'rgba(12,74,110,0.18)' : 'rgba(255,255,255,0.7)',
-                  border: isDark ? '1px solid rgba(2,132,199,0.22)' : '1px solid rgba(203,213,225,0.4)',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
-                }}
+                className={`w-full pl-10 pr-4 py-2.5 text-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all duration-300 ${text.body}`}
+                style={glassInner}
               />
             </div>
 
@@ -910,8 +906,8 @@ export function ConstantMonitoring() {
         >
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-base font-extrabold text-slate-800 tracking-tight">Monitored Patients</h3>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">{filtered.length} patient{filtered.length !== 1 ? 's' : ''} under active monitoring</p>
+              <h3 className={`text-base font-extrabold ${text.heading} tracking-tight`}>Monitored Patients</h3>
+              <p className={`text-xs ${text.body} font-medium mt-0.5`}>{filtered.length} patient{filtered.length !== 1 ? 's' : ''} under active monitoring</p>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
@@ -924,8 +920,8 @@ export function ConstantMonitoring() {
               patients.length === 0 ? (
                 <div className="py-12 text-center rounded-2xl" style={glassInner}>
                   <Monitor className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                  <h4 className="text-sm font-bold text-slate-700 mb-1">No patients under active monitoring</h4>
-                  <p className="text-xs text-slate-400 max-w-sm mx-auto mb-4">
+                  <h4 className={`text-sm font-bold ${text.label} mb-1`}>No patients under active monitoring</h4>
+                  <p className={`text-xs ${text.muted} max-w-sm mx-auto mb-4`}>
                     Patients will appear here once they are triaged and have vitals recorded or an IoT device assigned.
                   </p>
                   <button
@@ -938,8 +934,8 @@ export function ConstantMonitoring() {
               ) : (
                 <div className="text-center py-16">
                   <Activity className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-                  <p className="text-sm font-bold text-slate-400">No patients match your filters</p>
-                  <p className="text-xs text-slate-400 mt-1">Try adjusting your search criteria</p>
+                  <p className={`text-sm font-bold ${text.muted}`}>No patients match your filters</p>
+                  <p className={`text-xs ${text.muted} mt-1`}>Try adjusting your search criteria</p>
                 </div>
               )
             ) : filtered
@@ -1006,7 +1002,7 @@ export function ConstantMonitoring() {
                         {/* Patient Info — name + age/sex chip + chief complaint */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                            <span className="text-sm font-bold text-slate-800 whitespace-nowrap group-hover/card:text-cyan-700 transition-colors">{patient.fullName}</span>
+                            <span className={`text-sm font-bold ${text.heading} whitespace-nowrap group-hover/card:text-cyan-700 transition-colors`}>{patient.fullName}</span>
                             {patient.isPediatric && (
                               <span className="text-[9px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap flex items-center gap-1"
                                 style={{ background: 'rgba(139,92,246,0.1)', color: '#7c3aed', border: '1px solid rgba(139,92,246,0.2)' }}
@@ -1024,12 +1020,12 @@ export function ConstantMonitoring() {
                             <HandoffPriorityBadges signals={patient} mode="urgent-only" />
                           </div>
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-[11px] text-slate-500 font-semibold whitespace-nowrap flex-shrink-0"
+                            <span className={`text-[11px] ${text.body} font-semibold whitespace-nowrap flex-shrink-0`}
                               style={{ background: 'rgba(148,163,184,0.08)', padding: '1px 6px', borderRadius: 6, border: '1px solid rgba(148,163,184,0.12)' }}
                             >
                               {patient.age < 1 ? `${Math.round(patient.age * 12)}mo` : `${patient.age}y`} · {patient.gender === 'MALE' ? 'M' : 'F'}
                             </span>
-                            <span className="text-[11px] text-slate-400 truncate font-medium min-w-0">{patient.chiefComplaint}</span>
+                            <span className={`text-[11px] ${text.muted} truncate font-medium min-w-0`}>{patient.chiefComplaint}</span>
                           </div>
                         </div>
 
@@ -1063,7 +1059,7 @@ export function ConstantMonitoring() {
                                   <>
                                     <button
                                       onClick={() => handlePauseMonitoring(patient.id, session.id)}
-                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors"
+                                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-colors ${isDark ? 'bg-white/10 text-slate-200 hover:bg-white/15' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
                                       title="Pause monitoring (patient at imaging / procedure)"
                                     >
                                       <Pause className="w-3 h-3" />
@@ -1160,9 +1156,9 @@ export function ConstantMonitoring() {
                           <div
                             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold flex-shrink-0"
                             style={{
-                              background: patient.trend === 'worsening' ? 'rgba(239,68,68,0.1)' : patient.trend === 'improving' ? 'rgba(34,197,94,0.1)' : 'rgba(148,163,184,0.08)',
+                              background: patient.trend === 'worsening' ? 'rgba(239,68,68,0.1)' : patient.trend === 'improving' ? 'rgba(34,197,94,0.1)' : isDark ? 'rgba(148,163,184,0.14)' : 'rgba(148,163,184,0.08)',
                               backdropFilter: 'blur(8px)',
-                              color: patient.trend === 'worsening' ? '#dc2626' : patient.trend === 'improving' ? '#16a34a' : '#64748b',
+                              color: patient.trend === 'worsening' ? '#dc2626' : patient.trend === 'improving' ? '#16a34a' : isDark ? '#cbd5e1' : '#64748b',
                               border: `1px solid ${patient.trend === 'worsening' ? 'rgba(239,68,68,0.2)' : patient.trend === 'improving' ? 'rgba(34,197,94,0.2)' : 'rgba(148,163,184,0.15)'}`,
                               boxShadow: patient.trend === 'worsening' ? '0 2px 8px rgba(239,68,68,0.08)' : 'none',
                             }}
@@ -1226,7 +1222,7 @@ export function ConstantMonitoring() {
 
                           {/* Time in ED */}
                           <div
-                            className="flex items-center gap-1.5 text-[11px] text-slate-400 flex-shrink-0 whitespace-nowrap font-semibold px-2 py-1.5 rounded-lg"
+                            className={`flex items-center gap-1.5 text-[11px] ${text.muted} flex-shrink-0 whitespace-nowrap font-semibold px-2 py-1.5 rounded-lg`}
                             style={{ background: 'rgba(148,163,184,0.06)', border: '1px solid rgba(148,163,184,0.1)' }}
                           >
                             <Clock className="w-3 h-3" />
@@ -1246,7 +1242,7 @@ export function ConstantMonitoring() {
                         <div className="mb-5">
                           <div className="flex items-center gap-2 mb-2">
                             <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                            <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                            <h3 className={`text-[11px] font-bold ${text.body} uppercase tracking-wider`}>
                               ECG — Lead II
                             </h3>
                             {patient.currentVitals.ecgRhythm && (
@@ -1298,7 +1294,7 @@ export function ConstantMonitoring() {
 
                           {/* Left — Current Vitals */}
                           <div className="space-y-3">
-                            <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                            <h3 className={`text-[11px] font-bold ${text.body} uppercase tracking-wider flex items-center gap-1.5`}>
                               <Activity className="w-3 h-3" /> Current Vitals
                             </h3>
                             <div className="grid grid-cols-2 gap-2">
@@ -1327,14 +1323,14 @@ export function ConstantMonitoring() {
                                   >
                                     <div className="flex items-center gap-1.5 mb-1">
                                       <v.icon className={`w-3.5 h-3.5 ${v.color}`} />
-                                      <span className="text-[10px] font-bold text-slate-500">{v.label}</span>
+                                      <span className={`text-[10px] font-bold ${text.body}`}>{v.label}</span>
                                       {status !== 'normal' && (
                                         <div className={`w-1.5 h-1.5 rounded-full ml-auto ${status === 'critical' ? 'bg-red-500 animate-pulse' : 'bg-amber-500'}`} />
                                       )}
                                     </div>
                                     <div className="flex items-baseline gap-1">
-                                      <span className={`text-lg font-extrabold tabular-nums ${status === 'critical' ? 'text-red-700' : status === 'warning' ? 'text-amber-700' : 'text-slate-800'}`}>{v.value}</span>
-                                      <span className="text-[10px] text-slate-400 font-medium">{v.unit}</span>
+                                      <span className={`text-lg font-extrabold tabular-nums ${status === 'critical' ? 'text-red-700' : status === 'warning' ? 'text-amber-700' : text.heading}`}>{v.value}</span>
+                                      <span className={`text-[10px] ${text.muted} font-medium`}>{v.unit}</span>
                                     </div>
                                   </div>
                                 );
@@ -1347,23 +1343,23 @@ export function ConstantMonitoring() {
                               >
                                 <div className="flex items-center gap-1.5 mb-1">
                                   <Stethoscope className="w-3.5 h-3.5 text-blue-500" />
-                                  <span className="text-[10px] font-bold text-slate-500">Last Assessment</span>
+                                  <span className={`text-[10px] font-bold ${text.body}`}>Last Assessment</span>
                                 </div>
-                                <span className="text-sm font-extrabold text-slate-800">{formatElapsed(patient.lastAssessment)}</span>
+                                <span className={`text-sm font-extrabold ${text.heading}`}>{formatElapsed(patient.lastAssessment)}</span>
                               </div>
                             </div>
                           </div>
 
                           {/* Center — Vital Trend Charts */}
                           <div className="space-y-3">
-                            <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                            <h3 className={`text-[11px] font-bold ${text.body} uppercase tracking-wider flex items-center gap-1.5`}>
                               <TrendingUp className="w-3 h-3" /> Vital Trends
                             </h3>
                             <div
                               className="rounded-xl p-3"
                               style={glassVitalTile}
                             >
-                              <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Heart Rate (bpm)</p>
+                              <p className={`text-[10px] font-bold ${text.muted} uppercase mb-2`}>Heart Rate (bpm)</p>
                               <div className="h-[80px]">
                                 <ResponsiveContainer width="100%" height="100%">
                                   <AreaChart data={patient.vitalHistory}>
@@ -1385,7 +1381,7 @@ export function ConstantMonitoring() {
                               className="rounded-xl p-3"
                               style={glassVitalTile}
                             >
-                              <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">SpO₂ (%)</p>
+                              <p className={`text-[10px] font-bold ${text.muted} uppercase mb-2`}>SpO₂ (%)</p>
                               <div className="h-[80px]">
                                 <ResponsiveContainer width="100%" height="100%">
                                   <AreaChart data={patient.vitalHistory}>
@@ -1407,7 +1403,7 @@ export function ConstantMonitoring() {
 
                           {/* Right — TEWS Evolution & Alerts */}
                           <div className="space-y-3">
-                            <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                            <h3 className={`text-[11px] font-bold ${text.body} uppercase tracking-wider flex items-center gap-1.5`}>
                               <Shield className="w-3 h-3" /> Case Evolution
                             </h3>
 
@@ -1416,7 +1412,7 @@ export function ConstantMonitoring() {
                               className="rounded-xl p-3"
                               style={glassVitalTile}
                             >
-                              <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">TEWS Score Over Time</p>
+                              <p className={`text-[10px] font-bold ${text.muted} uppercase mb-2`}>TEWS Score Over Time</p>
                               <div className="h-[80px]">
                                 <ResponsiveContainer width="100%" height="100%">
                                   <LineChart data={patient.tewsHistory}>
@@ -1434,7 +1430,7 @@ export function ConstantMonitoring() {
                               className="rounded-xl p-3"
                               style={glassVitalTile}
                             >
-                              <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Recent AI Alerts</p>
+                              <p className={`text-[10px] font-bold ${text.muted} uppercase mb-2`}>Recent AI Alerts</p>
                               {patient.alerts && patient.alerts.length > 0 ? (
                                 <div className="space-y-1.5">
                                   {patient.alerts.map((alert, i) => (
@@ -1464,7 +1460,7 @@ export function ConstantMonitoring() {
                                   ))}
                                 </div>
                               ) : (
-                                <p className="text-xs text-slate-400 italic">No active alerts</p>
+                                <p className={`text-xs ${text.muted} italic`}>No active alerts</p>
                               )}
                             </div>
 
@@ -1478,7 +1474,7 @@ export function ConstantMonitoring() {
                                   className="rounded-xl p-3"
                                   style={glassVitalTile}
                                 >
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">IoT Devices</p>
+                                  <p className={`text-[10px] font-bold ${text.muted} uppercase mb-2`}>IoT Devices</p>
                                   <div className="space-y-1.5">
                                     {devices.map((dev) => {
                                       const sigMeta = SIGNAL_QUALITY_META[dev.health.signalQuality];
@@ -1491,7 +1487,7 @@ export function ConstantMonitoring() {
                                           ) : (
                                             <WifiOff className="w-3 h-3 text-red-400" />
                                           )}
-                                          <span className="font-semibold text-slate-700 flex-1 truncate">{dev.name}</span>
+                                          <span className={`font-semibold ${text.label} flex-1 truncate`}>{dev.name}</span>
                                           <div className="flex items-center gap-0.5">
                                             {[1, 2, 3, 4].map((bar) => (
                                               <div

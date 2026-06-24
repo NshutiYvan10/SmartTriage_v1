@@ -9,11 +9,14 @@
  * Navigate here from the sidebar ("Beds") or deep-link via /beds?zone=RESUS.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useBedStore } from '@/store/bedStore';
 import { subscribeToBedChanges } from '@/api/websocket';
 import type { BedResponse, EdZone } from '@/api/types';
 import { useTheme } from '@/hooks/useTheme';
+import type { ThemeStyles } from '@/hooks/useTheme';
+import { BedDouble } from 'lucide-react';
 import { BedTile } from './BedTile';
 import { BedActionSheet } from './BedActionSheet';
 
@@ -32,7 +35,7 @@ interface BedGridViewProps {
 }
 
 export function BedGridView({ initialZone = 'RESUS' }: BedGridViewProps) {
-  const { isDark } = useTheme();
+  const { glassCard, glassInner, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const { zoneSnapshots, loadZone } = useBedStore();
@@ -77,79 +80,90 @@ export function BedGridView({ initialZone = 'RESUS' }: BedGridViewProps) {
   };
 
   return (
-    <div className="p-6">
-      <header className="mb-4">
-        <h1 className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
-          Bed Management
-        </h1>
-        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-          Live view of every bed in the ED. Click a bed to place, transfer, or discharge.
-        </p>
-      </header>
+    <div className="min-h-full animate-fade-in">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4">
 
-      {/* Zone tabs */}
-      <div className={`mb-4 flex flex-wrap gap-1 rounded-lg border p-1 ${isDark ? 'border-slate-700 bg-slate-900/40' : 'border-slate-200 bg-slate-50'}`}>
-        {ZONES.map((z) => {
-          const active = z.key === zone;
-          return (
-            <button
-              key={z.key}
-              type="button"
-              onClick={() => setZone(z.key)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                active
-                  ? isDark ? 'bg-cyan-500 text-white' : 'bg-cyan-600 text-white'
-                  : isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-700 hover:bg-white'
-              }`}
-              title={z.hint}
-            >
-              {z.label}
-            </button>
-          );
-        })}
+        {/* ── Header Banner ── */}
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+              <BedDouble className="w-5 h-5 text-cyan-300" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-white tracking-tight leading-tight">
+                Bed Management
+              </h1>
+              <p className="text-sm text-white/50 mt-0.5 font-medium">
+                Live view of every bed in the ED. Click a bed to place, transfer, or discharge.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Zone tabs */}
+        <div className="flex flex-wrap gap-1 rounded-2xl p-1 animate-fade-up" style={glassInner}>
+          {ZONES.map((z) => {
+            const active = z.key === zone;
+            return (
+              <button
+                key={z.key}
+                type="button"
+                onClick={() => setZone(z.key)}
+                className={`rounded-xl px-3 py-1.5 text-sm font-medium transition border ${
+                  active
+                    ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                    : `border-transparent ${text.body} hover:bg-white/5`
+                }`}
+                title={z.hint}
+              >
+                {z.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Header metrics */}
+        {snap && (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 animate-fade-up">
+            <Metric label="Total" value={snap.totalBeds} glassInner={glassInner} text={text} />
+            <Metric label="Occupied" value={snap.occupied} tone="occupied" glassInner={glassInner} text={text} />
+            <Metric label="Available" value={snap.available} tone="available" glassInner={glassInner} text={text} />
+            <Metric label="Cleaning / OOS" value={snap.cleaning + snap.outOfService} tone="transition" glassInner={glassInner} text={text} />
+          </div>
+        )}
+
+        {loading && sortedBeds.length === 0 ? (
+          <div className={`rounded-2xl px-6 py-12 text-center text-sm animate-fade-up ${text.muted}`} style={glassCard}>
+            Loading beds…
+          </div>
+        ) : sortedBeds.length === 0 ? (
+          <div className={`rounded-2xl px-6 py-12 text-center animate-fade-up ${text.muted}`} style={glassCard}>
+            <p className={`text-sm font-medium ${text.body}`}>No beds configured in {zone}</p>
+            <p className={`mt-1 text-xs ${text.muted}`}>
+              Ask your hospital admin to add beds to this zone from the admin panel.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 animate-fade-up">
+            {sortedBeds.map((b) => (
+              <BedTile
+                key={b.id}
+                bed={b}
+                onClick={() => setSelectedBed(b)}
+                selected={selectedBed?.id === b.id}
+              />
+            ))}
+          </div>
+        )}
+
+        {selectedBed && (
+          <BedActionSheet
+            bed={selectedBed}
+            onClose={() => setSelectedBed(null)}
+            onActionComplete={handleActionDone}
+          />
+        )}
       </div>
-
-      {/* Header metrics */}
-      {snap && (
-        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Metric label="Total" value={snap.totalBeds} isDark={isDark} />
-          <Metric label="Occupied" value={snap.occupied} tone="occupied" isDark={isDark} />
-          <Metric label="Available" value={snap.available} tone="available" isDark={isDark} />
-          <Metric label="Cleaning / OOS" value={snap.cleaning + snap.outOfService} tone="transition" isDark={isDark} />
-        </div>
-      )}
-
-      {loading && sortedBeds.length === 0 ? (
-        <div className={`rounded-lg border px-6 py-12 text-center text-sm ${isDark ? 'border-slate-700 text-slate-400' : 'border-slate-200 text-slate-500'}`}>
-          Loading beds…
-        </div>
-      ) : sortedBeds.length === 0 ? (
-        <div className={`rounded-lg border border-dashed px-6 py-12 text-center ${isDark ? 'border-slate-700 text-slate-400' : 'border-slate-200 text-slate-500'}`}>
-          <p className="text-sm font-medium">No beds configured in {zone}</p>
-          <p className={`mt-1 text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-            Ask your hospital admin to add beds to this zone from the admin panel.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {sortedBeds.map((b) => (
-            <BedTile
-              key={b.id}
-              bed={b}
-              onClick={() => setSelectedBed(b)}
-              selected={selectedBed?.id === b.id}
-            />
-          ))}
-        </div>
-      )}
-
-      {selectedBed && (
-        <BedActionSheet
-          bed={selectedBed}
-          onClose={() => setSelectedBed(null)}
-          onActionComplete={handleActionDone}
-        />
-      )}
     </div>
   );
 }
@@ -158,25 +172,27 @@ function Metric({
   label,
   value,
   tone,
-  isDark,
+  glassInner,
+  text,
 }: {
   label: string;
   value: number;
   tone?: 'occupied' | 'available' | 'transition';
-  isDark: boolean;
+  glassInner: CSSProperties;
+  text: ThemeStyles['text'];
 }) {
   const toneClass =
     tone === 'occupied'
-      ? isDark ? 'text-slate-200' : 'text-slate-800'
+      ? text.heading
       : tone === 'available'
-        ? isDark ? 'text-emerald-300' : 'text-emerald-700'
+        ? 'text-emerald-400'
         : tone === 'transition'
-          ? isDark ? 'text-amber-300' : 'text-amber-700'
-          : isDark ? 'text-slate-100' : 'text-slate-900';
+          ? 'text-amber-400'
+          : text.heading;
 
   return (
-    <div className={`rounded-md border px-3 py-2 ${isDark ? 'border-slate-700 bg-slate-900/60' : 'border-slate-200 bg-white'}`}>
-      <div className={`text-[11px] uppercase tracking-wide ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+    <div className="rounded-xl px-3 py-2" style={glassInner}>
+      <div className={`text-[11px] uppercase tracking-wide ${text.muted}`}>
         {label}
       </div>
       <div className={`text-xl font-bold ${toneClass}`}>{value}</div>

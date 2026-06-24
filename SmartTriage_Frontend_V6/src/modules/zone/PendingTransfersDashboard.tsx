@@ -151,7 +151,7 @@ export function PendingTransfersDashboard() {
 
   if (shiftLoading) {
     return (
-      <div className="p-6 flex items-center gap-2 text-sm text-slate-500">
+      <div className={`p-6 flex items-center gap-2 text-sm ${text.body}`}>
         <Loader2 className="w-4 h-4 animate-spin" /> Resolving shift…
       </div>
     );
@@ -174,17 +174,22 @@ export function PendingTransfersDashboard() {
   const canViewDashboard = isChargeNurse || isShiftLead || isHospitalAdmin;
   if (!canViewDashboard) {
     return (
-      <div className="p-6 rounded-2xl border border-amber-500/40 bg-amber-50">
-        <div className="flex items-start gap-3">
-          <ShieldAlert className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-bold text-amber-900">Charge-nurse role required</p>
-            <p className="text-xs mt-0.5 text-amber-800">
-              The pending-transfers dashboard is visible to charge nurses,
-              the active shift lead, and hospital admins. Zoned doctors see
-              pending transfers into their own zone via the My Patients
-              banner.
-            </p>
+      <div className="min-h-full p-4 lg:p-6 max-w-7xl mx-auto animate-fade-in">
+        <div
+          className="p-6 rounded-3xl border border-amber-500/30"
+          style={glassCard}
+        >
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className={`text-sm font-bold ${text.heading}`}>Charge-nurse role required</p>
+              <p className={`text-xs mt-0.5 ${text.body}`}>
+                The pending-transfers dashboard is visible to charge nurses,
+                the active shift lead, and hospital admins. Zoned doctors see
+                pending transfers into their own zone via the My Patients
+                banner.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -192,40 +197,41 @@ export function PendingTransfersDashboard() {
   }
 
   return (
-    <div className="min-h-full p-5 animate-fade-in">
-      <div className="space-y-5">
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-lg shadow-amber-500/20">
-              <Users className="w-5 h-5 text-white" />
+    <div className="min-h-full p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
+        {/* Header banner */}
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                <Users className="w-5 h-5 text-amber-300" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-white tracking-tight leading-tight">
+                  Pending Zone Transfers
+                </h1>
+                <p className="text-sm mt-0.5 text-white/50">
+                  {transfers.length} pending across the ED
+                  {overdueCount > 0 && (
+                    <span className="ml-2 text-red-300 font-bold">
+                      · {overdueCount} overdue
+                    </span>
+                  )}
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className={`text-xl font-bold tracking-tight leading-tight ${text.heading}`}>
-                Pending Zone Transfers
-              </h1>
-              <p className={`text-sm mt-0.5 font-medium ${text.muted}`}>
-                {transfers.length} pending across the ED
-                {overdueCount > 0 && (
-                  <span className="ml-2 text-red-600 font-bold">
-                    · {overdueCount} overdue
-                  </span>
-                )}
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={loadTransfers}
+              className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl bg-white/10 text-white hover:bg-white/20"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={loadTransfers}
-            className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg bg-white/60 hover:bg-white/80"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
         </div>
 
         {error && (
-          <div className="rounded-xl p-3 border border-red-500/30 bg-red-500/10 text-red-700 text-xs">
+          <div className={`rounded-xl p-3 border border-red-500/30 bg-red-500/10 text-xs ${isDark ? 'text-red-300' : 'text-red-700'}`}>
             {error}
           </div>
         )}
@@ -269,15 +275,15 @@ export function PendingTransfersDashboard() {
                         </button>
                         <span className={`text-[10px] font-mono ${text.muted}`}>{t.visitNumber}</span>
                         {t.isPediatric && (
-                          <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-pink-500/15 text-pink-700">
+                          <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-pink-500/15 border border-pink-500/30 ${isDark ? 'text-pink-300' : 'text-pink-700'}`}>
                             Peds
                           </span>
                         )}
                       </div>
                       <div className="mt-1.5 flex items-center gap-2 text-xs">
-                        <span className="font-semibold text-slate-700">{t.fromZone ?? '—'}</span>
-                        <ArrowRight className="w-3 h-3 text-slate-400" />
-                        <span className={`font-bold ${overdue ? 'text-red-700' : 'text-amber-700'}`}>{t.toZone}</span>
+                        <span className={`font-semibold ${text.label}`}>{t.fromZone ?? '—'}</span>
+                        <ArrowRight className={`w-3 h-3 ${text.muted}`} />
+                        <span className={`font-bold ${overdue ? (isDark ? 'text-red-300' : 'text-red-700') : (isDark ? 'text-amber-300' : 'text-amber-700')}`}>{t.toZone}</span>
                       </div>
                       {t.reason && (
                         <p className={`text-[11px] mt-1 ${text.body}`}>{t.reason}</p>
@@ -287,7 +293,7 @@ export function PendingTransfersDashboard() {
                           Proposed receiver: <span className="font-semibold">{t.proposedClinicianName}</span>
                         </p>
                       )}
-                      <div className={`mt-1.5 flex items-center gap-1.5 text-[11px] ${overdue ? 'text-red-700 font-bold' : text.muted}`}>
+                      <div className={`mt-1.5 flex items-center gap-1.5 text-[11px] ${overdue ? `font-bold ${isDark ? 'text-red-300' : 'text-red-700'}` : text.muted}`}>
                         <Clock className="w-3 h-3" />
                         Pending {ageMinutes} min
                         {satsWindow != null && (
@@ -334,7 +340,7 @@ export function PendingTransfersDashboard() {
                           const reason = window?.prompt('Decline reason (e.g. Resus full):');
                           if (reason && reason.trim()) onAct(t.id, 'decline', reason.trim());
                         }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-md bg-white text-red-700 border border-red-500/40 hover:bg-red-50 disabled:opacity-50"
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-md bg-red-500/20 border border-red-500/30 hover:bg-red-500/30 disabled:opacity-50 ${isDark ? 'text-red-300' : 'text-red-700'}`}
                       >
                         <XCircle className="w-3 h-3" />
                         Decline
@@ -346,7 +352,6 @@ export function PendingTransfersDashboard() {
             })}
           </div>
         )}
-      </div>
     </div>
   );
 }

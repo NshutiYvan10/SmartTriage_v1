@@ -254,20 +254,21 @@ export function BedManagement() {
   }, [beds]);
 
   // ──────────────────────────────────────────────────────────────────
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   return (
-    <div className="min-h-full p-4 lg:p-6 max-w-6xl mx-auto space-y-4 animate-fade-in">
+    <div className="min-h-full p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
 
       {/* Header */}
       <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
-        <div className="bg-gradient-to-r from-emerald-700 to-cyan-700 px-6 py-5 text-white">
+        <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-                <BedDouble className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                <BedDouble className="w-5 h-5 text-cyan-300" />
               </div>
               <div>
-                <h1 className="text-lg font-bold tracking-wide">Bed Management</h1>
-                <p className="text-white/70 text-xs">
+                <h1 className="text-lg font-bold tracking-wide text-white">Bed Management</h1>
+                <p className="text-white/50 text-xs">
                   Configure the physical beds in each ED zone and link them to bedside monitors.
                 </p>
               </div>
@@ -278,7 +279,7 @@ export function BedManagement() {
                 <select
                   value={selectedHospitalId}
                   onChange={(e) => setSelectedHospitalId(e.target.value)}
-                  className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/20 text-white text-xs font-bold outline-none cursor-pointer hover:bg-white/15 transition-colors"
+                  className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/20 text-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500/20 cursor-pointer hover:bg-white/15 transition-colors"
                 >
                   {hospitals.map((h) => (
                     <option key={h.id} value={h.id} className="bg-slate-800 text-white">
@@ -289,14 +290,14 @@ export function BedManagement() {
               )}
               <button
                 onClick={refresh}
-                className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
                 title="Refresh"
               >
                 <RefreshCw className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setShowForm(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-white text-emerald-700 rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all"
               >
                 <Plus className="w-3.5 h-3.5" /> Add Bed
               </button>
@@ -307,15 +308,15 @@ export function BedManagement() {
         {/* Quick stats */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-0" style={{ background: isDark ? 'rgba(15,23,42,0.4)' : 'rgba(241,245,249,0.6)' }}>
           {[
-            { label: 'Total', value: stats.total, tone: 'text-slate-700 dark:text-slate-200' },
+            { label: 'Total', value: stats.total, tone: text.heading },
             { label: 'Available', value: stats.AVAILABLE, tone: 'text-emerald-600' },
-            { label: 'Occupied', value: stats.OCCUPIED, tone: 'text-slate-700 dark:text-slate-300' },
+            { label: 'Occupied', value: stats.OCCUPIED, tone: text.body },
             { label: 'Cleaning', value: stats.CLEANING, tone: 'text-amber-600' },
             { label: 'Out of Service', value: stats.OUT_OF_SERVICE, tone: 'text-rose-600' },
           ].map((s) => (
-            <div key={s.label} className="px-5 py-3 text-center border-r last:border-r-0 border-slate-200/20">
+            <div key={s.label} className="px-5 py-3 text-center last:border-r-0" style={{ borderRight: borderStyle }}>
               <p className={`text-lg font-black ${s.tone}`}>{s.value}</p>
-              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">{s.label}</p>
+              <p className={`text-[9px] font-bold uppercase tracking-wider ${text.muted}`}>{s.label}</p>
             </div>
           ))}
         </div>
@@ -341,10 +342,10 @@ export function BedManagement() {
           <button
             key={z}
             onClick={() => setZoneFilter(z)}
-            className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all ${
+            className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all ${
               zoneFilter === z
-                ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow'
-                : isDark ? 'text-slate-300 hover:bg-white/5' : 'text-slate-600 hover:bg-slate-100'
+                ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                : `border-transparent ${text.body} hover:bg-white/5`
             }`}
             style={zoneFilter !== z ? glassInner : {}}
           >
@@ -360,7 +361,7 @@ export function BedManagement() {
       <div className="rounded-2xl overflow-hidden" style={glassCard}>
         {loadingBeds && filteredBeds.length === 0 ? (
           <div className="py-16 text-center">
-            <Loader2 className="w-6 h-6 animate-spin text-emerald-500 mx-auto mb-3" />
+            <Loader2 className="w-6 h-6 animate-spin text-cyan-500 mx-auto mb-3" />
             <p className={`text-xs ${text.muted}`}>Loading beds…</p>
           </div>
         ) : filteredBeds.length === 0 ? (
@@ -381,7 +382,7 @@ export function BedManagement() {
                 <button
                   onClick={handleSeedDefaults}
                   disabled={seeding}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                 >
                   {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                   {seeding ? 'Seeding default beds…' : 'Seed default beds for this hospital'}
@@ -395,15 +396,15 @@ export function BedManagement() {
             )}
           </div>
         ) : (
-          <div className="divide-y divide-slate-200/20">
-            {filteredBeds.map((b) => {
+          <div>
+            {filteredBeds.map((b, i) => {
               const styles = STATUS_STYLES[b.status];
               return (
-                <div key={b.id} className="grid grid-cols-12 gap-3 px-4 py-3 items-center hover:bg-white/5 transition-colors">
+                <div key={b.id} className="grid grid-cols-12 gap-3 px-4 py-3 items-center hover:bg-white/5 transition-colors" style={i > 0 ? { borderTop: borderStyle } : undefined}>
                   {/* Code + zone */}
                   <div className="col-span-12 sm:col-span-3 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-sm">
-                      <span className="text-[11px] font-extrabold text-white leading-none">{b.code}</span>
+                    <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center shadow-sm">
+                      <span className="text-[11px] font-extrabold text-cyan-300 leading-none">{b.code}</span>
                     </div>
                     <div className="min-w-0">
                       <p className={`text-sm font-bold truncate ${text.heading}`}>Bed {b.code}</p>
@@ -446,9 +447,7 @@ export function BedManagement() {
                     <button
                       onClick={() => setAssignBed(b)}
                       title={b.assignedDeviceId ? 'Change or detach monitor' : 'Link a monitor to this bed'}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg ${
-                        isDark ? 'text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20' : 'text-cyan-700 bg-cyan-50 hover:bg-cyan-100'
-                      }`}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30 transition-colors"
                     >
                       {b.assignedDeviceId ? <Link2Off className="w-3 h-3" /> : <Link2 className="w-3 h-3" />}
                       Monitor
@@ -457,9 +456,7 @@ export function BedManagement() {
                     {b.status === 'CLEANING' && (
                       <button
                         onClick={() => handleStatusAction(b, 'cleaned')}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg ${
-                          isDark ? 'text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20' : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
-                        }`}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 transition-colors"
                       >
                         Mark clean
                       </button>
@@ -467,9 +464,7 @@ export function BedManagement() {
                     {b.status !== 'OUT_OF_SERVICE' && b.status !== 'OCCUPIED' && (
                       <button
                         onClick={() => handleStatusAction(b, 'oos')}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg ${
-                          isDark ? 'text-rose-300 bg-rose-500/10 hover:bg-rose-500/20' : 'text-rose-700 bg-rose-50 hover:bg-rose-100'
-                        }`}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30 transition-colors"
                       >
                         Take OOS
                       </button>
@@ -477,9 +472,7 @@ export function BedManagement() {
                     {b.status === 'OUT_OF_SERVICE' && (
                       <button
                         onClick={() => handleStatusAction(b, 'available')}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg ${
-                          isDark ? 'text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20' : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
-                        }`}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 transition-colors"
                       >
                         Return to service
                       </button>
@@ -487,9 +480,7 @@ export function BedManagement() {
 
                     <button
                       onClick={() => setEditBed(b)}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg ${
-                        isDark ? 'text-slate-300 bg-white/5 hover:bg-white/10' : 'text-slate-600 bg-slate-100 hover:bg-slate-200'
-                      }`}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg transition-colors ${text.body} ${isDark ? 'bg-white/10 hover:bg-white/15' : 'bg-slate-100 hover:bg-slate-200'}`}
                       title="Edit bed"
                     >
                       <Pencil className="w-3 h-3" />
@@ -498,9 +489,7 @@ export function BedManagement() {
                     <button
                       onClick={() => handleDelete(b)}
                       disabled={b.status === 'OCCUPIED'}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg disabled:opacity-40 disabled:cursor-not-allowed ${
-                        isDark ? 'text-rose-300 bg-rose-500/10 hover:bg-rose-500/20' : 'text-rose-700 bg-rose-50 hover:bg-rose-100'
-                      }`}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       title={b.status === 'OCCUPIED' ? 'Cannot delete an occupied bed' : 'Delete bed'}
                     >
                       <Trash2 className="w-3 h-3" />
@@ -566,6 +555,7 @@ function BedFormModal({
   onClose: () => void;
   onSubmit: (payload: CreateBedRequest | null, updates: UpdateBedRequest | null) => Promise<void>;
 }) {
+  const { glassCard, glassInner, text } = useTheme();
   const editing = !!bed;
   const [code, setCode] = useState(bed?.code || '');
   const [label, setLabel] = useState(bed?.label || '');
@@ -575,33 +565,39 @@ function BedFormModal({
   const [targetHospitalId, setTargetHospitalId] = useState(hospitalId);
 
   const canSubmit = code.trim().length >= 1 && !submitting;
+  const inputClass = `w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.heading}`;
+  const labelClass = `block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
       <div
-        className={`w-full max-w-md rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-slate-900 border border-slate-700' : 'bg-white border border-slate-200'}`}
+        className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
+        style={glassCard}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-3 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <BedDouble className="w-4 h-4 text-white" />
+            <div className="w-7 h-7 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+              <BedDouble className="w-4 h-4 text-cyan-300" />
+            </div>
             <h3 className="text-sm font-bold text-white">{editing ? `Edit bed ${bed!.code}` : 'Add new bed'}</h3>
           </div>
-          <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center hover:bg-white/25">
-            <X className="w-3.5 h-3.5 text-white" />
+          <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center text-white hover:bg-white/25">
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         <div className="p-5 space-y-3">
           {!editing && isSuperAdmin && hospitals.length > 0 && (
             <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              <label className={labelClass}>
                 <Building2 className="inline w-3 h-3 mr-1" /> Hospital
               </label>
               <select
                 value={targetHospitalId}
                 onChange={(e) => setTargetHospitalId(e.target.value)}
-                className={`w-full px-3 py-2 rounded-lg text-sm outline-none border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'}`}
+                className={inputClass}
+                style={glassInner}
               >
                 {hospitals.map((h) => (
                   <option key={h.id} value={h.id}>{h.name}</option>
@@ -612,45 +608,49 @@ function BedFormModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Code*</label>
+              <label className={labelClass}>Code*</label>
               <input
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 placeholder="e.g. RES-01"
                 maxLength={20}
-                className={`w-full px-3 py-2 rounded-lg text-sm outline-none border font-mono ${isDark ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'}`}
+                className={`${inputClass} font-mono`}
+                style={glassInner}
                 autoFocus={!editing}
               />
             </div>
             <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Order</label>
+              <label className={labelClass}>Order</label>
               <input
                 type="number"
                 value={displayOrder}
                 onChange={(e) => setDisplayOrder(parseInt(e.target.value, 10) || 0)}
-                className={`w-full px-3 py-2 rounded-lg text-sm outline-none border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'}`}
+                className={inputClass}
+                style={glassInner}
               />
             </div>
           </div>
 
           <div>
-            <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Label</label>
+            <label className={labelClass}>Label</label>
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="e.g. Crash bay A"
               maxLength={100}
-              className={`w-full px-3 py-2 rounded-lg text-sm outline-none border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'}`}
+              className={inputClass}
+              style={glassInner}
             />
           </div>
 
           {!editing && (
             <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Zone</label>
+              <label className={labelClass}>Zone</label>
               <select
                 value={zone}
                 onChange={(e) => setZone(e.target.value as EdZone)}
-                className={`w-full px-3 py-2 rounded-lg text-sm outline-none border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'}`}
+                className={inputClass}
+                style={glassInner}
               >
                 {ZONES.map((z) => <option key={z} value={z}>{z}</option>)}
               </select>
@@ -658,22 +658,26 @@ function BedFormModal({
           )}
 
           <div>
-            <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Notes</label>
+            <label className={labelClass}>Notes</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
               placeholder="Optional — e.g. isolation capable, bariatric, pediatric crib"
-              className={`w-full px-3 py-2 rounded-lg text-sm outline-none border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-800'}`}
+              className={inputClass}
+              style={glassInner}
             />
           </div>
         </div>
 
-        <div className={`flex items-center justify-end gap-2 px-5 py-3 border-t ${isDark ? 'border-slate-700 bg-slate-900/60' : 'border-slate-200 bg-slate-50/60'}`}>
+        <div
+          className="flex items-center justify-end gap-2 px-5 py-3"
+          style={{ borderTop: isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)', background: isDark ? 'rgba(2,6,23,0.3)' : 'rgba(241,245,249,0.5)' }}
+        >
           <button
             onClick={onClose}
             disabled={submitting}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold ${isDark ? 'text-slate-300 hover:bg-white/5' : 'text-slate-600 hover:bg-slate-100'}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold ${text.body} ${isDark ? 'hover:bg-white/5' : 'hover:bg-slate-100'}`}
           >
             Cancel
           </button>
@@ -698,7 +702,7 @@ function BedFormModal({
                 }, null);
               }
             }}
-            className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold text-white ${canSubmit ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500' : 'bg-slate-400 cursor-not-allowed'}`}
+            className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold text-white transition-colors ${canSubmit ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-slate-400 cursor-not-allowed'}`}
           >
             {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
             {editing ? 'Save changes' : 'Create bed'}
@@ -725,6 +729,7 @@ function BedDeviceAssignmentModal({
   onAssign: (deviceId: string | null) => void;
   isDark: boolean;
 }) {
+  const { glassCard, text } = useTheme();
   // Devices not currently attached to a different bed are candidates — the server
   // enforces this too, but filtering here makes the picker less noisy.
   const candidates = useMemo(() => {
@@ -736,16 +741,19 @@ function BedDeviceAssignmentModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
       <div
-        className={`w-full max-w-md rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-slate-900 border border-slate-700' : 'bg-white border border-slate-200'}`}
+        className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
+        style={glassCard}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="bg-gradient-to-r from-cyan-600 to-cyan-500 px-5 py-3 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Monitor className="w-4 h-4 text-white" />
+            <div className="w-7 h-7 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+              <Monitor className="w-4 h-4 text-cyan-300" />
+            </div>
             <h3 className="text-sm font-bold text-white">Monitor for bed {bed.code}</h3>
           </div>
-          <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center hover:bg-white/25">
-            <X className="w-3.5 h-3.5 text-white" />
+          <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center text-white hover:bg-white/25">
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -753,18 +761,18 @@ function BedDeviceAssignmentModal({
           {bed.assignedDeviceId && (
             <button
               onClick={() => onAssign(null)}
-              className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm font-semibold ${isDark ? 'bg-rose-500/10 text-rose-300 hover:bg-rose-500/20' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30 transition-colors"
             >
               <span className="flex items-center gap-2">
                 <Link2Off className="w-3.5 h-3.5" />
                 Detach current monitor
-                {bed.assignedDeviceName && <span className={`text-[10px] font-normal ${isDark ? 'text-rose-200/70' : 'text-rose-600/70'}`}>({bed.assignedDeviceName})</span>}
+                {bed.assignedDeviceName && <span className="text-[10px] font-normal text-rose-400/70">({bed.assignedDeviceName})</span>}
               </span>
             </button>
           )}
 
           {candidates.length === 0 ? (
-            <div className={`text-center py-6 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+            <div className={`text-center py-6 text-xs ${text.muted}`}>
               No devices registered for this hospital yet.
             </div>
           ) : candidates.map((d) => {
@@ -774,21 +782,21 @@ function BedDeviceAssignmentModal({
                 key={d.id}
                 disabled={isCurrent}
                 onClick={() => onAssign(d.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left border ${
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left border transition-colors ${
                   isCurrent
-                    ? isDark ? 'border-cyan-500/40 bg-cyan-500/10' : 'border-cyan-500/40 bg-cyan-50'
-                    : isDark ? 'border-slate-700 hover:border-slate-500 hover:bg-white/5' : 'border-slate-200 hover:border-slate-400 hover:bg-slate-50'
+                    ? 'border-cyan-500/40 bg-cyan-500/10'
+                    : isDark ? 'border-white/10 hover:border-white/20 hover:bg-white/5' : 'border-slate-200 hover:border-slate-400 hover:bg-slate-50'
                 }`}
               >
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'bg-white/10' : 'bg-slate-100'}`}>
                   <Monitor className={`w-4 h-4 ${d.status === 'MONITORING' ? 'text-cyan-500' : d.status === 'ONLINE' ? 'text-emerald-500' : 'text-slate-400'}`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className={`text-sm font-bold truncate ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>{d.deviceName}</p>
-                    {isCurrent && <span className="text-[9px] uppercase font-extrabold tracking-wider text-cyan-600">Current</span>}
+                    <p className={`text-sm font-bold truncate ${text.heading}`}>{d.deviceName}</p>
+                    {isCurrent && <span className="text-[9px] uppercase font-extrabold tracking-wider text-cyan-500">Current</span>}
                   </div>
-                  <p className={`text-[10px] truncate ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  <p className={`text-[10px] truncate ${text.muted}`}>
                     {d.deviceType?.replace(/_/g, ' ')} · {d.serialNumber} · {d.status}
                   </p>
                 </div>
