@@ -24,6 +24,14 @@ public interface IoTDeviceRepository extends JpaRepository<IoTDevice, UUID> {
 
         Optional<IoTDevice> findByApiKeyAndIsActiveTrue(String apiKey);
 
+        /** Resolve a device's hospital — used by ClinicalAuthz to scope the RFID bind-mode endpoint (V95). */
+        @Query("SELECT d.hospital.id FROM IoTDevice d WHERE d.id = :id")
+        Optional<UUID> findHospitalIdById(@Param("id") UUID id);
+
+        /** RFID readers at a hospital — for the registration desk-device picker (V95). */
+        List<IoTDevice> findByHospitalIdAndDeviceTypeAndIsActiveTrueOrderByDeviceNameAsc(
+                        UUID hospitalId, com.smartTriage.smartTriage_server.common.enums.DeviceType deviceType);
+
         Page<IoTDevice> findByHospitalIdAndIsActiveTrueOrderByDeviceNameAsc(
                         UUID hospitalId, Pageable pageable);
 

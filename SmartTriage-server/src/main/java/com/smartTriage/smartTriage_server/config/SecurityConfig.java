@@ -65,7 +65,11 @@ public class SecurityConfig {
                         // /api/v1/iot/stream/latest/{visitId} (and siblings on
                         // IoTDeviceController) to anonymous callers.
                         .requestMatchers("/api/v1/iot/stream/ingest",
-                                          "/api/v1/iot/stream/heartbeat").permitAll()
+                                          "/api/v1/iot/stream/heartbeat",
+                                          // RFID reader tap (V95) — device-API-key authed, not JWT.
+                                          // The registrar-facing /iot/rfid/** endpoints (bind-mode,
+                                          // open-visit, devices) stay JWT-gated by the default rule.
+                                          "/api/v1/iot/rfid/tap").permitAll()
 
                         // WebSocket endpoint
                         .requestMatchers("/ws/**").permitAll()

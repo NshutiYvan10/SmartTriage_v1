@@ -50,6 +50,10 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
     /** All local patient rows linked to one shared cross-hospital identity (safety-summary fan-out). */
     List<Patient> findByPersonIdentityIdAndIsActiveTrue(UUID personIdentityId);
 
+    /** Local rows for one shared identity at a SPECIFIC hospital — RFID open-visit "do we already
+     *  have a local record here?" check (V95). */
+    List<Patient> findByPersonIdentityIdAndHospitalIdAndIsActiveTrue(UUID personIdentityId, UUID hospitalId);
+
     // ── Tier 3: soft identifiers (multiple matches possible) ──
     //
     // These return List<> rather than Optional<> because the same phone /

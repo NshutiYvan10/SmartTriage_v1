@@ -54,6 +54,7 @@ class ClinicalAuthzTest {
     private com.smartTriage.smartTriage_server.module.referral.repository.ReferralRepository referralRepository;
     private com.smartTriage.smartTriage_server.module.reporting.repository.MohReportRepository mohReportRepository;
     private com.smartTriage.smartTriage_server.module.medsafety.repository.MedicationSafetyCheckRepository medicationSafetyCheckRepository;
+    private com.smartTriage.smartTriage_server.module.iot.repository.IoTDeviceRepository ioTDeviceRepository;
     private HandoverReportRepository handoverReportRepository;
     private ClinicalAuthz authz;
 
@@ -87,6 +88,8 @@ class ClinicalAuthzTest {
                 mock(com.smartTriage.smartTriage_server.module.reporting.repository.MohReportRepository.class);
         medicationSafetyCheckRepository =
                 mock(com.smartTriage.smartTriage_server.module.medsafety.repository.MedicationSafetyCheckRepository.class);
+        ioTDeviceRepository =
+                mock(com.smartTriage.smartTriage_server.module.iot.repository.IoTDeviceRepository.class);
         handoverReportRepository = mock(HandoverReportRepository.class);
         authz = new ClinicalAuthz(
                 userRepository,
@@ -108,7 +111,8 @@ class ClinicalAuthzTest {
                 informedConsentRepository,
                 referralRepository,
                 mohReportRepository,
-                medicationSafetyCheckRepository);
+                medicationSafetyCheckRepository,
+                ioTDeviceRepository);
     }
 
     @Test
@@ -592,5 +596,42 @@ class ClinicalAuthzTest {
                 new UsernamePasswordAuthenticationToken("not-a-user", null), hospitalId));
         assertFalse(authz.canAccessRegistrarReports(
                 authFor(user(Role.REGISTRAR, null, hospitalId)), null));
+    }
+
+    // ── canOperateRfidDevice (V95 — scopes the RFID bind-mode endpoint to the device's hospital) ──
+
+    @Test
+    void canOperateRfidDevice_allowsRegistrarAndHospitalAdmin_atDeviceHospital() {
+        UUID deviceId = UUID.randomUUID();
+        when(ioTDeviceRepository.findHospitalIdById(deviceId)).thenReturn(Optional.of(hospitalId));
+        assertTrue(authz.canOperateRfidDevice(authFor(user(Role.REGISTRAR, null, hospitalId)), deviceId));
+        assertTrue(authz.canOperateRfidDevice(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), deviceId));
+    }
+
+    @Test
+    void canOperateRfidDevice_allowsSuperAdmin_withoutDeviceLookup() {
+        // SUPER_ADMIN short-circuits before resolving the device.
+        assertTrue(authz.canOperateRfidDevice(authFor(user(Role.SUPER_ADMIN, null, null)), UUID.randomUUID()));
+    }
+
+    @Test
+    void canOperateRfidDevice_deniesAnotherHospitalsRegistrar_andClinicalRoles() {
+        UUID deviceId = UUID.randomUUID();
+        when(ioTDeviceRepository.findHospitalIdById(deviceId)).thenReturn(Optional.of(hospitalId));
+        // Registrar at a different hospital cannot drive this hospital's reader by id.
+        assertFalse(authz.canOperateRfidDevice(
+                authFor(user(Role.REGISTRAR, null, UUID.randomUUID())), deviceId));
+        // Clinical roles are not the registration-desk audience.
+        assertFalse(authz.canOperateRfidDevice(authFor(user(Role.DOCTOR, null, hospitalId)), deviceId));
+        assertFalse(authz.canOperateRfidDevice(authFor(user(Role.NURSE, null, hospitalId)), deviceId));
+    }
+
+    @Test
+    void canOperateRfidDevice_deniesUnknownDevice_andNullArgs() {
+        UUID deviceId = UUID.randomUUID();
+        when(ioTDeviceRepository.findHospitalIdById(deviceId)).thenReturn(Optional.empty());
+        assertFalse(authz.canOperateRfidDevice(authFor(user(Role.REGISTRAR, null, hospitalId)), deviceId));
+        assertFalse(authz.canOperateRfidDevice(null, deviceId));
+        assertFalse(authz.canOperateRfidDevice(authFor(user(Role.REGISTRAR, null, hospitalId)), null));
     }
 }

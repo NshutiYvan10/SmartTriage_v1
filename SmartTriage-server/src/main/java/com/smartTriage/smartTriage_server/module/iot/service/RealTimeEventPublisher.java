@@ -65,6 +65,16 @@ public class RealTimeEventPublisher {
     }
 
     /**
+     * Push an RFID registration-reader event to the hospital's RFID topic (V95): a card tap that
+     * FOUND / did NOT find a patient, or a tap-to-capture CARD_BIND for the registration form.
+     * Read-driven (no clinical persistence), so immediate publish is correct.
+     */
+    public void publishRfidEvent(UUID hospitalId, Map<String, Object> payload) {
+        messagingTemplate.convertAndSend("/topic/rfid/" + hospitalId, (Object) payload);
+        log.debug("Published RFID event to /topic/rfid/{}", hospitalId);
+    }
+
+    /**
      * Push a device status change to the hospital's devices topic.
      */
     public void publishDeviceStatusChange(UUID hospitalId, Map<String, Object> deviceData) {

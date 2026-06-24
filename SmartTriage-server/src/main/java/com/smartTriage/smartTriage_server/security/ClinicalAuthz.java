@@ -23,6 +23,7 @@ import com.smartTriage.smartTriage_server.module.referral.repository.ReferralRep
 import com.smartTriage.smartTriage_server.module.reporting.repository.MohReportRepository;
 import com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository;
 import com.smartTriage.smartTriage_server.module.medsafety.repository.MedicationSafetyCheckRepository;
+import com.smartTriage.smartTriage_server.module.iot.repository.IoTDeviceRepository;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
@@ -120,6 +121,7 @@ public class ClinicalAuthz {
     private final ReferralRepository referralRepository;
     private final MohReportRepository mohReportRepository;
     private final MedicationSafetyCheckRepository medicationSafetyCheckRepository;
+    private final IoTDeviceRepository ioTDeviceRepository;
 
     /**
      * @return true if the authenticated user is attached to {@code hospitalId}.
@@ -791,6 +793,33 @@ public class ClinicalAuthz {
                     .orElse(false);
         } catch (Exception e) {
             log.error("canAccessMedicationSafetyCheck error for check {}: {}", checkId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Who may operate an RFID registration reader (arm tap-to-capture bind mode) at the registration
+     * desk: SUPER_ADMIN anywhere; REGISTRAR or HOSPITAL_ADMIN at the DEVICE's own hospital. Resolves
+     * deviceId → hospital so a registrar at hospital A cannot drive hospital B's reader by id; denies
+     * an unknown device (no existence leak). The /tap ingest itself is device-API-key authed, not here.
+     */
+    @Transactional(readOnly = true)
+    public boolean canOperateRfidDevice(Authentication authentication, UUID deviceId) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null || deviceId == null) {
+                return false;
+            }
+            if (user.getRole() == Role.SUPER_ADMIN) {
+                return true;
+            }
+            UUID hospitalId = ioTDeviceRepository.findHospitalIdById(deviceId).orElse(null);
+            if (hospitalId == null || !belongsToHospital(user, hospitalId)) {
+                return false;
+            }
+            return user.getRole() == Role.REGISTRAR || user.getRole() == Role.HOSPITAL_ADMIN;
+        } catch (Exception e) {
+            log.error("canOperateRfidDevice error for device {}: {}", deviceId, e.getMessage(), e);
             return false;
         }
     }
