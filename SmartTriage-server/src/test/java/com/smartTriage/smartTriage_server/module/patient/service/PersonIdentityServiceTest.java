@@ -158,4 +158,37 @@ class PersonIdentityServiceTest {
         assertThat(service.findOrCreate("  ", "  ")).isNull();
         verify(repo, never()).saveAndFlush(any());
     }
+
+    // ── V95: replaceCard (lost/damaged-card workflow) ──
+
+    @Test
+    void replaceCard_swapsCard_andReturnsOldCard() {
+        PersonIdentity id = identity("NID-9", "OLD-CARD");
+        when(repo.findByRfidCardIdAndIsActiveTrue("NEW-CARD")).thenReturn(Optional.empty());
+        when(repo.saveAndFlush(any(PersonIdentity.class))).thenAnswer(i -> i.getArgument(0));
+
+        String old = service.replaceCard(id, "NEW-CARD");
+        assertThat(old).isEqualTo("OLD-CARD");
+        assertThat(id.getRfidCardId()).isEqualTo("NEW-CARD"); // old card now stops resolving
+    }
+
+    @Test
+    void replaceCard_rejects_whenNewCardBelongsToAnotherPatient() {
+        PersonIdentity id = identity("NID-10", "OLD-CARD");
+        PersonIdentity other = identity("NID-11", "TAKEN-CARD");
+        when(repo.findByRfidCardIdAndIsActiveTrue("TAKEN-CARD")).thenReturn(Optional.of(other));
+
+        assertThatThrownBy(() -> service.replaceCard(id, "TAKEN-CARD"))
+                .isInstanceOf(IdentityConflictException.class);
+        verify(repo, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void replaceCard_isNoOp_whenSameCardReentered() {
+        PersonIdentity id = identity("NID-12", "SAME-CARD");
+        when(repo.findByRfidCardIdAndIsActiveTrue("SAME-CARD")).thenReturn(Optional.of(id));
+
+        assertThat(service.replaceCard(id, "SAME-CARD")).isEqualTo("SAME-CARD");
+        verify(repo, never()).saveAndFlush(any());
+    }
 }

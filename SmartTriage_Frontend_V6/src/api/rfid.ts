@@ -1,4 +1,4 @@
-import { get, post } from './client';
+import { get, post, put } from './client';
 
 /**
  * RFID registration-reader API (V95). The physical reader posts taps to the backend; the registrar
@@ -43,4 +43,10 @@ export const rfidApi = {
 
   /** RFID readers registered at a hospital — for the desk-device picker. */
   listDevices: (hospitalId: string) => get<RfidDevice[]>(`/iot/rfid/devices/hospital/${hospitalId}`),
+
+  /** Replace a patient's card (lost/damaged) — new card set on the shared identity, old one
+   *  immediately stops resolving; rejects a card already held by another patient. */
+  replaceCard: (patientId: string, newCardId: string) =>
+    put<{ id: string; firstName: string; lastName: string; rfidCardId?: string | null }>(
+      `/iot/rfid/replace-card`, { patientId, newCardId }),
 };

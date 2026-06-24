@@ -3,11 +3,13 @@ package com.smartTriage.smartTriage_server.module.iot.controller;
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.module.iot.dto.DeviceResponse;
 import com.smartTriage.smartTriage_server.module.iot.dto.OpenVisitForCardRequest;
+import com.smartTriage.smartTriage_server.module.iot.dto.ReplaceCardRequest;
 import com.smartTriage.smartTriage_server.module.iot.dto.RfidTapRequest;
 import com.smartTriage.smartTriage_server.module.iot.dto.RfidTapResponse;
 import com.smartTriage.smartTriage_server.module.iot.entity.IoTDevice;
 import com.smartTriage.smartTriage_server.module.iot.service.DeviceService;
 import com.smartTriage.smartTriage_server.module.iot.service.RfidService;
+import com.smartTriage.smartTriage_server.module.patient.dto.PatientResponse;
 import com.smartTriage.smartTriage_server.module.patient.dto.RegisterPatientResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -70,6 +72,19 @@ public class RfidController {
             @Valid @RequestBody OpenVisitForCardRequest request) {
         return ResponseEntity.ok(ApiResponse.success("Visit opened",
                 rfidService.openVisitForCard(request)));
+    }
+
+    /**
+     * Replace a patient's RFID card (lost/damaged-card workflow). Sets the new card on the shared
+     * identity so the old card stops resolving; rejects a card already held by another patient.
+     * Gated to the registration-desk audience at the patient's own hospital; audited (old → new).
+     */
+    @PutMapping("/replace-card")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','HOSPITAL_ADMIN','REGISTRAR') "
+            + "and @clinicalAuthz.canAccessPatient(authentication, #request.patientId)")
+    public ResponseEntity<ApiResponse<PatientResponse>> replaceCard(@Valid @RequestBody ReplaceCardRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Card replaced",
+                rfidService.replaceCardForPatient(request.getPatientId(), request.getNewCardId())));
     }
 
     /** RFID readers registered at a hospital — for the registration desk-device picker. */

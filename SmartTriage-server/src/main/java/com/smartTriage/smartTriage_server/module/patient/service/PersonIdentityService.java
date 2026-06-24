@@ -87,6 +87,37 @@ public class PersonIdentityService {
         return createOrReread(nid, card);
     }
 
+    /**
+     * Replace the RFID card on an existing shared identity (lost/damaged-card workflow). The new
+     * card must not already belong to ANOTHER identity (else {@link IdentityConflictException}).
+     * The old card is overwritten, so it immediately stops resolving anywhere. Returns the old card
+     * UID (may be null) for the caller's forensic audit. Distinct from {@code findOrCreate}, which
+     * deliberately refuses a silent reassignment — this is the EXPLICIT, gated, audited action.
+     */
+    @Transactional
+    public String replaceCard(PersonIdentity identity, String newRfidCardId) {
+        String newCard = normalize(newRfidCardId);
+        if (newCard == null) {
+            throw new IllegalArgumentException("A new card ID is required to replace the card.");
+        }
+        PersonIdentity holder = personIdentityRepository.findByRfidCardIdAndIsActiveTrue(newCard).orElse(null);
+        if (holder != null && !holder.getId().equals(identity.getId())) {
+            throw new IdentityConflictException(
+                    "That card is already assigned to another patient — it cannot be reassigned.");
+        }
+        String oldCard = identity.getRfidCardId();
+        if (newCard.equals(oldCard)) {
+            return oldCard; // no-op — same card re-entered
+        }
+        identity.setRfidCardId(newCard);
+        try {
+            personIdentityRepository.saveAndFlush(identity);
+        } catch (DataIntegrityViolationException race) {
+            throw new IdentityConflictException("That card was just assigned to another patient — please retry.");
+        }
+        return oldCard;
+    }
+
     /** Attach a newly-provided key to an existing identity, or reject a conflicting different value. */
     private PersonIdentity attachIfProvided(PersonIdentity identity, String existing, String provided,
                                             java.util.function.Consumer<String> setter, String conflictMessage) {

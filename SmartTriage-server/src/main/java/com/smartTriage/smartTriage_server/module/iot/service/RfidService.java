@@ -2,7 +2,11 @@ package com.smartTriage.smartTriage_server.module.iot.service;
 
 import com.smartTriage.smartTriage_server.common.enums.DeviceStatus;
 import com.smartTriage.smartTriage_server.common.enums.DeviceType;
+import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
+import com.smartTriage.smartTriage_server.module.audit.service.AuditService;
+import com.smartTriage.smartTriage_server.module.patient.dto.PatientResponse;
+import com.smartTriage.smartTriage_server.module.patient.service.PersonIdentityService;
 import com.smartTriage.smartTriage_server.module.iot.dto.OpenVisitForCardRequest;
 import com.smartTriage.smartTriage_server.module.iot.dto.RfidTapResponse;
 import com.smartTriage.smartTriage_server.module.iot.entity.IoTDevice;
@@ -49,8 +53,10 @@ public class RfidService {
     private final PersonIdentityRepository personIdentityRepository;
     private final PatientRepository patientRepository;
     private final PatientService patientService;
+    private final PersonIdentityService personIdentityService;
     private final VisitService visitService;
     private final RealTimeEventPublisher realTimeEventPublisher;
+    private final AuditService auditService;
 
     /**
      * Process a card tap from a reader (device already authenticated by API key in the controller).
@@ -178,6 +184,27 @@ public class RfidService {
         return patientService.registerPatientWithVisit(reg);
     }
 
+    /**
+     * Replace a patient's RFID card (lost/damaged-card workflow). Sets the new card on the patient's
+     * shared identity so the OLD card immediately stops resolving anywhere; rejects a card already
+     * held by another patient; audits old → new. The new card is typically tap-captured.
+     */
+    @Transactional
+    public PatientResponse replaceCardForPatient(UUID patientId, String newCardId) {
+        Patient patient = patientService.findPatientOrThrow(patientId);
+        PersonIdentity identity = patient.getPersonIdentity();
+        if (identity == null) {
+            // The card lives on the shared identity, which is created from a national ID / first card
+            // at registration — there's nothing to "replace" yet.
+            throw new ClinicalBusinessException(
+                    "This patient has no shared identity yet — assign a card via registration first.");
+        }
+        String oldCard = personIdentityService.replaceCard(identity, newCardId);
+        auditService.record("PUT", "/api/v1/iot/rfid/replace-card",
+                "RFID_CARD_REPLACED patient=" + patientId + " old=" + mask(oldCard) + " new=" + mask(newCardId), 200);
+        return PatientMapper.toResponse(patient);
+    }
+
     /** RFID readers at a hospital — for the registration desk-device picker. */
     @Transactional(readOnly = true)
     public List<com.smartTriage.smartTriage_server.module.iot.dto.DeviceResponse> listDevices(UUID hospitalId) {
@@ -207,5 +234,10 @@ public class RfidService {
         if (s == null) return null;
         String t = s.trim();
         return t.isEmpty() ? null : t;
+    }
+
+    /** Mask a card UID for audit (last 4 only). */
+    private static String mask(String v) {
+        return v == null || v.length() < 4 ? "(none)" : "***" + v.substring(v.length() - 4);
     }
 }

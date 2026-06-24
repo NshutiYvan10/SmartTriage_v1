@@ -140,6 +140,35 @@ class RfidIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void replaceCard_swapsCard_oldStopsResolving_newResolves_andRejectsAnothersCard() {
+        String s = UUID.randomUUID().toString().substring(0, 6);
+        Hospital a = hospital("G-" + s);
+        String oldCard = "OLD-" + s;
+        String newCard = "NEW-" + s;
+
+        UUID patientId = patientService.registerPatientWithVisit(reg(a.getId(), "Lost", "Card", "nidG" + s, oldCard))
+                .getPatient().getId();
+        IoTDevice reader = rfidReader(a, "G" + s);
+        assertEquals("FOUND", rfidService.tap(reader.getId(), oldCard).getResult());
+
+        // Replace the lost card.
+        rfidService.replaceCardForPatient(patientId, newCard);
+
+        // Old card no longer resolves anywhere; the new card does.
+        assertEquals("NOT_FOUND", rfidService.tap(reader.getId(), oldCard).getResult(),
+                "the lost card must stop resolving immediately");
+        assertEquals("FOUND", rfidService.tap(reader.getId(), newCard).getResult(),
+                "the new card resolves to the same patient");
+
+        // A card already held by ANOTHER patient cannot be stolen via replace.
+        String otherCard = "OTHER-" + s;
+        patientService.registerPatientWithVisit(reg(a.getId(), "Someone", "Else", "nidH" + s, otherCard));
+        assertThrows(IdentityConflictException.class,
+                () -> rfidService.replaceCardForPatient(patientId, otherCard),
+                "replacing with a card assigned to another patient must be rejected");
+    }
+
+    @Test
     void cardOnlyPatient_withNoNationalId_isFoundCrossHospital() {
         String s = UUID.randomUUID().toString().substring(0, 6);
         Hospital a = hospital("E-" + s);

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, User, Calendar, MapPin, Phone, CreditCard,
@@ -7,8 +7,13 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { usePatientStore } from '@/store/patientStore';
+import { useAuthStore } from '@/store/authStore';
 import { patientApi } from '@/api/patients';
+import { ReplaceCardModal } from './ReplaceCardModal';
 import type { Patient } from '@/types';
+import type { UserRole } from '@/types/roles';
+
+const CARD_ADMIN_ROLES: UserRole[] = ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR'];
 
 /* ─── Reusable info row ─── */
 const InfoRow = ({ label, value }: { label: string; value?: string | number | null }) => (
@@ -58,6 +63,12 @@ export function PatientDetailView() {
   const patient: (Patient & Record<string, any>) | undefined =
     usePatientStore((s) => s.getPatient(patientId || ''));
   const updatePatient = usePatientStore((s) => s.updatePatient);
+  const role = useAuthStore((s) => s.user?.role);
+  const [showReplaceCard, setShowReplaceCard] = useState(false);
+  // The replace endpoint is keyed on the real patient id; the visit projection carries it on
+  // `patientId`, otherwise the route param IS the patient id.
+  const realPatientId = (patient as any)?.patientId || patientId || '';
+  const canManageCard = role != null && CARD_ADMIN_ROLES.includes(role);
 
   // Lazy hydrate the full patient record. The bulk list-view fetch
   // (fetchActiveVisits) skips per-patient detail to avoid the N+1
@@ -97,7 +108,8 @@ export function PatientDetailView() {
           chronicConditions: p.chronicConditions || undefined,
           medicalRecordNumber: p.medicalRecordNumber || undefined,
           dateOfBirth: p.dateOfBirth || undefined,
-        } as Partial<Patient>);
+          rfidCardId: p.rfidCardId || undefined,
+        } as Partial<Patient> & { rfidCardId?: string });
       })
       .catch(() => { /* best-effort; placeholder fields persist */ });
     return () => { cancelled = true; };
@@ -246,6 +258,24 @@ export function PatientDetailView() {
             <InfoRow label="Age" value={`${patient.age} years`} />
             <InfoRow label="Gender" value={patient.gender === 'MALE' ? 'Male' : patient.gender === 'FEMALE' ? 'Female' : '—'} />
             <InfoRow label="National ID" value={patient.nationalId} />
+            {/* RFID card (V95) — system-wide identifier on the shared identity. Registration-desk
+                roles can replace it (lost/damaged-card workflow). */}
+            {(patient.rfidCardId || canManageCard) && (
+              <div className="flex items-center justify-between py-2.5 border-b border-gray-100 last:border-0">
+                <span className="text-xs font-medium text-slate-400">RFID Card</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-slate-700">{patient.rfidCardId || '—'}</span>
+                  {canManageCard && realPatientId && (
+                    <button
+                      onClick={() => setShowReplaceCard(true)}
+                      className="text-[11px] font-bold text-teal-700 hover:text-teal-900 px-2 py-0.5 rounded-md hover:bg-teal-50 transition-colors"
+                    >
+                      {patient.rfidCardId ? 'Replace' : 'Assign'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             <InfoRow label="Medical Record No." value={patient.medicalRecordNumber} />
             <InfoRow label="Patient Type" value={patient.isPediatric || (typeof patient.age === 'number' && patient.age < 18) ? 'Pediatric' : 'Adult'} />
             <InfoRow label="Blood Type" value={patient.bloodType} />
@@ -348,6 +378,19 @@ export function PatientDetailView() {
           </SectionCard>
         </div>
       </div>
+
+      {showReplaceCard && realPatientId && (
+        <ReplaceCardModal
+          patientId={realPatientId}
+          patientName={patient.fullName}
+          currentCardId={(patient as any).rfidCardId}
+          onClose={() => setShowReplaceCard(false)}
+          onReplaced={(newCard) => {
+            updatePatient(patient.id, { rfidCardId: newCard } as Partial<Patient> & { rfidCardId?: string });
+            setShowReplaceCard(false);
+          }}
+        />
+      )}
     </div>
   );
 }
