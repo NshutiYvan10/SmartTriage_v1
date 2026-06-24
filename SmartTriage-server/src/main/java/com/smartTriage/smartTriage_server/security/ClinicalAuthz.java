@@ -22,6 +22,7 @@ import com.smartTriage.smartTriage_server.module.pathway.repository.PathwayActiv
 import com.smartTriage.smartTriage_server.module.referral.repository.ReferralRepository;
 import com.smartTriage.smartTriage_server.module.reporting.repository.MohReportRepository;
 import com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository;
+import com.smartTriage.smartTriage_server.module.medsafety.repository.MedicationSafetyCheckRepository;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
@@ -118,6 +119,7 @@ public class ClinicalAuthz {
     private final InformedConsentRepository informedConsentRepository;
     private final ReferralRepository referralRepository;
     private final MohReportRepository mohReportRepository;
+    private final MedicationSafetyCheckRepository medicationSafetyCheckRepository;
 
     /**
      * @return true if the authenticated user is attached to {@code hospitalId}.
@@ -772,6 +774,23 @@ public class ClinicalAuthz {
                     .orElse(false);
         } catch (Exception e) {
             log.error("canAccessSepsisScreening error for screening {}: {}", screeningId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** Scopes the medication-safety OVERRIDE endpoint to the check's own hospital, so a doctor
+     *  at hospital B cannot clear a safety block (allergy / interaction / dose) belonging to
+     *  hospital A's patient by enumerating a checkId. Resolves checkId → visit → hospital and
+     *  reuses {@link #canAccessVisit}; denies an unknown/inactive check (no existence leak). */
+    @Transactional(readOnly = true)
+    public boolean canAccessMedicationSafetyCheck(Authentication authentication, UUID checkId) {
+        try {
+            if (checkId == null) return false;
+            return medicationSafetyCheckRepository.findVisitIdById(checkId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessMedicationSafetyCheck error for check {}: {}", checkId, e.getMessage(), e);
             return false;
         }
     }

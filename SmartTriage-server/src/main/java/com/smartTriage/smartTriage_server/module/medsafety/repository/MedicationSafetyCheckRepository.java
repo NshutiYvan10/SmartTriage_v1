@@ -4,6 +4,8 @@ import com.smartTriage.smartTriage_server.module.medsafety.entity.MedicationSafe
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -25,4 +27,8 @@ public interface MedicationSafetyCheckRepository extends JpaRepository<Medicatio
 
     List<MedicationSafetyCheck> findByVisitIdAndOverallSafeFalseAndOverriddenByIsNullAndIsActiveTrue(
             UUID visitId);
+
+    /** Resolve a safety check's visit id — used by ClinicalAuthz to hospital-scope the override endpoint. */
+    @Query("SELECT c.visit.id FROM MedicationSafetyCheck c WHERE c.id = :id AND c.isActive = true")
+    Optional<UUID> findVisitIdById(@Param("id") UUID id);
 }

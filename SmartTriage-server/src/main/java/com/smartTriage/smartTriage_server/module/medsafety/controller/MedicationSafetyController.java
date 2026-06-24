@@ -54,7 +54,8 @@ public class MedicationSafetyController {
     // ====================================================================
 
     @PutMapping("/{checkId}/override")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessMedicationSafetyCheck(authentication, #checkId)")
     public ResponseEntity<ApiResponse<MedicationSafetyCheckResponse>> overrideSafetyCheck(
             @PathVariable UUID checkId,
             @Valid @RequestBody OverrideSafetyCheckRequest request) {

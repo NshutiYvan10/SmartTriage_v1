@@ -53,6 +53,7 @@ class ClinicalAuthzTest {
     private com.smartTriage.smartTriage_server.module.consent.repository.InformedConsentRepository informedConsentRepository;
     private com.smartTriage.smartTriage_server.module.referral.repository.ReferralRepository referralRepository;
     private com.smartTriage.smartTriage_server.module.reporting.repository.MohReportRepository mohReportRepository;
+    private com.smartTriage.smartTriage_server.module.medsafety.repository.MedicationSafetyCheckRepository medicationSafetyCheckRepository;
     private HandoverReportRepository handoverReportRepository;
     private ClinicalAuthz authz;
 
@@ -84,6 +85,8 @@ class ClinicalAuthzTest {
                 mock(com.smartTriage.smartTriage_server.module.referral.repository.ReferralRepository.class);
         mohReportRepository =
                 mock(com.smartTriage.smartTriage_server.module.reporting.repository.MohReportRepository.class);
+        medicationSafetyCheckRepository =
+                mock(com.smartTriage.smartTriage_server.module.medsafety.repository.MedicationSafetyCheckRepository.class);
         handoverReportRepository = mock(HandoverReportRepository.class);
         authz = new ClinicalAuthz(
                 userRepository,
@@ -104,7 +107,8 @@ class ClinicalAuthzTest {
                 clinicalDocumentRepository,
                 informedConsentRepository,
                 referralRepository,
-                mohReportRepository);
+                mohReportRepository,
+                medicationSafetyCheckRepository);
     }
 
     @Test
@@ -154,6 +158,43 @@ class ClinicalAuthzTest {
         when(sepsisScreeningRepository.findVisitIdById(missing)).thenReturn(java.util.Optional.empty());
         assertFalse(authz.canAccessSepsisScreening(
                 authFor(user(Role.DOCTOR, null, hospitalId)), missing));
+    }
+
+    // ── canAccessMedicationSafetyCheck (scopes the medication-safety OVERRIDE endpoint) ──
+
+    @Test
+    void canAccessMedicationSafetyCheck_deniesUnknownCheck() {
+        UUID missing = UUID.randomUUID();
+        when(medicationSafetyCheckRepository.findVisitIdById(missing)).thenReturn(Optional.empty());
+        assertFalse(authz.canAccessMedicationSafetyCheck(
+                authFor(user(Role.DOCTOR, null, hospitalId)), missing));
+    }
+
+    @Test
+    void canAccessMedicationSafetyCheck_deniesAnotherHospitalsCheck() {
+        // The check belongs to a visit at ANOTHER hospital — a doctor at `hospitalId`
+        // must not be able to clear that hospital's safety block by enumerating a checkId.
+        UUID checkId = UUID.randomUUID();
+        UUID visitId = UUID.randomUUID();
+        UUID otherHospital = UUID.randomUUID();
+        when(medicationSafetyCheckRepository.findVisitIdById(checkId)).thenReturn(Optional.of(visitId));
+        when(visitRepository.findHospitalIdByVisitId(visitId)).thenReturn(Optional.of(otherHospital));
+        assertFalse(authz.canAccessMedicationSafetyCheck(
+                authFor(user(Role.DOCTOR, null, hospitalId)), checkId));
+    }
+
+    @Test
+    void canAccessMedicationSafetyCheck_allowsOwnHospitalCheck() {
+        UUID checkId = UUID.randomUUID();
+        UUID visitId = UUID.randomUUID();
+        when(medicationSafetyCheckRepository.findVisitIdById(checkId)).thenReturn(Optional.of(visitId));
+        when(visitRepository.findHospitalIdByVisitId(visitId)).thenReturn(Optional.of(hospitalId));
+        assertTrue(authz.canAccessMedicationSafetyCheck(
+                authFor(user(Role.DOCTOR, null, hospitalId)), checkId));
+        // SUPER_ADMIN may override at any hospital.
+        when(visitRepository.findHospitalIdByVisitId(visitId)).thenReturn(Optional.of(UUID.randomUUID()));
+        assertTrue(authz.canAccessMedicationSafetyCheck(
+                authFor(user(Role.SUPER_ADMIN, null, null)), checkId));
     }
 
     // ── canAccessDocument (clinical document GET-by-id, #3 cross-hospital fix) ──
