@@ -274,12 +274,10 @@ export function SepsisDashboard() {
               <button
                 key={key}
                 onClick={() => setFilter(key)}
-                className={`px-4 py-2 text-[11px] font-bold rounded-lg transition-all ${
+                className={`px-4 py-2 text-[11px] font-bold rounded-lg transition-all border ${
                   filter === key
-                    ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
-                    : isDark
-                      ? 'text-slate-400 hover:text-white hover:bg-white/5'
-                      : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
+                    ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                    : `${text.body} hover:bg-white/5 border-transparent`
                 }`}
               >
                 {label}
@@ -341,7 +339,7 @@ export function SepsisDashboard() {
                               {screening.sepsisStatus.replace(/_/g, ' ')}
                             </span>
                             {/* SIRS badge */}
-                            <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${isDark ? 'bg-white/5 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-500/20 ${text.body}`}>
                               SIRS: {screening.sirsScore}/4
                             </span>
                             {/* Bundle progress */}
@@ -377,13 +375,13 @@ export function SepsisDashboard() {
 
                           {/* qSOFA criteria */}
                           <div className="flex items-center gap-3 mt-2">
-                            <span className={`text-[10px] px-2 py-0.5 rounded ${screening.alteredMentation ? 'bg-red-500/10 text-red-400' : isDark ? 'bg-white/5 text-slate-500' : 'bg-slate-100 text-slate-400'}`}>
+                            <span className={`text-[10px] px-2 py-0.5 rounded ${screening.alteredMentation ? 'bg-red-500/10 text-red-400' : `bg-slate-500/10 ${text.muted}`}`}>
                               {screening.alteredMentation ? '\u2713' : '\u2717'} Altered Mentation
                             </span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded ${screening.respiratoryRateHigh ? 'bg-red-500/10 text-red-400' : isDark ? 'bg-white/5 text-slate-500' : 'bg-slate-100 text-slate-400'}`}>
+                            <span className={`text-[10px] px-2 py-0.5 rounded ${screening.respiratoryRateHigh ? 'bg-red-500/10 text-red-400' : `bg-slate-500/10 ${text.muted}`}`}>
                               {screening.respiratoryRateHigh ? '\u2713' : '\u2717'} RR &ge; 22
                             </span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded ${screening.systolicBpLow ? 'bg-red-500/10 text-red-400' : isDark ? 'bg-white/5 text-slate-500' : 'bg-slate-100 text-slate-400'}`}>
+                            <span className={`text-[10px] px-2 py-0.5 rounded ${screening.systolicBpLow ? 'bg-red-500/10 text-red-400' : `bg-slate-500/10 ${text.muted}`}`}>
                               {screening.systolicBpLow ? '\u2713' : '\u2717'} SBP &le; 100
                             </span>
                           </div>
@@ -460,9 +458,7 @@ export function SepsisDashboard() {
                               className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-[11px] font-bold transition-all ${
                                 done
                                   ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                  : isDark
-                                    ? 'bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10'
-                                    : 'bg-slate-50 text-slate-500 border border-slate-200/50 hover:bg-slate-100'
+                                  : `bg-white/5 ${text.body} border border-white/5 hover:bg-white/10`
                               } ${screening.bundleCompletedAt ? 'cursor-default' : 'cursor-pointer'}`}
                             >
                               {isUpdating ? (

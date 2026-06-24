@@ -153,7 +153,7 @@ export function IsolationPanel({ visitId, onChanged }: IsolationPanelProps) {
   const Check = ({ k, label }: { k: keyof ScreenInfectionRequest; label: string }) => (
     <label className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-all text-[11px] font-medium ${
       form[k] ? 'bg-red-500/10 border-red-500/40 text-red-500'
-        : isDark ? 'border-white/10 text-slate-300 hover:bg-white/5' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+        : `border-transparent hover:bg-white/5 ${text.body}`}`} style={form[k] ? undefined : glassInner}>
       <input type="checkbox" className="accent-red-500" checked={!!form[k]} onChange={(e) => set(k, e.target.checked as never)} />
       {label}
     </label>
@@ -176,7 +176,7 @@ export function IsolationPanel({ visitId, onChanged }: IsolationPanelProps) {
           <div className="flex items-center gap-2">
             {screenings.length > 0 && (
               <button onClick={load} disabled={loading} title="Refresh"
-                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${isDark ? 'bg-white/5 hover:bg-white/10' : 'bg-slate-100 hover:bg-slate-200'}`}>
+                className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors hover:bg-white/5" style={glassInner}>
                 <RefreshCw className={`w-4 h-4 ${text.muted} ${loading ? 'animate-spin' : ''}`} />
               </button>
             )}
@@ -215,17 +215,17 @@ export function IsolationPanel({ visitId, onChanged }: IsolationPanelProps) {
               {form.hasCough && (
                 <input type="number" min="0" max="104" placeholder="Cough weeks" value={form.hasCoughDurationWeeks ?? ''}
                   onChange={(e) => set('hasCoughDurationWeeks', e.target.value ? parseInt(e.target.value) : undefined)}
-                  className="px-3 py-2 rounded-xl text-sm outline-none" style={glassInner} />
+                  className={`px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner} />
               )}
               {form.hasRecentTravel && (
                 <input type="text" placeholder="Travel location" value={form.recentTravelLocation ?? ''}
                   onChange={(e) => set('recentTravelLocation', e.target.value || undefined)}
-                  className="px-3 py-2 rounded-xl text-sm outline-none" style={glassInner} />
+                  className={`px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner} />
               )}
               {form.hasContactWithInfectious && (
                 <input type="text" placeholder="Contact details" value={form.contactDetails ?? ''}
                   onChange={(e) => set('contactDetails', e.target.value || undefined)}
-                  className="px-3 py-2 rounded-xl text-sm outline-none" style={glassInner} />
+                  className={`px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner} />
               )}
             </div>
             <div className="flex items-center gap-2 mt-3">
@@ -234,7 +234,7 @@ export function IsolationPanel({ visitId, onChanged }: IsolationPanelProps) {
                 {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldAlert className="w-3.5 h-3.5" />} Screen
               </button>
               <button onClick={() => setShowForm(false)}
-                className={`px-4 py-2 text-[11px] font-bold rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-white/5' : 'text-slate-500 hover:bg-slate-100'}`}>Cancel</button>
+                className={`px-4 py-2 text-[11px] font-bold rounded-xl transition-colors hover:bg-white/5 ${text.muted}`}>Cancel</button>
             </div>
           </div>
         )}
@@ -317,19 +317,19 @@ export function IsolationPanel({ visitId, onChanged }: IsolationPanelProps) {
                   </div>
                   {roomFor === s.id && (
                     <div className="flex items-center gap-2 mt-2">
-                      <input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="Isolation room / bed no." className="w-48 px-3 py-2 rounded-xl text-sm outline-none" style={glassInner} />
+                      <input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="Isolation room / bed no." className={`w-48 px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner} />
                       <button onClick={() => submitRoom(s.id)} disabled={!room.trim() || busy} className="px-4 py-2 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 disabled:opacity-50">Save</button>
                     </div>
                   )}
                   {notifyFor === s.id && (
                     <div className="flex items-center gap-2 mt-2">
-                      <input value={notifyRef} onChange={(e) => setNotifyRef(e.target.value)} placeholder="RBC reference (optional)" className="w-56 px-3 py-2 rounded-xl text-sm outline-none" style={glassInner} />
+                      <input value={notifyRef} onChange={(e) => setNotifyRef(e.target.value)} placeholder="RBC reference (optional)" className={`w-56 px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner} />
                       <button onClick={() => submitNotify(s.id)} disabled={busy} className="px-4 py-2 text-[11px] font-bold rounded-xl bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 disabled:opacity-50">Record</button>
                     </div>
                   )}
                   {endFor === s.id && (
                     <div className="flex items-center gap-2 mt-2">
-                      <input value={endReason} onChange={(e) => setEndReason(e.target.value)} placeholder="Clearance reason (required)" className="w-72 px-3 py-2 rounded-xl text-sm outline-none" style={glassInner} />
+                      <input value={endReason} onChange={(e) => setEndReason(e.target.value)} placeholder="Clearance reason (required)" className={`w-72 px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner} />
                       <button onClick={() => submitEnd(s.id)} disabled={!endReason.trim() || busy} className="px-4 py-2 text-[11px] font-bold rounded-xl bg-slate-500/10 text-slate-300 hover:bg-slate-500/20 disabled:opacity-50">Clear</button>
                     </div>
                   )}

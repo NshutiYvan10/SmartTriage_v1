@@ -29,9 +29,9 @@ const URGENCIES: ReferralUrgency[] = ['ROUTINE', 'URGENT', 'EMERGENT'];
 const label = (s: string) => s.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 
 const STATUS_COLOR: Record<string, string> = {
-  GIVEN: 'text-emerald-600', REFUSED: 'text-rose-600', WITHDRAWN: 'text-slate-500',
-  REQUESTED: 'text-amber-600', ACCEPTED: 'text-emerald-600', DECLINED: 'text-rose-600',
-  COMPLETED: 'text-blue-600', CANCELLED: 'text-slate-500',
+  GIVEN: 'text-emerald-400', REFUSED: 'text-rose-400', WITHDRAWN: 'text-slate-400',
+  REQUESTED: 'text-amber-400', ACCEPTED: 'text-emerald-400', DECLINED: 'text-rose-400',
+  COMPLETED: 'text-blue-400', CANCELLED: 'text-slate-400',
 };
 
 export function ConsentReferralView() {
@@ -141,12 +141,12 @@ export function ConsentReferralView() {
     <div className="min-h-full">
       <div className="p-4 lg:p-6 max-w-5xl mx-auto space-y-4 animate-fade-in">
         {/* Header */}
-        <div className="rounded-3xl overflow-hidden" style={glassCard}>
-          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center gap-4">
-            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center"><ShieldCheck className="w-6 h-6 text-white" /></div>
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center"><ShieldCheck className="w-5 h-5 text-cyan-300" /></div>
             <div>
               <h1 className="text-lg font-bold text-white tracking-wide">Consent &amp; Referrals</h1>
-              <p className="text-white/70 text-xs font-medium">Informed consent and specialty consultation / referral, per visit</p>
+              <p className="text-sm text-white/50 font-medium">Informed consent and specialty consultation / referral, per visit</p>
             </div>
           </div>
         </div>
@@ -155,7 +155,7 @@ export function ConsentReferralView() {
         <div className="rounded-2xl p-4" style={glassCard}>
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Search className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 ${text.muted}`} />
               <input value={visitIdInput} onChange={(e) => setVisitIdInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && setActiveVisitId(visitIdInput.trim())}
                 placeholder="Enter Visit ID..." className={`pl-10 ${input}`} style={glassInner} />
@@ -170,7 +170,7 @@ export function ConsentReferralView() {
         </div>
 
         {error && (
-          <div className="rounded-xl p-3 text-xs font-medium text-rose-600" style={{ ...glassInner, border: '1px solid rgba(244,63,94,0.3)' }}>{error}</div>
+          <div className="rounded-xl p-3 text-xs font-medium text-rose-400" style={{ ...glassInner, border: '1px solid rgba(244,63,94,0.3)' }}>{error}</div>
         )}
 
         {!activeVisitId ? (
@@ -184,9 +184,9 @@ export function ConsentReferralView() {
             <div className="flex gap-2">
               {([['consent', 'Consent', FileSignature], ['referral', 'Referrals', Stethoscope]] as const).map(([id, lbl, Icon]) => (
                 <button key={id} onClick={() => setTab(id)}
-                  className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl transition-all ${tab === id ? 'bg-gradient-to-r from-cyan-600 to-cyan-500 text-white' : isDark ? 'text-slate-400 hover:bg-white/5' : 'text-slate-500 hover:bg-white/60'}`}>
+                  className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl border transition-all ${tab === id ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : `${text.body} hover:bg-white/5 border-transparent`}`}>
                   <Icon className="w-3.5 h-3.5" /> {lbl}
-                  <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-md bg-black/10">{id === 'consent' ? consents.length : referrals.length}</span>
+                  <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/10">{id === 'consent' ? consents.length : referrals.length}</span>
                 </button>
               ))}
             </div>
@@ -250,10 +250,10 @@ export function ConsentReferralView() {
                         </div>
                         <p className={`text-sm font-bold mt-1 ${text.heading}`}>{c.procedureName}</p>
                         <p className={`text-[11px] ${text.muted}`}>{label(c.consentGrantor)}{c.grantorName ? ` — ${c.grantorName}` : ''} · obtained by {c.obtainedByName}{c.obtainedByRole ? ` (${label(c.obtainedByRole)})` : ''} · {c.obtainedAt ? format(new Date(c.obtainedAt), 'MMM d HH:mm') : ''}</p>
-                        {c.status === 'WITHDRAWN' && c.withdrawalReason && <p className="text-[11px] text-slate-500 mt-1">Withdrawn: {c.withdrawalReason}</p>}
+                        {c.status === 'WITHDRAWN' && c.withdrawalReason && <p className={`text-[11px] mt-1 ${text.muted}`}>Withdrawn: {c.withdrawalReason}</p>}
                       </div>
                       {c.status === 'GIVEN' && (
-                        <button onClick={() => withdrawConsent(c.id)} disabled={busy} className="text-[11px] font-bold text-rose-600 px-3 py-1.5 rounded-lg hover:bg-rose-500/10">Withdraw</button>
+                        <button onClick={() => withdrawConsent(c.id)} disabled={busy} className="text-[11px] font-bold text-rose-400 px-3 py-1.5 rounded-lg hover:bg-rose-500/10">Withdraw</button>
                       )}
                     </div>
                   </div>
@@ -306,7 +306,7 @@ export function ConsentReferralView() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md" style={glassInner}>{label(r.referralType)}</span>
                           <span className={`text-[10px] font-bold uppercase ${STATUS_COLOR[r.status]}`}>{label(r.status)}</span>
-                          <span className="text-[10px] font-bold uppercase text-amber-600">{label(r.urgency)}</span>
+                          <span className="text-[10px] font-bold uppercase text-amber-400">{label(r.urgency)}</span>
                         </div>
                         <p className={`text-sm font-bold mt-1 ${text.heading}`}>{r.specialty}</p>
                         <p className={`text-[11px] ${text.body}`}>{r.reasonForReferral}</p>
@@ -318,9 +318,9 @@ export function ConsentReferralView() {
                       </div>
                       {(r.status === 'REQUESTED' || r.status === 'ACCEPTED') && (
                         <div className="flex flex-col gap-1 flex-shrink-0">
-                          <button onClick={() => respondReferral(r.id, 'ACCEPTED')} disabled={busy} className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 px-2.5 py-1 rounded-lg hover:bg-emerald-500/10"><CheckCircle className="w-3 h-3" /> Accept/Reply</button>
-                          <button onClick={() => respondReferral(r.id, 'DECLINED')} disabled={busy} className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 px-2.5 py-1 rounded-lg hover:bg-rose-500/10"><XCircle className="w-3 h-3" /> Decline</button>
-                          <button onClick={() => respondReferral(r.id, 'COMPLETED')} disabled={busy} className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 px-2.5 py-1 rounded-lg hover:bg-blue-500/10"><Clock className="w-3 h-3" /> Complete</button>
+                          <button onClick={() => respondReferral(r.id, 'ACCEPTED')} disabled={busy} className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 px-2.5 py-1 rounded-lg hover:bg-emerald-500/10"><CheckCircle className="w-3 h-3" /> Accept/Reply</button>
+                          <button onClick={() => respondReferral(r.id, 'DECLINED')} disabled={busy} className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-400 px-2.5 py-1 rounded-lg hover:bg-rose-500/10"><XCircle className="w-3 h-3" /> Decline</button>
+                          <button onClick={() => respondReferral(r.id, 'COMPLETED')} disabled={busy} className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-400 px-2.5 py-1 rounded-lg hover:bg-blue-500/10"><Clock className="w-3 h-3" /> Complete</button>
                           <button onClick={() => cancelReferral(r.id)} disabled={busy} className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg ${text.muted} hover:bg-white/10`}><X className="w-3 h-3" /> Cancel</button>
                         </div>
                       )}

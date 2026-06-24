@@ -326,19 +326,19 @@ export function ClinicalPathwaysView() {
 
   return (
     <div className="min-h-full">
-      <div className="p-4 lg:p-6 max-w-6xl mx-auto space-y-4 animate-fade-in">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
 
         {/* ── Header Banner ── */}
         <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
-          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg">
-                  <Route className="w-6 h-6 text-white" />
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center gap-3">
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                  <Route className="w-5 h-5 text-cyan-300" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-white tracking-wide">Clinical Pathways</h1>
-                  <p className="text-white/70 text-xs font-medium">Evidence-based care protocols & step-by-step guidance</p>
+                  <h1 className="text-lg font-bold text-white">Clinical Pathways</h1>
+                  <p className="text-sm text-white/50">Evidence-based care protocols & step-by-step guidance</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -370,10 +370,10 @@ export function ClinicalPathwaysView() {
                   <button
                     key={tab.key}
                     onClick={() => setMainView(tab.key)}
-                    className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-bold rounded-lg transition-all ${
+                    className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-bold rounded-lg transition-all border ${
                       mainView === tab.key
-                        ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
-                        : isDark ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
+                        ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                        : `${text.body} hover:bg-white/5 border-transparent`
                     }`}
                   >
                     <Icon className="w-3.5 h-3.5" />
@@ -390,9 +390,7 @@ export function ClinicalPathwaysView() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search pathways by name, category, or code..."
-                  className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all ${
-                    isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                  }`}
+                  className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all placeholder-slate-400 ${text.body}`}
                   style={glassInner}
                 />
               </div>
@@ -407,9 +405,7 @@ export function ClinicalPathwaysView() {
                     onChange={(e) => setActiveVisitIdInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && loadActivePathways(activeVisitIdInput)}
                     placeholder="Enter Visit ID to view active pathways..."
-                    className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all ${
-                      isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                    }`}
+                    className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all placeholder-slate-400 ${text.body}`}
                     style={glassInner}
                   />
                 </div>
@@ -930,12 +926,16 @@ export function ClinicalPathwaysView() {
          Activate Pathway Dialog
          ═══════════════════════════════════════════════════════════════ */}
       {activateDialogOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+          style={{ background: 'rgba(2,11,20,0.55)' }}
+          onClick={() => !activateSubmitting && setActivateDialogOpen(false)}
+        >
           <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => !activateSubmitting && setActivateDialogOpen(false)}
-          />
-          <div className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in" style={glassCard}>
+            className="relative w-full max-w-md rounded-2xl overflow-hidden p-6 shadow-2xl animate-scale-in"
+            style={glassCard}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-cyan-500/10">
@@ -998,12 +998,16 @@ export function ClinicalPathwaysView() {
          Skip Step Dialog
          ═══════════════════════════════════════════════════════════════ */}
       {skipDialogOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+          style={{ background: 'rgba(2,11,20,0.55)' }}
+          onClick={() => !skipSubmitting && setSkipDialogOpen(false)}
+        >
           <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => !skipSubmitting && setSkipDialogOpen(false)}
-          />
-          <div className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in" style={glassCard}>
+            className="relative w-full max-w-md rounded-2xl overflow-hidden p-6 shadow-2xl animate-scale-in"
+            style={glassCard}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-amber-500/10">
@@ -1066,12 +1070,16 @@ export function ClinicalPathwaysView() {
          Abandon Pathway Dialog
          ═══════════════════════════════════════════════════════════════ */}
       {abandonDialogOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+          style={{ background: 'rgba(2,11,20,0.55)' }}
+          onClick={() => !abandonSubmitting && setAbandonDialogOpen(false)}
+        >
           <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => !abandonSubmitting && setAbandonDialogOpen(false)}
-          />
-          <div className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in" style={glassCard}>
+            className="relative w-full max-w-md rounded-2xl overflow-hidden p-6 shadow-2xl animate-scale-in"
+            style={glassCard}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10">

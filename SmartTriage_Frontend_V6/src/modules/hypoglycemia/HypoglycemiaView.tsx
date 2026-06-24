@@ -50,7 +50,8 @@ function getGlucoseSeverity(level: number | null | undefined): { color: string; 
 type WorkflowStep = 'treat' | 'repeat-glucose' | 'resolve';
 
 export function HypoglycemiaView() {
-  const { glassCard, isDark, text } = useTheme();
+  const { glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
 
@@ -187,8 +188,8 @@ export function HypoglycemiaView() {
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                  <Droplets className="w-5 h-5 text-purple-400" />
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                  <Droplets className="w-5 h-5 text-cyan-300" />
                 </div>
                 <div>
                   <h1 className="text-lg font-bold text-white tracking-wide">Hypoglycemia Management</h1>
@@ -371,7 +372,7 @@ export function HypoglycemiaView() {
                   {isActive && workflowStep === 'treat' && (
                     <div
                       className="px-4 pb-4 pt-2"
-                      style={{ borderTop: isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)' }}
+                      style={{ borderTop: borderStyle }}
                     >
                       <p className={`text-xs font-bold mb-3 ${text.heading}`}>Select Treatment</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -379,12 +380,11 @@ export function HypoglycemiaView() {
                           <button
                             key={opt}
                             onClick={() => setSelectedTreatment(opt)}
+                            style={selectedTreatment === opt ? undefined : glassInner}
                             className={`px-4 py-2.5 text-xs font-medium rounded-xl border transition-all text-left ${
                               selectedTreatment === opt
                                 ? 'bg-purple-500/15 border-purple-500/40 text-purple-400'
-                                : isDark
-                                  ? 'border-white/10 text-slate-300 hover:border-purple-500/30 hover:bg-purple-500/5'
-                                  : 'border-slate-200 text-slate-600 hover:border-purple-400/30 hover:bg-purple-50'
+                                : `${text.body} hover:border-purple-500/30 hover:bg-purple-500/5`
                             }`}
                           >
                             <Syringe className="w-3.5 h-3.5 inline mr-2" />
@@ -407,9 +407,7 @@ export function HypoglycemiaView() {
                         </button>
                         <button
                           onClick={closeWorkflow}
-                          className={`px-4 py-2 text-[11px] font-bold rounded-xl transition-colors ${
-                            isDark ? 'text-slate-400 hover:bg-white/5' : 'text-slate-500 hover:bg-slate-100'
-                          }`}
+                          className={`px-4 py-2 text-[11px] font-bold rounded-xl transition-colors ${text.body} hover:bg-white/5`}
                         >
                           Cancel
                         </button>
@@ -420,7 +418,7 @@ export function HypoglycemiaView() {
                   {isActive && workflowStep === 'repeat-glucose' && (
                     <div
                       className="px-4 pb-4 pt-2"
-                      style={{ borderTop: isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)' }}
+                      style={{ borderTop: borderStyle }}
                     >
                       <p className={`text-xs font-bold mb-3 ${text.heading}`}>Record Repeat Glucose Level</p>
                       <div className="flex items-center gap-3 flex-wrap">
@@ -432,14 +430,11 @@ export function HypoglycemiaView() {
                           value={repeatGlucose}
                           onChange={(e) => setRepeatGlucose(e.target.value)}
                           placeholder={repeatUnit === 'MG_DL' ? 'e.g. 75' : 'e.g. 4.2'}
-                          className={`w-28 px-3 py-2 text-sm rounded-xl border outline-none transition-colors ${
-                            isDark
-                              ? 'bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-cyan-500/40'
-                              : 'bg-white border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-cyan-500'
-                          }`}
+                          style={glassInner}
+                          className={`w-28 px-3 py-2 text-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/20 placeholder:text-slate-400 ${text.heading}`}
                         />
                         {/* Unit toggle — a mg/dL glucometer reading is converted server-side */}
-                        <div className={`inline-flex rounded-xl p-0.5 ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
+                        <div className="inline-flex rounded-xl p-0.5" style={glassInner}>
                           {(['MMOL_L', 'MG_DL'] as const).map((u) => (
                             <button
                               key={u}
@@ -448,7 +443,7 @@ export function HypoglycemiaView() {
                               className={`px-2.5 py-1.5 text-[10px] font-bold rounded-lg transition-colors ${
                                 repeatUnit === u
                                   ? 'bg-cyan-500/20 text-cyan-500'
-                                  : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'
+                                  : `${text.body} hover:text-cyan-400`
                               }`}
                             >
                               {u === 'MMOL_L' ? 'mmol/L' : 'mg/dL'}
@@ -469,9 +464,7 @@ export function HypoglycemiaView() {
                         </button>
                         <button
                           onClick={closeWorkflow}
-                          className={`px-4 py-2 text-[11px] font-bold rounded-xl transition-colors ${
-                            isDark ? 'text-slate-400 hover:bg-white/5' : 'text-slate-500 hover:bg-slate-100'
-                          }`}
+                          className={`px-4 py-2 text-[11px] font-bold rounded-xl transition-colors ${text.body} hover:bg-white/5`}
                         >
                           Cancel
                         </button>

@@ -262,7 +262,7 @@ export function SepsisPanel({ visitId, latestVitals, onScreened }: SepsisPanelPr
               title={noVitals ? 'Record vitals first — screening needs at least one set of vitals on file.' : 'Run a sepsis screening now'}
               className={`inline-flex items-center gap-2 px-5 py-2.5 text-[11px] font-bold rounded-xl shadow-md transition-all ${
                 noVitals
-                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  ? 'bg-white/5 text-slate-400 cursor-not-allowed'
                   : 'bg-gradient-to-r from-orange-500 to-red-500 text-white hover:-translate-y-0.5'
               }`}
             >
@@ -301,8 +301,8 @@ export function SepsisPanel({ visitId, latestVitals, onScreened }: SepsisPanelPr
                   value={labs.lactate}
                   onChange={(e) => setLabs((l) => ({ ...l, lactate: e.target.value }))}
                   placeholder="e.g. 2.4"
-                  className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                  style={glassCard}
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+                  style={glassInner}
                 />
                 <p className={`text-[9px] mt-1 ${text.muted}`}>&gt; 2.0 mmol/L escalates to severe sepsis</p>
               </div>
@@ -313,8 +313,8 @@ export function SepsisPanel({ visitId, latestVitals, onScreened }: SepsisPanelPr
                   value={labs.wbc}
                   onChange={(e) => setLabs((l) => ({ ...l, wbc: e.target.value }))}
                   placeholder="e.g. 14500"
-                  className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                  style={glassCard}
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+                  style={glassInner}
                 />
                 <p className={`text-[9px] mt-1 ${text.muted}`}>Absolute count — &gt;12000 or &lt;4000 meets the SIRS criterion</p>
               </div>
@@ -325,8 +325,8 @@ export function SepsisPanel({ visitId, latestVitals, onScreened }: SepsisPanelPr
                   value={labs.infectionSource}
                   onChange={(e) => setLabs((l) => ({ ...l, infectionSource: e.target.value }))}
                   placeholder="e.g. pneumonia, urinary, intra-abdominal, skin/soft-tissue…"
-                  className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                  style={glassCard}
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+                  style={glassInner}
                 />
                 <p className={`text-[9px] mt-1 ${text.muted}`}>With SIRS ≥ 2, a named source escalates to sepsis-suspected</p>
               </div>
@@ -337,8 +337,8 @@ export function SepsisPanel({ visitId, latestVitals, onScreened }: SepsisPanelPr
                   value={labs.notes}
                   onChange={(e) => setLabs((l) => ({ ...l, notes: e.target.value }))}
                   placeholder="Optional context for this screening"
-                  className="w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none"
-                  style={glassCard}
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+                  style={glassInner}
                 />
               </div>
             </div>

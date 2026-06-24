@@ -45,7 +45,8 @@ const vitalLabels: Record<string, string> = {
 };
 
 export function DynamicRetriage() {
-  const { glassCard, glassInner, isDark } = useTheme();
+  const { glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const patients = usePatientStore((s) => s.patients);
   const updatePatient = usePatientStore((s) => s.updatePatient);
   const addOverride = usePatientStore((s) => s.addOverride);
@@ -156,16 +157,16 @@ export function DynamicRetriage() {
       <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
 
         {/* ── Dark Header Banner ── */}
-        <div className="glass-card-dark rounded-3xl overflow-hidden animate-fade-up">
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-violet-500/30 to-indigo-500/30 rounded-2xl flex items-center justify-center shadow-lg border border-violet-400/20">
-                  <Brain className="w-6 h-6 text-violet-300" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                  <Brain className="w-5 h-5 text-cyan-300" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-white tracking-wide">Dynamic Re-Triage AI Engine</h1>
-                  <p className="text-white/70 text-xs font-medium">Real-time AI analysis with 7-vital composite scoring & bi-directional recommendations</p>
+                  <h1 className="text-lg font-bold text-white">Dynamic Re-Triage AI Engine</h1>
+                  <p className="text-sm text-white/50">Real-time AI analysis with 7-vital composite scoring & bi-directional recommendations</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -203,8 +204,8 @@ export function DynamicRetriage() {
                     <Icon className={`w-5 h-5 ${stat.color}`} />
                   </div>
                   <div>
-                    <p className="text-lg font-extrabold text-slate-800">{stat.value}</p>
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{stat.label}</p>
+                    <p className={`text-lg font-extrabold ${text.heading}`}>{stat.value}</p>
+                    <p className={`text-[10px] font-semibold ${text.muted} uppercase tracking-wider`}>{stat.label}</p>
                   </div>
                 </div>
               </div>
@@ -216,18 +217,14 @@ export function DynamicRetriage() {
         <div className="rounded-2xl p-4 animate-fade-up" style={{ ...glassCard, animationDelay: '0.12s' } as any}>
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Search className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 ${text.muted}`} />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search patients by name or ID..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-all duration-300"
-                style={{
-                  background: isDark ? 'rgba(12,74,110,0.18)' : 'rgba(255,255,255,0.7)',
-                  border: isDark ? '1px solid rgba(2,132,199,0.22)' : '1px solid rgba(203,213,225,0.5)',
-                  boxShadow: isDark ? '0 1px 4px rgba(0,0,0,0.2)' : '0 1px 4px rgba(0,0,0,0.03), inset 0 1px 0 rgba(255,255,255,0.8)',
-                }}
+                className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm ${text.body} placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300`}
+                style={glassInner}
               />
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -235,9 +232,9 @@ export function DynamicRetriage() {
                 <button
                   key={cat}
                   onClick={() => setFilterCategory(cat)}
-                  className={`px-3 py-2 text-[11px] font-bold rounded-lg transition-all duration-300 ${filterCategory === cat
-                    ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
-                    : 'text-slate-500 hover:bg-white/60'
+                  className={`px-3 py-2 text-[11px] font-bold rounded-lg transition-all duration-300 border ${filterCategory === cat
+                    ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                    : `${text.body} hover:bg-white/5 border-transparent`
                   }`}
                 >
                   {cat}
@@ -256,16 +253,16 @@ export function DynamicRetriage() {
               <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'rgba(99,102,241,0.12)' }}>
                 <Activity className="w-3.5 h-3.5 text-indigo-500" />
               </div>
-              <h3 className="text-sm font-extrabold text-slate-800">Patient Risk Assessment</h3>
-              <span className="text-[10px] text-slate-400 font-medium ml-auto">{filteredAnalyses.length} patients</span>
+              <h3 className={`text-sm font-extrabold ${text.heading}`}>Patient Risk Assessment</h3>
+              <span className={`text-[10px] ${text.muted} font-medium ml-auto`}>{filteredAnalyses.length} patients</span>
             </div>
 
             <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1 scrollbar-thin">
               {filteredAnalyses.length === 0 ? (
                 <div className="rounded-2xl p-8 text-center" style={glassCard}>
-                  <Users className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                  <p className="text-sm font-bold text-slate-600">No triaged patients found</p>
-                  <p className="text-xs text-slate-400 mt-1">Register and triage patients to see AI analysis</p>
+                  <Users className={`w-10 h-10 ${text.muted} mx-auto mb-3`} />
+                  <p className={`text-sm font-bold ${text.label}`}>No triaged patients found</p>
+                  <p className={`text-xs ${text.muted} mt-1`}>Register and triage patients to see AI analysis</p>
                 </div>
               ) : (
                 filteredAnalyses.map(({ patient, analysis }, idx) => {
@@ -301,15 +298,15 @@ export function DynamicRetriage() {
                             analysis.compositeRiskScore > 60 ? 'text-red-600' :
                             analysis.compositeRiskScore > 30 ? 'text-amber-600' : 'text-emerald-600'
                           }`}>{analysis.compositeRiskScore}</span>
-                          <span className="text-[8px] font-bold text-slate-400 -mt-0.5">RISK</span>
+                          <span className={`text-[8px] font-bold ${text.muted} -mt-0.5`}>RISK</span>
                         </div>
 
                         {/* Patient Info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <p className="text-[13px] font-bold text-slate-800 truncate">{patient.fullName}</p>
+                            <p className={`text-[13px] font-bold ${text.heading} truncate`}>{patient.fullName}</p>
                             {patient.isPediatric && (
-                              <span className="text-[9px] font-bold bg-pink-100 text-pink-600 px-1.5 py-0.5 rounded-md">PED</span>
+                              <span className="text-[9px] font-bold bg-pink-500/20 text-pink-300 border border-pink-500/30 px-1.5 py-0.5 rounded-md">PED</span>
                             )}
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
@@ -319,7 +316,7 @@ export function DynamicRetriage() {
                             >
                               {patient.category}
                             </span>
-                            <span className="text-[10px] text-slate-400">
+                            <span className={`text-[10px] ${text.muted}`}>
                               Confidence: {Math.round(analysis.confidence * 100)}%
                             </span>
                           </div>
@@ -328,21 +325,21 @@ export function DynamicRetriage() {
                         {/* Direction Badge */}
                         <div className="flex-shrink-0">
                           {isEscalate && (
-                            <div className="flex items-center gap-1 px-2.5 py-1.5 bg-red-50 border border-red-200/60 rounded-lg">
-                              <ArrowUpCircle className="w-3.5 h-3.5 text-red-500" />
-                              <span className="text-[10px] font-bold text-red-600">ESCALATE</span>
+                            <div className="flex items-center gap-1 px-2.5 py-1.5 bg-red-500/20 border border-red-500/30 rounded-lg">
+                              <ArrowUpCircle className="w-3.5 h-3.5 text-red-400" />
+                              <span className="text-[10px] font-bold text-red-300">ESCALATE</span>
                             </div>
                           )}
                           {isDeEscalate && (
-                            <div className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200/60 rounded-lg">
-                              <ArrowDownCircle className="w-3.5 h-3.5 text-emerald-500" />
-                              <span className="text-[10px] font-bold text-emerald-600">DE-ESCALATE</span>
+                            <div className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-500/20 border border-emerald-500/30 rounded-lg">
+                              <ArrowDownCircle className="w-3.5 h-3.5 text-emerald-400" />
+                              <span className="text-[10px] font-bold text-emerald-300">DE-ESCALATE</span>
                             </div>
                           )}
                           {analysis.direction === 'STABLE' && (
-                            <div className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-50 border border-slate-200/60 rounded-lg">
-                              <Minus className="w-3.5 h-3.5 text-slate-400" />
-                              <span className="text-[10px] font-bold text-slate-500">STABLE</span>
+                            <div className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-500/20 border border-slate-500/30 rounded-lg">
+                              <Minus className={`w-3.5 h-3.5 ${text.muted}`} />
+                              <span className={`text-[10px] font-bold ${text.body}`}>STABLE</span>
                             </div>
                           )}
                         </div>
@@ -361,8 +358,8 @@ export function DynamicRetriage() {
                 <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: 'rgba(139,92,246,0.08)' }}>
                   <Brain className="w-8 h-8 text-violet-400" />
                 </div>
-                <p className="text-sm font-bold text-slate-700">Select a Patient</p>
-                <p className="text-xs text-slate-400 mt-1">Choose a patient from the list to see detailed AI re-triage analysis</p>
+                <p className={`text-sm font-bold ${text.label}`}>Select a Patient</p>
+                <p className={`text-xs ${text.muted} mt-1`}>Choose a patient from the list to see detailed AI re-triage analysis</p>
               </div>
             ) : (
               <div className="space-y-3 animate-fade-up" style={{ animationDelay: '0.15s' } as any}>
@@ -372,24 +369,24 @@ export function DynamicRetriage() {
                     <div className="flex items-center gap-3">
                       <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
                         selectedAnalysis.analysis.direction === 'ESCALATE' ? 'bg-red-500/10' :
-                        selectedAnalysis.analysis.direction === 'DE_ESCALATE' ? 'bg-emerald-500/10' : 'bg-slate-100'
+                        selectedAnalysis.analysis.direction === 'DE_ESCALATE' ? 'bg-emerald-500/10' : 'bg-slate-500/10'
                       }`}>
                         {selectedAnalysis.analysis.direction === 'ESCALATE' ? (
                           <ShieldAlert className="w-6 h-6 text-red-500" />
                         ) : selectedAnalysis.analysis.direction === 'DE_ESCALATE' ? (
                           <ShieldCheck className="w-6 h-6 text-emerald-500" />
                         ) : (
-                          <Activity className="w-6 h-6 text-slate-500" />
+                          <Activity className={`w-6 h-6 ${text.muted}`} />
                         )}
                       </div>
                       <div>
-                        <h3 className="text-base font-extrabold text-slate-800">{selectedAnalysis.patient.fullName}</h3>
+                        <h3 className={`text-base font-extrabold ${text.heading}`}>{selectedAnalysis.patient.fullName}</h3>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[11px] text-slate-400">ID: {selectedAnalysis.patient.id.slice(0, 10)}</span>
-                          <span className="text-[11px] text-slate-400">|</span>
-                          <span className="text-[11px] text-slate-400">Age: {selectedAnalysis.patient.age}</span>
+                          <span className={`text-[11px] ${text.muted}`}>ID: {selectedAnalysis.patient.id.slice(0, 10)}</span>
+                          <span className={`text-[11px] ${text.muted}`}>|</span>
+                          <span className={`text-[11px] ${text.muted}`}>Age: {selectedAnalysis.patient.age}</span>
                           {selectedAnalysis.patient.isPediatric && (
-                            <span className="text-[9px] font-bold bg-pink-100 text-pink-600 px-1.5 py-0.5 rounded-md">Pediatric</span>
+                            <span className="text-[9px] font-bold bg-pink-500/20 text-pink-300 border border-pink-500/30 px-1.5 py-0.5 rounded-md">Pediatric</span>
                           )}
                         </div>
                       </div>
@@ -425,7 +422,7 @@ export function DynamicRetriage() {
                 {/* Composite Risk & Confidence */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-2xl p-4" style={glassCard}>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Composite Risk Score</p>
+                    <p className={`text-[10px] font-bold ${text.muted} uppercase tracking-wider mb-2`}>Composite Risk Score</p>
                     <div className="flex items-end gap-2">
                       <span className={`text-3xl font-extrabold ${
                         selectedAnalysis.analysis.compositeRiskScore > 60 ? 'text-red-600' :
@@ -433,10 +430,10 @@ export function DynamicRetriage() {
                       }`}>
                         {selectedAnalysis.analysis.compositeRiskScore}
                       </span>
-                      <span className="text-xs text-slate-400 font-semibold mb-1">/100</span>
+                      <span className={`text-xs ${text.muted} font-semibold mb-1`}>/100</span>
                     </div>
                     {/* Risk bar */}
-                    <div className="w-full h-2 rounded-full bg-slate-100 mt-3 overflow-hidden">
+                    <div className="w-full h-2 rounded-full bg-slate-500/15 mt-3 overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-1000 ${
                           selectedAnalysis.analysis.compositeRiskScore > 60 ? 'bg-gradient-to-r from-red-400 to-red-500' :
@@ -449,7 +446,7 @@ export function DynamicRetriage() {
                   </div>
 
                   <div className="rounded-2xl p-4" style={glassCard}>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">AI Confidence</p>
+                    <p className={`text-[10px] font-bold ${text.muted} uppercase tracking-wider mb-2`}>AI Confidence</p>
                     <div className="flex items-end gap-2">
                       <span className={`text-3xl font-extrabold ${
                         selectedAnalysis.analysis.confidence > 0.7 ? 'text-indigo-600' :
@@ -458,7 +455,7 @@ export function DynamicRetriage() {
                         {Math.round(selectedAnalysis.analysis.confidence * 100)}%
                       </span>
                     </div>
-                    <div className="w-full h-2 rounded-full bg-slate-100 mt-3 overflow-hidden">
+                    <div className="w-full h-2 rounded-full bg-slate-500/15 mt-3 overflow-hidden">
                       <div
                         className="h-full rounded-full bg-gradient-to-r from-violet-400 to-indigo-500 transition-all duration-1000"
                         style={{ width: `${selectedAnalysis.analysis.confidence * 100}%` }}
@@ -469,7 +466,7 @@ export function DynamicRetriage() {
 
                 {/* Vital Trend Summary */}
                 <div className="rounded-2xl p-4" style={glassCard}>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Vital Trend Analysis (7 Channels)</p>
+                  <p className={`text-[10px] font-bold ${text.muted} uppercase tracking-wider mb-3`}>Vital Trend Analysis (7 Channels)</p>
                   <div className="grid grid-cols-7 gap-2">
                     {(['heartRate', 'respiratoryRate', 'spo2', 'systolicBP', 'temperature', 'glucose', 'ecg'] as const).map((vitalKey) => {
                       const Icon = vitalIcons[vitalKey];
@@ -491,19 +488,19 @@ export function DynamicRetriage() {
                           style={glassInner}
                         >
                           <Icon className={`w-4 h-4 ${
-                            isBreach ? 'text-red-500' : isDeteriorating ? 'text-amber-500' : isImproving ? 'text-emerald-500' : 'text-slate-400'
+                            isBreach ? 'text-red-500' : isDeteriorating ? 'text-amber-500' : isImproving ? 'text-emerald-500' : text.muted
                           }`} />
-                          <span className="text-[9px] font-bold text-slate-500">{label}</span>
+                          <span className={`text-[9px] font-bold ${text.body}`}>{label}</span>
                           <span className={`text-xs font-extrabold ${
-                            latest === null ? 'text-slate-300' :
-                            isBreach ? 'text-red-600' : isDeteriorating ? 'text-amber-600' : isImproving ? 'text-emerald-600' : 'text-slate-700'
+                            latest === null ? text.muted :
+                            isBreach ? 'text-red-600' : isDeteriorating ? 'text-amber-600' : isImproving ? 'text-emerald-600' : text.heading
                           }`}>
                             {latest !== null ? latest.toFixed(vitalKey === 'temperature' ? 1 : 0) : '—'}
                           </span>
                           <div className="flex items-center">
                             {isDeteriorating && <TrendingUp className="w-3 h-3 text-red-400" />}
                             {isImproving && <TrendingDown className="w-3 h-3 text-emerald-400" />}
-                            {!isDeteriorating && !isImproving && <Minus className="w-3 h-3 text-slate-300" />}
+                            {!isDeteriorating && !isImproving && <Minus className={`w-3 h-3 ${text.muted}`} />}
                           </div>
                         </div>
                       );
@@ -524,7 +521,7 @@ export function DynamicRetriage() {
                         {selectedAnalysis.analysis.deteriorationFactors.map((f, i) => (
                           <div key={i} className="flex items-start gap-2 px-2.5 py-2 rounded-lg" style={glassInner}>
                             <AlertTriangle className="w-3 h-3 text-red-400 mt-0.5 flex-shrink-0" />
-                            <span className="text-[11px] text-slate-700 font-medium">{f}</span>
+                            <span className={`text-[11px] ${text.label} font-medium`}>{f}</span>
                           </div>
                         ))}
                       </div>
@@ -540,9 +537,9 @@ export function DynamicRetriage() {
                       </div>
                       <div className="space-y-1.5">
                         {selectedAnalysis.analysis.thresholdBreaches.map((f, i) => (
-                          <div key={i} className="flex items-start gap-2 px-2.5 py-2 rounded-lg bg-red-50/50">
+                          <div key={i} className="flex items-start gap-2 px-2.5 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
                             <ShieldAlert className="w-3 h-3 text-red-500 mt-0.5 flex-shrink-0" />
-                            <span className="text-[11px] text-red-700 font-medium">{f}</span>
+                            <span className="text-[11px] text-red-300 font-medium">{f}</span>
                           </div>
                         ))}
                       </div>
@@ -560,7 +557,7 @@ export function DynamicRetriage() {
                         {selectedAnalysis.analysis.improvementFactors.map((f, i) => (
                           <div key={i} className="flex items-start gap-2 px-2.5 py-2 rounded-lg" style={glassInner}>
                             <CheckCircle className="w-3 h-3 text-emerald-400 mt-0.5 flex-shrink-0" />
-                            <span className="text-[11px] text-slate-700 font-medium">{f}</span>
+                            <span className={`text-[11px] ${text.label} font-medium`}>{f}</span>
                           </div>
                         ))}
                       </div>
@@ -573,8 +570,8 @@ export function DynamicRetriage() {
                    selectedAnalysis.analysis.thresholdBreaches.length === 0 && (
                     <div className="rounded-2xl p-6 text-center col-span-2" style={glassCard}>
                       <CheckCircle className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
-                      <p className="text-sm font-bold text-slate-600">All vitals stable</p>
-                      <p className="text-xs text-slate-400 mt-1">No significant trends or threshold breaches detected</p>
+                      <p className={`text-sm font-bold ${text.label}`}>All vitals stable</p>
+                      <p className={`text-xs ${text.muted} mt-1`}>No significant trends or threshold breaches detected</p>
                     </div>
                   )}
                 </div>
@@ -584,8 +581,8 @@ export function DynamicRetriage() {
                   <div className="rounded-2xl p-4" style={glassCard}>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs font-bold text-slate-700">AI Recommendation</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
+                        <p className={`text-xs font-bold ${text.label}`}>AI Recommendation</p>
+                        <p className={`text-[11px] ${text.muted} mt-0.5`}>
                           {selectedAnalysis.analysis.direction === 'ESCALATE'
                             ? `Escalate from ${selectedAnalysis.patient.category} to ${selectedAnalysis.analysis.recommendedCategory}`
                             : `De-escalate from ${selectedAnalysis.patient.category} to ${selectedAnalysis.analysis.recommendedCategory}`
@@ -595,7 +592,8 @@ export function DynamicRetriage() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleDismiss(selectedAnalysis.patient.id)}
-                          className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-600 bg-white/70 hover:bg-white border border-slate-200/60 rounded-xl transition-all duration-300"
+                          className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold ${text.body} hover:bg-white/5 rounded-xl transition-all duration-300`}
+                          style={{ border: borderStyle }}
                         >
                           <XCircle className="w-3.5 h-3.5" />
                           Dismiss

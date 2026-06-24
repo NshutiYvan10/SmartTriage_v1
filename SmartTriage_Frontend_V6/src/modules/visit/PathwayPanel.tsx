@@ -299,11 +299,11 @@ export function PathwayPanel({ visitId, onChanged }: PathwayPanelProps) {
                   {skipFor && skipFor.startsWith(`${a.id}:`) && (
                     <div className="flex items-center gap-2 mb-3 flex-wrap">
                       <input value={skipReason} onChange={(e) => setSkipReason(e.target.value)} placeholder="Skip reason (required)"
-                        className="flex-1 min-w-[12rem] px-3 py-2 rounded-xl text-sm outline-none" style={glassInner} />
+                        className={`flex-1 min-w-[12rem] px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner} />
                       <button onClick={() => submitSkip(a.id, skipFor.split(':')[1])} disabled={!skipReason.trim() || busy}
                         className="px-3 py-2 text-[11px] font-bold rounded-xl bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 disabled:opacity-50">Skip step</button>
                       <button onClick={() => { setSkipFor(null); setSkipReason(''); }}
-                        className={`px-3 py-2 text-[11px] font-bold rounded-xl ${isDark ? 'text-slate-400 hover:bg-white/5' : 'text-slate-500 hover:bg-slate-100'}`}>Cancel</button>
+                        className={`px-3 py-2 text-[11px] font-bold rounded-xl hover:bg-white/5 ${text.muted}`}>Cancel</button>
                     </div>
                   )}
 
@@ -324,11 +324,11 @@ export function PathwayPanel({ visitId, onChanged }: PathwayPanelProps) {
                       ) : (
                         <div className="flex items-center gap-2 flex-wrap">
                           <input value={abandonReason} onChange={(e) => setAbandonReason(e.target.value)} placeholder="Abandon reason (required)"
-                            className="w-56 px-3 py-2 rounded-xl text-sm outline-none" style={glassInner} />
+                            className={`w-56 px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner} />
                           <button onClick={() => submitAbandon(a.id)} disabled={!abandonReason.trim() || busy}
                             className="px-3 py-2 text-[11px] font-bold rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 disabled:opacity-50">Confirm</button>
                           <button onClick={() => { setAbandonFor(null); setAbandonReason(''); }}
-                            className={`px-3 py-2 text-[11px] font-bold rounded-xl ${isDark ? 'text-slate-400 hover:bg-white/5' : 'text-slate-500 hover:bg-slate-100'}`}>Cancel</button>
+                            className={`px-3 py-2 text-[11px] font-bold rounded-xl hover:bg-white/5 ${text.muted}`}>Cancel</button>
                         </div>
                       )}
                     </div>

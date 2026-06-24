@@ -216,7 +216,7 @@ export function FastTrackPanel({ visitId, onChanged }: FastTrackPanelProps) {
           </div>
           {activation && (
             <button onClick={load} disabled={loading}
-              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${isDark ? 'bg-white/5 hover:bg-white/10' : 'bg-slate-100 hover:bg-slate-200'}`} title="Refresh">
+              className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors bg-white/5 hover:bg-white/10" title="Refresh">
               <RefreshCw className={`w-4 h-4 ${text.muted}`} />
             </button>
           )}
@@ -268,7 +268,7 @@ export function FastTrackPanel({ visitId, onChanged }: FastTrackPanelProps) {
                   className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-[11px] font-bold border transition-all ${
                     selected
                       ? (stroke ? 'bg-purple-500/15 text-purple-500 border-purple-500/30' : 'bg-red-500/15 text-red-500 border-red-500/30')
-                      : isDark ? 'bg-white/5 text-slate-300 border-white/5 hover:bg-white/10' : 'bg-slate-50 text-slate-600 border-slate-200/50 hover:bg-slate-100'
+                      : `bg-white/5 ${text.body} border-transparent hover:bg-white/10`
                   }`}>
                   {stroke ? <Brain className="w-3.5 h-3.5 shrink-0" /> : <Heart className="w-3.5 h-3.5 shrink-0" />}
                   <span className="truncate">{TYPE_LABEL[t]}</span>
@@ -286,21 +286,21 @@ export function FastTrackPanel({ visitId, onChanged }: FastTrackPanelProps) {
                       <label className={`block text-[10px] font-semibold mb-1 ${text.muted}`}>Symptom onset / last-known-well</label>
                       <input type="datetime-local" value={form.symptomOnsetTime}
                         onChange={(e) => setForm((f) => ({ ...f, symptomOnsetTime: e.target.value }))}
-                        className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={glassInner} />
+                        className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner} />
                       <p className={`text-[9px] mt-1 ${text.muted}`}>Drives the thrombolysis-window advisory</p>
                     </div>
                     <div>
                       <label className={`block text-[10px] font-semibold mb-1 ${text.muted}`}>NIHSS (0–42)</label>
                       <input type="number" min="0" max="42" inputMode="numeric" value={form.nihssScore}
                         onChange={(e) => setForm((f) => ({ ...f, nihssScore: e.target.value }))}
-                        placeholder="e.g. 8" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={glassInner} />
+                        placeholder="e.g. 8" className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner} />
                     </div>
                   </div>
                   <div>
                     <label className={`block text-[10px] font-semibold mb-1 ${text.muted}`}>BE-FAST findings</label>
                     <input type="text" value={form.beFastScore}
                       onChange={(e) => setForm((f) => ({ ...f, beFastScore: e.target.value }))}
-                      placeholder="e.g. Face droop + Arm weakness + Speech" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={glassInner} />
+                      placeholder="e.g. Face droop + Arm weakness + Speech" className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner} />
                   </div>
                 </>
               ) : (
@@ -308,7 +308,7 @@ export function FastTrackPanel({ visitId, onChanged }: FastTrackPanelProps) {
                   <label className={`block text-[10px] font-semibold mb-1 ${text.muted}`}>Chest-pain / symptom onset</label>
                   <input type="datetime-local" value={form.chestPainOnsetTime}
                     onChange={(e) => setForm((f) => ({ ...f, chestPainOnsetTime: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={glassInner} />
+                    className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner} />
                   <p className={`text-[9px] mt-1 ${text.muted}`}>An ECG is auto-ordered on activation</p>
                 </div>
               )}
@@ -316,7 +316,7 @@ export function FastTrackPanel({ visitId, onChanged }: FastTrackPanelProps) {
                 <label className={`block text-[10px] font-semibold mb-1 ${text.muted}`}>Notes</label>
                 <textarea rows={2} value={form.notes}
                   onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                  placeholder="Optional context" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none" style={glassInner} />
+                  placeholder="Optional context" className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 resize-none ${text.body}`} style={glassInner} />
               </div>
               <button onClick={activate} disabled={busy}
                 className="inline-flex items-center gap-2 px-5 py-2.5 text-[11px] font-bold rounded-xl bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50">
@@ -385,9 +385,9 @@ function ActiveCard({
             {/* Metrics */}
             <div className="flex items-center gap-3 mt-2 flex-wrap">
               {a.nihssScore != null && a.nihssScore !== undefined && (
-                <span className={`text-[10px] px-2 py-0.5 rounded ${isDark ? 'bg-white/5' : 'bg-slate-100'} ${text.body}`}>NIHSS {a.nihssScore}</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded bg-white/5 ${text.body}`}>NIHSS {a.nihssScore}</span>
               )}
-              {a.beFastScore && <span className={`text-[10px] px-2 py-0.5 rounded ${isDark ? 'bg-white/5' : 'bg-slate-100'} ${text.body}`}>BE-FAST: {a.beFastScore}</span>}
+              {a.beFastScore && <span className={`text-[10px] px-2 py-0.5 rounded bg-white/5 ${text.body}`}>BE-FAST: {a.beFastScore}</span>}
               {a.doorToEcgMinutes != null && <span className={`text-[10px] font-bold ${a.doorToEcgMinutes <= 10 ? 'text-emerald-400' : 'text-red-400'}`}>Door-to-ECG {a.doorToEcgMinutes}m</span>}
               {a.doorToCtMinutes != null && <span className={`text-[10px] font-bold ${a.doorToCtMinutes <= 25 ? 'text-emerald-400' : 'text-red-400'}`}>Door-to-CT {a.doorToCtMinutes}m</span>}
               {a.doorToNeedleMinutes != null && <span className={`text-[10px] font-bold ${a.doorToNeedleMinutes <= 60 ? 'text-emerald-400' : 'text-red-400'}`}>Door-to-needle {a.doorToNeedleMinutes}m</span>}
@@ -423,7 +423,7 @@ function ActiveCard({
         <button onClick={onComplete} disabled={busy} className="inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
           {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileCheck className="w-3.5 h-3.5" />}Complete
         </button>
-        <button onClick={onCancel} disabled={busy} className={`inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold rounded-xl transition-colors disabled:opacity-50 ${isDark ? 'text-slate-400 hover:bg-white/5' : 'text-slate-500 hover:bg-slate-100'}`}>
+        <button onClick={onCancel} disabled={busy} className={`inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold rounded-xl transition-colors disabled:opacity-50 hover:bg-white/5 ${text.muted}`}>
           <XCircle className="w-3.5 h-3.5" />Cancel
         </button>
       </div>
@@ -432,7 +432,7 @@ function ActiveCard({
       {ecgOpen && (
         <div className="px-5 py-3 border-t" style={{ borderColor: isDark ? 'rgba(2,132,199,0.12)' : 'rgba(203,213,225,0.3)' }}>
           <input type="text" value={ecg.result} onChange={(e: any) => setEcg({ ...ecg, result: e.target.value })}
-            placeholder="ECG result (e.g. anterior STEMI)" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none mb-2" style={glassInner} />
+            placeholder="ECG result (e.g. anterior STEMI)" className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 mb-2 ${text.body}`} style={glassInner} />
           <label className="flex items-center gap-2 cursor-pointer mb-2">
             <input type="checkbox" checked={ecg.stElevation} onChange={(e: any) => setEcg({ ...ecg, stElevation: e.target.checked })} className="w-4 h-4" />
             <span className={`text-[11px] font-bold ${text.heading}`}>ST elevation present (upgrades to STEMI)</span>
@@ -444,7 +444,7 @@ function ActiveCard({
       {ctOpen && (
         <div className="px-5 py-3 border-t" style={{ borderColor: isDark ? 'rgba(2,132,199,0.12)' : 'rgba(203,213,225,0.3)' }}>
           <input type="text" value={ct.result} onChange={(e: any) => setCt({ ...ct, result: e.target.value })}
-            placeholder="CT result (e.g. no acute findings)" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none mb-2" style={glassInner} />
+            placeholder="CT result (e.g. no acute findings)" className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 mb-2 ${text.body}`} style={glassInner} />
           <label className="flex items-center gap-2 cursor-pointer mb-2">
             <input type="checkbox" checked={ct.hemorrhagic} onChange={(e: any) => setCt({ ...ct, hemorrhagic: e.target.checked })} className="w-4 h-4" />
             <span className={`text-[11px] font-bold ${text.heading}`}>Hemorrhagic (thrombolysis contraindicated)</span>

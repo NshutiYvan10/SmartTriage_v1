@@ -614,26 +614,26 @@ export function ClinicalDocumentation() {
                           </span>
                           {/* Signature status */}
                           {doc.isSigned ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg text-emerald-600"
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}
                               style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}
                             >
                               <CheckCircle className="w-3 h-3" /> Signed
                             </span>
                           ) : doc.isAmendment ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg text-blue-600"
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg ${isDark ? 'text-blue-300' : 'text-blue-600'}`}
                               style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}
                             >
                               <PenTool className="w-3 h-3" /> Amended
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg text-amber-600"
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg ${isDark ? 'text-amber-300' : 'text-amber-600'}`}
                               style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
                             >
                               <Clock className="w-3 h-3" /> Pending Signature
                             </span>
                           )}
                           {doc.coSignedByName && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg text-violet-600"
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg ${isDark ? 'text-violet-300' : 'text-violet-600'}`}
                               style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}
                             >
                               <Shield className="w-3 h-3" /> Co-signed

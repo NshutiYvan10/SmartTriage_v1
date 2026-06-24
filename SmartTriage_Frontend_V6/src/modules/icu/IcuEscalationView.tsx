@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   BedDouble, RefreshCw, Loader2, CheckCircle2, Clock,
   AlertTriangle, Bell, MessageSquare, Hash, ArrowRight,
-  XCircle, Zap, User, Activity, ShieldCheck,
+  XCircle, Zap, User, Activity, ShieldCheck, X,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useScopedView } from '@/hooks/useScopedView';
@@ -547,13 +547,13 @@ export function IcuEscalationView() {
 
         {/* ── Record Response Dialog ── */}
         {responseDialogId && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="w-full max-w-md rounded-2xl overflow-hidden" style={glassCard}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+            <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-bold text-white">Record ICU Response</h2>
                   <button onClick={() => setResponseDialogId(null)} className="text-white/50 hover:text-white">
-                    <XCircle className="w-4 h-4" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -586,7 +586,8 @@ export function IcuEscalationView() {
                       value={responseBedNumber}
                       onChange={(e) => setResponseBedNumber(e.target.value)}
                       placeholder="e.g. ICU-12"
-                      className={`w-full mt-1 px-3 py-2 rounded-lg text-xs ${isDark ? 'bg-white/5 text-white border-white/10' : 'bg-white text-slate-800 border-slate-200'} border focus:outline-none focus:ring-2 focus:ring-cyan-500/30`}
+                      style={glassInner}
+                      className={`w-full mt-1 px-3 py-2 rounded-lg text-xs ${text.body} focus:outline-none focus:ring-2 focus:ring-cyan-500/20`}
                     />
                   </div>
                 ) : (
@@ -597,7 +598,8 @@ export function IcuEscalationView() {
                       onChange={(e) => setResponseDeclineReason(e.target.value)}
                       placeholder="Reason for declining..."
                       rows={3}
-                      className={`w-full mt-1 px-3 py-2 rounded-lg text-xs resize-none ${isDark ? 'bg-white/5 text-white border-white/10' : 'bg-white text-slate-800 border-slate-200'} border focus:outline-none focus:ring-2 focus:ring-cyan-500/30`}
+                      style={glassInner}
+                      className={`w-full mt-1 px-3 py-2 rounded-lg text-xs resize-none ${text.body} focus:outline-none focus:ring-2 focus:ring-cyan-500/20`}
                     />
                   </div>
                 )}
@@ -624,13 +626,13 @@ export function IcuEscalationView() {
 
         {/* ── Assign Bed Dialog ── */}
         {bedDialogId && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="w-full max-w-sm rounded-2xl overflow-hidden" style={glassCard}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+            <div className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-bold text-white">Assign ICU Bed</h2>
                   <button onClick={() => setBedDialogId(null)} className="text-white/50 hover:text-white">
-                    <XCircle className="w-4 h-4" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -642,7 +644,8 @@ export function IcuEscalationView() {
                     value={bedNumber}
                     onChange={(e) => setBedNumber(e.target.value)}
                     placeholder="e.g. ICU-12"
-                    className={`w-full mt-1 px-3 py-2 rounded-lg text-xs ${isDark ? 'bg-white/5 text-white border-white/10' : 'bg-white text-slate-800 border-slate-200'} border focus:outline-none focus:ring-2 focus:ring-cyan-500/30`}
+                    style={glassInner}
+                    className={`w-full mt-1 px-3 py-2 rounded-lg text-xs ${text.body} focus:outline-none focus:ring-2 focus:ring-cyan-500/20`}
                   />
                 </div>
                 <div className="flex justify-end gap-2">
@@ -667,13 +670,13 @@ export function IcuEscalationView() {
 
         {/* ── Cancel Dialog ── */}
         {cancelDialogId && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="w-full max-w-sm rounded-2xl overflow-hidden" style={glassCard}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+            <div className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-bold text-white">Cancel Escalation</h2>
                   <button onClick={() => setCancelDialogId(null)} className="text-white/50 hover:text-white">
-                    <XCircle className="w-4 h-4" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -685,7 +688,8 @@ export function IcuEscalationView() {
                     onChange={(e) => setCancelReason(e.target.value)}
                     placeholder="Reason for cancellation..."
                     rows={3}
-                    className={`w-full mt-1 px-3 py-2 rounded-lg text-xs resize-none ${isDark ? 'bg-white/5 text-white border-white/10' : 'bg-white text-slate-800 border-slate-200'} border focus:outline-none focus:ring-2 focus:ring-cyan-500/30`}
+                    style={glassInner}
+                    className={`w-full mt-1 px-3 py-2 rounded-lg text-xs resize-none ${text.body} focus:outline-none focus:ring-2 focus:ring-cyan-500/20`}
                   />
                 </div>
                 <div className="flex justify-end gap-2">

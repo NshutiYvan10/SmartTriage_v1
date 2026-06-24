@@ -43,7 +43,7 @@ const ISOLATION_TYPE_CONFIG: Record<string, { color: string; bg: string; border:
 };
 
 export function IsolationDashboard() {
-  const { glassCard, isDark, text } = useTheme();
+  const { glassCard, glassInner, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const scope = useScopedView();
@@ -150,9 +150,7 @@ export function IsolationDashboard() {
   const PpeBadge = ({ show, label, Icon }: { show: boolean; label: string; Icon: typeof Shield }) => {
     if (!show) return null;
     return (
-      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold ${
-        isDark ? 'bg-white/5 text-slate-300' : 'bg-slate-100 text-slate-600'
-      }`}>
+      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold ${text.muted}`} style={glassInner}>
         <Icon className="w-3 h-3" />
         {label}
       </div>
@@ -355,11 +353,8 @@ export function IsolationDashboard() {
                                     value={roomInput}
                                     onChange={(e) => setRoomInput(e.target.value)}
                                     placeholder="Room name / number"
-                                    className={`w-40 px-3 py-2 text-xs rounded-xl border outline-none transition-colors ${
-                                      isDark
-                                        ? 'bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-cyan-500/40'
-                                        : 'bg-white border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-cyan-500'
-                                    }`}
+                                    style={glassInner}
+                                    className={`w-40 px-3 py-2 text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-colors ${text.body}`}
                                   />
                                   <button
                                     onClick={() => handleAssignRoom(iso.id)}
@@ -371,9 +366,7 @@ export function IsolationDashboard() {
                                   </button>
                                   <button
                                     onClick={() => { setAssignRoomId(null); setRoomInput(''); }}
-                                    className={`px-3 py-2 text-[11px] font-bold rounded-xl transition-colors ${
-                                      isDark ? 'text-slate-400 hover:bg-white/5' : 'text-slate-500 hover:bg-slate-100'
-                                    }`}
+                                    className={`px-3 py-2 text-[11px] font-bold rounded-xl transition-colors hover:bg-white/5 ${text.body}`}
                                   >
                                     Cancel
                                   </button>
@@ -411,11 +404,8 @@ export function IsolationDashboard() {
                                 value={endReason}
                                 onChange={(e) => setEndReason(e.target.value)}
                                 placeholder="Clearance reason (required)"
-                                className={`w-64 px-3 py-2 text-xs rounded-xl border outline-none transition-colors ${
-                                  isDark
-                                    ? 'bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-emerald-500/40'
-                                    : 'bg-white border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-emerald-500'
-                                }`}
+                                style={glassInner}
+                                className={`w-64 px-3 py-2 text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-colors ${text.body}`}
                               />
                               <button
                                 onClick={() => handleEndIsolation(iso.id)}
@@ -426,7 +416,7 @@ export function IsolationDashboard() {
                                 Clear
                               </button>
                               <button onClick={() => { setEndId(null); setEndReason(''); }}
-                                className={`px-3 py-2 text-[11px] font-bold rounded-xl transition-colors ${isDark ? 'text-slate-400 hover:bg-white/5' : 'text-slate-500 hover:bg-slate-100'}`}>Cancel</button>
+                                className={`px-3 py-2 text-[11px] font-bold rounded-xl transition-colors hover:bg-white/5 ${text.body}`}>Cancel</button>
                             </div>
                           ) : (
                             <button
