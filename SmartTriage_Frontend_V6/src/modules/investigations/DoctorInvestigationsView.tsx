@@ -43,35 +43,35 @@ const SECTIONS: Section[] = [
     title: 'Resulted',
     helper: 'Result available — review and act',
     icon: CheckCircle2,
-    tint: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    tint: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
   },
   {
     status: 'IN_PROGRESS',
     title: 'In progress',
     helper: 'Specimen received by lab, processing',
     icon: Loader2,
-    tint: 'bg-cyan-100 text-cyan-800 border-cyan-300',
+    tint: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
   },
   {
     status: 'SPECIMEN_COLLECTED',
     title: 'Specimen collected',
     helper: 'Drawn — on its way to the lab',
     icon: FileSearch,
-    tint: 'bg-amber-100 text-amber-800 border-amber-300',
+    tint: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
   },
   {
     status: 'ORDERED',
     title: 'Pending',
     helper: 'Ordered — specimen not yet drawn',
     icon: Clock,
-    tint: 'bg-slate-100 text-slate-700 border-slate-300',
+    tint: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
   },
   {
     status: 'CANCELLED',
     title: 'Cancelled',
     helper: 'Cancelled — for audit only',
     icon: XCircle,
-    tint: 'bg-rose-50 text-rose-700 border-rose-200',
+    tint: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
   },
 ];
 
@@ -97,6 +97,7 @@ function fmtDateTime(iso: string | null | undefined): string {
 
 export function DoctorInvestigationsView() {
   const { cardClass, glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const [orders, setOrders] = useState<InvestigationResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -142,33 +143,27 @@ export function DoctorInvestigationsView() {
   );
 
   return (
-    <div className="p-4 md:p-6 space-y-4 max-w-6xl mx-auto">
+    <div className="min-h-full">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
       {/* ── Header ── */}
-      <div className={`${cardClass} overflow-hidden`} style={glassCard}>
-        <div className="p-5 md:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center bg-gradient-to-br ${
-              isDark ? 'from-cyan-500/20 to-blue-500/20' : 'from-cyan-50 to-blue-50'
-            }`}>
-              <FlaskConical className={`w-6 h-6 ${text.accent}`} />
-            </div>
-            <div>
-              <h1 className={`text-xl md:text-2xl font-bold tracking-tight ${text.heading}`}>
-                My Investigations
-              </h1>
-              <p className={`text-sm mt-0.5 ${text.muted}`}>
-                Every investigation you've ordered, grouped by status.
-                Click a row to open the visit.
-              </p>
-            </div>
+      <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+        <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+            <FlaskConical className="w-5 h-5 text-cyan-300" />
+          </div>
+          <div className="flex-1">
+            <h1 className="text-lg font-bold text-white">
+              My Investigations
+            </h1>
+            <p className="text-sm text-white/50">
+              Every investigation you've ordered, grouped by status.
+              Click a row to open the visit.
+            </p>
           </div>
           <button
             onClick={load}
             disabled={loading}
-            className={`inline-flex items-center gap-2 ${cardClass} px-3 py-2 text-xs font-bold transition-colors ${
-              isDark ? 'hover:bg-white/10 text-slate-300' : 'hover:bg-slate-100 text-slate-600'
-            }`}
-            style={glassInner}
+            className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
           >
             {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
             Refresh
@@ -176,7 +171,7 @@ export function DoctorInvestigationsView() {
         </div>
 
         {/* Stat strip + filter chips */}
-        <div className="border-t border-slate-200/30 px-5 md:px-6 py-3 flex flex-wrap items-center gap-2">
+        <div className="px-5 md:px-6 py-3 flex flex-wrap items-center gap-2" style={{ borderTop: borderStyle }}>
           <FilterChip active={filter === 'ALL'}             label={`All ${totals.all}`}                onClick={() => setFilter('ALL')} />
           <FilterChip active={filter === 'RESULTED'}        label={`Resulted ${totals.RESULTED}`}      onClick={() => setFilter('RESULTED')} accent="emerald" />
           <FilterChip active={filter === 'IN_PROGRESS'}     label={`In progress ${totals.IN_PROGRESS}`} onClick={() => setFilter('IN_PROGRESS')} accent="cyan" />
@@ -184,7 +179,7 @@ export function DoctorInvestigationsView() {
           <FilterChip active={filter === 'ORDERED'}         label={`Pending ${totals.ORDERED}`}        onClick={() => setFilter('ORDERED')} accent="slate" />
           <FilterChip active={filter === 'CANCELLED'}       label={`Cancelled ${totals.CANCELLED}`}    onClick={() => setFilter('CANCELLED')} accent="rose" />
           {totals.abnormal > 0 && (
-            <span className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-md bg-red-100 text-red-800 text-[11px] font-bold">
+            <span className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-md bg-red-500/20 text-red-300 border border-red-500/30 text-[11px] font-bold">
               <AlertTriangle className="w-3 h-3" /> {totals.abnormal} abnormal/critical need review
             </span>
           )}
@@ -193,7 +188,7 @@ export function DoctorInvestigationsView() {
 
       {/* ── Sections ── */}
       {err && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 flex items-start gap-2">
+        <div className="rounded-md border border-red-500/30 bg-red-500/20 px-3 py-2 text-sm text-red-300 flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 mt-0.5" />
           <span>{err}</span>
         </div>
@@ -229,6 +224,7 @@ export function DoctorInvestigationsView() {
           })}
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -242,11 +238,11 @@ function FilterChip({
   accent?: 'emerald' | 'cyan' | 'amber' | 'slate' | 'rose';
 }) {
   const accents: Record<string, string> = {
-    emerald: 'bg-emerald-500/15 text-emerald-700 border-emerald-400/40',
-    cyan: 'bg-cyan-500/15 text-cyan-700 border-cyan-400/40',
-    amber: 'bg-amber-500/15 text-amber-700 border-amber-400/40',
-    slate: 'bg-slate-500/15 text-slate-700 border-slate-400/40',
-    rose: 'bg-rose-500/15 text-rose-700 border-rose-400/40',
+    emerald: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+    cyan: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+    amber: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    slate: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
+    rose: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
   };
   return (
     <button
@@ -254,8 +250,8 @@ function FilterChip({
       onClick={onClick}
       className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
         active
-          ? (accent ? accents[accent] : 'bg-slate-800 text-white border-slate-800')
-          : 'bg-white/60 border-slate-200 text-slate-500 hover:bg-slate-100'
+          ? (accent ? accents[accent] : 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30')
+          : 'border-transparent text-slate-400 hover:bg-white/5'
       }`}
     >
       {label}
@@ -283,7 +279,7 @@ function SectionCard({
         <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border ${section.tint}`}>
           <Icon className="w-3 h-3" />
           {section.title}
-          <span className="ml-1 inline-flex items-center justify-center min-w-[20px] px-1 rounded bg-white/70">
+          <span className="ml-1 inline-flex items-center justify-center min-w-[20px] px-1 rounded bg-white/10">
             {rows.length}
           </span>
         </span>
@@ -298,9 +294,9 @@ function SectionCard({
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-sm font-bold ${text.heading}`}>{r.testName}</span>
                 <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                  r.priority === 'STAT' ? 'bg-red-100 text-red-800'
-                  : r.priority === 'URGENT' ? 'bg-amber-100 text-amber-800'
-                  : 'bg-slate-200 text-slate-600'
+                  r.priority === 'STAT' ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                  : r.priority === 'URGENT' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-slate-500/20 text-slate-300 border border-slate-500/30'
                 }`}>
                   {r.priority || 'ROUTINE'}
                 </span>
@@ -313,7 +309,7 @@ function SectionCard({
                   </span>
                 )}
                 {!r.isCritical && r.isAbnormal && (
-                  <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-200 text-amber-900">
+                  <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
                     Abnormal
                   </span>
                 )}
@@ -327,16 +323,13 @@ function SectionCard({
               {r.status === 'RESULTED' && r.result && (
                 <div className={`mt-1 text-[12px] ${text.body} truncate`}>
                   Result: <span className="font-medium">{r.result}</span>
-                  {r.resultUnit && <span className="text-slate-500"> {r.resultUnit}</span>}
+                  {r.resultUnit && <span className={text.muted}> {r.resultUnit}</span>}
                 </div>
               )}
             </div>
             <Link
               to={`/visit/${r.visitId}`}
-              className={`inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold ${cardClass} ${
-                isDark ? 'bg-white/5 hover:bg-white/10 text-cyan-300' : 'bg-white hover:bg-slate-100 text-cyan-700'
-              }`}
-              style={glassInner}
+              className={`inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold ${cardClass} bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30 transition-colors`}
             >
               Open visit <ChevronRight className="w-3 h-3" />
             </Link>

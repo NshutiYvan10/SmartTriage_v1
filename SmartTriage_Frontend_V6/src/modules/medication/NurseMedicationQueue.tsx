@@ -170,41 +170,45 @@ export function NurseMedicationQueue() {
 
   return (
     <div className="min-h-full">
-      <div className="p-4 lg:p-6 max-w-6xl mx-auto space-y-4 animate-fade-in">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
 
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className={`text-xl font-extrabold tracking-tight ${text.heading} inline-flex items-center gap-2`}>
-              <Pill className="w-5 h-5 text-emerald-500" />
-              Medication Queue
-            </h1>
-            <p className={`text-xs ${text.muted} mt-0.5`}>
-              Prescribed medications awaiting administration across the hospital. Sorted STAT first.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => load()}
-              disabled={refreshing}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-500/10 text-slate-600 hover:bg-slate-500/20 disabled:opacity-50"
-            >
-              {refreshing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-              Refresh
-            </button>
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
+              <Pill className="w-5 h-5 text-cyan-300" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold text-white">
+                Medication Queue
+              </h1>
+              <p className="text-sm text-white/50">
+                Prescribed medications awaiting administration across the hospital. Sorted STAT first.
+              </p>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => load()}
+                disabled={refreshing}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
+              >
+                {refreshing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                Refresh
+              </button>
+            </div>
           </div>
         </div>
 
         {/* STAT toast */}
         {statBanner && (
-          <div className="rounded-xl border-2 border-red-400 bg-red-50 p-3 flex items-start gap-3 animate-fade-up">
-            <ShieldAlert className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div className="rounded-2xl bg-red-500/20 border border-red-500/30 p-3 flex items-start gap-3 animate-fade-up">
+            <ShieldAlert className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-extrabold text-red-800">
+              <p className="text-sm font-extrabold text-red-300">
                 STAT order: {statBanner.drugName}{statBanner.dose ? ` ${statBanner.dose}` : ''}
               </p>
-              <p className="text-[11px] text-red-700 mt-0.5">
+              <p className="text-[11px] text-red-300/90 mt-0.5">
                 Prescribed by {statBanner.prescribedByName ?? 'unknown'} ·
                 {' '}{formatDistanceToNow(new Date(statBanner.prescribedAt))} ago.
                 Give immediately — 10 min SLA.
@@ -213,7 +217,7 @@ export function NurseMedicationQueue() {
             <button
               type="button"
               onClick={() => setStatBanner(null)}
-              className="text-red-600 hover:text-red-800"
+              className="text-red-400 hover:text-red-300"
               aria-label="Dismiss"
             >
               <XCircle className="w-5 h-5" />
@@ -223,7 +227,7 @@ export function NurseMedicationQueue() {
 
         {/* Error */}
         {err && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700 inline-flex items-start gap-2">
+          <div className="rounded-lg bg-red-500/20 border border-red-500/30 px-3 py-2 text-[11px] text-red-300 inline-flex items-start gap-2">
             <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
             <span>{err}</span>
           </div>
@@ -301,10 +305,11 @@ function PriorityGroup({
   onOpenVisit: (visitId: string) => void;
   currentUserId: string | undefined;
 }) {
+  const { text } = useTheme();
   const tintClasses =
-    tint === 'red'    ? { header: 'text-red-700', dot: 'bg-red-500' } :
-    tint === 'orange' ? { header: 'text-orange-700', dot: 'bg-orange-500' } :
-                        { header: 'text-emerald-700', dot: 'bg-emerald-600' };
+    tint === 'red'    ? { header: 'text-red-400', dot: 'bg-red-500' } :
+    tint === 'orange' ? { header: 'text-orange-400', dot: 'bg-orange-500' } :
+                        { header: 'text-emerald-400', dot: 'bg-emerald-500' };
 
   return (
     <div className="space-y-2">
@@ -313,8 +318,8 @@ function PriorityGroup({
         <h2 className={`text-xs font-extrabold uppercase tracking-wider ${tintClasses.header}`}>
           {title}
         </h2>
-        <span className="text-[10px] text-slate-500">— {subtitle}</span>
-        <span className="ml-auto text-[10px] font-bold text-slate-500">{rows.length}</span>
+        <span className={`text-[10px] ${text.muted}`}>— {subtitle}</span>
+        <span className={`ml-auto text-[10px] font-bold ${text.muted}`}>{rows.length}</span>
       </div>
 
       <ul className="space-y-1.5">
@@ -344,8 +349,26 @@ function MedRow({
   onOpenVisit: (visitId: string) => void;
   currentUserId: string | undefined;
 }) {
+  const { text } = useTheme();
   const meta = priorityMeta(med.priority);
   const sla = slaInfo(med);
+
+  // Dark-aware dose-state pill — preserves the same semantic hue as the
+  // light-only MEDICATION_PRIORITIES tint/overdueTint (red / orange /
+  // emerald, escalating on overdue) but in the glass-surface palette.
+  const priority = med.priority ?? 'ROUTINE';
+  const rowTint =
+    sla.isOverdue
+      ? priority === 'STAT'
+        ? 'bg-red-500/25 border border-red-500/40 text-red-300'
+        : priority === 'URGENT'
+        ? 'bg-orange-500/25 border border-orange-500/40 text-orange-300'
+        : 'bg-amber-500/25 border border-amber-500/40 text-amber-300'
+      : priority === 'STAT'
+      ? 'bg-red-500/15 border border-red-500/30 text-red-300'
+      : priority === 'URGENT'
+      ? 'bg-orange-500/15 border border-orange-500/30 text-orange-300'
+      : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300';
 
   // Front-end-side guard: warn the prescriber up-front instead of
   // letting them click and bounce off the backend 400. Backend
@@ -358,19 +381,19 @@ function MedRow({
   ].filter(Boolean);
 
   return (
-    <li className={`rounded-lg border p-3 ${sla.isOverdue ? meta.overdueTint : meta.tint}`}>
+    <li className={`rounded-xl p-3 ${rowTint}`}>
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-bold">{med.drugName}</span>
-            {med.dose && <span className="text-sm opacity-80">— {med.dose}</span>}
+            <span className={`text-sm font-bold ${text.heading}`}>{med.drugName}</span>
+            {med.dose && <span className={`text-sm ${text.body}`}>— {med.dose}</span>}
             {med.route && (
-              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/70 border border-current">
+              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/10 border border-current">
                 {med.route}
               </span>
             )}
             {med.priority && med.priority !== 'ROUTINE' && (
-              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white border border-current">
+              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/10 border border-current">
                 {meta.label}
               </span>
             )}
@@ -398,7 +421,7 @@ function MedRow({
             <div className="text-[10px] mt-1 opacity-90 inline-flex items-center gap-1.5 flex-wrap">
               <ShieldAlert className="w-3 h-3" />
               {overrideBadges.map((b) => (
-                <span key={b!} className="px-1 py-0.5 rounded bg-white/60 border border-current">
+                <span key={b!} className="px-1 py-0.5 rounded bg-white/10 border border-current">
                   {b}
                 </span>
               ))}
@@ -430,7 +453,7 @@ function MedRow({
           onClick={() => onAction(med.id, 'administer')}
           disabled={isOwnPrescription}
           title={isOwnPrescription ? 'Separation of duties — a different clinician must administer' : 'Record administration'}
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <CheckCircle2 className="w-3 h-3" /> Administer
         </button>
@@ -441,7 +464,7 @@ function MedRow({
             const reason = window.prompt('Hold reason (e.g. NPO before procedure, awaiting labs)');
             if (reason && reason.trim().length >= 3) onAction(med.id, 'hold', reason.trim());
           }}
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-amber-500/20 text-amber-800 hover:bg-amber-500/30"
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30"
         >
           <Pause className="w-3 h-3" /> Hold
         </button>
@@ -452,7 +475,7 @@ function MedRow({
             const reason = window.prompt('Refusal reason (patient declined / unable to take)');
             if (reason && reason.trim().length >= 3) onAction(med.id, 'refuse', reason.trim());
           }}
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-red-500/20 text-red-800 hover:bg-red-500/30"
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30"
         >
           <XCircle className="w-3 h-3" /> Refuse
         </button>

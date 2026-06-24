@@ -21,6 +21,7 @@
  */
 import { useMemo, useState } from 'react';
 import { AlertTriangle, X, ShieldAlert, Pill, Copy, Scale, Droplet, Baby, UserMinus } from 'lucide-react';
+import { useTheme } from '@/hooks/useTheme';
 import type { AllergyMatch } from '@/utils/allergyCheck';
 import type { InteractionMatch, DuplicateMatch } from '@/utils/interactionCheck';
 import type { DoseMatch } from '@/utils/pediatricDoseCheck';
@@ -103,6 +104,11 @@ export function PrescribeSafetyDialog({
   onCancel,
   onOverride,
 }: Props) {
+  const { glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark
+    ? '1px solid rgba(2,132,199,0.12)'
+    : '1px solid rgba(203,213,225,0.3)';
+
   // Workflow 2 — capture an override reason when the highest matched
   // allergy is SEVERE or ANAPHYLAXIS. For MILD / MODERATE / UNKNOWN
   // (or any legacy free-text match without a structured severity)
@@ -228,12 +234,16 @@ export function PrescribeSafetyDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in"
+      style={{ background: 'rgba(2,11,20,0.55)' }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="safety-dialog-title"
     >
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden animate-fade-up max-h-[90vh] flex flex-col">
+      <div
+        style={glassCard}
+        className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-scale-in max-h-[90vh] flex flex-col"
+      >
         {/* ── Header (red, unmissable) ── */}
         <div className="bg-gradient-to-r from-red-600 to-red-500 px-5 py-4 flex items-center gap-3 flex-shrink-0">
           <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
@@ -274,11 +284,11 @@ export function PrescribeSafetyDialog({
         {/* ── Body (scrollable when content is long) ── */}
         <div className="p-5 space-y-4 overflow-y-auto">
           {/* Drug being prescribed */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          <div style={glassInner} className="rounded-xl p-3">
+            <div className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>
               Prescribing
             </div>
-            <div className="text-base font-bold text-slate-900 break-words">
+            <div className={`text-base font-bold break-words ${text.heading}`}>
               {drugName}
             </div>
           </div>
@@ -306,45 +316,45 @@ export function PrescribeSafetyDialog({
             //   no severity → amber (legacy fallback)
             const flavour =
               topSev === 'ANAPHYLAXIS' ? {
-                box: 'border-red-500 bg-red-100',
-                icon: 'text-red-800',
-                title: 'text-red-900',
-                body: 'text-red-900',
-                subtle: 'text-red-800/80',
+                box: 'border border-red-500/40 bg-red-500/20',
+                icon: 'text-red-400',
+                title: 'text-red-300',
+                body: 'text-red-200',
+                subtle: 'text-red-300/80',
                 label: 'ANAPHYLAXIS — life-threatening reaction on record',
               } : topSev === 'SEVERE' ? {
-                box: 'border-red-400 bg-red-50',
-                icon: 'text-red-700',
-                title: 'text-red-800',
-                body: 'text-red-900',
-                subtle: 'text-red-800/80',
+                box: 'border border-red-500/30 bg-red-500/10',
+                icon: 'text-red-400',
+                title: 'text-red-300',
+                body: 'text-red-200',
+                subtle: 'text-red-300/80',
                 label: 'SEVERE allergy on record',
               } : topSev === 'MODERATE' || topSev === 'UNKNOWN' ? {
-                box: 'border-orange-300 bg-orange-50',
-                icon: 'text-orange-700',
-                title: 'text-orange-800',
-                body: 'text-orange-900',
-                subtle: 'text-orange-800/80',
+                box: 'border border-orange-500/30 bg-orange-500/10',
+                icon: 'text-orange-400',
+                title: 'text-orange-300',
+                body: 'text-orange-200',
+                subtle: 'text-orange-300/80',
                 label: topSev === 'UNKNOWN'
                   ? 'UNKNOWN reaction — treated as moderate'
                   : 'MODERATE allergy on record',
               } : topSev === 'MILD' ? {
-                box: 'border-yellow-300 bg-yellow-50',
-                icon: 'text-yellow-700',
-                title: 'text-yellow-800',
-                body: 'text-yellow-900',
-                subtle: 'text-yellow-800/80',
+                box: 'border border-yellow-500/30 bg-yellow-500/10',
+                icon: 'text-yellow-400',
+                title: 'text-yellow-300',
+                body: 'text-yellow-200',
+                subtle: 'text-yellow-300/80',
                 label: 'MILD allergy on record',
               } : {
-                box: 'border-amber-300 bg-amber-50',
-                icon: 'text-amber-700',
-                title: 'text-amber-800',
-                body: 'text-amber-900',
-                subtle: 'text-amber-800/80',
+                box: 'border border-amber-500/30 bg-amber-500/10',
+                icon: 'text-amber-400',
+                title: 'text-amber-300',
+                body: 'text-amber-200',
+                subtle: 'text-amber-300/80',
                 label: 'Allergy match (severity not recorded)',
               };
             return (
-              <div className={`rounded-xl border p-3 ${flavour.box}`}>
+              <div className={`rounded-xl p-3 ${flavour.box}`}>
                 <div className="flex items-start gap-2">
                   <AlertTriangle className={`w-4 h-4 ${flavour.icon} flex-shrink-0 mt-0.5`} />
                   <div className="flex-1 min-w-0">
@@ -352,7 +362,7 @@ export function PrescribeSafetyDialog({
                       <span className={`text-[11px] font-bold uppercase tracking-wider ${flavour.title}`}>
                         Allergy conflict
                       </span>
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white border border-current ${flavour.title}`}>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/10 border border-current ${flavour.title}`}>
                         {flavour.label}
                       </span>
                     </div>
@@ -372,7 +382,7 @@ export function PrescribeSafetyDialog({
                               </span>
                             )}
                             {m.severity && (
-                              <span className={`ml-2 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/70 ${flavour.title}`}>
+                              <span className={`ml-2 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/10 ${flavour.title}`}>
                                 {m.severity}
                               </span>
                             )}
@@ -394,27 +404,27 @@ export function PrescribeSafetyDialog({
           {/* ── Pregnancy / lactation precaution ── */}
           {hasTeratogen && (
             <div
-              className={`rounded-xl border p-3 ${
-                hasCategoryX ? 'border-red-300 bg-red-50' : 'border-pink-300 bg-pink-50'
+              className={`rounded-xl p-3 ${
+                hasCategoryX ? 'border border-red-500/30 bg-red-500/10' : 'border border-pink-500/30 bg-pink-500/10'
               }`}
             >
               <div className="flex items-start gap-2">
                 <Baby
                   className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
-                    hasCategoryX ? 'text-red-700' : 'text-pink-700'
+                    hasCategoryX ? 'text-red-400' : 'text-pink-400'
                   }`}
                 />
                 <div className="flex-1 min-w-0">
                   <div
                     className={`text-[11px] font-bold uppercase tracking-wider ${
-                      hasCategoryX ? 'text-red-800' : 'text-pink-800'
+                      hasCategoryX ? 'text-red-300' : 'text-pink-300'
                     }`}
                   >
                     {isBreastfeeding ? 'Lactation precaution' : 'Pregnancy precaution'}
                   </div>
                   <p
                     className={`text-[11px] mt-0.5 mb-1.5 ${
-                      hasCategoryX ? 'text-red-800/80' : 'text-pink-800/80'
+                      hasCategoryX ? 'text-red-300/80' : 'text-pink-300/80'
                     }`}
                   >
                     {hasCategoryX
@@ -427,22 +437,22 @@ export function PrescribeSafetyDialog({
                     {teratogenMatches.map((m, i) => (
                       <li
                         key={i}
-                        className={`text-sm ${hasCategoryX ? 'text-red-900' : 'text-pink-900'}`}
+                        className={`text-sm ${hasCategoryX ? 'text-red-200' : 'text-pink-200'}`}
                       >
                         <div>
                           <span className="font-semibold">{m.drugClassLabel}</span>
-                          <span className={hasCategoryX ? 'text-red-800' : 'text-pink-800'}>
+                          <span className={hasCategoryX ? 'text-red-300/80' : 'text-pink-300/80'}>
                             {' '}— chart says: <span className="italic">"{m.evidence}"</span>
                           </span>
                           <span
-                            className={`ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                            className={`ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
                               m.category === 'X'
-                                ? 'bg-red-600 text-white'
+                                ? 'bg-red-500/20 text-red-300 border-red-500/30'
                                 : m.category === 'D'
-                                  ? 'bg-pink-700 text-white'
+                                  ? 'bg-pink-500/20 text-pink-300 border-pink-500/30'
                                   : m.category === 'D-late'
-                                    ? 'bg-pink-600 text-white'
-                                    : 'bg-amber-600 text-white'
+                                    ? 'bg-pink-500/20 text-pink-300 border-pink-500/30'
+                                    : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                             }`}
                           >
                             {m.category === 'D-late'
@@ -454,7 +464,7 @@ export function PrescribeSafetyDialog({
                         </div>
                         <div
                           className={`text-xs mt-0.5 ml-0.5 ${
-                            hasCategoryX ? 'text-red-800' : 'text-pink-800'
+                            hasCategoryX ? 'text-red-300/80' : 'text-pink-300/80'
                           }`}
                         >
                           → {m.concern}
@@ -469,11 +479,11 @@ export function PrescribeSafetyDialog({
 
           {/* ── Patient's recorded allergies (raw text) ── */}
           {hasAllergy && rawAllergyString && (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-3">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-red-700">
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-red-300">
                 Patient's recorded allergies
               </div>
-              <div className="text-sm text-red-900 mt-1 break-words font-medium">
+              <div className="text-sm text-red-200 mt-1 break-words font-medium">
                 {rawAllergyString}
               </div>
             </div>
@@ -481,22 +491,22 @@ export function PrescribeSafetyDialog({
 
           {/* ── Duplicate therapy ── */}
           {hasDuplicate && (
-            <div className="rounded-xl border border-yellow-300 bg-yellow-50 p-3">
+            <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-3">
               <div className="flex items-start gap-2">
-                <Copy className="w-4 h-4 text-yellow-700 flex-shrink-0 mt-0.5" />
+                <Copy className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-yellow-800">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-yellow-300">
                     Duplicate therapy
                   </div>
-                  <p className="text-[11px] text-yellow-800/80 mt-0.5 mb-1.5">
+                  <p className="text-[11px] text-yellow-300/80 mt-0.5 mb-1.5">
                     Already on a drug in the same class. Confirm if intentional
                     (PRN + scheduled, loading + maintenance, IV-to-PO bridge).
                   </p>
                   <ul className="space-y-1">
                     {duplicateMatches.map((m, i) => (
-                      <li key={i} className="text-sm text-yellow-900">
+                      <li key={i} className="text-sm text-yellow-200">
                         <span className="font-semibold">{m.otherDrugName}</span>
-                        <span className="text-yellow-800">
+                        <span className="text-yellow-300/80">
                           {' '}— same class as prescribed drug ({m.sharedClassLabel})
                         </span>
                       </li>
@@ -510,29 +520,29 @@ export function PrescribeSafetyDialog({
           {/* ── Paediatric dose out of range ── */}
           {hasDose && (
             <div
-              className={`rounded-xl border p-3 ${
+              className={`rounded-xl p-3 ${
                 hasOverdose
-                  ? 'border-red-300 bg-red-50'
-                  : 'border-blue-300 bg-blue-50'
+                  ? 'border border-red-500/30 bg-red-500/10'
+                  : 'border border-blue-500/30 bg-blue-500/10'
               }`}
             >
               <div className="flex items-start gap-2">
                 <Scale
                   className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
-                    hasOverdose ? 'text-red-700' : 'text-blue-700'
+                    hasOverdose ? 'text-red-400' : 'text-blue-400'
                   }`}
                 />
                 <div className="flex-1 min-w-0">
                   <div
                     className={`text-[11px] font-bold uppercase tracking-wider ${
-                      hasOverdose ? 'text-red-800' : 'text-blue-800'
+                      hasOverdose ? 'text-red-300' : 'text-blue-300'
                     }`}
                   >
                     {hasOverdose ? 'Dose exceeds paediatric maximum' : 'Dose below paediatric minimum'}
                   </div>
                   <p
                     className={`text-[11px] mt-0.5 mb-1.5 ${
-                      hasOverdose ? 'text-red-800/80' : 'text-blue-800/80'
+                      hasOverdose ? 'text-red-300/80' : 'text-blue-300/80'
                     }`}
                   >
                     Calculated against the patient's recorded weight. Confirm
@@ -543,25 +553,25 @@ export function PrescribeSafetyDialog({
                     {doseMatches.map((m, i) => (
                       <li
                         key={i}
-                        className={`text-sm ${hasOverdose ? 'text-red-900' : 'text-blue-900'}`}
+                        className={`text-sm ${hasOverdose ? 'text-red-200' : 'text-blue-200'}`}
                       >
                         <div>
                           <span className="font-semibold">{m.ruleLabel}</span>
-                          <span className={hasOverdose ? 'text-red-800' : 'text-blue-800'}>
+                          <span className={hasOverdose ? 'text-red-300/80' : 'text-blue-300/80'}>
                             {' '}— {m.doseString} @ {m.weightKg} kg ={' '}
                             <span className="font-bold">
                               {formatMgPerKg(m.prescribedMgPerKg)} mg/kg
                             </span>
                           </span>
                           {m.severity === 'overdose' && (m.foldOverMax ?? 0) >= 2 && (
-                            <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-600 text-white">
+                            <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">
                               {formatFold(m.foldOverMax!)}× max
                             </span>
                           )}
                         </div>
                         <div
                           className={`text-xs mt-0.5 ml-0.5 ${
-                            hasOverdose ? 'text-red-800' : 'text-blue-800'
+                            hasOverdose ? 'text-red-300/80' : 'text-blue-300/80'
                           }`}
                         >
                           → recommended {m.minMgPerKg}–{m.maxMgPerKg} mg/kg/dose
@@ -577,24 +587,24 @@ export function PrescribeSafetyDialog({
           {/* ── Adult single-dose envelope (Phase 11b) ── */}
           {hasAdultDose && (
             <div
-              className={`rounded-xl border p-3 ${
+              className={`rounded-xl p-3 ${
                 adultDoseMatches.some((m) => m.severity === 'overdose')
-                  ? 'border-red-300 bg-red-50'
-                  : 'border-blue-300 bg-blue-50'
+                  ? 'border border-red-500/30 bg-red-500/10'
+                  : 'border border-blue-500/30 bg-blue-500/10'
               }`}
             >
               <div className="flex items-start gap-2">
                 <Scale
                   className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
                     adultDoseMatches.some((m) => m.severity === 'overdose')
-                      ? 'text-red-700' : 'text-blue-700'
+                      ? 'text-red-400' : 'text-blue-400'
                   }`}
                 />
                 <div className="flex-1 min-w-0">
                   <div
                     className={`text-[11px] font-bold uppercase tracking-wider ${
                       adultDoseMatches.some((m) => m.severity === 'overdose')
-                        ? 'text-red-800' : 'text-blue-800'
+                        ? 'text-red-300' : 'text-blue-300'
                     }`}
                   >
                     {adultDoseMatches.some((m) => m.severity === 'overdose')
@@ -604,7 +614,7 @@ export function PrescribeSafetyDialog({
                   <p
                     className={`text-[11px] mt-0.5 mb-1.5 ${
                       adultDoseMatches.some((m) => m.severity === 'overdose')
-                        ? 'text-red-800/80' : 'text-blue-800/80'
+                        ? 'text-red-300/80' : 'text-blue-300/80'
                     }`}
                   >
                     Compared against the common adult single-dose envelope
@@ -618,25 +628,25 @@ export function PrescribeSafetyDialog({
                       return (
                         <li
                           key={i}
-                          className={`text-sm ${isOver ? 'text-red-900' : 'text-blue-900'}`}
+                          className={`text-sm ${isOver ? 'text-red-200' : 'text-blue-200'}`}
                         >
                           <div>
                             <span className="font-semibold">{m.ruleLabel}</span>
-                            <span className={isOver ? 'text-red-800' : 'text-blue-800'}>
+                            <span className={isOver ? 'text-red-300/80' : 'text-blue-300/80'}>
                               {' '}— {m.doseString} ={' '}
                               <span className="font-bold">
                                 {m.prescribedMg} mg
                               </span>
                             </span>
                             {isOver && (m.foldOverMax ?? 0) >= 2 && (
-                              <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-600 text-white">
+                              <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">
                                 {formatFold(m.foldOverMax!)}× max
                               </span>
                             )}
                           </div>
                           <div
                             className={`text-xs mt-0.5 ml-0.5 ${
-                              isOver ? 'text-red-800' : 'text-blue-800'
+                              isOver ? 'text-red-300/80' : 'text-blue-300/80'
                             }`}
                           >
                             → adult single-dose range {m.minMg}–{m.maxMg} mg
@@ -652,14 +662,14 @@ export function PrescribeSafetyDialog({
 
           {/* ── Renal precaution ── */}
           {hasRenal && (
-            <div className="rounded-xl border border-violet-300 bg-violet-50 p-3">
+            <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-3">
               <div className="flex items-start gap-2">
-                <Droplet className="w-4 h-4 text-violet-700 flex-shrink-0 mt-0.5" />
+                <Droplet className="w-4 h-4 text-violet-400 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-violet-800">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-violet-300">
                     {hasCkd ? 'Renal precaution — CKD' : 'Renal precaution — possible AKI'}
                   </div>
-                  <p className="text-[11px] text-violet-800/80 mt-0.5 mb-1.5">
+                  <p className="text-[11px] text-violet-300/80 mt-0.5 mb-1.5">
                     {hasCkd
                       ? "Patient's chart records chronic kidney disease. Confirm renal function before prescribing — dose adjustment may be needed."
                       : 'Vitals suggest haemodynamic instability that can cause pre-renal AKI. Hold or dose-adjust if renal function unconfirmed.'}
@@ -667,21 +677,21 @@ export function PrescribeSafetyDialog({
                   </p>
                   <ul className="space-y-1.5">
                     {renalMatches.map((m, i) => (
-                      <li key={i} className="text-sm text-violet-900">
+                      <li key={i} className="text-sm text-violet-200">
                         <div>
                           <span className="font-semibold">{m.drugClassLabel}</span>
                           {m.trigger === 'ckd' && m.conditionEvidence && (
-                            <span className="text-violet-800">
+                            <span className="text-violet-300/80">
                               {' '}— chart says: <span className="italic">"{m.conditionEvidence}"</span>
                             </span>
                           )}
                           {m.trigger === 'aki_likely' && m.vitalEvidence && (
-                            <span className="text-violet-800">
+                            <span className="text-violet-300/80">
                               {' '}— vitals: {m.vitalEvidence}
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-violet-800 mt-0.5 ml-0.5">
+                        <div className="text-xs text-violet-300/80 mt-0.5 ml-0.5">
                           → {m.concern}
                         </div>
                       </li>
@@ -695,22 +705,22 @@ export function PrescribeSafetyDialog({
           {/* ── Renal eGFR precaution (Phase 12b — Cockcroft-Gault) ── */}
           {hasRenalEgfr && (
             <div
-              className={`rounded-xl border p-3 ${
+              className={`rounded-xl p-3 ${
                 hasRenalEgfrAvoid
-                  ? 'border-red-300 bg-red-50'
-                  : 'border-violet-300 bg-violet-50'
+                  ? 'border border-red-500/30 bg-red-500/10'
+                  : 'border border-violet-500/30 bg-violet-500/10'
               }`}
             >
               <div className="flex items-start gap-2">
                 <Droplet
                   className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
-                    hasRenalEgfrAvoid ? 'text-red-700' : 'text-violet-700'
+                    hasRenalEgfrAvoid ? 'text-red-400' : 'text-violet-400'
                   }`}
                 />
                 <div className="flex-1 min-w-0">
                   <div
                     className={`text-[11px] font-bold uppercase tracking-wider ${
-                      hasRenalEgfrAvoid ? 'text-red-800' : 'text-violet-800'
+                      hasRenalEgfrAvoid ? 'text-red-300' : 'text-violet-300'
                     }`}
                   >
                     {hasRenalEgfrAvoid
@@ -719,7 +729,7 @@ export function PrescribeSafetyDialog({
                   </div>
                   <p
                     className={`text-[11px] mt-0.5 mb-1.5 ${
-                      hasRenalEgfrAvoid ? 'text-red-800/80' : 'text-violet-800/80'
+                      hasRenalEgfrAvoid ? 'text-red-300/80' : 'text-violet-300/80'
                     }`}
                   >
                     Calculated by Cockcroft-Gault from the most recent serum
@@ -733,11 +743,11 @@ export function PrescribeSafetyDialog({
                       return (
                         <li
                           key={i}
-                          className={`text-sm ${isAvoid ? 'text-red-900' : 'text-violet-900'}`}
+                          className={`text-sm ${isAvoid ? 'text-red-200' : 'text-violet-200'}`}
                         >
                           <div>
                             <span className="font-semibold">{m.drugClassLabel}</span>
-                            <span className={isAvoid ? 'text-red-800' : 'text-violet-800'}>
+                            <span className={isAvoid ? 'text-red-300/80' : 'text-violet-300/80'}>
                               {' '}— eGFR{' '}
                               <span className="font-bold">
                                 {m.patientEgfr.toFixed(0)}
@@ -745,8 +755,8 @@ export function PrescribeSafetyDialog({
                               mL/min (threshold {m.thresholdEgfr})
                             </span>
                             <span
-                              className={`ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded text-white ${
-                                isAvoid ? 'bg-red-600' : 'bg-violet-600'
+                              className={`ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+                                isAvoid ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-violet-500/20 text-violet-300 border-violet-500/30'
                               }`}
                             >
                               {isAvoid ? 'Avoid' : 'Caution'}
@@ -754,7 +764,7 @@ export function PrescribeSafetyDialog({
                           </div>
                           <div
                             className={`text-xs mt-0.5 ml-0.5 ${
-                              isAvoid ? 'text-red-800' : 'text-violet-800'
+                              isAvoid ? 'text-red-300/80' : 'text-violet-300/80'
                             }`}
                           >
                             → {m.concern}
@@ -771,22 +781,22 @@ export function PrescribeSafetyDialog({
           {/* ── Geriatric (Beers Criteria) precaution (Phase 16) ── */}
           {hasGeriatric && (
             <div
-              className={`rounded-xl border p-3 ${
+              className={`rounded-xl p-3 ${
                 hasGeriatricAvoid
-                  ? 'border-red-300 bg-red-50'
-                  : 'border-amber-300 bg-amber-50'
+                  ? 'border border-red-500/30 bg-red-500/10'
+                  : 'border border-amber-500/30 bg-amber-500/10'
               }`}
             >
               <div className="flex items-start gap-2">
                 <UserMinus
                   className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
-                    hasGeriatricAvoid ? 'text-red-700' : 'text-amber-700'
+                    hasGeriatricAvoid ? 'text-red-400' : 'text-amber-400'
                   }`}
                 />
                 <div className="flex-1 min-w-0">
                   <div
                     className={`text-[11px] font-bold uppercase tracking-wider ${
-                      hasGeriatricAvoid ? 'text-red-800' : 'text-amber-800'
+                      hasGeriatricAvoid ? 'text-red-300' : 'text-amber-300'
                     }`}
                   >
                     {hasGeriatricAvoid
@@ -795,7 +805,7 @@ export function PrescribeSafetyDialog({
                   </div>
                   <p
                     className={`text-[11px] mt-0.5 mb-1.5 ${
-                      hasGeriatricAvoid ? 'text-red-800/80' : 'text-amber-800/80'
+                      hasGeriatricAvoid ? 'text-red-300/80' : 'text-amber-300/80'
                     }`}
                   >
                     The American Geriatrics Society Beers Criteria flags this
@@ -808,16 +818,16 @@ export function PrescribeSafetyDialog({
                       return (
                         <li
                           key={i}
-                          className={`text-sm ${isAvoid ? 'text-red-900' : 'text-amber-900'}`}
+                          className={`text-sm ${isAvoid ? 'text-red-200' : 'text-amber-200'}`}
                         >
                           <div>
                             <span className="font-semibold">{m.drugClassLabel}</span>
-                            <span className={isAvoid ? 'text-red-800' : 'text-amber-800'}>
+                            <span className={isAvoid ? 'text-red-300/80' : 'text-amber-300/80'}>
                               {' '}— age {m.ageYears}
                             </span>
                             <span
-                              className={`ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded text-white ${
-                                isAvoid ? 'bg-red-600' : 'bg-amber-600'
+                              className={`ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+                                isAvoid ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                               }`}
                             >
                               {isAvoid ? 'Avoid' : 'Caution'}
@@ -825,7 +835,7 @@ export function PrescribeSafetyDialog({
                           </div>
                           <div
                             className={`text-xs mt-0.5 ml-0.5 ${
-                              isAvoid ? 'text-red-800' : 'text-amber-800'
+                              isAvoid ? 'text-red-300/80' : 'text-amber-300/80'
                             }`}
                           >
                             → {m.concern}
@@ -841,33 +851,33 @@ export function PrescribeSafetyDialog({
 
           {/* ── Interaction conflicts ── */}
           {hasInteraction && (
-            <div className="rounded-xl border border-orange-300 bg-orange-50 p-3">
+            <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 p-3">
               <div className="flex items-start gap-2">
-                <Pill className="w-4 h-4 text-orange-700 flex-shrink-0 mt-0.5" />
+                <Pill className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-orange-800">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-orange-300">
                     Drug interactions
                   </div>
                   <ul className="mt-1.5 space-y-1.5">
                     {interactionMatches.map((m, i) => (
-                      <li key={i} className="text-sm text-orange-900">
+                      <li key={i} className="text-sm text-orange-200">
                         <div>
                           <span className="font-semibold">{m.otherDrugName}</span>
-                          <span className="text-orange-800">
+                          <span className="text-orange-300/80">
                             {' '}— {m.prescribedClassLabel} + {m.otherClassLabel}
                           </span>
                           {m.severity === 'contraindicated' && (
-                            <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-600 text-white">
+                            <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">
                               Contraindicated
                             </span>
                           )}
                           {m.severity === 'major' && (
-                            <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-orange-600 text-white">
+                            <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300 border border-orange-500/30">
                               Major
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-orange-800 mt-0.5 ml-0.5">
+                        <div className="text-xs text-orange-300/80 mt-0.5 ml-0.5">
                           → {m.mechanism}
                         </div>
                       </li>
@@ -878,7 +888,7 @@ export function PrescribeSafetyDialog({
             </div>
           )}
 
-          <p className="text-xs text-slate-600 leading-relaxed">
+          <p className={`text-xs leading-relaxed ${text.body}`}>
             If the order is clinically necessary despite the conflict
             (e.g. desensitization protocol, monitored co-administration,
             alternative is unavailable), you may override. The override
@@ -888,11 +898,11 @@ export function PrescribeSafetyDialog({
 
         {/* ── Override reason (Workflow 2 — SEVERE/ANAPHYLAXIS only) ── */}
         {requiresOverrideReason && (
-          <div className="px-5 pb-3 border-t border-slate-200">
-            <label className="block mt-3 text-[11px] font-bold uppercase tracking-wider text-red-700">
-              Override reason <span className="text-red-600">*</span>
+          <div className="px-5 pb-3" style={{ borderTop: borderStyle }}>
+            <label className="block mt-3 text-[11px] font-bold uppercase tracking-wider text-red-400">
+              Override reason <span className="text-red-400">*</span>
             </label>
-            <p className="text-[11px] text-slate-600 mt-0.5 mb-2">
+            <p className={`text-[11px] mt-0.5 mb-2 ${text.body}`}>
               {highestAllergySev === 'ANAPHYLAXIS'
                 ? 'Anaphylaxis is on this patient\'s record. Document why this prescription is clinically justified — your reason is permanent and visible department-wide.'
                 : 'A severe allergy is on this patient\'s record. Document why this prescription is clinically justified — your reason is permanent and visible department-wide.'}
@@ -902,10 +912,11 @@ export function PrescribeSafetyDialog({
               value={overrideReason}
               onChange={(e) => setOverrideReason(e.target.value)}
               placeholder="e.g. Desensitisation protocol started 2 hours ago, monitored in resus, no alternative available."
-              className="w-full px-3 py-2 text-sm rounded-lg border border-red-300 outline-none focus:border-red-500"
+              style={glassInner}
+              className={`w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
               disabled={loading}
             />
-            <p className="text-[10px] text-slate-500 mt-1">
+            <p className={`text-[10px] mt-1 ${text.muted}`}>
               {overrideReason.trim().length < 10
                 ? `Need at least 10 characters (${overrideReason.trim().length}/10).`
                 : `${overrideReason.trim().length} characters.`}
@@ -914,12 +925,16 @@ export function PrescribeSafetyDialog({
         )}
 
         {/* ── Actions ── */}
-        <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 flex-shrink-0">
+        <div
+          style={{ ...glassInner, borderRadius: 0, borderTop: borderStyle }}
+          className="px-5 py-4 flex items-center justify-end gap-2 flex-shrink-0"
+        >
           <button
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="px-4 py-2.5 text-sm font-bold rounded-xl bg-white border border-slate-300 text-slate-800 hover:bg-slate-100 transition-colors disabled:opacity-50"
+            style={glassInner}
+            className={`px-4 py-2.5 text-sm font-bold rounded-xl hover:bg-white/5 transition-colors disabled:opacity-50 ${text.label}`}
           >
             Cancel order
           </button>

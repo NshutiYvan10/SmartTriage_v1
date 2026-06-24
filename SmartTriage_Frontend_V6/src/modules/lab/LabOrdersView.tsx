@@ -82,6 +82,7 @@ function slaInfo(order: LabOrder): { elapsed: number; target: number; overdueBy:
 
 export function LabOrdersView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const techName = user?.fullName ?? '';
@@ -306,15 +307,15 @@ export function LabOrdersView() {
 
         {/* Header */}
         <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
-          <div className="bg-gradient-to-r from-violet-700 to-violet-600 px-6 py-5">
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-                  <FlaskConical className="w-5 h-5 text-white" />
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                  <FlaskConical className="w-5 h-5 text-cyan-300" />
                 </div>
                 <div>
                   <h1 className="text-lg font-bold text-white tracking-wide">Lab — Worklist</h1>
-                  <p className="text-white/60 text-xs">
+                  <p className="text-white/50 text-xs">
                     {techName ? `Signed in as ${techName}` : 'Lab technician dashboard'}
                   </p>
                 </div>
@@ -371,16 +372,16 @@ export function LabOrdersView() {
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
                 activeTab === id
-                  ? 'bg-gradient-to-r from-violet-700 to-violet-600 text-white shadow-lg'
-                  : isDark ? 'bg-white/5 text-white/60 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                  : `${text.body} hover:bg-white/5 border-transparent`
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
               {label}
               <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                activeTab === id ? 'bg-white/20' : 'bg-slate-500/20'
+                activeTab === id ? 'bg-cyan-500/20' : 'bg-slate-500/20'
               }`}>{count}</span>
             </button>
           ))}
@@ -790,28 +791,25 @@ function HistoryPanel({
   text: { heading: string; muted: string; body: string; accent: string; label: string };
   isDark: boolean;
 }) {
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   return (
     <div className="space-y-3 animate-fade-up">
       {/* Filter bar */}
       <div className="rounded-2xl p-3 flex flex-col md:flex-row md:items-center gap-2" style={glassCard}>
         <div className="relative flex-1 min-w-0">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className={`w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 ${text.muted}`} />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search order number, test name, or accession…"
-            className={`w-full pl-8 pr-3 py-2 text-sm rounded-lg outline-none ${
-              isDark ? 'bg-white/5 text-white placeholder-slate-500' : 'bg-white text-slate-900 placeholder-slate-400'
-            }`}
+            className={`w-full pl-8 pr-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
             style={glassInner}
           />
         </div>
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value as LabOrderStatus | '')}
-          className={`px-3 py-2 text-xs font-bold rounded-lg outline-none ${
-            isDark ? 'bg-white/5 text-white' : 'bg-white text-slate-900'
-          }`}
+          className={`px-3 py-2 text-xs font-bold rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
           style={glassInner}
         >
           {HISTORY_STATUS_OPTIONS.map((opt) => (
@@ -830,9 +828,7 @@ function HistoryPanel({
 
       {/* Result table */}
       <div className="rounded-2xl overflow-hidden" style={glassCard}>
-        <div className={`flex items-center justify-between px-4 py-2.5 border-b ${
-          isDark ? 'border-white/10' : 'border-slate-200/60'
-        }`}>
+        <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: borderStyle }}>
           <span className={`text-[11px] font-bold uppercase tracking-wider ${text.muted}`}>
             {total === 0 ? 'No matches' : `${total} order${total === 1 ? '' : 's'}`}
           </span>
@@ -856,9 +852,7 @@ function HistoryPanel({
               const sc = statusChip(r.status);
               const pc = priorityColor(r.priority);
               return (
-                <li key={r.id} className={`px-4 py-3 border-b last:border-0 ${
-                  isDark ? 'border-white/5 hover:bg-white/5' : 'border-slate-100 hover:bg-slate-50'
-                }`}>
+                <li key={r.id} className="px-4 py-3 last:border-0 hover:bg-white/5" style={{ borderBottom: borderStyle }}>
                   <div className="flex items-start gap-3 flex-wrap">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -867,10 +861,10 @@ function HistoryPanel({
                         <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${pc.chip}`}>{r.priority}</span>
                         <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${sc.className}`}>{sc.label}</span>
                         {r.isCritical && (
-                          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-red-600 text-white">Critical</span>
+                          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">Critical</span>
                         )}
                         {!r.isCritical && r.isAbnormal && (
-                          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-200 text-amber-900">Abnormal</span>
+                          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Abnormal</span>
                         )}
                       </div>
                       <div className={`text-[11px] mt-0.5 ${text.muted} flex items-center gap-3 flex-wrap`}>
@@ -882,7 +876,7 @@ function HistoryPanel({
                       {r.resultValue && (
                         <div className={`mt-1 text-[12px] ${text.body} truncate`}>
                           Result: <span className="font-medium">{r.resultValue}</span>
-                          {r.resultUnit && <span className="text-slate-500"> {r.resultUnit}</span>}
+                          {r.resultUnit && <span className={text.muted}> {r.resultUnit}</span>}
                         </div>
                       )}
                     </div>
@@ -894,13 +888,11 @@ function HistoryPanel({
         )}
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className={`flex items-center justify-between px-4 py-2 border-t ${
-            isDark ? 'border-white/10' : 'border-slate-200/60'
-          }`}>
+          <div className="flex items-center justify-between px-4 py-2" style={{ borderTop: borderStyle }}>
             <button
               onClick={() => setPage(Math.max(0, page - 1))}
               disabled={page === 0 || loading}
-              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded hover:bg-slate-100 disabled:opacity-40"
+              className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded hover:bg-white/5 disabled:opacity-40 ${text.body}`}
             >
               <ChevronLeft className="w-3 h-3" /> Prev
             </button>
@@ -910,7 +902,7 @@ function HistoryPanel({
             <button
               onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
               disabled={page >= totalPages - 1 || loading}
-              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded hover:bg-slate-100 disabled:opacity-40"
+              className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded hover:bg-white/5 disabled:opacity-40 ${text.body}`}
             >
               Next <ChevronRight className="w-3 h-3" />
             </button>

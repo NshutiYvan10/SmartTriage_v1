@@ -185,7 +185,7 @@ function severityStyle(s: AlertSeverity) {
 /* ═══════════════════════════════════════════════════════════════ */
 
 export function MedicationSafetyOverridesView() {
-  const { glassCard, text } = useTheme();
+  const { glassCard, glassInner, isDark, text } = useTheme();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
@@ -202,7 +202,7 @@ export function MedicationSafetyOverridesView() {
   // re-sync from the server in any case.
   const [ackingId, setAckingId] = useState<string | null>(null);
 
-  const borderStyle = '1px solid rgba(255,255,255,0.06)';
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
 
   /* ── Fetch ─────────────────────────────────────────────────── */
   const load = useCallback(async () => {
@@ -579,7 +579,8 @@ export function MedicationSafetyOverridesView() {
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Patient, drug, visit#…"
-                    className="pl-8 pr-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-white placeholder:text-slate-500 outline-none focus:border-rose-500/50 w-56"
+                    style={glassInner}
+                    className={`pl-8 pr-3 py-1.5 rounded-lg text-xs ${text.body} placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 w-56`}
                   />
                 </div>
               </div>

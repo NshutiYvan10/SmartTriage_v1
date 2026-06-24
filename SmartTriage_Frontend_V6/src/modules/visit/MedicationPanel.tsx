@@ -106,6 +106,7 @@ export function MedicationPanel({
   onSubmit, onClose, formLoading, patient, visit, latestTriage,
   glassCard, glassInner, isDark, text,
 }: Props) {
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<DrugFormulary[]>([]);
   const [searching, setSearching] = useState(false);
@@ -319,18 +320,18 @@ export function MedicationPanel({
                   <span className={`text-[10px] ${text.muted}`}>({selected.brandNames})</span>
                 )}
                 {selected.isOnReml && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600">REML</span>
+                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">REML</span>
                 )}
                 {selected.isHighAlert && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-red-500/15 text-red-600 inline-flex items-center gap-1">
+                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 inline-flex items-center gap-1">
                     <ShieldAlert className="w-3 h-3" /> High alert
                   </span>
                 )}
                 {selected.requiresDoubleCheck && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700">Double-check</span>
+                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Double-check</span>
                 )}
                 {selected.pregnancyCategory && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-700">
+                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
                     Preg {selected.pregnancyCategory}
                   </span>
                 )}
@@ -340,8 +341,8 @@ export function MedicationPanel({
               </div>
               {allergenHit && (
                 <div className="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center gap-2">
-                  <AlertTriangle className="w-3.5 h-3.5 text-red-600 flex-shrink-0" />
-                  <span className="text-[11px] text-red-700 font-semibold">
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                  <span className="text-[11px] text-red-300 font-semibold">
                     Allergen group "{allergenHit}" may match this patient's known allergies. Hard check runs on submit.
                   </span>
                 </div>
@@ -360,12 +361,12 @@ export function MedicationPanel({
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search REML formulary (e.g. paracetamol, amoxicillin, oxytocin)…"
                 autoFocus
-                className={`w-full pl-9 pr-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+                className={`w-full pl-9 pr-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 placeholder-slate-400 ${text.body}`}
                 style={glassInner}
               />
             </div>
             {(searching || results.length > 0) && (
-              <div className="absolute z-10 mt-1 w-full rounded-xl border border-slate-200/30 max-h-72 overflow-y-auto" style={glassCard}>
+              <div className="absolute z-10 mt-1 w-full rounded-xl max-h-72 overflow-y-auto" style={{ ...glassCard, border: borderStyle }}>
                 {searching && results.length === 0 && (
                   <p className={`text-xs text-center py-3 ${text.muted}`}>Searching…</p>
                 )}
@@ -379,13 +380,13 @@ export function MedicationPanel({
                     key={r.id}
                     type="button"
                     onClick={() => handleSelect(r)}
-                    className="w-full text-left px-3 py-2 hover:bg-emerald-500/10 transition-colors border-b border-slate-200/10 last:border-0"
+                    className={`w-full text-left px-3 py-2 hover:bg-emerald-500/10 transition-colors border-b last:border-0 ${isDark ? 'border-sky-500/10' : 'border-slate-200/40'}`}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className={`text-sm font-bold ${text.heading}`}>{r.genericName}</span>
                       <div className="flex items-center gap-1">
-                        {r.isOnReml && <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-600">REML</span>}
-                        {r.isHighAlert && <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-red-500/15 text-red-600">HA</span>}
+                        {r.isOnReml && <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">REML</span>}
+                        {r.isHighAlert && <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">HA</span>}
                       </div>
                     </div>
                     <div className={`text-[10px] ${text.muted}`}>
@@ -443,7 +444,7 @@ export function MedicationPanel({
             </div>
           )}
           {visit.isPediatric && !weightKg && (
-            <div className="mt-2 text-[11px] text-amber-600">
+            <div className="mt-2 text-[11px] text-amber-400">
               Pediatric patient but no weight on record — record weight in triage to enable dose calculator.
             </div>
           )}
@@ -466,7 +467,7 @@ export function MedicationPanel({
                 onClick={() => setPriority(p.value)}
                 title={p.description}
                 className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
-                  active ? p.tint : 'bg-slate-500/10 text-slate-500 border-transparent hover:bg-slate-500/20'
+                  active ? p.tint : `${text.body} border-transparent hover:bg-white/5`
                 }`}
               >
                 <div>{p.label}</div>
@@ -496,8 +497,8 @@ export function MedicationPanel({
                 title={t.description}
                 className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border text-left ${
                   active
-                    ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/40'
-                    : 'bg-slate-500/10 text-slate-500 border-transparent hover:bg-slate-500/20'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    : `${text.body} border-transparent hover:bg-white/5`
                 }`}
               >
                 <div className="flex items-center gap-1.5"><Icon className="w-3.5 h-3.5" />{t.label}</div>
@@ -516,7 +517,7 @@ export function MedicationPanel({
             </label>
             <input type="number" min="0.5" step="0.5" value={intervalHours}
               onChange={(e) => setIntervalHours(e.target.value)} placeholder="e.g. 8"
-              className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+              className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 placeholder-slate-400 ${text.body}`} style={glassInner} />
           </div>
           <div>
             <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
@@ -524,7 +525,7 @@ export function MedicationPanel({
             </label>
             <input type="number" min="1" value={maxDoses}
               onChange={(e) => setMaxDoses(e.target.value)} placeholder="until discontinued"
-              className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+              className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 placeholder-slate-400 ${text.body}`} style={glassInner} />
           </div>
           <div>
             <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
@@ -532,7 +533,7 @@ export function MedicationPanel({
             </label>
             <input type="datetime-local" value={endAt}
               onChange={(e) => setEndAt(e.target.value)}
-              className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+              className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 placeholder-slate-400 ${text.body}`} style={glassInner} />
           </div>
           <p className={`md:col-span-3 text-[10px] ${text.muted}`}>
             The first dose is due immediately; each administration schedules the next.
@@ -550,7 +551,7 @@ export function MedicationPanel({
               </label>
               <input value={prnIndication} onChange={(e) => setPrnIndication(e.target.value)}
                 placeholder="e.g. pain, nausea"
-                className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+                className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 placeholder-slate-400 ${text.body}`} style={glassInner} />
             </div>
             <div>
               <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
@@ -558,7 +559,7 @@ export function MedicationPanel({
               </label>
               <input type="number" min="0.5" step="0.5" value={prnMinIntervalHours}
                 onChange={(e) => setPrnMinIntervalHours(e.target.value)} placeholder="e.g. 6"
-                className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+                className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 placeholder-slate-400 ${text.body}`} style={glassInner} />
             </div>
             <div>
               <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
@@ -566,7 +567,7 @@ export function MedicationPanel({
               </label>
               <input type="number" min="1" value={prnMaxDosesPerDay}
                 onChange={(e) => setPrnMaxDosesPerDay(e.target.value)} placeholder="e.g. 4"
-                className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+                className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 placeholder-slate-400 ${text.body}`} style={glassInner} />
             </div>
           </div>
           <div>
@@ -576,7 +577,7 @@ export function MedicationPanel({
             <div className="flex items-center gap-2 flex-wrap">
               <select value={gateParameter}
                 onChange={(e) => setGateParameter(e.target.value as VitalGateParameter | '')}
-                className={`px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-slate-800' : 'text-slate-800 bg-white'}`}>
+                className={`px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
                 <option value="">No gate</option>
                 {VITAL_GATE_PARAMETERS.map((p) => (
                   <option key={p.value} value={p.value}>{p.label}</option>
@@ -586,14 +587,14 @@ export function MedicationPanel({
                 <>
                   <select value={gateComparator}
                     onChange={(e) => setGateComparator(e.target.value as VitalGateComparator)}
-                    className={`px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-slate-800' : 'text-slate-800 bg-white'}`}>
+                    className={`px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
                     <option value="GTE">≥</option>
                     <option value="LTE">≤</option>
                   </select>
                   <input type="number" value={gateThreshold}
                     onChange={(e) => setGateThreshold(e.target.value)}
                     placeholder="threshold"
-                    className={`w-28 px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+                    className={`w-28 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 placeholder-slate-400 ${text.body}`} style={glassInner} />
                   <span className={`text-[11px] ${text.muted}`}>
                     {VITAL_GATE_PARAMETERS.find((p) => p.value === gateParameter)?.unit}
                     {' '}— checked against the latest vitals at administration; blocked if unmet (override requires justification).
@@ -613,7 +614,7 @@ export function MedicationPanel({
             </label>
             <input type="number" min="0.1" step="0.1" value={rateValue}
               onChange={(e) => setRateValue(e.target.value)} placeholder="e.g. 100"
-              className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+              className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 placeholder-slate-400 ${text.body}`} style={glassInner} />
           </div>
           <div>
             <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
@@ -621,7 +622,7 @@ export function MedicationPanel({
             </label>
             <input value={rateUnit} onChange={(e) => setRateUnit(e.target.value)}
               placeholder="mL/hr, units/hr, mcg/kg/min"
-              className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+              className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 placeholder-slate-400 ${text.body}`} style={glassInner} />
           </div>
           <p className={`md:col-span-2 text-[10px] ${text.muted}`}>
             The nurse confirms initiation at the bedside; rate changes and the stop are each audited events.
@@ -644,7 +645,7 @@ export function MedicationPanel({
                     ? value === 'BLOOD_PRODUCT'
                       ? 'bg-rose-600 text-white shadow-md'
                       : 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-md'
-                    : isDark ? 'bg-white/5 text-slate-300 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    : `${text.body} hover:bg-white/5`
                 }`}>
                 {label}
               </button>
@@ -653,7 +654,7 @@ export function MedicationPanel({
           {productType !== 'DRUG' && (
             <input value={productDetail} onChange={(e) => setProductDetail(e.target.value)}
               placeholder={productType === 'BLOOD_PRODUCT' ? 'e.g. PRBC 2 units, FFP 4 units' : 'detail'}
-              className={`flex-1 min-w-[180px] px-3 py-2 rounded-lg text-sm outline-none border border-slate-300/30 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+              className={`flex-1 min-w-[180px] px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 placeholder-slate-400 ${text.body}`} style={glassInner} />
           )}
         </div>
         {productType === 'BLOOD_PRODUCT' && (
@@ -681,7 +682,7 @@ export function MedicationPanel({
             <textarea rows={2} value={emergencyJustification}
               onChange={(e) => setEmergencyJustification(e.target.value)}
               placeholder="Why this cannot wait for approval (min 10 characters)…"
-              className={`w-full px-3 py-2 rounded-lg text-sm outline-none border border-red-300 ${isDark ? 'text-white bg-white/5' : 'text-slate-800 bg-white'}`} />
+              className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500/30 border border-red-500/30 placeholder-slate-400 ${text.body}`} style={glassInner} />
           )}
         </div>
       )}
@@ -694,7 +695,7 @@ export function MedicationPanel({
             value={dose}
             onChange={(e) => setDose(e.target.value)}
             placeholder="e.g. 500 mg, 10 mg/kg, 1 g"
-            className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+            className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 placeholder-slate-400 ${text.body}`}
             style={glassInner}
           />
         </div>
@@ -711,9 +712,7 @@ export function MedicationPanel({
                   className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
                     active
                       ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-md'
-                      : isDark
-                        ? 'bg-white/5 text-slate-300 hover:bg-white/10'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      : `${text.body} hover:bg-white/5`
                   }`}
                   title={ROUTE_LABELS[r] ?? r}
                 >
@@ -729,7 +728,7 @@ export function MedicationPanel({
             value={frequency}
             onChange={(e) => setFrequency(e.target.value)}
             placeholder="e.g. q8h, BID, stat, every 4–6h prn"
-            className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+            className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 placeholder-slate-400 ${text.body}`}
             style={glassInner}
           />
         </div>
@@ -741,7 +740,7 @@ export function MedicationPanel({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="e.g. Give with food, monitor BP at 30 min"
-            className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+            className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 placeholder-slate-400 ${text.body}`}
             style={glassInner}
           />
         </div>

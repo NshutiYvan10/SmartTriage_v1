@@ -64,6 +64,8 @@ export function InvestigationPanel({ onSubmit, onClose, formLoading, glassCard, 
   const [clinicalIndication, setClinicalIndication] = useState('');
   const [labNotes, setLabNotes] = useState('');
 
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
+
   useEffect(() => {
     let cancelled = false;
     labCatalogApi.getCommon()
@@ -155,7 +157,7 @@ export function InvestigationPanel({ onSubmit, onClose, formLoading, glassCard, 
             <button
               type="button"
               onClick={() => setShowCommon((v) => !v)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition-colors"
             >
               <Sparkles className="w-3.5 h-3.5" /> Common
               <ChevronDown className={`w-3 h-3 transition-transform ${showCommon ? 'rotate-180' : ''}`} />
@@ -197,11 +199,11 @@ export function InvestigationPanel({ onSubmit, onClose, formLoading, glassCard, 
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-sm font-bold ${text.heading}`}>{selected.testName}</span>
                 {selected.shortName && <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-500/15 ${text.muted}`}>{selected.shortName}</span>}
-                <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-500/15 text-slate-600">
+                <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-300 border border-slate-500/30">
                   {selected.investigationType?.replace(/_/g, ' ')}
                 </span>
                 {selected.isCommonInRwanda && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600">Common in Rwanda</span>
+                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Common in Rwanda</span>
                 )}
               </div>
               {selected.specimenType && (
@@ -218,18 +220,18 @@ export function InvestigationPanel({ onSubmit, onClose, formLoading, glassCard, 
         ) : (
           <div className="relative">
             <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 ${text.muted}`} />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search for a test (e.g. FBC, malaria RDT, chest X-ray)…"
                 autoFocus
-                className={`w-full pl-9 pr-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+                className={`w-full pl-9 pr-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
                 style={glassInner}
               />
             </div>
             {(searching || results.length > 0) && (
-              <div className="absolute z-10 mt-1 w-full rounded-xl border border-slate-200/30 max-h-72 overflow-y-auto" style={glassCard}>
+              <div className="absolute z-10 mt-1 w-full rounded-xl max-h-72 overflow-y-auto" style={{ ...glassCard, border: borderStyle }}>
                 {searching && results.length === 0 && (
                   <p className={`text-xs text-center py-3 ${text.muted}`}>Searching…</p>
                 )}
@@ -243,19 +245,19 @@ export function InvestigationPanel({ onSubmit, onClose, formLoading, glassCard, 
                     key={r.id}
                     type="button"
                     onClick={() => handleSelect(r)}
-                    className="w-full text-left px-3 py-2 hover:bg-cyan-500/10 transition-colors border-b border-slate-200/10 last:border-0"
+                    className="w-full text-left px-3 py-2 hover:bg-cyan-500/10 transition-colors border-b border-cyan-500/10 last:border-0"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className={`text-sm font-bold ${text.heading}`}>{r.testName}</span>
                       {r.shortName && <span className={`text-[10px] font-mono ${text.muted}`}>{r.shortName}</span>}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-slate-500/15 text-slate-600">
+                      <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-slate-500/20 text-slate-300 border border-slate-500/30">
                         {r.investigationType?.replace(/_/g, ' ')}
                       </span>
                       {r.category && <span className={`text-[10px] ${text.muted}`}>{r.category}</span>}
                       {r.isCommonInRwanda && (
-                        <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-600">Rwanda common</span>
+                        <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Rwanda common</span>
                       )}
                     </div>
                   </button>
@@ -285,7 +287,7 @@ export function InvestigationPanel({ onSubmit, onClose, formLoading, glassCard, 
                 type="button"
                 onClick={() => setUrgency(u.value)}
                 className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                  active ? u.color : 'bg-slate-500/10 text-slate-500 hover:bg-slate-500/20'
+                  active ? u.color : `bg-slate-500/10 ${text.body} hover:bg-slate-500/20`
                 }`}
               >
                 <div>{u.label}</div>
@@ -306,7 +308,7 @@ export function InvestigationPanel({ onSubmit, onClose, formLoading, glassCard, 
           value={clinicalIndication}
           onChange={(e) => setClinicalIndication(e.target.value)}
           placeholder="e.g. Suspected severe malaria, persistent fever > 48h, chest pain with ECG changes…"
-          className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+          className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
           style={glassInner}
         />
       </div>
@@ -322,7 +324,7 @@ export function InvestigationPanel({ onSubmit, onClose, formLoading, glassCard, 
           onChange={(e) => setLabNotes(e.target.value)}
           placeholder="e.g. Patient on warfarin — process on priority. Specimen drawn at 14:00."
           rows={2}
-          className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+          className={`w-full px-3 py-2.5 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
           style={glassInner}
         />
       </div>

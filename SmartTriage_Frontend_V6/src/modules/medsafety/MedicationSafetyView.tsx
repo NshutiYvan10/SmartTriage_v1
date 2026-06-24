@@ -17,11 +17,11 @@ import { useTheme } from '@/hooks/useTheme';
 
 // ── Check result styling ──
 function getOverallStyle(check: MedicationSafetyCheck) {
-  if (check.overriddenBy) return { bg: 'rgba(139,92,246,0.08)', text: 'text-violet-600', border: '1px solid rgba(139,92,246,0.2)', label: 'Overridden' };
-  if (check.overallSafe) return { bg: 'rgba(34,197,94,0.08)', text: 'text-emerald-600', border: '1px solid rgba(34,197,94,0.2)', label: 'Safe' };
+  if (check.overriddenBy) return { bg: 'rgba(139,92,246,0.08)', text: 'text-violet-300', border: '1px solid rgba(139,92,246,0.2)', label: 'Overridden' };
+  if (check.overallSafe) return { bg: 'rgba(34,197,94,0.08)', text: 'text-emerald-300', border: '1px solid rgba(34,197,94,0.2)', label: 'Safe' };
   const hasBlock = !check.allergyCheckPassed || !check.doseCheckPassed;
-  if (hasBlock) return { bg: 'rgba(239,68,68,0.08)', text: 'text-red-600', border: '1px solid rgba(239,68,68,0.2)', label: 'Blocked' };
-  return { bg: 'rgba(245,158,11,0.08)', text: 'text-amber-600', border: '1px solid rgba(245,158,11,0.2)', label: 'Warning' };
+  if (hasBlock) return { bg: 'rgba(239,68,68,0.08)', text: 'text-red-300', border: '1px solid rgba(239,68,68,0.2)', label: 'Blocked' };
+  return { bg: 'rgba(245,158,11,0.08)', text: 'text-amber-300', border: '1px solid rgba(245,158,11,0.2)', label: 'Warning' };
 }
 
 function getCheckIcon(passed: boolean) {
@@ -498,7 +498,7 @@ export function MedicationSafetyView() {
                                   <span
                                     key={c.label}
                                     className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded-md ${
-                                      c.passed ? 'text-emerald-600' : 'text-red-600'
+                                      c.passed ? 'text-emerald-300' : 'text-red-300'
                                     }`}
                                     style={{
                                       background: c.passed ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)',
@@ -891,7 +891,7 @@ export function MedicationSafetyView() {
                               {/* High alert badge */}
                               {drug.isHighAlert && (
                                 <span
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg text-red-600"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg text-red-300"
                                   style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
                                 >
                                   <AlertTriangle className="w-2.5 h-2.5" /> HIGH ALERT
@@ -899,7 +899,7 @@ export function MedicationSafetyView() {
                               )}
                               {drug.requiresDoubleCheck && (
                                 <span
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg text-amber-600"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg text-amber-300"
                                   style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
                                 >
                                   <Eye className="w-2.5 h-2.5" /> Double Check
@@ -1018,9 +1018,9 @@ export function MedicationSafetyView() {
 
         {/* ── Override Dialog ── */}
         {overrideDialogOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOverrideDialogOpen(false)} />
-            <div className="relative w-full max-w-lg rounded-2xl overflow-hidden animate-fade-up" style={glassCard}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+            <div className="absolute inset-0" onClick={() => setOverrideDialogOpen(false)} />
+            <div className="relative w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="px-5 py-4 border-b border-white/10">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">

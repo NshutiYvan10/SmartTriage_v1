@@ -15,11 +15,9 @@ import { useAuthStore } from '@/store/authStore';
 import { labApi } from '@/api/lab';
 import type { LabOrder } from '@/api/lab';
 import { subscribeToLabOrders } from '@/api/websocket';
-import { useTheme } from '@/hooks/useTheme';
 import { AcknowledgeCriticalModal } from './AcknowledgeCriticalModal';
 
 export function CriticalLabBanner() {
-  const { isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const docName = user?.fullName ?? '';

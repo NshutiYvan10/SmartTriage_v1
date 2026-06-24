@@ -287,63 +287,70 @@ export function MedicationBoard() {
     (modal?.kind === 'prn' && !!modal.entry.order.requiresWitness) ||
     (modal?.kind === 'inf-start' && !!modal.entry.order.requiresWitness);
 
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
+
   return (
-    <div className="space-y-5 animate-fade-up">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className={`text-xl font-extrabold tracking-tight ${text.heading} flex items-center gap-2`}>
-            <Pill className="w-5 h-5 text-emerald-500" />
-            Medication Board
-            {scope.mode === 'ZONE_SCOPED' && scope.zone && (
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-600">
-                {scope.zone} zone
-              </span>
-            )}
-          </h1>
-          <p className={`text-xs mt-0.5 ${text.muted}`}>
-            Scheduled doses, PRN, infusions and high-alert approvals — live.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {scope.mode === 'HOSPITAL_WIDE' && (
-            <div className="flex items-center gap-1 flex-wrap">
+    <div className="min-h-full">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
+        {/* ── Header banner ── */}
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
+              <Pill className="w-5 h-5 text-cyan-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-lg font-bold text-white flex items-center gap-2">
+                Medication Board
+                {scope.mode === 'ZONE_SCOPED' && scope.zone && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    {scope.zone} zone
+                  </span>
+                )}
+              </h1>
+              <p className="text-sm text-white/50">
+                Scheduled doses, PRN, infusions and high-alert approvals — live.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {scope.mode === 'HOSPITAL_WIDE' && (
+                <div className="flex items-center gap-1 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setZoneFilter(null)}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${zoneFilter === null
+                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+                      : 'text-white/70 hover:bg-white/5 border-transparent'}`}
+                  >
+                    All zones
+                  </button>
+                  {ZONES.map((z) => (
+                    <button
+                      key={z}
+                      type="button"
+                      onClick={() => setZoneFilter(z)}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${zoneFilter === z
+                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+                        : 'text-white/70 hover:bg-white/5 border-transparent'}`}
+                    >
+                      {z}
+                    </button>
+                  ))}
+                </div>
+              )}
               <button
                 type="button"
-                onClick={() => setZoneFilter(null)}
-                className={`px-2 py-1 rounded-lg text-[10px] font-bold ${zoneFilter === null
-                  ? 'bg-emerald-600 text-white'
-                  : isDark ? 'bg-white/5 text-slate-300' : 'bg-slate-100 text-slate-600'}`}
+                onClick={() => load()}
+                className="p-2 rounded-xl text-white/70 hover:bg-white/5"
+                title="Refresh"
               >
-                All zones
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
               </button>
-              {ZONES.map((z) => (
-                <button
-                  key={z}
-                  type="button"
-                  onClick={() => setZoneFilter(z)}
-                  className={`px-2 py-1 rounded-lg text-[10px] font-bold ${zoneFilter === z
-                    ? 'bg-emerald-600 text-white'
-                    : isDark ? 'bg-white/5 text-slate-300' : 'bg-slate-100 text-slate-600'}`}
-                >
-                  {z}
-                </button>
-              ))}
             </div>
-          )}
-          <button
-            type="button"
-            onClick={() => load()}
-            className={`p-2 rounded-xl ${text.muted} hover:bg-white/5`}
-            title="Refresh"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          </button>
+          </div>
         </div>
-      </div>
 
       {err && (
-        <div className="rounded-xl border border-red-300 bg-red-500/10 p-3 text-sm text-red-600 font-semibold">
+        <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-3 text-sm text-red-400 font-semibold">
           {err}
         </div>
       )}
@@ -367,7 +374,7 @@ export function MedicationBoard() {
                     <div className="flex-1 min-w-[220px]">
                       <div className={`text-sm font-bold ${text.heading}`}>
                         {o.drugName} {fmtOrderDose(o)} {o.route}
-                        <span className="ml-2 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-red-500/15 text-red-600">High alert</span>
+                        <span className="ml-2 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">High alert</span>
                       </div>
                       <div className={`text-[11px] ${text.muted}`}>
                         {o.prescriptionType?.replace('_', '-')} · prescribed by {o.prescribedByName}
@@ -452,14 +459,14 @@ export function MedicationBoard() {
                           <span className={`text-sm font-bold ${text.heading}`}>
                             {o.drugName} {fmtOrderDose(o)} {o.route}
                           </span>
-                          <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-600">PRN {o.prnIndication}</span>
+                          <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30">PRN {o.prnIndication}</span>
                           {o.gateParameter && (
-                            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600">
+                            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">
                               Gate: {o.gateParameter} {o.gateComparator === 'GTE' ? '≥' : '≤'} {o.gateThreshold}
                             </span>
                           )}
                           {o.requiresWitness && (
-                            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700">Witness</span>
+                            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Witness</span>
                           )}
                         </div>
                         <div className={`text-[11px] mt-1 ${text.muted}`}>
@@ -510,15 +517,15 @@ export function MedicationBoard() {
                           <span className={`text-sm font-bold ${text.heading}`}>
                             {o.drugName}{o.productDetail ? ` (${o.productDetail})` : ''}
                           </span>
-                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${running
-                            ? 'bg-emerald-500/15 text-emerald-600'
-                            : 'bg-slate-500/15 text-slate-500'}`}>
+                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${running
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                            : 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>
                             {running
                               ? `Running @ ${last?.rateValue ?? o.rateValue} ${last?.rateUnit ?? o.rateUnit}`
                               : last ? 'Stopped' : 'Not started'}
                           </span>
                           {o.requiresWitness && (
-                            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700">Witness</span>
+                            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Witness</span>
                           )}
                         </div>
                         <div className={`text-[11px] mt-1 ${text.muted}`}>
@@ -591,7 +598,7 @@ export function MedicationBoard() {
                       {' '}{d.givenAt ? formatDistanceToNow(new Date(d.givenAt), { addSuffix: true }) : ''}
                     </span>
                     {d.isOverride && (
-                      <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-red-500/15 text-red-600">Override</span>
+                      <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">Override</span>
                     )}
                   </div>
                 ))}
@@ -603,8 +610,8 @@ export function MedicationBoard() {
 
       {/* ── Action modal ── */}
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true">
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }} role="dialog" aria-modal="true">
+          <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in max-h-[90vh] flex flex-col" style={glassCard}>
             <div className="px-5 py-4 bg-gradient-to-r from-slate-800 to-slate-700 flex items-center justify-between">
               <h3 className="text-sm font-extrabold text-white">
                 {modal.kind === 'administer' && `Administer — ${modal.dose.drugName}`}
@@ -629,34 +636,39 @@ export function MedicationBoard() {
                     <Field label="Indication (what triggered this dose) *">
                       <input value={fIndication} onChange={(e) => setFIndication(e.target.value)}
                         placeholder={`e.g. ${modal.entry.order.prnIndication ?? 'pain 6/10'}`}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 outline-none focus:border-violet-500" />
+                        style={glassInner}
+                        className={`w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} />
                     </Field>
                   )}
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Dose given (verification) *">
                       <input type="number" value={fDoseValue} onChange={(e) => setFDoseValue(e.target.value)}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 outline-none focus:border-emerald-500" />
+                        style={glassInner}
+                        className={`w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} />
                     </Field>
                     <Field label="Unit">
                       <input value={fDoseUnit} onChange={(e) => setFDoseUnit(e.target.value)}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 outline-none focus:border-emerald-500" />
+                        style={glassInner}
+                        className={`w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} />
                     </Field>
                   </div>
                   {witnessNeeded && (
                     <Field label="Witness (second clinician) *">
                       <input value={fWitness} onChange={(e) => setFWitness(e.target.value)}
                         placeholder="Full name of the witnessing clinician"
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-amber-400 outline-none focus:border-amber-500" />
+                        style={glassInner}
+                        className={`w-full px-3 py-2 text-sm rounded-lg border border-amber-500/30 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} />
                     </Field>
                   )}
-                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                  <label className={`flex items-center gap-2 text-xs font-semibold ${text.body}`}>
                     <input type="checkbox" checked={fOverride} onChange={(e) => setFOverride(e.target.checked)} />
                     Override a failed safety gate (justification required)
                   </label>
                   {fOverride && (
                     <Field label="Override justification (min 10 chars) *">
                       <textarea rows={2} value={fJustification} onChange={(e) => setFJustification(e.target.value)}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-red-300 outline-none focus:border-red-500" />
+                        style={glassInner}
+                        className={`w-full px-3 py-2 text-sm rounded-lg border border-red-500/30 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} />
                     </Field>
                   )}
                 </>
@@ -667,12 +679,14 @@ export function MedicationBoard() {
                   <Field label="Delay by (minutes, 15–720) *">
                     <input type="number" min={15} max={720} value={fMinutes}
                       onChange={(e) => setFMinutes(e.target.value)}
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 outline-none focus:border-amber-500" />
+                      style={glassInner}
+                      className={`w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} />
                   </Field>
                   <Field label="Reason *">
                     <textarea rows={2} value={fReason} onChange={(e) => setFReason(e.target.value)}
                       placeholder="e.g. patient away for imaging"
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 outline-none focus:border-amber-500" />
+                      style={glassInner}
+                      className={`w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} />
                   </Field>
                 </>
               )}
@@ -680,7 +694,8 @@ export function MedicationBoard() {
               {(modal.kind === 'refuse' || modal.kind === 'inf-stop') && (
                 <Field label="Reason *">
                   <textarea rows={2} value={fReason} onChange={(e) => setFReason(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 outline-none focus:border-rose-500" />
+                    style={glassInner}
+                    className={`w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} />
                 </Field>
               )}
 
@@ -689,23 +704,27 @@ export function MedicationBoard() {
                   <div className="grid grid-cols-2 gap-3">
                     <Field label={modal.kind === 'inf-start' ? 'Rate' : 'New rate *'}>
                       <input type="number" value={fRate} onChange={(e) => setFRate(e.target.value)}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 outline-none focus:border-cyan-500" />
+                        style={glassInner}
+                        className={`w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} />
                     </Field>
                     <Field label="Unit">
                       <input value={fRateUnit} onChange={(e) => setFRateUnit(e.target.value)}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 outline-none focus:border-cyan-500" />
+                        style={glassInner}
+                        className={`w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} />
                     </Field>
                   </div>
                   {modal.kind === 'inf-start' && witnessNeeded && (
                     <Field label="Witness (second clinician) *">
                       <input value={fWitness} onChange={(e) => setFWitness(e.target.value)}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-amber-400 outline-none focus:border-amber-500" />
+                        style={glassInner}
+                        className={`w-full px-3 py-2 text-sm rounded-lg border border-amber-500/30 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} />
                     </Field>
                   )}
                   {modal.kind === 'inf-rate' && (
                     <Field label="Reason (optional)">
                       <input value={fReason} onChange={(e) => setFReason(e.target.value)}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 outline-none focus:border-cyan-500" />
+                        style={glassInner}
+                        className={`w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} />
                     </Field>
                   )}
                 </>
@@ -713,21 +732,23 @@ export function MedicationBoard() {
 
               {modal.kind === 'approve' && (
                 <>
-                  <p className="text-xs text-slate-600">
+                  <p className={`text-xs ${text.muted}`}>
                     Confirm this high-alert order is clinically appropriate. Your name is
                     recorded as the approver; the prescriber cannot approve their own order.
                   </p>
                   <Field label="Note (optional)">
                     <input value={fReason} onChange={(e) => setFReason(e.target.value)}
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 outline-none focus:border-emerald-500" />
+                      style={glassInner}
+                      className={`w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} />
                   </Field>
                 </>
               )}
             </div>
 
-            <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2">
+            <div className="px-5 py-4 flex items-center justify-end gap-2" style={{ borderTop: borderStyle }}>
               <button type="button" onClick={() => setModal(null)} disabled={actionBusy}
-                className="px-4 py-2 text-xs font-bold rounded-xl bg-white border border-slate-300 text-slate-800 hover:bg-slate-100">
+                style={glassInner}
+                className={`px-4 py-2 text-xs font-bold rounded-xl hover:bg-white/5 ${text.body}`}>
                 Cancel
               </button>
               <button
@@ -747,6 +768,7 @@ export function MedicationBoard() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -759,7 +781,7 @@ function firstPatientName(entry: MedicationOrderAudit): string {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-500">
+      <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">
         {label}
       </label>
       {children}
@@ -799,13 +821,13 @@ function DoseLane({ title, icon, doses, tone, onAdminister, onDelay, onRefuse, n
                   <span className={`text-[10px] ${text.muted}`}>dose #{d.sequenceNumber}</span>
                 )}
                 {d.priority && d.priority !== 'ROUTINE' && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-red-500/15 text-red-600">{d.priority}</span>
+                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">{d.priority}</span>
                 )}
                 {d.requiresWitness && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700">Witness</span>
+                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Witness</span>
                 )}
                 {d.productType && d.productType !== 'DRUG' && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-600">{d.productType.replace('_', ' ')}</span>
+                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">{d.productType.replace('_', ' ')}</span>
                 )}
               </div>
               <div className={`text-[11px] mt-1 ${text.muted}`}>
