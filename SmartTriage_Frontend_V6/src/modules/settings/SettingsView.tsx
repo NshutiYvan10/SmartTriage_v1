@@ -20,35 +20,36 @@ import { useTheme } from '../../hooks/useTheme';
    ═══════════════════════════════════════════════════════════════ */
 
 export function SettingsView() {
-  const { isDark, toggle } = useTheme();
+  const { isDark, toggle, glassCard, glassInner, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
 
   return (
     <div className="min-h-full">
       <div className="p-4 lg:p-6 max-w-3xl mx-auto space-y-4 animate-fade-in">
 
         {/* ── Header ── */}
-        <div className="glass-card-dark rounded-3xl overflow-hidden animate-fade-up">
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center gap-4">
-            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg">
-              <Settings className="w-6 h-6 text-white" />
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center shadow-lg">
+              <Settings className="w-5 h-5 text-white" />
             </div>
             <div>
               <h1 className="text-lg font-bold text-white tracking-wide">Settings</h1>
-              <p className="text-white/70 text-xs font-medium">Appearance and system information</p>
+              <p className="text-white/50 text-xs font-medium">Appearance and system information</p>
             </div>
           </div>
         </div>
 
         {/* ── Appearance ── */}
-        <div className="glass-card rounded-3xl overflow-hidden animate-fade-up" style={{ animationDelay: '0.08s' }}>
-          <div className="px-5 py-4 border-b border-gray-100/60">
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={{ ...glassCard, animationDelay: '0.08s' }}>
+          <div className="px-5 py-4" style={{ borderBottom: borderStyle }}>
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-sm">
-                <Palette className="w-4 h-4 text-white" />
+              <div className="w-9 h-9 rounded-xl bg-cyan-500/20 flex items-center justify-center shadow-sm">
+                <Palette className="w-4 h-4 text-cyan-400" />
               </div>
               <div>
-                <h2 className="text-sm font-bold text-gray-900">Appearance</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Display preference for this device</p>
+                <h2 className={`text-sm font-bold ${text.heading}`}>Appearance</h2>
+                <p className={`text-xs ${text.muted} mt-0.5`}>Display preference for this device</p>
               </div>
             </div>
           </div>
@@ -59,8 +60,8 @@ export function SettingsView() {
                   {isDark ? <Moon className="w-4 h-4 text-cyan-500" /> : <Sun className="w-4 h-4 text-amber-500" />}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-gray-900">Dark Mode</p>
-                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                  <p className={`text-sm font-semibold ${text.heading}`}>Dark Mode</p>
+                  <p className={`text-xs ${text.muted} mt-0.5 leading-relaxed`}>
                     Easier on the eyes during night shifts. Applied immediately and remembered on this device.
                   </p>
                 </div>
@@ -71,15 +72,15 @@ export function SettingsView() {
         </div>
 
         {/* ── System Information ── */}
-        <div className="glass-card rounded-3xl overflow-hidden animate-fade-up" style={{ animationDelay: '0.16s' }}>
-          <div className="px-5 py-4 border-b border-gray-100/60">
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={{ ...glassCard, animationDelay: '0.16s' }}>
+          <div className="px-5 py-4" style={{ borderBottom: borderStyle }}>
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center shadow-sm">
-                <Cpu className="w-4 h-4 text-white" />
+              <div className="w-9 h-9 rounded-xl bg-cyan-500/20 flex items-center justify-center shadow-sm">
+                <Cpu className="w-4 h-4 text-cyan-400" />
               </div>
               <div>
-                <h2 className="text-sm font-bold text-gray-900">System Information</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Current environment</p>
+                <h2 className={`text-sm font-bold ${text.heading}`}>System Information</h2>
+                <p className={`text-xs ${text.muted} mt-0.5`}>Current environment</p>
               </div>
             </div>
           </div>
@@ -89,12 +90,12 @@ export function SettingsView() {
               { label: 'Database', value: 'Connected', icon: Database, ok: true },
               { label: 'API', value: 'Connected', icon: Zap, ok: true },
             ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between">
+              <div key={item.label} className="flex items-center justify-between rounded-xl px-3 py-2" style={glassInner}>
                 <div className="flex items-center gap-2.5">
-                  <item.icon className="w-4 h-4 text-gray-400" />
-                  <span className="text-xs font-medium text-gray-500">{item.label}</span>
+                  <item.icon className={`w-4 h-4 ${text.muted}`} />
+                  <span className={`text-xs font-medium ${text.body}`}>{item.label}</span>
                 </div>
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-800">
+                <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${text.heading}`}>
                   {item.ok && <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />}
                   {item.value}
                 </span>
@@ -119,7 +120,7 @@ function Toggle({ enabled, onToggle, ariaLabel }: { enabled: boolean; onToggle: 
       className={`relative w-12 h-7 rounded-full transition-all duration-300 flex-shrink-0 ml-4 ${
         enabled
           ? 'bg-gradient-to-r from-cyan-600 to-cyan-500 shadow-md shadow-cyan-600/30'
-          : 'bg-gray-300 hover:bg-gray-400'
+          : 'bg-slate-300 hover:bg-slate-400 dark:bg-white/10 dark:hover:bg-white/20'
       }`}
     >
       <span

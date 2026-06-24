@@ -366,7 +366,7 @@ export function LoginPage() {
                     placeholder="admin@smarttriage.com"
                     required
                     autoComplete="username"
-                    className="w-full px-4 py-3 rounded-xl text-[13px] text-white placeholder-slate-600 outline-none transition-all duration-300 focus:ring-2 focus:ring-cyan-500/30"
+                    className="w-full px-4 py-3 rounded-xl text-[13px] text-white placeholder-slate-600 outline-none transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
                     style={{
                       background: 'rgba(255,255,255,0.04)',
                       border: '1px solid rgba(255,255,255,0.08)',
@@ -395,7 +395,7 @@ export function LoginPage() {
                     placeholder="Enter your password"
                     required
                     autoComplete="current-password"
-                    className="w-full px-4 py-3 pr-12 rounded-xl text-[13px] text-white placeholder-slate-600 outline-none transition-all duration-300 focus:ring-2 focus:ring-cyan-500/30"
+                    className="w-full px-4 py-3 pr-12 rounded-xl text-[13px] text-white placeholder-slate-600 outline-none transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
                     style={{
                       background: 'rgba(255,255,255,0.04)',
                       border: '1px solid rgba(255,255,255,0.08)',
@@ -423,11 +423,7 @@ export function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-3.5 rounded-xl text-[13px] font-bold text-white shadow-xl disabled:opacity-50 transition-all duration-300 hover:-translate-y-0.5 flex items-center justify-center gap-2 relative overflow-hidden group"
-                style={{
-                  background: 'linear-gradient(135deg, #0891b2 0%, #0e7490 50%, #0284c7 100%)',
-                  boxShadow: '0 8px 24px rgba(6,182,212,0.30), 0 2px 8px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.15)',
-                }}
+                className="w-full py-3.5 rounded-xl text-[13px] font-bold text-white bg-cyan-600 hover:bg-cyan-700 shadow-xl disabled:opacity-50 transition-all duration-300 hover:-translate-y-0.5 flex items-center justify-center gap-2 relative overflow-hidden group"
               >
                 {/* Hover shimmer */}
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />

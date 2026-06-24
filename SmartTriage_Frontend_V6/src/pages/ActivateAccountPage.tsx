@@ -85,7 +85,9 @@ export function ActivateAccountPage() {
   // Loading state
   if (validating) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{
+        background: 'linear-gradient(135deg, #020b14 0%, #041a2e 25%, #030e1c 50%, #051e35 75%, #020b14 100%)',
+      }}>
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-cyan-400 mx-auto mb-4" />
           <p className="text-white/60 text-sm">Validating your invitation...</p>
@@ -97,7 +99,9 @@ export function ActivateAccountPage() {
   // Token error state
   if (tokenError) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+      <div className="min-h-screen flex items-center justify-center p-4" style={{
+        background: 'linear-gradient(135deg, #020b14 0%, #041a2e 25%, #030e1c 50%, #051e35 75%, #020b14 100%)',
+      }}>
         <div className="max-w-md w-full bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 text-center">
           <div className="w-16 h-16 rounded-2xl bg-red-500/20 flex items-center justify-center mx-auto mb-5">
             <AlertTriangle className="w-8 h-8 text-red-400" />
@@ -106,7 +110,7 @@ export function ActivateAccountPage() {
           <p className="text-white/50 text-sm mb-6 leading-relaxed">{tokenError}</p>
           <button
             onClick={() => navigate('/login')}
-            className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl text-sm font-bold hover:-translate-y-0.5 transition-all"
+            className="px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-sm font-bold transition-all"
           >
             Go to Login
           </button>
@@ -118,7 +122,9 @@ export function ActivateAccountPage() {
   // Success state
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+      <div className="min-h-screen flex items-center justify-center p-4" style={{
+        background: 'linear-gradient(135deg, #020b14 0%, #041a2e 25%, #030e1c 50%, #051e35 75%, #020b14 100%)',
+      }}>
         <div className="max-w-md w-full bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 text-center">
           <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 flex items-center justify-center mx-auto mb-5">
             <CheckCircle2 className="w-8 h-8 text-emerald-400" />
@@ -129,7 +135,7 @@ export function ActivateAccountPage() {
           </p>
           <button
             onClick={() => navigate('/login')}
-            className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl text-sm font-bold hover:-translate-y-0.5 transition-all"
+            className="px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-sm font-bold transition-all"
           >
             Go to Login
           </button>
@@ -140,7 +146,9 @@ export function ActivateAccountPage() {
 
   // Activation form
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{
+      background: 'linear-gradient(135deg, #020b14 0%, #041a2e 25%, #030e1c 50%, #051e35 75%, #020b14 100%)',
+    }}>
       <div className="max-w-lg w-full">
         {/* Header */}
         <div className="text-center mb-8">
@@ -219,7 +227,7 @@ export function ActivateAccountPage() {
                   autoComplete="new-password"
                   data-1p-ignore
                   data-lpignore="true"
-                  className="w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:border-cyan-500/50 transition-colors"
+                  className="w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:ring-2 focus:ring-cyan-500/20 transition-colors"
                 />
               </div>
             </div>
@@ -235,7 +243,7 @@ export function ActivateAccountPage() {
                   autoComplete="new-password"
                   data-1p-ignore
                   data-lpignore="true"
-                  className="w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:border-cyan-500/50 transition-colors"
+                  className="w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:ring-2 focus:ring-cyan-500/20 transition-colors"
                 />
               </div>
             </div>
@@ -262,7 +270,7 @@ export function ActivateAccountPage() {
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 placeholder="Min 8 characters"
-                className="w-full pl-10 pr-10 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:border-cyan-500/50 transition-colors"
+                className="w-full pl-10 pr-10 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:ring-2 focus:ring-cyan-500/20 transition-colors"
               />
               <button
                 type="button"
@@ -286,7 +294,7 @@ export function ActivateAccountPage() {
                 value={form.confirmPassword}
                 onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
                 placeholder="Re-enter password"
-                className="w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:border-cyan-500/50 transition-colors"
+                className="w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:ring-2 focus:ring-cyan-500/20 transition-colors"
               />
             </div>
             {form.confirmPassword && !passwordsMatch && (
@@ -302,7 +310,7 @@ export function ActivateAccountPage() {
                 value={form.phoneNumber}
                 onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })}
                 placeholder="+250 788 000 000"
-                className="w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:border-cyan-500/50 transition-colors"
+                className="w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:ring-2 focus:ring-cyan-500/20 transition-colors"
               />
             </div>
           </div>
@@ -314,7 +322,7 @@ export function ActivateAccountPage() {
                 value={form.employeeNumber}
                 onChange={(e) => setForm({ ...form, employeeNumber: e.target.value })}
                 placeholder="EMP-001"
-                className="w-full px-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:border-cyan-500/50 transition-colors"
+                className="w-full px-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:ring-2 focus:ring-cyan-500/20 transition-colors"
               />
             </div>
             <div>
@@ -323,7 +331,7 @@ export function ActivateAccountPage() {
                 value={form.professionalLicense}
                 onChange={(e) => setForm({ ...form, professionalLicense: e.target.value })}
                 placeholder="LIC-001"
-                className="w-full px-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:border-cyan-500/50 transition-colors"
+                className="w-full px-3 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/20 outline-none focus:ring-2 focus:ring-cyan-500/20 transition-colors"
               />
             </div>
           </div>
@@ -331,7 +339,7 @@ export function ActivateAccountPage() {
           <button
             type="submit"
             disabled={!canSubmit}
-            className="w-full py-3.5 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl text-sm font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0 flex items-center justify-center gap-2"
+            className="w-full py-3.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {submitting ? (
               <>

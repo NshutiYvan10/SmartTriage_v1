@@ -84,7 +84,8 @@ function buildProfileFromAuth(user: { fullName: string; email: string; role: Use
 }
 
 export function ProfilePage() {
-  const { isDark, toggle: toggleTheme } = useTheme();
+  const { isDark, toggle: toggleTheme, glassCard, glassInner, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const roleMeta = user ? ROLE_META[user.role] : null;
@@ -203,7 +204,7 @@ export function ProfilePage() {
   if (!displayProfile || !user) {
     return (
       <div className="min-h-full flex items-center justify-center">
-        <p className="text-sm text-gray-500">No user profile available.</p>
+        <p className={`text-sm ${text.muted}`}>No user profile available.</p>
       </div>
     );
   }
@@ -222,9 +223,9 @@ export function ProfilePage() {
       <div className="p-4 lg:p-6 max-w-6xl mx-auto space-y-4 animate-fade-in">
 
         {/* ── Profile Header Banner ── */}
-        <div className="glass-card-dark rounded-3xl overflow-hidden animate-fade-up">
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
           {/* Dark Banner */}
-          <div className="bg-gradient-to-r from-slate-800 via-slate-700 to-cyan-700 px-6 py-6 relative">
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-6 relative">
             <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iYSIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBwYXR0ZXJuVHJhbnNmb3JtPSJyb3RhdGUoNDUpIj48cmVjdCB3aWR0aD0iMSIgaGVpZ2h0PSI0MCIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjA1KSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3QgZmlsbD0idXJsKCNhKSIgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiLz48L3N2Zz4=')] opacity-50" />
             <div className="relative flex flex-col sm:flex-row sm:items-end gap-4">
               {/* Avatar */}
@@ -290,14 +291,14 @@ export function ProfilePage() {
 
         {/* ── Save error ── */}
         {saveError && (
-          <div className="glass-card rounded-2xl px-5 py-3 flex items-center gap-2 animate-fade-up border-l-4 border-red-500" style={{ background: 'rgba(254,242,242,0.85)' }}>
+          <div className="rounded-2xl px-5 py-3 flex items-center gap-2 animate-fade-up border-l-4 border-red-500" style={glassInner}>
             <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-            <span className="text-sm font-semibold text-red-700">{saveError}</span>
+            <span className="text-sm font-semibold text-red-500">{saveError}</span>
           </div>
         )}
 
         {/* ── Tab Navigation ── */}
-        <div className="glass-card rounded-2xl p-1.5 animate-fade-up" style={{ animationDelay: '0.1s' }}>
+        <div className="rounded-2xl p-1.5 animate-fade-up" style={{ ...glassCard, animationDelay: '0.1s' }}>
           <div className="flex items-center gap-1.5">
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -309,11 +310,11 @@ export function ProfilePage() {
                   className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-300 ${
                     isActive
                       ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md shadow-slate-800/20'
-                      : 'text-gray-600 hover:bg-white/60'
+                      : `${text.body} hover:bg-white/10`
                   }`}
                 >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-gray-400'}`} />
-                  <span className={`font-bold ${isActive ? 'text-white' : 'text-gray-800'}`}>{tab.label}</span>
+                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : text.muted}`} />
+                  <span className={`font-bold ${isActive ? 'text-white' : text.heading}`}>{tab.label}</span>
                 </button>
               );
             })}
@@ -330,15 +331,15 @@ export function ProfilePage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 animate-fade-up" style={{ animationDelay: '0.3s' }}>
             {/* Personal Information */}
-            <div className="lg:col-span-2 glass-card rounded-3xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-100/60">
+            <div className="lg:col-span-2 rounded-3xl overflow-hidden" style={glassCard}>
+              <div className="px-5 py-4" style={{ borderBottom: borderStyle }}>
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-600 to-cyan-500 flex items-center justify-center shadow-sm">
                     <User className="w-4 h-4 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-gray-900">Personal Information</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">Your professional details</p>
+                    <h2 className={`text-sm font-bold ${text.heading}`}>Personal Information</h2>
+                    <p className={`text-xs ${text.muted} mt-0.5`}>Your professional details</p>
                   </div>
                 </div>
               </div>
@@ -357,7 +358,7 @@ export function ProfilePage() {
                     const Icon = item.icon;
                     return (
                       <div key={item.label}>
-                        <label className="text-xs font-semibold text-gray-500 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
+                        <label className={`text-xs font-semibold ${text.muted} flex items-center gap-1.5 mb-2 uppercase tracking-wider`}>
                           <Icon className="w-3.5 h-3.5" />
                           {item.label}
                         </label>
@@ -368,10 +369,11 @@ export function ProfilePage() {
                             onChange={(e) =>
                               setEditedProfile((prev) => ({ ...(prev ?? displayProfile!), [item.field]: e.target.value }))
                             }
-                            className="w-full px-4 py-2.5 text-sm bg-white/80 backdrop-blur-sm border border-gray-200/60 rounded-2xl focus:outline-none focus:ring-4 focus:ring-cyan-500/10 focus:border-cyan-500 transition-all duration-300 shadow-sm font-medium text-gray-700"
+                            style={glassInner}
+                            className={`w-full px-4 py-2.5 text-sm rounded-2xl focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300 font-medium ${text.body}`}
                           />
                         ) : (
-                          <p className="text-sm font-semibold text-gray-900">{item.value}</p>
+                          <p className={`text-sm font-semibold ${text.heading}`}>{item.value}</p>
                         )}
                       </div>
                     );
@@ -379,8 +381,8 @@ export function ProfilePage() {
                 </div>
 
                 {/* Bio */}
-                <div className="mt-5 pt-5 border-t border-gray-100/60">
-                  <label className="text-xs font-semibold text-gray-500 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
+                <div className="mt-5 pt-5" style={{ borderTop: borderStyle }}>
+                  <label className={`text-xs font-semibold ${text.muted} flex items-center gap-1.5 mb-2 uppercase tracking-wider`}>
                     <FileText className="w-3.5 h-3.5" />
                     Bio
                   </label>
@@ -389,10 +391,11 @@ export function ProfilePage() {
                       value={displayEditProfile!.bio}
                       onChange={(e) => setEditedProfile((prev) => ({ ...(prev ?? displayProfile!), bio: e.target.value }))}
                       rows={3}
-                      className="w-full px-4 py-3 text-sm bg-white/80 backdrop-blur-sm border border-gray-200/60 rounded-2xl focus:outline-none focus:ring-4 focus:ring-cyan-500/10 focus:border-cyan-500 transition-all duration-300 shadow-sm font-medium text-gray-700 resize-none"
+                      style={glassInner}
+                      className={`w-full px-4 py-3 text-sm rounded-2xl focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300 font-medium resize-none ${text.body}`}
                     />
                   ) : (
-                    <p className="text-sm text-gray-700 leading-relaxed">{displayProfile.bio}</p>
+                    <p className={`text-sm ${text.body} leading-relaxed`}>{displayProfile.bio}</p>
                   )}
                 </div>
               </div>
@@ -401,34 +404,25 @@ export function ProfilePage() {
             {/* Sidebar */}
             <div className="space-y-4">
               {/* Recent Activity */}
-              <div className="glass-card rounded-3xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-100/60">
+              <div className="rounded-3xl overflow-hidden" style={glassCard}>
+                <div className="px-5 py-4" style={{ borderBottom: borderStyle }}>
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-sm">
                       <Clock className="w-4 h-4 text-white" />
                     </div>
-                    <h2 className="text-sm font-bold text-gray-900">Recent Activity</h2>
+                    <h2 className={`text-sm font-bold ${text.heading}`}>Recent Activity</h2>
                   </div>
                 </div>
                 <div className="p-5">
-                  <p className="text-xs text-gray-400 text-center py-4">No recent activity</p>
+                  <p className={`text-xs ${text.muted} text-center py-4`}>No recent activity</p>
                 </div>
               </div>
 
               {/* Quick Actions */}
-              <div
-                className="rounded-2xl p-5 animate-fade-up"
-                style={{
-                  background: isDark ? 'rgba(12,74,110,0.18)' : 'rgba(255,255,255,0.55)',
-                  backdropFilter: 'blur(24px)',
-                  WebkitBackdropFilter: 'blur(24px)',
-                  border: isDark ? '1px solid rgba(2,132,199,0.22)' : '1px solid rgba(255,255,255,0.6)',
-                  boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 8px 32px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.8)',
-                }}
-              >
+              <div className="rounded-2xl p-5 animate-fade-up" style={glassCard}>
                 <div className="mb-4">
-                  <h3 className="text-base font-extrabold text-slate-800 tracking-tight">Quick Actions</h3>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">Shortcuts & navigation</p>
+                  <h3 className={`text-base font-extrabold ${text.heading} tracking-tight`}>Quick Actions</h3>
+                  <p className={`text-xs ${text.body} font-medium mt-0.5`}>Shortcuts & navigation</p>
                 </div>
                 <div className="space-y-2.5">
                   {[
@@ -442,11 +436,7 @@ export function ProfilePage() {
                       <button
                         key={item.label}
                         className="w-full flex items-center justify-between p-3 rounded-xl hover:-translate-y-1 transition-all duration-400 group cursor-pointer"
-                        style={{
-                          background: isDark ? 'rgba(12,74,110,0.18)' : 'rgba(255,255,255,0.6)',
-                          border: isDark ? '1px solid rgba(2,132,199,0.22)' : '1px solid rgba(203,213,225,0.4)',
-                          boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.2)' : '0 2px 8px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03)',
-                        }}
+                        style={glassInner}
                       >
                         <div className="flex items-center gap-3">
                           <div
@@ -456,11 +446,11 @@ export function ProfilePage() {
                             <Icon className={`w-[18px] h-[18px] ${item.iconColor}`} />
                           </div>
                           <div className="text-left">
-                            <div className={`text-[13px] font-bold ${item.danger ? 'text-red-600' : 'text-slate-800'}`}>{item.label}</div>
-                            <div className="text-[11px] text-slate-400 font-medium">{item.sublabel}</div>
+                            <div className={`text-[13px] font-bold ${item.danger ? 'text-red-500' : text.heading}`}>{item.label}</div>
+                            <div className={`text-[11px] ${text.muted} font-medium`}>{item.sublabel}</div>
                           </div>
                         </div>
-                        <ChevronRight className={`w-4 h-4 ${item.danger ? 'text-red-400' : 'text-slate-400'} group-hover:translate-x-1 transition-transform duration-300`} />
+                        <ChevronRight className={`w-4 h-4 ${item.danger ? 'text-red-400' : text.muted} group-hover:translate-x-1 transition-transform duration-300`} />
                       </button>
                     );
                   })}
@@ -475,15 +465,15 @@ export function ProfilePage() {
         {activeTab === 'settings' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-fade-up" style={{ animationDelay: '0.3s' }}>
             {/* Alerts */}
-            <div className="glass-card rounded-3xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-100/60">
+            <div className="rounded-3xl overflow-hidden" style={glassCard}>
+              <div className="px-5 py-4" style={{ borderBottom: borderStyle }}>
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center shadow-sm">
                     <Bell className="w-4 h-4 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-gray-900">Alerts</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">Audible cue for deteriorating patients</p>
+                    <h2 className={`text-sm font-bold ${text.heading}`}>Alerts</h2>
+                    <p className={`text-xs ${text.muted} mt-0.5`}>Audible cue for deteriorating patients</p>
                   </div>
                 </div>
               </div>
@@ -498,15 +488,15 @@ export function ProfilePage() {
             </div>
 
             {/* Appearance */}
-            <div className="glass-card rounded-3xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-100/60">
+            <div className="rounded-3xl overflow-hidden" style={glassCard}>
+              <div className="px-5 py-4" style={{ borderBottom: borderStyle }}>
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-sm">
                     <Palette className="w-4 h-4 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-gray-900">Appearance</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">Display preference for this device</p>
+                    <h2 className={`text-sm font-bold ${text.heading}`}>Appearance</h2>
+                    <p className={`text-xs ${text.muted} mt-0.5`}>Display preference for this device</p>
                   </div>
                 </div>
               </div>
@@ -526,50 +516,53 @@ export function ProfilePage() {
         {activeTab === 'security' && (
           <div className="max-w-xl animate-fade-up" style={{ animationDelay: '0.3s' }}>
             {/* Change Password */}
-            <div className="glass-card rounded-3xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-100/60">
+            <div className="rounded-3xl overflow-hidden" style={glassCard}>
+              <div className="px-5 py-4" style={{ borderBottom: borderStyle }}>
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-800 to-slate-700 flex items-center justify-center shadow-sm">
                     <KeyRound className="w-4 h-4 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-gray-900">Change Password</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">Keep your account secure</p>
+                    <h2 className={`text-sm font-bold ${text.heading}`}>Change Password</h2>
+                    <p className={`text-xs ${text.muted} mt-0.5`}>Keep your account secure</p>
                   </div>
                 </div>
               </div>
               <div className="p-5 space-y-4">
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-2 block uppercase tracking-wider">Current Password</label>
+                  <label className={`text-xs font-semibold ${text.muted} mb-2 block uppercase tracking-wider`}>Current Password</label>
                   <input
                     type="password"
                     placeholder="Enter current password"
                     value={pwCurrent}
                     onChange={(e) => setPwCurrent(e.target.value)}
                     autoComplete="current-password"
-                    className="w-full px-4 py-3 text-sm bg-white/80 backdrop-blur-sm border border-gray-200/60 rounded-2xl focus:outline-none focus:ring-4 focus:ring-cyan-500/10 focus:border-cyan-500 transition-all duration-300 shadow-sm font-medium"
+                    style={glassInner}
+                    className={`w-full px-4 py-3 text-sm rounded-2xl focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300 font-medium ${text.body}`}
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-2 block uppercase tracking-wider">New Password</label>
+                  <label className={`text-xs font-semibold ${text.muted} mb-2 block uppercase tracking-wider`}>New Password</label>
                   <input
                     type="password"
                     placeholder="Enter new password (min 8 characters)"
                     value={pwNew}
                     onChange={(e) => setPwNew(e.target.value)}
                     autoComplete="new-password"
-                    className="w-full px-4 py-3 text-sm bg-white/80 backdrop-blur-sm border border-gray-200/60 rounded-2xl focus:outline-none focus:ring-4 focus:ring-cyan-500/10 focus:border-cyan-500 transition-all duration-300 shadow-sm font-medium"
+                    style={glassInner}
+                    className={`w-full px-4 py-3 text-sm rounded-2xl focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300 font-medium ${text.body}`}
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-2 block uppercase tracking-wider">Confirm New Password</label>
+                  <label className={`text-xs font-semibold ${text.muted} mb-2 block uppercase tracking-wider`}>Confirm New Password</label>
                   <input
                     type="password"
                     placeholder="Confirm new password"
                     value={pwConfirm}
                     onChange={(e) => setPwConfirm(e.target.value)}
                     autoComplete="new-password"
-                    className="w-full px-4 py-3 text-sm bg-white/80 backdrop-blur-sm border border-gray-200/60 rounded-2xl focus:outline-none focus:ring-4 focus:ring-cyan-500/10 focus:border-cyan-500 transition-all duration-300 shadow-sm font-medium"
+                    style={glassInner}
+                    className={`w-full px-4 py-3 text-sm rounded-2xl focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300 font-medium ${text.body}`}
                   />
                 </div>
                 {pwError && (
@@ -608,6 +601,8 @@ export function ProfilePage() {
 // ═══════════════════════════════════════════════════════════════
 
 function ShiftCheckInCard() {
+  const { isDark, glassCard, glassInner, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const { assignment, isLoading, refresh } = useMyShift();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -625,9 +620,9 @@ function ShiftCheckInCard() {
 
   if (isLoading) {
     return (
-      <div className="glass-card rounded-3xl px-5 py-5 flex items-center gap-3">
+      <div className="rounded-3xl px-5 py-5 flex items-center gap-3" style={glassCard}>
         <Loader2 className="w-5 h-5 animate-spin text-cyan-500" />
-        <p className="text-sm text-gray-500 font-medium">Checking your shift assignment…</p>
+        <p className={`text-sm ${text.body} font-medium`}>Checking your shift assignment…</p>
       </div>
     );
   }
@@ -635,19 +630,19 @@ function ShiftCheckInCard() {
   /* ── Case 1: Not scheduled ── */
   if (!hasShift) {
     return (
-      <div className="glass-card rounded-3xl overflow-hidden">
-        <div className="bg-gradient-to-r from-slate-100 via-white to-slate-50 px-5 py-5">
+      <div className="rounded-3xl overflow-hidden" style={glassCard}>
+        <div className="px-5 py-5">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-200 to-slate-100 border border-slate-200 flex items-center justify-center">
-                <AlertCircle className="w-5 h-5 text-slate-500" />
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={glassInner}>
+                <AlertCircle className={`w-5 h-5 ${text.muted}`} />
               </div>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <p className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>
                   Shift Check-in
                 </p>
-                <h3 className="text-base font-bold text-slate-800">Not scheduled for this shift</h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">
+                <h3 className={`text-base font-bold ${text.heading}`}>Not scheduled for this shift</h3>
+                <p className={`text-[11px] ${text.muted} mt-0.5`}>
                   Your name isn't on today's roster. Contact your shift lead if you believe this is a mistake.
                 </p>
               </div>
@@ -655,7 +650,8 @@ function ShiftCheckInCard() {
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 rounded-xl border border-slate-200 transition-all duration-300 shadow-sm disabled:opacity-40"
+              style={glassInner}
+              className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold ${text.label} rounded-xl transition-all duration-300 disabled:opacity-40`}
             >
               {refreshing ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -679,7 +675,8 @@ function ShiftCheckInCard() {
 
   return (
     <div
-      className={`glass-card rounded-3xl overflow-hidden ${
+      style={glassCard}
+      className={`rounded-3xl overflow-hidden ${
         isLead ? 'ring-2 ring-amber-500/40' : ''
       }`}
     >
@@ -707,7 +704,7 @@ function ShiftCheckInCard() {
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-0.5">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                <p className={`text-[10px] font-bold uppercase tracking-wider ${text.body}`}>
                   {isLead ? 'Shift-Lead On Duty' : "You're On Duty"}
                 </p>
                 {isLead && (
@@ -717,18 +714,18 @@ function ShiftCheckInCard() {
                   </span>
                 )}
               </div>
-              <h3 className="text-base font-bold text-slate-900">
+              <h3 className={`text-base font-bold ${text.heading}`}>
                 {zoneMeta.icon} {zoneMeta.label} · {functionLabel}
               </h3>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+                <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${text.body}`}>
                   <PeriodIcon className="w-3 h-3" />
                   {periodMeta.label}
                 </span>
-                <span className="text-[10px] text-slate-400">·</span>
-                <span className="text-[11px] font-medium text-slate-500">{periodMeta.time}</span>
-                <span className="text-[10px] text-slate-400">·</span>
-                <span className="text-[11px] font-medium text-slate-500">{assignment.shiftDate}</span>
+                <span className={`text-[10px] ${text.muted}`}>·</span>
+                <span className={`text-[11px] font-medium ${text.muted}`}>{periodMeta.time}</span>
+                <span className={`text-[10px] ${text.muted}`}>·</span>
+                <span className={`text-[11px] font-medium ${text.muted}`}>{assignment.shiftDate}</span>
               </div>
               {isLead && (
                 <p className="text-[11px] text-amber-700 font-medium mt-2 leading-relaxed">
@@ -744,12 +741,13 @@ function ShiftCheckInCard() {
               onClick={handleRefresh}
               disabled={refreshing}
               title="Refresh shift status"
-              className="w-10 h-10 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 flex items-center justify-center transition-all duration-300 shadow-sm disabled:opacity-40"
+              style={glassInner}
+              className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 disabled:opacity-40"
             >
               {refreshing ? (
-                <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
+                <Loader2 className={`w-4 h-4 animate-spin ${text.muted}`} />
               ) : (
-                <RefreshCw className="w-4 h-4 text-slate-500" />
+                <RefreshCw className={`w-4 h-4 ${text.muted}`} />
               )}
             </button>
             <button
@@ -766,13 +764,13 @@ function ShiftCheckInCard() {
         </div>
 
         {/* Tier info strip */}
-        <div className="flex items-center gap-3 mt-4 pt-4 border-t border-slate-200/60 flex-wrap">
-          <div className="inline-flex items-center gap-1.5 text-[11px] text-slate-600">
+        <div className="flex items-center gap-3 mt-4 pt-4 flex-wrap" style={{ borderTop: borderStyle }}>
+          <div className={`inline-flex items-center gap-1.5 text-[11px] ${text.body}`}>
             <MapPinIcon className="w-3 h-3 text-cyan-500" />
             <span className="font-semibold">Zone {zoneMeta.label}</span> patients routed to you
           </div>
-          <span className="text-[10px] text-slate-400">·</span>
-          <div className="inline-flex items-center gap-1.5 text-[11px] text-slate-600">
+          <span className={`text-[10px] ${text.muted}`}>·</span>
+          <div className={`inline-flex items-center gap-1.5 text-[11px] ${text.body}`}>
             <Clock className="w-3 h-3 text-violet-500" />
             Tier-1 alerts escalate in <strong>2 min</strong>
           </div>
@@ -791,11 +789,12 @@ interface SettingToggleProps {
 }
 
 function SettingToggle({ label, description, enabled, onToggle }: SettingToggleProps) {
+  const { text } = useTheme();
   return (
     <div className="flex items-center justify-between py-4">
       <div>
-        <p className="text-sm font-semibold text-gray-900">{label}</p>
-        <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{description}</p>
+        <p className={`text-sm font-semibold ${text.heading}`}>{label}</p>
+        <p className={`text-xs ${text.muted} mt-0.5 leading-relaxed`}>{description}</p>
       </div>
       <button
         onClick={onToggle}
