@@ -119,7 +119,7 @@ interface PatientState {
   /** Register patient + create visit via API, then add to local store */
   registerPatientApi: (data: {
     firstName: string; lastName: string; dateOfBirth?: string;
-    gender: string; nationalId?: string; phoneNumber?: string;
+    gender: string; nationalId?: string; rfidCardId?: string; phoneNumber?: string;
     address?: string; emergencyContactName?: string; emergencyContactPhone?: string;
     // Persistent clinical facts captured at registration. They surface
     // immediately on the doctor's Overview and feed the medication
@@ -239,6 +239,7 @@ export const usePatientStore = create<PatientState>((set, get) => ({
         dateOfBirth: data.dateOfBirth || undefined,
         gender: data.gender as any,
         nationalId: data.nationalId,
+        rfidCardId: data.rfidCardId,
         phoneNumber: data.phoneNumber,
         address: data.address,
         emergencyContactName: data.emergencyContactName,

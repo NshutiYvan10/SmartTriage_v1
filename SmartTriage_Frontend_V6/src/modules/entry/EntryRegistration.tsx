@@ -22,6 +22,8 @@ import {
   UserCheck,
   Users,
   Accessibility,
+  ScanLine,
+  Loader2,
 } from 'lucide-react';
 import { usePatientStore } from '@/store/patientStore';
 import { useAuditStore } from '@/store/auditStore';
@@ -36,6 +38,8 @@ import { PatientLookupPanel } from './PatientLookupPanel';
 import { PatientHistoryPanel } from './PatientHistoryPanel';
 import { PatientProfilePanel } from './PatientProfilePanel';
 import { CrossHospitalSafetyBanner } from './CrossHospitalSafetyBanner';
+import { rfidApi, type RfidDevice, type RfidEvent } from '@/api/rfid';
+import { subscribeToRfidEvents } from '@/api/websocket';
 import { RwandaLocationPicker } from '@/components/RwandaLocationPicker';
 
 /* ─── Constants ─── */
@@ -84,6 +88,7 @@ interface FormData {
   age: string;
   gender: Gender | '';
   nationalId: string;
+  rfidCardId: string;
   weight: string;
   dateOfBirth: string;
   // Step 2 — Address
@@ -145,6 +150,7 @@ const INITIAL_FORM: FormData = {
   age: '',
   gender: '',
   nationalId: '',
+  rfidCardId: '',
   weight: '',
   dateOfBirth: '',
   streetAddress: '',
@@ -194,6 +200,47 @@ export function EntryRegistration() {
   // patient/visit creation from rapid multi-tapping while the
   // registration API call is in flight.
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // ── RFID tap-to-capture (V95) ──
+  // The registrar arms the desk reader; the next tap of a (blank/new) card pushes a CARD_BIND
+  // event over /topic/rfid/{hospitalId}, which we capture into the form — no hand-typed UID.
+  const [rfidDevices, setRfidDevices] = useState<RfidDevice[]>([]);
+  const [rfidDeviceId, setRfidDeviceId] = useState<string>(() => localStorage.getItem('st-rfid-device') || '');
+  const [capturingCard, setCapturingCard] = useState(false);
+
+  useEffect(() => {
+    const hid = authUser?.hospitalId;
+    if (!hid) return;
+    rfidApi.listDevices(hid)
+      .then((d) => {
+        setRfidDevices(d);
+        // Auto-select the only reader, or keep a previously-remembered one if still present.
+        setRfidDeviceId((cur) => (cur && d.some((x) => x.id === cur)) ? cur : (d.length === 1 ? d[0].id : cur));
+      })
+      .catch(() => setRfidDevices([]));
+  }, [authUser?.hospitalId]);
+
+  const captureCard = useCallback(async () => {
+    const hid = authUser?.hospitalId;
+    if (!rfidDeviceId || !hid) return;
+    if (rfidDeviceId) localStorage.setItem('st-rfid-device', rfidDeviceId);
+    setCapturingCard(true);
+    let unsub: (() => void) | null = null;
+    let timer = 0;
+    const stop = () => { if (unsub) unsub(); unsub = null; if (timer) window.clearTimeout(timer); setCapturingCard(false); };
+    timer = window.setTimeout(stop, 32000); // a touch beyond the 30s server bind window
+    unsub = subscribeToRfidEvents(hid, (e: RfidEvent) => {
+      if (e?.type === 'CARD_BIND' && e.cardId) {
+        setFormData((f) => ({ ...f, rfidCardId: e.cardId }));
+        stop();
+      }
+    });
+    try {
+      await rfidApi.armBindMode(rfidDeviceId);
+    } catch {
+      stop();
+    }
+  }, [rfidDeviceId, authUser?.hospitalId]);
 
   /**
    * Federated-lookup mode flag.
@@ -333,6 +380,7 @@ export function EntryRegistration() {
       age: computedAge,
       gender: (patient.gender as Gender) ?? '',
       nationalId: patient.nationalId ?? '',
+      rfidCardId: patient.rfidCardId ?? '',
       phoneNumber: patient.phoneNumber ?? '',
       // PatientResponse exposes a single concatenated address string —
       // drop it into streetAddress so it's at least visible; the nurse can
@@ -507,6 +555,7 @@ export function EntryRegistration() {
         dateOfBirth: formData.dateOfBirth || syntheticDob || undefined,
         gender: formData.gender,
         nationalId: formData.nationalId || undefined,
+        rfidCardId: formData.rfidCardId || undefined,
         phoneNumber: formData.contactPersonPhone || undefined,
         // Address is the optional building / landmark string. The
         // administrative location (province → village) lives on the
@@ -891,6 +940,48 @@ export function EntryRegistration() {
                       </p>
                     </div>
                   )}
+                </div>
+
+                {/* RFID Card ID (V95) — tap-to-capture or hand-type. Becomes the patient's
+                    permanent system-wide identifier on the shared cross-hospital identity. */}
+                <div>
+                  <label className={labelCls}>RFID Card ID</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      className={inputClass('rfidCardId')}
+                      style={glassInner}
+                      value={formData.rfidCardId}
+                      onChange={(e) => set('rfidCardId', e.target.value)}
+                      placeholder="Tap the card on the reader, or type its ID (optional)"
+                    />
+                    <button
+                      type="button"
+                      onClick={captureCard}
+                      disabled={capturingCard || !rfidDeviceId}
+                      title={rfidDevices.length === 0
+                        ? 'No RFID reader registered at this hospital'
+                        : 'Tap the card on the desk reader to capture its ID'}
+                      className="flex items-center gap-1.5 px-3 rounded-xl text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 transition-colors disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {capturingCard ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanLine className="w-3.5 h-3.5" />}
+                      {capturingCard ? 'Tap card…' : 'Tap to capture'}
+                    </button>
+                  </div>
+                  {rfidDevices.length > 1 && (
+                    <select
+                      value={rfidDeviceId}
+                      onChange={(e) => { setRfidDeviceId(e.target.value); localStorage.setItem('st-rfid-device', e.target.value); }}
+                      className="mt-1.5 text-xs px-2 py-1 rounded-lg w-full"
+                      style={glassInner}
+                    >
+                      <option value="">Select desk reader…</option>
+                      {rfidDevices.map((d) => <option key={d.id} value={d.id}>{d.deviceName}</option>)}
+                    </select>
+                  )}
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Becomes this patient's permanent ID across all SmartTriage hospitals.
+                  </p>
                 </div>
 
                 {isPediatric && (

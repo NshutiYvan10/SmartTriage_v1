@@ -23,6 +23,7 @@ import { safeFormatDistanceToNow } from '@/utils/safeDate';
 import { useMyShift, getZoneForCategory } from '@/hooks/useMyShift';
 import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
 import { ShiftSummaryCard } from './ShiftSummaryCard';
+import { RfidPatientFoundBanner } from './RfidPatientFoundBanner';
 import { ShiftStartBanner } from '@/components/ShiftStartBanner';
 import { CriticalLabBanner } from '@/modules/lab/CriticalLabBanner';
 import { InboundEmsBoard } from '@/modules/ems/InboundEmsBoard';
@@ -185,6 +186,11 @@ export function Dashboard() {
             charge nurse can prep bays and acknowledge MIST handovers
             in real time. */}
         <InboundEmsBoard />
+
+        {/* RFID tap-to-identify banner (V95) — self-hides until a card is tapped at the desk
+            reader; surfaces the found patient + cross-hospital history for the registrar to
+            confirm and open a visit, or flags an unknown card. Registration-desk roles only. */}
+        <RfidPatientFoundBanner />
 
         {/* Critical lab banner — Phase 1. Self-hides when zero
             unacknowledged criticals so it doesn't burn dashboard

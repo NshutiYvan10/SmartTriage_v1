@@ -110,6 +110,11 @@ export const crossHospitalApi = {
   getSafetySummary: (nationalId: string) =>
     get<CrossHospitalSafetySummary>(`/patient-identity/safety-summary?nationalId=${enc(nationalId)}`),
 
+  /** Same safety summary resolved by RFID card UID (V95) — for the tap-to-identify flow; works
+   *  for card-anchored patients with no national ID. */
+  getSafetySummaryByCard: (cardId: string) =>
+    get<CrossHospitalSafetySummary>(`/patient-identity/safety-summary-by-card?cardId=${enc(cardId)}`),
+
   /**
    * Consent-gated deep clinical-history summary. Pass a non-blank `breakTheGlassReason` to perform
    * an emergency override when no consent is on file — it is recorded forensically and audited.

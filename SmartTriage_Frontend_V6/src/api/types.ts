@@ -368,6 +368,8 @@ export interface RegisterPatientRequest extends CreatePatientRequest {
   arrivalMode?: ArrivalMode;
   chiefComplaint?: string;
   referringFacility?: string;
+  /** RFID card UID (V95) — stored on the shared cross-hospital identity, not this local row. */
+  rfidCardId?: string;
 }
 
 /** Combined registration response */
@@ -383,6 +385,7 @@ export interface PatientResponse {
   dateOfBirth: string;
   gender: Gender;
   nationalId: string;
+  rfidCardId?: string | null;
   passportNumber: string | null;
   birthCertificateNumber: string | null;
   phoneNumber: string;

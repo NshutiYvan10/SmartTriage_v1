@@ -17,11 +17,14 @@ import { DataSharingConsentModal } from './DataSharingConsentModal';
 const CONSENT_ROLES: UserRole[] = ['SUPER_ADMIN', 'DOCTOR', 'NURSE', 'REGISTRAR'];
 
 interface Props {
-  nationalId: string;
+  /** National-ID lookup (registration flow). Either nationalId or cardId must be provided. */
+  nationalId?: string;
+  /** RFID card-UID lookup (V95 tap-to-identify flow) — used when no national ID is available. */
+  cardId?: string;
   patientName?: string;
 }
 
-export function CrossHospitalSafetyBanner({ nationalId, patientName }: Props) {
+export function CrossHospitalSafetyBanner({ nationalId, cardId, patientName }: Props) {
   const role = useAuthStore((s) => s.user?.role);
   const [summary, setSummary] = useState<CrossHospitalSafetySummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,13 +35,19 @@ export function CrossHospitalSafetyBanner({ nationalId, patientName }: Props) {
     setLoading(true);
     setError(null);
     try {
-      setSummary(await crossHospitalApi.getSafetySummary(nationalId));
+      // Prefer national ID; fall back to the card UID for card-anchored patients with no NID.
+      const result = nationalId && nationalId.trim()
+        ? await crossHospitalApi.getSafetySummary(nationalId)
+        : cardId
+          ? await crossHospitalApi.getSafetySummaryByCard(cardId)
+          : null;
+      setSummary(result);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load cross-hospital records');
     } finally {
       setLoading(false);
     }
-  }, [nationalId]);
+  }, [nationalId, cardId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -67,7 +76,8 @@ export function CrossHospitalSafetyBanner({ nationalId, patientName }: Props) {
     { icon: Pill, label: 'Active medications', list: summary.activeMedications, tone: 'text-cyan-700' },
   ];
   const hasAnyItem = items.some((g) => g.list && g.list.length > 0);
-  const canManageConsent = role != null && CONSENT_ROLES.includes(role);
+  // Consent capture is keyed on national ID; not offered for a card-only (no-NID) lookup.
+  const canManageConsent = role != null && CONSENT_ROLES.includes(role) && !!(nationalId && nationalId.trim());
 
   return (
     <div className="rounded-xl px-4 py-3 animate-fade-in"
@@ -119,7 +129,7 @@ export function CrossHospitalSafetyBanner({ nationalId, patientName }: Props) {
         </div>
       </div>
 
-      {showConsent && (
+      {showConsent && nationalId && (
         <DataSharingConsentModal
           nationalId={nationalId}
           patientName={patientName}

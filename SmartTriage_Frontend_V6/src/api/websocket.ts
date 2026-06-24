@@ -282,6 +282,19 @@ export function subscribeToGovernance(
 }
 
 /**
+ * Subscribe to RFID registration-reader events for a hospital (V95): a card tap that FOUND /
+ * did NOT find a patient, or a tap-to-capture CARD_BIND for the registration form. Dedicated
+ * topic, hospital-scoped (SUBSCRIBE authz = canAccessHospital). Payload is a small
+ * { type, cardId, patientName?, identityId?, nationalId?, linkedHospitalCount? } map.
+ */
+export function subscribeToRfidEvents(
+  hospitalId: string,
+  callback: (event: any) => void
+): () => void {
+  return subscribeToTopic(`/topic/rfid/${hospitalId}`, callback);
+}
+
+/**
  * Subscribe to hypoglycemia events for a hospital. Dedicated topic (same
  * one-subscriber-per-topic rationale as sepsis/fast-track). Payload is a small
  * { eventType, visitId } map; refetch on any event.
