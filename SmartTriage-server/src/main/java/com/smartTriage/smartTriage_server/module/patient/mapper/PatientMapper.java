@@ -42,6 +42,10 @@ public final class PatientMapper {
                 .isPediatric(patient.isPediatric())
                 .gender(patient.getGender())
                 .nationalId(patient.getNationalId())
+                // V95 — the card lives on the shared PersonIdentity (LAZY). Only read it when the
+                // association is already initialized (e.g. inside the registration transaction) so
+                // a no-session mapping never triggers a LazyInitializationException.
+                .rfidCardId(rfidCardIfLoaded(patient))
                 .passportNumber(patient.getPassportNumber())
                 .birthCertificateNumber(patient.getBirthCertificateNumber())
                 .medicalRecordNumber(patient.getMedicalRecordNumber())
@@ -74,6 +78,20 @@ public final class PatientMapper {
                 .createdAt(patient.getCreatedAt())
                 .updatedAt(patient.getUpdatedAt())
                 .build();
+    }
+
+    /**
+     * The RFID card UID lives on the LAZY {@code personIdentity} association. Return it only when
+     * that association is already initialized in the current persistence context; otherwise null
+     * (avoids a LazyInitializationException when mapping outside an open session). Callers that need
+     * the card guaranteed (e.g. the registration response) map within the registration transaction.
+     */
+    private static String rfidCardIfLoaded(Patient patient) {
+        var identity = patient.getPersonIdentity();
+        if (identity != null && org.hibernate.Hibernate.isInitialized(identity)) {
+            return identity.getRfidCardId();
+        }
+        return null;
     }
 
     private static String formatUserDisplayName(String firstName, String lastName, String username) {

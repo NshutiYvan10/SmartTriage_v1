@@ -82,7 +82,7 @@ public class PatientService {
         Patient patient = PatientMapper.toEntity(request);
         patient.setHospital(hospital);
         patient.setMedicalRecordNumber(generateMRN(hospital.getHospitalCode()));
-        linkSharedIdentity(patient);
+        linkSharedIdentity(patient, null); // createPatient path carries no RFID card
         applyStructuredLocation(patient,
                 request.getProvinceId(), request.getDistrictId(),
                 request.getSectorId(), request.getCellId(), request.getVillageId());
@@ -150,7 +150,7 @@ public class PatientService {
                 .build();
         patient.setHospital(hospital);
         patient.setMedicalRecordNumber(generateMRN(hospital.getHospitalCode()));
-        linkSharedIdentity(patient);
+        linkSharedIdentity(patient, blankToNull(request.getRfidCardId()));
         applyStructuredLocation(patient,
                 request.getProvinceId(), request.getDistrictId(),
                 request.getSectorId(), request.getCellId(), request.getVillageId());
@@ -297,8 +297,9 @@ public class PatientService {
      * ID is present, so a returning patient is recognised at another SmartTriage hospital instead
      * of re-registered blank. No national ID (e.g. unidentified placeholders) → stays local.
      */
-    private void linkSharedIdentity(Patient patient) {
-        patient.setPersonIdentity(personIdentityService.findOrCreate(patient.getNationalId()));
+    private void linkSharedIdentity(Patient patient, String rfidCardId) {
+        patient.setPersonIdentity(
+                personIdentityService.findOrCreate(patient.getNationalId(), rfidCardId));
     }
 
     /**

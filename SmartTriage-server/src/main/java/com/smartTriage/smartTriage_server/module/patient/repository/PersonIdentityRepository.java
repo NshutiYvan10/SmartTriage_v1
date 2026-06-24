@@ -11,4 +11,7 @@ import java.util.UUID;
 public interface PersonIdentityRepository extends JpaRepository<PersonIdentity, UUID> {
 
     Optional<PersonIdentity> findByNationalIdAndIsActiveTrue(String nationalId);
+
+    /** Resolve the shared identity by RFID card UID — the system-wide tap-to-identify lookup (V95). */
+    Optional<PersonIdentity> findByRfidCardIdAndIsActiveTrue(String rfidCardId);
 }

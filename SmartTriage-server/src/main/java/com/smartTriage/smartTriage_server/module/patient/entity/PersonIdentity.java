@@ -19,9 +19,12 @@ import lombok.Setter;
  * returning patient be recognised at a different SmartTriage hospital instead of re-registered
  * from blank, and what the minimal cross-hospital safety summary is assembled against.
  *
- * Phase 1 matches on national ID only (deterministic — a wrong probabilistic merge would be a
- * patient-safety incident). Patients without a national ID (e.g. unidentified placeholders) are
- * never linked and stay purely local.
+ * Anchoring is by national ID AND/OR RFID card (V95) — both deterministic-exact (a wrong
+ * probabilistic merge would be a patient-safety incident). The card makes identity system-wide
+ * even for patients with no national ID (unconscious / newborn / foreign / unidentified). At least
+ * one anchor is always present (DB CHECK + partial-unique indexes on each, declared in V95 — JPA
+ * cannot express partial uniqueness). {@link PersonIdentityService} resolves/merges the two keys
+ * and REJECTS a card + national ID that point at different identities rather than auto-merging.
  */
 @Entity
 @Table(name = "person_identities")
@@ -32,6 +35,10 @@ import lombok.Setter;
 @Builder
 public class PersonIdentity extends BaseEntity {
 
-    @Column(name = "national_id", nullable = false, length = 30, unique = true)
+    @Column(name = "national_id", length = 30)
     private String nationalId;
+
+    /** RFID card UID — a co-equal cross-hospital anchor (V95). Nullable; partial-unique in V95 SQL. */
+    @Column(name = "rfid_card_id", length = 64)
+    private String rfidCardId;
 }

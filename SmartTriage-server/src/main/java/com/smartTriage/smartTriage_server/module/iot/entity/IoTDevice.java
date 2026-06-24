@@ -154,4 +154,12 @@ public class IoTDevice extends BaseEntity {
     /** Administrative notes about this device */
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
+
+    /**
+     * RFID "tap-to-capture" bind window (V95). While {@code now < rfidBindUntil}, the next RFID tap
+     * on this reader captures the card UID for the requesting registrar (registration binding)
+     * instead of running an identify lookup. Null/past = normal identify mode.
+     */
+    @Column(name = "rfid_bind_until")
+    private Instant rfidBindUntil;
 }

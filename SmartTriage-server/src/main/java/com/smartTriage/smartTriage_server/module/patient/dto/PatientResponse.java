@@ -37,6 +37,8 @@ public class PatientResponse {
 
     private Gender gender;
     private String nationalId;
+    /** System-wide RFID card UID (V95), read from the linked shared PersonIdentity when loaded. */
+    private String rfidCardId;
     private String passportNumber;
     private String birthCertificateNumber;
     private String medicalRecordNumber;

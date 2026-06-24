@@ -40,6 +40,14 @@ public class RegisterPatientRequest {
     @Size(max = 30)
     private String nationalId;
 
+    /**
+     * RFID card UID (V95) — a system-wide identity anchor stored on the shared PersonIdentity, not
+     * on this hospital-local row. Optional: entered/tap-captured at registration. Lets the patient
+     * be found by a card tap at any SmartTriage hospital.
+     */
+    @Size(max = 64)
+    private String rfidCardId;
+
     @Size(max = 30)
     private String passportNumber;
 

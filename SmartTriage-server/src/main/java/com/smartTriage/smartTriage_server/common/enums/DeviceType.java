@@ -31,6 +31,9 @@ public enum DeviceType {
     /** Ambulance monitor (pre-hospital) */
     AMBULANCE_MONITOR("Ambulance Monitor"),
 
+    /** ESP32 + RFID reader at the registration desk — tap-to-identify (V95) */
+    RFID_READER("RFID Card Reader"),
+
     /** Generic / other device */
     OTHER("Other Device");
 

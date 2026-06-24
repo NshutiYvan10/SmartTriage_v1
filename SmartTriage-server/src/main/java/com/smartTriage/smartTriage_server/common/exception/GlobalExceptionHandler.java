@@ -41,6 +41,13 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
+    @ExceptionHandler(IdentityConflictException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIdentityConflict(IdentityConflictException ex) {
+        log.warn("Cross-hospital identity conflict: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
     @ExceptionHandler(ClinicalBusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleClinicalBusiness(ClinicalBusinessException ex) {
         log.error("Clinical business rule violation: {}", ex.getMessage());
