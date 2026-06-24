@@ -61,15 +61,15 @@ const STRATEGY_HINTS: Record<LookupStrategy, string> = {
 };
 
 const MATCH_BADGE: Record<MatchType, { label: string; cls: string }> = {
-  NATIONAL_ID:          { label: 'NID',                cls: 'bg-emerald-100 text-emerald-700' },
-  PASSPORT:             { label: 'Passport',           cls: 'bg-emerald-100 text-emerald-700' },
-  BIRTH_CERTIFICATE:    { label: 'Birth certificate',  cls: 'bg-emerald-100 text-emerald-700' },
-  MRN:                  { label: 'MRN',                cls: 'bg-blue-100 text-blue-700' },
-  PHONE_AND_DOB:        { label: 'Phone + DOB',        cls: 'bg-amber-100 text-amber-700' },
-  PHONE:                { label: 'Phone',              cls: 'bg-amber-100 text-amber-700' },
-  GUARDIAN_NATIONAL_ID: { label: 'Guardian NID',       cls: 'bg-purple-100 text-purple-700' },
-  GUARDIAN_PHONE:       { label: 'Guardian phone',     cls: 'bg-purple-100 text-purple-700' },
-  DEMOGRAPHIC:          { label: 'Name + DOB',         cls: 'bg-gray-200 text-gray-700' },
+  NATIONAL_ID:          { label: 'NID',                cls: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' },
+  PASSPORT:             { label: 'Passport',           cls: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' },
+  BIRTH_CERTIFICATE:    { label: 'Birth certificate',  cls: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' },
+  MRN:                  { label: 'MRN',                cls: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' },
+  PHONE_AND_DOB:        { label: 'Phone + DOB',        cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
+  PHONE:                { label: 'Phone',              cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
+  GUARDIAN_NATIONAL_ID: { label: 'Guardian NID',       cls: 'bg-purple-500/20 text-purple-300 border border-purple-500/30' },
+  GUARDIAN_PHONE:       { label: 'Guardian phone',     cls: 'bg-purple-500/20 text-purple-300 border border-purple-500/30' },
+  DEMOGRAPHIC:          { label: 'Name + DOB',         cls: 'bg-slate-500/20 text-slate-300 border border-slate-500/30' },
 };
 
 function formatLastVisit(iso: string | null): string {
@@ -100,7 +100,7 @@ interface Props {
 }
 
 export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNew }: Props) {
-  const { isDark, glassCard } = useTheme();
+  const { isDark, glassCard, glassInner, text } = useTheme();
 
   const [strategy, setStrategy] = useState<LookupStrategy>('nationalId');
   const [primary, setPrimary]   = useState('');
@@ -180,16 +180,9 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
   };
 
   // ── Styling helpers ──
-  const cardCls = `rounded-xl shadow-md p-4 ${
-    isDark ? glassCard + ' border border-white/10' : 'bg-white border border-gray-200'
-  }`;
-  const headerTextCls = isDark ? 'text-white' : 'text-gray-900';
-  const subtleTextCls = isDark ? 'text-slate-400' : 'text-gray-500';
-  const inputCls = `w-full px-3 py-2 text-sm rounded-lg border ${
-    isDark
-      ? 'bg-white/5 border-white/10 text-white placeholder:text-slate-500'
-      : 'bg-white border-gray-200 text-gray-900 placeholder:text-gray-400'
-  } focus:outline-none focus:ring-2 focus:ring-blue-500/40`;
+  const headerTextCls = text.heading;
+  const subtleTextCls = text.body;
+  const inputCls = `w-full px-3 py-2 text-sm rounded-xl ${text.label} placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20`;
 
   // What input fields to render for the chosen strategy
   const showPrimary = strategy !== 'demographic';
@@ -208,7 +201,7 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
   const showLastName  = strategy === 'demographic';
 
   return (
-    <div className={cardCls}>
+    <div style={glassCard} className="rounded-2xl p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className={`text-sm font-bold flex items-center gap-2 ${headerTextCls}`}>
           <Search className="w-4 h-4" />
@@ -218,9 +211,7 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
           <button
             type="button"
             onClick={onRegisterNew}
-            className={`text-xs px-2.5 py-1 rounded-md ${
-              isDark ? 'text-slate-300 hover:bg-white/5' : 'text-gray-600 hover:bg-gray-100'
-            }`}
+            className={`text-xs px-2.5 py-1 rounded-xl ${text.body} hover:bg-white/10`}
           >
             Skip — register new
           </button>
@@ -241,12 +232,12 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
                 key={key}
                 type="button"
                 onClick={() => handleStrategyChange(key)}
-                className={`text-[11px] px-2 py-1.5 rounded-md border transition-colors ${
+                className={`text-[11px] px-2 py-1.5 rounded-xl border transition-colors ${
                   active
-                    ? 'bg-blue-600 border-blue-600 text-white'
+                    ? 'bg-cyan-600 border-cyan-600 text-white'
                     : isDark
-                      ? 'border-white/10 text-slate-300 hover:bg-white/5'
-                      : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                      ? 'border-white/10 text-slate-300 hover:bg-white/[0.03]'
+                      : 'border-slate-200/60 text-slate-700 hover:bg-white/[0.03]'
                 }`}
               >
                 {STRATEGY_LABELS[key]}
@@ -268,6 +259,7 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
           {showPrimary && (
             <input
               type="text"
+              style={glassInner}
               className={inputCls}
               placeholder={primaryLabel[strategy]}
               value={primary}
@@ -278,6 +270,7 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
           {showFirstName && (
             <input
               type="text"
+              style={glassInner}
               className={inputCls}
               placeholder={strategy === 'demographic' ? 'First name' : "Child's first name"}
               value={firstName}
@@ -288,6 +281,7 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
           {showLastName && (
             <input
               type="text"
+              style={glassInner}
               className={inputCls}
               placeholder="Last name"
               value={lastName}
@@ -298,6 +292,7 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
           {showDob && (
             <input
               type="date"
+              style={glassInner}
               className={inputCls}
               value={dob}
               onChange={(e) => setDob(e.target.value)}
@@ -318,10 +313,10 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
           <button
             type="submit"
             disabled={searching}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition-colors ${
               searching
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
+                ? 'bg-slate-500/20 text-slate-400 cursor-not-allowed'
+                : 'bg-cyan-600 hover:bg-cyan-700 text-white'
             }`}
           >
             {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
@@ -350,9 +345,8 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
                   return (
                     <div
                       key={c.patientId}
-                      className={`rounded-lg border p-2.5 flex items-center gap-3 ${
-                        isDark ? 'bg-white/[0.04] border-white/10' : 'bg-gray-50 border-gray-200'
-                      }`}
+                      style={glassInner}
+                      className="rounded-xl p-2.5 flex items-center gap-3 hover:bg-white/[0.03] transition-colors"
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -362,15 +356,15 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
                           <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.cls}`}>
                             {badge.label}
                           </span>
-                          <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                            c.confidence >= 0.95 ? 'bg-emerald-100 text-emerald-700'
-                              : c.confidence >= 0.80 ? 'bg-amber-100 text-amber-700'
-                              : 'bg-gray-200 text-gray-700'
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+                            c.confidence >= 0.95 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                              : c.confidence >= 0.80 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                              : 'bg-slate-500/20 text-slate-300 border-slate-500/30'
                           }`}>
                             {Math.round(c.confidence * 100)}%
                           </span>
                           {c.isPediatric && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-pink-100 text-pink-700 inline-flex items-center gap-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-pink-500/20 text-pink-300 border-pink-500/30 inline-flex items-center gap-1">
                               <Baby className="w-3 h-3" />
                               Pediatric
                             </span>
@@ -391,9 +385,9 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
                         type="button"
                         onClick={() => handlePick(c)}
                         disabled={picking || pickingId !== null}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md whitespace-nowrap ${
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-xl whitespace-nowrap ${
                           picking
-                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            ? 'bg-slate-500/20 text-slate-400 cursor-not-allowed'
                             : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                         }`}
                       >

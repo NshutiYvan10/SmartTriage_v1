@@ -21,7 +21,8 @@ interface Props {
 }
 
 export function ReplaceCardModal({ patientId, patientName, currentCardId, onClose, onReplaced }: Props) {
-  const { glassCard, glassInner } = useTheme();
+  const { glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const hospitalId = useAuthStore((s) => s.user?.hospitalId) || '';
 
   const [newCard, setNewCard] = useState('');
@@ -68,36 +69,36 @@ export function ReplaceCardModal({ patientId, patientName, currentCardId, onClos
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
-      <div className="w-full max-w-md rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+      <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
         <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <CreditCard className="w-5 h-5 text-teal-300" />
+            <CreditCard className="w-5 h-5 text-cyan-300" />
             <h2 className="text-sm font-bold text-white">Replace RFID card</h2>
           </div>
           <button onClick={onClose} aria-label="Close" className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-5 space-y-3">
-          <p className="text-xs text-slate-500">
-            For <span className="font-semibold text-slate-700">{patientName || 'this patient'}</span>.
+          <p className={`text-xs ${text.body}`}>
+            For <span className={`font-semibold ${text.label}`}>{patientName || 'this patient'}</span>.
             {currentCardId
               ? <> Current card <span className="font-mono">{currentCardId}</span> will stop working immediately.</>
               : ' This patient has no card on file yet.'}
           </p>
 
           <div>
-            <label className="text-xs font-semibold text-slate-600">New card ID</label>
+            <label className={`text-xs font-semibold ${text.label}`}>New card ID</label>
             <div className="flex gap-2 mt-1">
               <input
                 type="text" value={newCard} onChange={(e) => setNewCard(e.target.value)}
                 placeholder="Tap the new card, or type its ID"
-                className="flex-1 px-3 py-2 rounded-xl text-sm text-slate-200" style={glassInner}
+                className={`flex-1 px-3 py-2 rounded-xl text-sm ${text.body} focus:outline-none focus:ring-2 focus:ring-cyan-500/20`} style={glassInner}
               />
               <button
                 type="button" onClick={capture} disabled={capturing || !deviceId}
                 title={devices.length === 0 ? 'No RFID reader at this hospital' : 'Tap the new card on the desk reader'}
-                className="flex items-center gap-1.5 px-3 rounded-xl text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 transition-colors disabled:opacity-50 whitespace-nowrap"
+                className="flex items-center gap-1.5 px-3 rounded-xl text-xs font-bold text-cyan-400 bg-cyan-500/20 border border-cyan-500/30 hover:bg-cyan-500/30 transition-colors disabled:opacity-50 whitespace-nowrap"
               >
                 {capturing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanLine className="w-3.5 h-3.5" />}
                 {capturing ? 'Tap card…' : 'Tap to capture'}
@@ -105,7 +106,7 @@ export function ReplaceCardModal({ patientId, patientName, currentCardId, onClos
             </div>
             {devices.length > 1 && (
               <select value={deviceId} onChange={(e) => { setDeviceId(e.target.value); localStorage.setItem('st-rfid-device', e.target.value); }}
-                className="mt-1.5 text-xs px-2 py-1 rounded-lg w-full" style={glassInner}>
+                className={`mt-1.5 text-xs px-2 py-1 rounded-lg w-full ${text.body} focus:outline-none focus:ring-2 focus:ring-cyan-500/20`} style={glassInner}>
                 <option value="">Select desk reader…</option>
                 {devices.map((d) => <option key={d.id} value={d.id}>{d.deviceName}</option>)}
               </select>
@@ -113,17 +114,17 @@ export function ReplaceCardModal({ patientId, patientName, currentCardId, onClos
           </div>
 
           {error && (
-            <div className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)' }}>
-              <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-              <p className="text-xs font-semibold text-red-600">{error}</p>
+            <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/30">
+              <AlertTriangle className={`w-4 h-4 flex-shrink-0 mt-0.5 ${isDark ? 'text-red-300' : 'text-red-500'}`} />
+              <p className={`text-xs font-semibold ${isDark ? 'text-red-300' : 'text-red-600'}`}>{error}</p>
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <button onClick={onClose} className="text-xs font-semibold text-slate-500 hover:text-slate-700 px-3 py-2">Cancel</button>
+          <div className="flex items-center justify-end gap-2 pt-3" style={{ borderTop: borderStyle }}>
+            <button onClick={onClose} className={`text-xs font-semibold ${text.body} hover:text-cyan-400 px-3 py-2`}>Cancel</button>
             <button
               onClick={submit} disabled={saving || !newCard.trim()}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 px-4 py-2 rounded-xl transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded-xl transition-colors disabled:opacity-50"
             >
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CreditCard className="w-3.5 h-3.5" />}
               Replace card

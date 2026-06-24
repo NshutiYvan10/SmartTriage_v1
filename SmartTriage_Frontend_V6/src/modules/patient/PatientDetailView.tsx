@@ -6,6 +6,7 @@ import {
   Users, Shield, Footprints,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { Badge } from '@/components/ui/Badge';
 import { usePatientStore } from '@/store/patientStore';
 import { useAuthStore } from '@/store/authStore';
 import { patientApi } from '@/api/patients';
@@ -16,14 +17,18 @@ import type { UserRole } from '@/types/roles';
 const CARD_ADMIN_ROLES: UserRole[] = ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR'];
 
 /* ─── Reusable info row ─── */
-const InfoRow = ({ label, value }: { label: string; value?: string | number | null }) => (
-  <div className="flex items-start justify-between py-2.5 border-b border-gray-100 last:border-0">
-    <span className="text-sm text-gray-500 font-medium">{label}</span>
-    <span className="text-sm font-semibold text-gray-900 text-right max-w-[60%]">
-      {value || <span className="text-gray-300 font-normal italic">—</span>}
-    </span>
-  </div>
-);
+const InfoRow = ({ label, value }: { label: string; value?: string | number | null }) => {
+  const { isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
+  return (
+    <div className="flex items-start justify-between py-2.5 last:border-0" style={{ borderBottom: borderStyle }}>
+      <span className={`text-sm font-medium ${text.muted}`}>{label}</span>
+      <span className={`text-sm font-semibold text-right max-w-[60%] ${text.heading}`}>
+        {value || <span className={`font-normal italic ${text.muted}`}>—</span>}
+      </span>
+    </div>
+  );
+};
 
 /* ─── Section card ─── */
 const SectionCard = ({ title, icon: Icon, children, accent = 'cyan' }: {
@@ -32,23 +37,25 @@ const SectionCard = ({ title, icon: Icon, children, accent = 'cyan' }: {
   children: React.ReactNode;
   accent?: string;
 }) => {
-  const accentMap: Record<string, { iconBg: string; iconText: string; border: string }> = {
-    cyan: { iconBg: 'bg-cyan-50', iconText: 'text-cyan-600', border: 'border-cyan-200' },
-    violet: { iconBg: 'bg-violet-50', iconText: 'text-violet-600', border: 'border-violet-200' },
-    amber: { iconBg: 'bg-amber-50', iconText: 'text-amber-600', border: 'border-amber-200' },
-    emerald: { iconBg: 'bg-emerald-50', iconText: 'text-emerald-600', border: 'border-emerald-200' },
-    rose: { iconBg: 'bg-rose-50', iconText: 'text-rose-600', border: 'border-rose-200' },
-    blue: { iconBg: 'bg-blue-50', iconText: 'text-blue-600', border: 'border-blue-200' },
+  const { glassCard, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
+  const accentMap: Record<string, { iconBg: string; iconText: string }> = {
+    cyan: { iconBg: 'bg-cyan-500/20', iconText: 'text-cyan-400' },
+    violet: { iconBg: 'bg-violet-500/20', iconText: 'text-violet-400' },
+    amber: { iconBg: 'bg-amber-500/20', iconText: 'text-amber-400' },
+    emerald: { iconBg: 'bg-emerald-500/20', iconText: 'text-emerald-400' },
+    rose: { iconBg: 'bg-rose-500/20', iconText: 'text-rose-400' },
+    blue: { iconBg: 'bg-blue-500/20', iconText: 'text-blue-400' },
   };
   const a = accentMap[accent] || accentMap.cyan;
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow duration-300">
-      <div className={`flex items-center gap-3 px-5 py-3.5 border-b ${a.border} bg-gradient-to-r from-gray-50 to-white`}>
+    <div className="rounded-2xl overflow-hidden" style={glassCard}>
+      <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: borderStyle }}>
         <div className={`w-8 h-8 rounded-lg ${a.iconBg} flex items-center justify-center`}>
           <Icon className={`w-4 h-4 ${a.iconText}`} />
         </div>
-        <h3 className="text-sm font-bold text-gray-900 tracking-tight">{title}</h3>
+        <h3 className={`text-sm font-bold tracking-tight ${text.heading}`}>{title}</h3>
       </div>
       <div className="px-5 py-3">{children}</div>
     </div>
@@ -58,7 +65,8 @@ const SectionCard = ({ title, icon: Icon, children, accent = 'cyan' }: {
 export function PatientDetailView() {
   const { patientId } = useParams<{ patientId: string }>();
   const navigate = useNavigate();
-  const { glassCard } = useTheme();
+  const { glassCard, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
 
   const patient: (Patient & Record<string, any>) | undefined =
     usePatientStore((s) => s.getPatient(patientId || ''));
@@ -117,14 +125,14 @@ export function PatientDetailView() {
 
   if (!patient || !patientId) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center bg-white rounded-2xl p-8 shadow-lg border border-gray-200">
-          <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Patient Not Found</h2>
-          <p className="text-gray-600 mb-6">The requested patient could not be located.</p>
+      <div className="min-h-full flex items-center justify-center p-4">
+        <div className="text-center rounded-2xl p-8 animate-fade-in" style={glassCard}>
+          <User className={`w-16 h-16 mx-auto mb-4 ${text.muted}`} />
+          <h2 className={`text-xl font-bold mb-2 ${text.heading}`}>Patient Not Found</h2>
+          <p className={`mb-6 ${text.body}`}>The requested patient could not be located.</p>
           <button
             onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl hover:from-slate-700 hover:to-slate-600 transition-all duration-300 font-medium hover:shadow-lg hover:-translate-y-0.5"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl transition-all duration-300 font-medium hover:shadow-lg hover:-translate-y-0.5"
           >
             <ArrowLeft className="w-4 h-4" />
             Go Back
@@ -173,10 +181,10 @@ export function PatientDetailView() {
 
   return (
     <div className="min-h-full">
-      <div className="p-5 space-y-5">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
 
         {/* ── Header ── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-4">
             <div className="flex items-center justify-between">
               <button
@@ -186,7 +194,7 @@ export function PatientDetailView() {
                 <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform duration-300" />
                 <span className="text-sm font-medium">Back</span>
               </button>
-              <span className="text-xs text-white/60 font-mono">Patient Registration Record</span>
+              <span className="text-xs text-white/50 font-mono">Patient Registration Record</span>
             </div>
           </div>
 
@@ -210,8 +218,8 @@ export function PatientDetailView() {
 
               {/* Name & quick info */}
               <div className="flex-1 min-w-0">
-                <h1 className="text-xl font-bold text-gray-900 tracking-tight truncate">{patient.fullName}</h1>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-500 text-sm mt-1">
+                <h1 className={`text-xl font-bold tracking-tight truncate ${text.heading}`}>{patient.fullName}</h1>
+                <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 text-sm mt-1 ${text.body}`}>
                   <span className="flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5" />
                     {patient.age} yrs &middot; {patient.gender === 'MALE' ? 'Male' : patient.gender === 'FEMALE' ? 'Female' : '—'}
@@ -223,24 +231,22 @@ export function PatientDetailView() {
                     </span>
                   )}
                   {patient.medicalRecordNumber && (
-                    <span className="font-mono text-xs text-gray-400">MRN: {patient.medicalRecordNumber}</span>
+                    <span className={`font-mono text-xs ${text.muted}`}>MRN: {patient.medicalRecordNumber}</span>
                   )}
                 </div>
               </div>
 
               {/* Badges */}
-              <div className="flex flex-wrap gap-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
                 {catCfg && (
-                  <span className={`px-3 py-1 rounded-lg text-xs font-bold ${catCfg.bg} ${catCfg.text}`}>
-                    {patient.category}
-                  </span>
+                  <Badge category={patient.category} size="sm" />
                 )}
                 {patient.tewsScore != null && (
-                  <span className="px-3 py-1 rounded-lg text-xs font-bold bg-blue-500 text-white">
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
                     TEWS {patient.tewsScore}
                   </span>
                 )}
-                <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600">
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-500/20 text-slate-300 border border-slate-500/30">
                   {statusLabel[patient.triageStatus] || patient.triageStatus}
                 </span>
               </div>
@@ -249,7 +255,7 @@ export function PatientDetailView() {
         </div>
 
         {/* ── Registration Details Grid ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
           {/* Personal Information */}
           <SectionCard title="Personal Information" icon={User} accent="cyan">
@@ -261,14 +267,14 @@ export function PatientDetailView() {
             {/* RFID card (V95) — system-wide identifier on the shared identity. Registration-desk
                 roles can replace it (lost/damaged-card workflow). */}
             {(patient.rfidCardId || canManageCard) && (
-              <div className="flex items-center justify-between py-2.5 border-b border-gray-100 last:border-0">
-                <span className="text-xs font-medium text-slate-400">RFID Card</span>
+              <div className="flex items-center justify-between py-2.5 last:border-0" style={{ borderBottom: borderStyle }}>
+                <span className={`text-sm font-medium ${text.muted}`}>RFID Card</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-slate-700">{patient.rfidCardId || '—'}</span>
+                  <span className={`text-sm font-semibold ${text.heading}`}>{patient.rfidCardId || '—'}</span>
                   {canManageCard && realPatientId && (
                     <button
                       onClick={() => setShowReplaceCard(true)}
-                      className="text-[11px] font-bold text-teal-700 hover:text-teal-900 px-2 py-0.5 rounded-md hover:bg-teal-50 transition-colors"
+                      className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 px-2 py-0.5 rounded-md hover:bg-cyan-500/20 transition-colors"
                     >
                       {patient.rfidCardId ? 'Replace' : 'Assign'}
                     </button>
@@ -346,11 +352,11 @@ export function PatientDetailView() {
 
             {/* Allergies — prefer tag array if present, fall back to backend string */}
             {patient.allergies && patient.allergies.length > 0 ? (
-              <div className="py-2.5 border-b border-gray-100">
-                <span className="text-sm text-gray-500 font-medium block mb-1.5">Allergies</span>
+              <div className="py-2.5" style={{ borderBottom: borderStyle }}>
+                <span className={`text-sm font-medium block mb-1.5 ${text.muted}`}>Allergies</span>
                 <div className="flex flex-wrap gap-1.5">
                   {patient.allergies.map((a: string) => (
-                    <span key={a} className="px-2.5 py-0.5 rounded-full bg-red-50 text-red-600 text-xs font-semibold border border-red-200">
+                    <span key={a} className="px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-300 text-xs font-semibold border border-red-500/30">
                       {a}
                     </span>
                   ))}
@@ -363,10 +369,10 @@ export function PatientDetailView() {
             {/* Existing conditions — prefer tag array if present, fall back to backend string */}
             {patient.existingConditions && patient.existingConditions.length > 0 ? (
               <div className="py-2.5">
-                <span className="text-sm text-gray-500 font-medium block mb-1.5">Existing Conditions</span>
+                <span className={`text-sm font-medium block mb-1.5 ${text.muted}`}>Existing Conditions</span>
                 <div className="flex flex-wrap gap-1.5">
                   {patient.existingConditions.map((c: string) => (
-                    <span key={c} className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-xs font-semibold border border-amber-200">
+                    <span key={c} className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-xs font-semibold border border-amber-500/30">
                       {c}
                     </span>
                   ))}

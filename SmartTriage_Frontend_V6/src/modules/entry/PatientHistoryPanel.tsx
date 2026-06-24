@@ -36,11 +36,11 @@ import { useTheme } from '@/hooks/useTheme';
 // ── Display helpers ──────────────────────────────────────────────────
 
 const TRIAGE_PILL: Record<TriageCategory, { label: string; cls: string }> = {
-  RED:    { label: 'Red',    cls: 'bg-red-100 text-red-700' },
-  ORANGE: { label: 'Orange', cls: 'bg-orange-100 text-orange-700' },
-  YELLOW: { label: 'Yellow', cls: 'bg-yellow-100 text-yellow-800' },
-  GREEN:  { label: 'Green',  cls: 'bg-emerald-100 text-emerald-700' },
-  BLUE:   { label: 'Blue',   cls: 'bg-blue-100 text-blue-700' },
+  RED:    { label: 'Red',    cls: 'bg-red-500/20 text-red-300 border border-red-500/30' },
+  ORANGE: { label: 'Orange', cls: 'bg-orange-500/20 text-orange-300 border border-orange-500/30' },
+  YELLOW: { label: 'Yellow', cls: 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' },
+  GREEN:  { label: 'Green',  cls: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' },
+  BLUE:   { label: 'Blue',   cls: 'bg-blue-500/20 text-blue-300 border border-blue-500/30' },
 };
 
 /**
@@ -49,25 +49,25 @@ const TRIAGE_PILL: Record<TriageCategory, { label: string; cls: string }> = {
  * transfer/death).
  */
 const DISPOSITION_PILL: Record<DispositionType, { label: string; cls: string }> = {
-  DISCHARGED_HOME:               { label: 'Discharged',         cls: 'bg-emerald-100 text-emerald-700' },
-  ADMITTED_TO_WARD:              { label: 'Admitted',           cls: 'bg-blue-100 text-blue-700' },
-  ICU_ADMISSION:                 { label: 'ICU',                cls: 'bg-red-100 text-red-700' },
-  TRANSFERRED:                   { label: 'Transferred',        cls: 'bg-amber-100 text-amber-700' },
-  LEFT_AGAINST_MEDICAL_ADVICE:   { label: 'LAMA',               cls: 'bg-rose-100 text-rose-700' },
-  LEFT_WITHOUT_BEING_SEEN:       { label: 'LWBS',               cls: 'bg-slate-200 text-slate-700' },
-  DECEASED:                      { label: 'Deceased',           cls: 'bg-black text-white' },
+  DISCHARGED_HOME:               { label: 'Discharged',         cls: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' },
+  ADMITTED_TO_WARD:              { label: 'Admitted',           cls: 'bg-blue-500/20 text-blue-300 border border-blue-500/30' },
+  ICU_ADMISSION:                 { label: 'ICU',                cls: 'bg-red-500/20 text-red-300 border border-red-500/30' },
+  TRANSFERRED:                   { label: 'Transferred',        cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
+  LEFT_AGAINST_MEDICAL_ADVICE:   { label: 'LAMA',               cls: 'bg-rose-500/20 text-rose-300 border border-rose-500/30' },
+  LEFT_WITHOUT_BEING_SEEN:       { label: 'LWBS',               cls: 'bg-slate-500/20 text-slate-300 border border-slate-500/30' },
+  DECEASED:                      { label: 'Deceased',           cls: 'bg-slate-800 text-white border border-white/20' },
 };
 
 /** Status pill for visits that are still in-flight (no disposition yet). */
 const STATUS_PILL: Partial<Record<VisitStatus, { label: string; cls: string }>> = {
-  REGISTERED:           { label: 'Registered',          cls: 'bg-slate-200 text-slate-700' },
-  AWAITING_TRIAGE:      { label: 'Awaiting triage',     cls: 'bg-amber-100 text-amber-700' },
-  TRIAGED:              { label: 'Triaged',             cls: 'bg-blue-100 text-blue-700' },
-  AWAITING_ASSESSMENT:  { label: 'Awaiting MD',         cls: 'bg-amber-100 text-amber-700' },
-  UNDER_ASSESSMENT:     { label: 'Under assessment',    cls: 'bg-violet-100 text-violet-700' },
-  UNDER_TREATMENT:      { label: 'Under treatment',     cls: 'bg-violet-100 text-violet-700' },
-  UNDER_OBSERVATION:    { label: 'Under observation',   cls: 'bg-violet-100 text-violet-700' },
-  PENDING_DISPOSITION:  { label: 'Pending disposition', cls: 'bg-amber-100 text-amber-700' },
+  REGISTERED:           { label: 'Registered',          cls: 'bg-slate-500/20 text-slate-300 border border-slate-500/30' },
+  AWAITING_TRIAGE:      { label: 'Awaiting triage',     cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
+  TRIAGED:              { label: 'Triaged',             cls: 'bg-blue-500/20 text-blue-300 border border-blue-500/30' },
+  AWAITING_ASSESSMENT:  { label: 'Awaiting MD',         cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
+  UNDER_ASSESSMENT:     { label: 'Under assessment',    cls: 'bg-violet-500/20 text-violet-300 border border-violet-500/30' },
+  UNDER_TREATMENT:      { label: 'Under treatment',     cls: 'bg-violet-500/20 text-violet-300 border border-violet-500/30' },
+  UNDER_OBSERVATION:    { label: 'Under observation',   cls: 'bg-violet-500/20 text-violet-300 border border-violet-500/30' },
+  PENDING_DISPOSITION:  { label: 'Pending disposition', cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
 };
 
 /**
@@ -115,7 +115,7 @@ interface Props {
 }
 
 export function PatientHistoryPanel({ patientId, excludeVisitId, emptyMessage }: Props) {
-  const { isDark, glassCard } = useTheme();
+  const { glassCard, glassInner, text } = useTheme();
   const navigate = useNavigate();
 
   const [visits, setVisits] = useState<VisitResponse[] | null>(null);
@@ -164,17 +164,15 @@ export function PatientHistoryPanel({ patientId, excludeVisitId, emptyMessage }:
 
   if (!patientId) return null;
 
-  const cardCls = `rounded-xl shadow-md p-4 ${
-    isDark ? glassCard + ' border border-white/10' : 'bg-white border border-gray-200'
-  }`;
-  const headerTextCls = isDark ? 'text-white' : 'text-gray-900';
-  const subtleTextCls = isDark ? 'text-slate-400' : 'text-gray-500';
+  const cardCls = 'rounded-2xl shadow-md p-4';
+  const headerTextCls = text.heading;
+  const subtleTextCls = text.muted;
 
   // ── Render ──────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <div className={cardCls}>
+      <div className={cardCls} style={glassCard}>
         <div className="flex items-center gap-2 text-sm">
           <Loader2 className={`w-4 h-4 animate-spin ${subtleTextCls}`} />
           <span className={subtleTextCls}>Loading patient history…</span>
@@ -185,8 +183,8 @@ export function PatientHistoryPanel({ patientId, excludeVisitId, emptyMessage }:
 
   if (error) {
     return (
-      <div className={cardCls}>
-        <div className="flex items-center gap-2 text-sm text-red-500">
+      <div className={cardCls} style={glassCard}>
+        <div className="flex items-center gap-2 text-sm text-red-400">
           <AlertCircle className="w-4 h-4" />
           {error}
         </div>
@@ -196,7 +194,7 @@ export function PatientHistoryPanel({ patientId, excludeVisitId, emptyMessage }:
 
   if (!visits || visits.length === 0) {
     return (
-      <div className={cardCls}>
+      <div className={cardCls} style={glassCard}>
         <div className="flex items-center gap-2 text-sm">
           <Activity className={`w-4 h-4 ${subtleTextCls}`} />
           <span className={subtleTextCls}>
@@ -211,7 +209,7 @@ export function PatientHistoryPanel({ patientId, excludeVisitId, emptyMessage }:
   const hiddenCount = visits.length - visible.length;
 
   return (
-    <div className={cardCls}>
+    <div className={cardCls} style={glassCard}>
       <div className="flex items-center justify-between mb-2">
         <h3 className={`text-sm font-bold flex items-center gap-2 ${headerTextCls}`}>
           <Activity className="w-4 h-4" />
@@ -234,11 +232,8 @@ export function PatientHistoryPanel({ patientId, excludeVisitId, emptyMessage }:
               type="button"
               onClick={() => navigate(`/visit/${v.id}`)}
               title="Open visit detail"
-              className={`w-full text-left rounded-lg border p-2.5 transition-colors group ${
-                isDark
-                  ? 'bg-white/[0.04] border-white/10 hover:bg-white/[0.08] hover:border-white/20'
-                  : 'bg-gray-50 border-gray-200 hover:bg-blue-50 hover:border-blue-300'
-              }`}
+              style={glassInner}
+              className="w-full text-left rounded-xl p-2.5 transition-colors group hover:bg-white/[0.03]"
             >
               <div className="flex flex-wrap items-center gap-2">
                 <span className={`text-xs font-bold ${headerTextCls}`}>
@@ -248,9 +243,7 @@ export function PatientHistoryPanel({ patientId, excludeVisitId, emptyMessage }:
                   · {v.visitNumber}
                 </span>
                 <ExternalLink
-                  className={`w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity ${
-                    isDark ? 'text-blue-300' : 'text-blue-600'
-                  }`}
+                  className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-cyan-400"
                 />
                 {triagePill && (
                   <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${triagePill.cls}`}>
@@ -269,7 +262,7 @@ export function PatientHistoryPanel({ patientId, excludeVisitId, emptyMessage }:
                   </span>
                 )}
                 {v.retriageCount > 0 && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
                     Retriaged ×{v.retriageCount}
                   </span>
                 )}
@@ -294,9 +287,7 @@ export function PatientHistoryPanel({ patientId, excludeVisitId, emptyMessage }:
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className={`mt-2 text-xs font-semibold inline-flex items-center gap-1 ${
-            isDark ? 'text-blue-300 hover:text-blue-200' : 'text-blue-600 hover:text-blue-800'
-          }`}
+          className="mt-2 text-xs font-semibold inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300"
         >
           <ChevronDown className="w-3 h-3" />
           Show {hiddenCount} older visit{hiddenCount === 1 ? '' : 's'}
@@ -306,9 +297,7 @@ export function PatientHistoryPanel({ patientId, excludeVisitId, emptyMessage }:
         <button
           type="button"
           onClick={() => setExpanded(false)}
-          className={`mt-2 text-xs font-semibold inline-flex items-center gap-1 ${
-            isDark ? 'text-blue-300 hover:text-blue-200' : 'text-blue-600 hover:text-blue-800'
-          }`}
+          className="mt-2 text-xs font-semibold inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300"
         >
           <ChevronRight className="w-3 h-3" />
           Collapse

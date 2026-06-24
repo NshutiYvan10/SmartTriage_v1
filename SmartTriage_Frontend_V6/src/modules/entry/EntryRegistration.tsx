@@ -633,21 +633,21 @@ export function EntryRegistration() {
 
   /* ── Shared styling helpers ── */
   const inputClass = (fieldName: string) =>
-    `w-full px-4 py-3 rounded-xl text-sm text-slate-800 placeholder-slate-400 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 font-medium ${errors[fieldName] ? 'border-red-400 ring-2 ring-red-100 bg-red-50/80' : ''
+    `w-full px-4 py-3 rounded-xl text-sm ${text.label} placeholder-slate-400 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 font-medium ${errors[fieldName] ? 'border-red-400 ring-2 ring-red-100 bg-red-50/80' : ''
     }`;
 
   const selectClass = (fieldName: string) =>
-    `w-full appearance-none px-4 py-3 rounded-xl text-sm text-slate-800 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 cursor-pointer font-medium ${errors[fieldName] ? 'border-red-400 ring-2 ring-red-100 bg-red-50/80' : ''
+    `w-full appearance-none px-4 py-3 rounded-xl text-sm ${text.label} transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 cursor-pointer font-medium ${errors[fieldName] ? 'border-red-400 ring-2 ring-red-100 bg-red-50/80' : ''
     }`;
 
-  const labelCls = 'block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5';
+  const labelCls = `block text-xs font-semibold ${text.body} uppercase tracking-wider mb-1.5`;
 
   /* ── Progress percentage ── */
   const progress = ((step - 1) / 4) * 100;
 
   /* ───── MAIN RETURN ───── */
   return (
-    <div className="min-h-full p-5 animate-fade-in">
+    <div className="min-h-full p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
       <div className="space-y-5">
 
         {/* ── Header ── */}
@@ -659,16 +659,16 @@ export function EntryRegistration() {
               className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 hover:-translate-x-0.5 group flex-shrink-0"
               style={glassInner}
             >
-              <ArrowLeft className="w-4 h-4 text-slate-500 group-hover:text-cyan-600 transition-all duration-300" />
+              <ArrowLeft className={`w-4 h-4 ${text.body} group-hover:text-cyan-600 transition-all duration-300`} />
             </button>
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center shadow-lg shadow-cyan-500/20 flex-shrink-0">
               <ClipboardList className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-slate-800 tracking-tight leading-tight">
+              <h1 className={`text-xl font-bold ${text.heading} tracking-tight leading-tight`}>
                 Patient Registration
               </h1>
-              <p className="text-sm text-slate-400 mt-0.5 font-medium">
+              <p className={`text-sm ${text.muted} mt-0.5 font-medium`}>
                 Step {step} of 5 — {STEPS[step - 1].label}
               </p>
             </div>
@@ -677,8 +677,8 @@ export function EntryRegistration() {
           {/* Step counter badge */}
           <div className="flex items-center gap-3">
             <div className="px-4 py-2 rounded-full text-xs font-bold" style={glassInner}>
-              <span className={progress === 100 ? 'text-emerald-600' : progress > 0 ? 'text-emerald-500' : 'text-slate-400'}>{Math.round(progress)}%</span>
-              <span className="text-slate-400 ml-1">complete</span>
+              <span className={progress === 100 ? 'text-emerald-600' : progress > 0 ? 'text-emerald-500' : text.muted}>{Math.round(progress)}%</span>
+              <span className={`${text.muted} ml-1`}>complete</span>
             </div>
           </div>
         </div>
@@ -729,7 +729,7 @@ export function EntryRegistration() {
                         <Check className="w-5 h-5 text-white" />
                       ) : (
                         <Icon className={`w-[18px] h-[18px] transition-all duration-300 ${
-                          isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'
+                          isActive ? 'text-white' : `${text.muted} group-hover:text-slate-600 dark:group-hover:text-slate-300`
                         }`} />
                       )}
                       {/* Active pulse ring */}
@@ -743,7 +743,7 @@ export function EntryRegistration() {
                         ? 'text-cyan-600'
                         : isCompleted
                           ? 'text-emerald-600'
-                          : 'text-slate-400 group-hover:text-slate-500'
+                          : `${text.muted} group-hover:text-slate-500 dark:group-hover:text-slate-300`
                     }`}>
                       {s.label}
                     </span>
@@ -821,7 +821,7 @@ export function EntryRegistration() {
             <button
               type="button"
               onClick={resetToLookup}
-              className="text-xs font-semibold text-emerald-700 hover:text-emerald-900 px-2.5 py-1 rounded-md hover:bg-emerald-100 transition-colors"
+              className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-200 px-2.5 py-1 rounded-md hover:bg-emerald-500/15 transition-colors"
             >
               Search again
             </button>
@@ -877,8 +877,8 @@ export function EntryRegistration() {
                   <User className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-800 tracking-tight">Personal Information</h3>
-                  <p className="text-xs text-slate-400 font-medium">Basic patient details and identification</p>
+                  <h3 className={`text-sm font-bold ${text.heading} tracking-tight`}>Personal Information</h3>
+                  <p className={`text-xs ${text.muted} font-medium`}>Basic patient details and identification</p>
                 </div>
               </div>
 
@@ -962,7 +962,7 @@ export function EntryRegistration() {
                       title={rfidDevices.length === 0
                         ? 'No RFID reader registered at this hospital'
                         : 'Tap the card on the desk reader to capture its ID'}
-                      className="flex items-center gap-1.5 px-3 rounded-xl text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 transition-colors disabled:opacity-50 whitespace-nowrap"
+                      className="flex items-center gap-1.5 px-3 rounded-xl text-xs font-bold text-teal-600 dark:text-teal-300 bg-teal-500/20 border border-teal-500/30 hover:bg-teal-500/30 transition-colors disabled:opacity-50 whitespace-nowrap"
                     >
                       {capturingCard ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanLine className="w-3.5 h-3.5" />}
                       {capturingCard ? 'Tap card…' : 'Tap to capture'}
@@ -979,7 +979,7 @@ export function EntryRegistration() {
                       {rfidDevices.map((d) => <option key={d.id} value={d.id}>{d.deviceName}</option>)}
                     </select>
                   )}
-                  <p className="text-[11px] text-slate-400 mt-1">
+                  <p className={`text-[11px] ${text.muted} mt-1`}>
                     Becomes this patient's permanent ID across all SmartTriage hospitals.
                   </p>
                 </div>
@@ -1003,8 +1003,8 @@ export function EntryRegistration() {
                   <MapPin className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-800 tracking-tight">Address Information</h3>
-                  <p className="text-xs text-slate-400 font-medium">Patient's residential location details</p>
+                  <h3 className={`text-sm font-bold ${text.heading} tracking-tight`}>Address Information</h3>
+                  <p className={`text-xs ${text.muted} font-medium`}>Patient's residential location details</p>
                 </div>
               </div>
 
@@ -1018,7 +1018,7 @@ export function EntryRegistration() {
                 <div className="sm:col-span-2">
                   <label className={labelCls}>
                     Street Address
-                    <span className="ml-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider">Optional</span>
+                    <span className={`ml-2 text-[10px] font-medium ${text.muted} uppercase tracking-wider`}>Optional</span>
                   </label>
                   <input
                     type="text"
@@ -1033,7 +1033,7 @@ export function EntryRegistration() {
                 <div>
                   <label className={labelCls}>
                     Zipcode
-                    <span className="ml-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider">Optional</span>
+                    <span className={`ml-2 text-[10px] font-medium ${text.muted} uppercase tracking-wider`}>Optional</span>
                   </label>
                   <input type="text" className={inputClass('zipcode')} style={glassInner} value={formData.zipcode} onChange={(e) => set('zipcode', e.target.value)} placeholder="Enter zipcode" />
                 </div>
@@ -1091,8 +1091,8 @@ export function EntryRegistration() {
                   <Phone className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-800 tracking-tight">Contact, Arrival & Assignment</h3>
-                  <p className="text-xs text-slate-400 font-medium">Contacts, transport details, and triage nurse</p>
+                  <h3 className={`text-sm font-bold ${text.heading} tracking-tight`}>Contact, Arrival & Assignment</h3>
+                  <p className={`text-xs ${text.muted} font-medium`}>Contacts, transport details, and triage nurse</p>
                 </div>
               </div>
 
@@ -1109,7 +1109,7 @@ export function EntryRegistration() {
                     {/* Emergency Contact section divider */}
                     <div className="md:col-span-2 flex items-center gap-3 py-1">
                       <div className="flex-1 h-px" style={{ background: isDark ? 'rgba(2,132,199,0.2)' : 'rgba(203,213,225,0.4)' }} />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                      <span className={`text-[10px] font-bold uppercase tracking-widest ${text.muted} flex items-center gap-1.5`}>
                         <Shield className="w-3 h-3" /> Emergency Contact
                       </span>
                       <div className="flex-1 h-px" style={{ background: isDark ? 'rgba(2,132,199,0.2)' : 'rgba(203,213,225,0.4)' }} />
@@ -1127,7 +1127,7 @@ export function EntryRegistration() {
                     {/* ─── Contact Person (Next of Kin) ─── */}
                     <div className="md:col-span-2 flex items-center gap-3 py-1">
                       <div className="flex-1 h-px" style={{ background: isDark ? 'rgba(2,132,199,0.2)' : 'rgba(203,213,225,0.4)' }} />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                      <span className={`text-[10px] font-bold uppercase tracking-widest ${text.muted} flex items-center gap-1.5`}>
                         <Users className="w-3 h-3" /> Contact Person / Next of Kin
                       </span>
                       <div className="flex-1 h-px" style={{ background: isDark ? 'rgba(2,132,199,0.2)' : 'rgba(203,213,225,0.4)' }} />
@@ -1203,7 +1203,7 @@ export function EntryRegistration() {
                 {/* ─── Arrival Mode ─── */}
                 <div className="md:col-span-2 flex items-center gap-3 py-1">
                   <div className="flex-1 h-px" style={{ background: isDark ? 'rgba(2,132,199,0.2)' : 'rgba(203,213,225,0.4)' }} />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                  <span className={`text-[10px] font-bold uppercase tracking-widest ${text.muted} flex items-center gap-1.5`}>
                     <Siren className="w-3 h-3" /> Arrival Mode
                   </span>
                   <div className="flex-1 h-px" style={{ background: isDark ? 'rgba(2,132,199,0.2)' : 'rgba(203,213,225,0.4)' }} />
@@ -1233,7 +1233,7 @@ export function EntryRegistration() {
                         <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center shadow-md ${formData.arrivalMode === mode ? 'shadow-lg scale-110' : 'opacity-60'} transition-all duration-300`}>
                           <ModeIcon className="w-5 h-5 text-white" />
                         </div>
-                        <span className={formData.arrivalMode === mode ? 'text-cyan-700' : 'text-slate-500'}>{label}</span>
+                        <span className={formData.arrivalMode === mode ? 'text-cyan-700' : text.body}>{label}</span>
                       </button>
                     ))}
                   </div>
@@ -1262,17 +1262,17 @@ export function EntryRegistration() {
                               {(formData.referralDocumentFile.size / 1024).toFixed(1)} KB
                             </p>
                           </div>
-                          <button type="button" onClick={removeFile} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-red-50 transition-all duration-300 group">
-                            <X className="w-4 h-4 text-slate-400 group-hover:text-red-500" />
+                          <button type="button" onClick={removeFile} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-red-500/10 transition-all duration-300 group">
+                            <X className={`w-4 h-4 ${text.muted} group-hover:text-red-500`} />
                           </button>
                         </div>
                       ) : (
                         <label className="flex flex-col items-center justify-center p-6 rounded-xl cursor-pointer hover:-translate-y-1 transition-all duration-300 group" style={{ ...glassInner, border: isDark ? '2px dashed rgba(2,132,199,0.25)' : '2px dashed rgba(203,213,225,0.5)' }}>
-                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center mb-3 group-hover:from-cyan-100 group-hover:to-cyan-200 transition-all duration-300">
-                            <Upload className="w-6 h-6 text-slate-400 group-hover:text-cyan-600 transition-all duration-300" />
+                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center mb-3 group-hover:from-cyan-100 group-hover:to-cyan-200 transition-all duration-300">
+                            <Upload className={`w-6 h-6 ${text.muted} group-hover:text-cyan-600 transition-all duration-300`} />
                           </div>
-                          <p className="text-sm font-semibold text-slate-500 group-hover:text-cyan-600 transition-all duration-300">Click to upload referral document</p>
-                          <p className="text-xs text-slate-400 mt-1">PDF, JPG, PNG up to 10MB</p>
+                          <p className={`text-sm font-semibold ${text.body} group-hover:text-cyan-600 transition-all duration-300`}>Click to upload referral document</p>
+                          <p className={`text-xs ${text.muted} mt-1`}>PDF, JPG, PNG up to 10MB</p>
                           <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onChange={handleFileUpload} />
                         </label>
                       )}
@@ -1283,7 +1283,7 @@ export function EntryRegistration() {
                 {/* ─── Mobility / Physical Transport Mode ─── */}
                 <div className="md:col-span-2 flex items-center gap-3 py-1">
                   <div className="flex-1 h-px" style={{ background: isDark ? 'rgba(2,132,199,0.2)' : 'rgba(203,213,225,0.4)' }} />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                  <span className={`text-[10px] font-bold uppercase tracking-widest ${text.muted} flex items-center gap-1.5`}>
                     <Accessibility className="w-3 h-3" /> Mobility / Transport
                   </span>
                   <div className="flex-1 h-px" style={{ background: isDark ? 'rgba(2,132,199,0.2)' : 'rgba(203,213,225,0.4)' }} />
@@ -1313,7 +1313,7 @@ export function EntryRegistration() {
                         <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center shadow-md ${formData.mobility === mode ? 'shadow-lg scale-110' : 'opacity-60'} transition-all duration-300`}>
                           <ModeIcon className="w-5 h-5 text-white" />
                         </div>
-                        <span className={formData.mobility === mode ? 'text-cyan-700' : 'text-slate-500'}>{label}</span>
+                        <span className={formData.mobility === mode ? 'text-cyan-700' : text.body}>{label}</span>
                       </button>
                     ))}
                   </div>
@@ -1323,7 +1323,7 @@ export function EntryRegistration() {
                 {/* ─── Triage Nurse Assignment ─── */}
                 <div className="md:col-span-2 flex items-center gap-3 py-1">
                   <div className="flex-1 h-px" style={{ background: isDark ? 'rgba(2,132,199,0.2)' : 'rgba(203,213,225,0.4)' }} />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                  <span className={`text-[10px] font-bold uppercase tracking-widest ${text.muted} flex items-center gap-1.5`}>
                     <UserCheck className="w-3 h-3" /> Triage Nurse Assignment
                   </span>
                   <div className="flex-1 h-px" style={{ background: isDark ? 'rgba(2,132,199,0.2)' : 'rgba(203,213,225,0.4)' }} />
@@ -1331,7 +1331,7 @@ export function EntryRegistration() {
 
                 <div className="md:col-span-2">
                   <label className={labelCls}>Assign Triage Nurse <span className="text-red-400">*</span></label>
-                  <p className="text-xs text-slate-400 font-medium mb-3">A triage nurse must be assigned before the patient can proceed to triage.</p>
+                  <p className={`text-xs ${text.muted} font-medium mb-3`}>A triage nurse must be assigned before the patient can proceed to triage.</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     {nurses.map((nurse) => (
                       <button
@@ -1350,7 +1350,7 @@ export function EntryRegistration() {
                         <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${formData.assignedNurseId === nurse.id ? 'from-cyan-500 to-cyan-600' : 'from-slate-300 to-slate-400'} flex items-center justify-center shadow-sm transition-all duration-300`}>
                           <UserCheck className={`w-4 h-4 ${formData.assignedNurseId === nurse.id ? 'text-white' : 'text-white/80'}`} />
                         </div>
-                        <span className={formData.assignedNurseId === nurse.id ? 'text-cyan-700' : 'text-slate-500'}>{nurse.name}</span>
+                        <span className={formData.assignedNurseId === nurse.id ? 'text-cyan-700' : text.body}>{nurse.name}</span>
                         {formData.assignedNurseId === nurse.id && (
                           <Check className="w-4 h-4 text-cyan-600 ml-auto" />
                         )}
@@ -1371,8 +1371,8 @@ export function EntryRegistration() {
                   <Heart className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-800 tracking-tight">Medical History & Initial Complaint</h3>
-                  <p className="text-xs text-slate-400 font-medium">Allergies, conditions, and reason for visit</p>
+                  <h3 className={`text-sm font-bold ${text.heading} tracking-tight`}>Medical History & Initial Complaint</h3>
+                  <p className={`text-xs ${text.muted} font-medium`}>Allergies, conditions, and reason for visit</p>
                 </div>
               </div>
 
@@ -1383,7 +1383,7 @@ export function EntryRegistration() {
                   previously-set type. */}
               <div>
                 <label className={labelCls}>Blood Type</label>
-                <p className="text-xs text-slate-400 font-medium mb-2">Select if known. Leave Unknown if not yet typed.</p>
+                <p className={`text-xs ${text.muted} font-medium mb-2`}>Select if known. Leave Unknown if not yet typed.</p>
                 <div className="flex flex-wrap gap-2 mt-1">
                   {BLOOD_TYPES.map((bt) => {
                     const active = formData.bloodType === bt;
@@ -1394,7 +1394,7 @@ export function EntryRegistration() {
                         onClick={() => set('bloodType', active ? '' : bt)}
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-bold tracking-wider transition-all duration-300 hover:-translate-y-0.5 ${active
                           ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md shadow-red-500/20'
-                          : 'text-slate-500 hover:text-slate-700'
+                          : `${text.body} hover:text-slate-700 dark:hover:text-slate-200`
                         }`}
                         style={!active ? glassInner : undefined}
                       >
@@ -1407,7 +1407,7 @@ export function EntryRegistration() {
                     onClick={() => set('bloodType', '')}
                     className={`px-3.5 py-1.5 rounded-lg text-xs font-bold tracking-wider transition-all duration-300 ${formData.bloodType === ''
                       ? 'bg-slate-700 text-white'
-                      : 'text-slate-500 hover:text-slate-700'
+                      : `${text.body} hover:text-slate-700 dark:hover:text-slate-200`
                     }`}
                     style={formData.bloodType !== '' ? glassInner : undefined}
                   >
@@ -1430,7 +1430,7 @@ export function EntryRegistration() {
                       }
                     >
                       <input type="checkbox" checked={formData.allergies.includes(a)} onChange={() => toggleArray('allergies', a)} className="w-4 h-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500" />
-                      <span className={`text-sm font-medium ${formData.allergies.includes(a) ? 'text-cyan-700' : 'text-slate-600'}`}>{a}</span>
+                      <span className={`text-sm font-medium ${formData.allergies.includes(a) ? 'text-cyan-700' : text.body}`}>{a}</span>
                     </label>
                   ))}
                 </div>
@@ -1450,7 +1450,7 @@ export function EntryRegistration() {
                       }
                     >
                       <input type="checkbox" checked={formData.existingConditions.includes(c)} onChange={() => toggleArray('existingConditions', c)} className="w-4 h-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500" />
-                      <span className={`text-sm font-medium ${formData.existingConditions.includes(c) ? 'text-cyan-700' : 'text-slate-600'}`}>{c}</span>
+                      <span className={`text-sm font-medium ${formData.existingConditions.includes(c) ? 'text-cyan-700' : text.body}`}>{c}</span>
                     </label>
                   ))}
                 </div>
@@ -1465,7 +1465,7 @@ export function EntryRegistration() {
               {/* Reason(s) for Visit — multi-select */}
               <div>
                 <label className={labelCls}>Reason(s) For Visit <span className="text-red-400">*</span></label>
-                <p className="text-xs text-slate-400 font-medium mb-2">Select all that apply</p>
+                <p className={`text-xs ${text.muted} font-medium mb-2`}>Select all that apply</p>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {CHIEF_COMPLAINTS.filter(c => c !== 'Other').map((cc) => (
                     <button
@@ -1474,7 +1474,7 @@ export function EntryRegistration() {
                       onClick={() => toggleArray('chiefComplaints', cc)}
                       className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 hover:-translate-y-0.5 ${formData.chiefComplaints.includes(cc)
                           ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 text-white shadow-md shadow-cyan-500/20'
-                          : 'text-slate-500 hover:text-slate-700'
+                          : `${text.body} hover:text-slate-700 dark:hover:text-slate-200`
                         }`}
                       style={!formData.chiefComplaints.includes(cc) ? glassInner : undefined}
                     >
@@ -1502,8 +1502,8 @@ export function EntryRegistration() {
                   <FileText className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-800 tracking-tight">Review & Confirm</h3>
-                  <p className="text-xs text-slate-400 font-medium">Please verify all information before submitting</p>
+                  <h3 className={`text-sm font-bold ${text.heading} tracking-tight`}>Review & Confirm</h3>
+                  <p className={`text-xs ${text.muted} font-medium`}>Please verify all information before submitting</p>
                 </div>
               </div>
 
@@ -1539,7 +1539,7 @@ export function EntryRegistration() {
 
               {/* Personal */}
               <div className="rounded-xl p-5" style={glassInner}>
-                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <h4 className={`text-xs font-bold ${text.body} uppercase tracking-wider mb-4 flex items-center gap-2`}>
                   <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center">
                     <User className="w-3.5 h-3.5 text-white" />
                   </div>
@@ -1554,15 +1554,15 @@ export function EntryRegistration() {
                   ...(isPediatric ? [['Weight', formData.weight ? `${formData.weight} kg` : '']] : []),
                 ].map(([label, value]) => (
                   <div key={label} className="flex justify-between py-2.5" style={{ borderBottom: isDark ? '1px solid rgba(2,132,199,0.15)' : '1px solid rgba(203,213,225,0.25)' }}>
-                    <span className="text-sm text-slate-400 font-medium">{label}</span>
-                    <span className="text-sm font-semibold text-slate-700 text-right max-w-[60%]">{value || '\u2014'}</span>
+                    <span className={`text-sm ${text.muted} font-medium`}>{label}</span>
+                    <span className={`text-sm font-semibold ${text.label} text-right max-w-[60%]`}>{value || '\u2014'}</span>
                   </div>
                 ))}
               </div>
 
               {/* Address */}
               <div className="rounded-xl p-5" style={glassInner}>
-                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <h4 className={`text-xs font-bold ${text.body} uppercase tracking-wider mb-4 flex items-center gap-2`}>
                   <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center">
                     <MapPin className="w-3.5 h-3.5 text-white" />
                   </div>
@@ -1575,15 +1575,15 @@ export function EntryRegistration() {
                   ['Sector / Cell / Village', [formData.sector, formData.cell, formData.village].filter(Boolean).join(' / ')],
                 ].map(([label, value]) => (
                   <div key={label} className="flex justify-between py-2.5" style={{ borderBottom: isDark ? '1px solid rgba(2,132,199,0.15)' : '1px solid rgba(203,213,225,0.25)' }}>
-                    <span className="text-sm text-slate-400 font-medium">{label}</span>
-                    <span className="text-sm font-semibold text-slate-700 text-right max-w-[60%]">{value || '\u2014'}</span>
+                    <span className={`text-sm ${text.muted} font-medium`}>{label}</span>
+                    <span className={`text-sm font-semibold ${text.label} text-right max-w-[60%]`}>{value || '\u2014'}</span>
                   </div>
                 ))}
               </div>
 
               {/* Contact, Guardian & Arrival */}
               <div className="rounded-xl p-5" style={glassInner}>
-                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <h4 className={`text-xs font-bold ${text.body} uppercase tracking-wider mb-4 flex items-center gap-2`}>
                   <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center">
                     <Phone className="w-3.5 h-3.5 text-white" />
                   </div>
@@ -1600,22 +1600,22 @@ export function EntryRegistration() {
                   ...(isReferral && formData.referralDocumentFile ? [['Referral Document', formData.referralDocumentFile.name]] : []),
                 ].map(([label, value]) => (
                   <div key={label} className="flex justify-between py-2.5" style={{ borderBottom: isDark ? '1px solid rgba(2,132,199,0.15)' : '1px solid rgba(203,213,225,0.25)' }}>
-                    <span className="text-sm text-slate-400 font-medium">{label}</span>
-                    <span className={`text-sm font-semibold text-right max-w-[60%] ${label === 'Guardian' && value === 'NOT SET' ? 'text-red-500' : 'text-slate-700'}`}>{value || '\u2014'}</span>
+                    <span className={`text-sm ${text.muted} font-medium`}>{label}</span>
+                    <span className={`text-sm font-semibold text-right max-w-[60%] ${label === 'Guardian' && value === 'NOT SET' ? 'text-red-500' : text.label}`}>{value || '\u2014'}</span>
                   </div>
                 ))}
               </div>
 
               {/* Assigned Nurse */}
               <div className="rounded-xl p-5" style={glassInner}>
-                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <h4 className={`text-xs font-bold ${text.body} uppercase tracking-wider mb-4 flex items-center gap-2`}>
                   <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
                     <UserCheck className="w-3.5 h-3.5 text-white" />
                   </div>
                   Triage Assignment
                 </h4>
                 <div className="flex justify-between py-2.5" style={{ borderBottom: isDark ? '1px solid rgba(2,132,199,0.15)' : '1px solid rgba(203,213,225,0.25)' }}>
-                  <span className="text-sm text-slate-400 font-medium">Assigned Triage Nurse</span>
+                  <span className={`text-sm ${text.muted} font-medium`}>Assigned Triage Nurse</span>
                   <span className={`text-sm font-semibold ${selectedNurseName ? 'text-emerald-600' : 'text-red-500'}`}>
                     {selectedNurseName || 'NOT ASSIGNED'}
                   </span>
@@ -1624,7 +1624,7 @@ export function EntryRegistration() {
 
               {/* Medical */}
               <div className="rounded-xl p-5" style={glassInner}>
-                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <h4 className={`text-xs font-bold ${text.body} uppercase tracking-wider mb-4 flex items-center gap-2`}>
                   <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center">
                     <Heart className="w-3.5 h-3.5 text-white" />
                   </div>
@@ -1638,8 +1638,8 @@ export function EntryRegistration() {
                   ['Reason(s) for Visit', [...formData.chiefComplaints, formData.chiefComplaintOther.trim()].filter(Boolean).join('; ')],
                 ].map(([label, value]) => (
                   <div key={label} className="flex justify-between py-2.5" style={{ borderBottom: isDark ? '1px solid rgba(2,132,199,0.15)' : '1px solid rgba(203,213,225,0.25)' }}>
-                    <span className="text-sm text-slate-400 font-medium">{label}</span>
-                    <span className="text-sm font-semibold text-slate-700 text-right max-w-[60%]">{value || '\u2014'}</span>
+                    <span className={`text-sm ${text.muted} font-medium`}>{label}</span>
+                    <span className={`text-sm font-semibold ${text.label} text-right max-w-[60%]`}>{value || '\u2014'}</span>
                   </div>
                 ))}
               </div>
@@ -1653,14 +1653,14 @@ export function EntryRegistration() {
                 <button
                   type="button"
                   onClick={goPrev}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-slate-600 hover:text-slate-800 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+                  className={`inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold ${text.body} hover:text-slate-800 dark:hover:text-white transition-all duration-300 hover:-translate-y-1 hover:shadow-lg`}
                   style={glassInner}
                 >
                   <ChevronLeft className="w-4 h-4" />
                   Previous
                 </button>
               ) : (
-                <p className="text-xs text-slate-400 font-medium">
+                <p className={`text-xs ${text.muted} font-medium`}>
                   <span className="text-red-400">*</span> indicates required fields
                 </p>
               )}
@@ -1683,7 +1683,7 @@ export function EntryRegistration() {
                 className={`inline-flex items-center gap-2 px-10 py-3 rounded-xl text-sm font-bold transition-all duration-300 shadow-lg ${
                   formData.assignedNurseId && !isSubmitting && !showSuccess
                     ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white shadow-cyan-500/25 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/30'
-                    : 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                    : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed shadow-none'
                 }`}
               >
                 {isSubmitting ? (

@@ -151,88 +151,92 @@ export function PatientsList() {
     }
   };
 
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
+
   return (
-    <div className="min-h-full p-5 animate-fade-in">
-      <div className="space-y-5">
+    <div className="min-h-full animate-fade-in">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4">
 
-        {/* ── Header ── */}
-        <div className="flex items-start justify-between animate-fade-up">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-              <Users className="w-5 h-5 text-white" />
+        {/* ── Header Banner ── */}
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                <Users className="w-5 h-5 text-cyan-300" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-white tracking-tight leading-tight">
+                  Patient Registry
+                </h1>
+                <p className="text-sm text-white/50 mt-0.5 font-medium">
+                  {allPatients.length} total patients registered
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-800 tracking-tight leading-tight">
-                Patient Registry
-              </h1>
-              <p className="text-sm text-slate-400 mt-0.5 font-medium">
-                {allPatients.length} total patients registered
-              </p>
-            </div>
+
+            <button
+              onClick={() => navigate('/entry')}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-sm font-bold transition-all duration-300 shadow-lg shadow-cyan-500/25 hover:-translate-y-1 hover:shadow-xl"
+            >
+              <UserPlus className="w-4 h-4" />
+              New Patient
+            </button>
           </div>
-
-          <button
-            onClick={() => navigate('/entry')}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-xl text-sm font-bold transition-all duration-300 shadow-lg shadow-cyan-500/25 hover:-translate-y-1 hover:shadow-xl"
-          >
-            <UserPlus className="w-4 h-4" />
-            New Patient
-          </button>
         </div>
 
         {/* ── Quick Summary Bar ── */}
-        <div className="rounded-2xl p-4 animate-fade-up" style={{ ...glassCard, animationDelay: '0.05s' }}>
+        <div className="rounded-3xl p-4 animate-fade-up" style={{ ...glassCard, animationDelay: '0.05s' }}>
           <div className="flex items-center gap-5 flex-wrap">
             {/* Total */}
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center shadow-md shadow-cyan-500/20">
-                <Users className="w-4 h-4 text-white" />
+              <div className="w-9 h-9 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                <Users className="w-4 h-4 text-cyan-400" />
               </div>
               <div>
-                <p className="text-xl font-bold text-slate-800 leading-none">{stats.total}</p>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total</p>
+                <p className={`text-xl font-bold ${text.heading} leading-none`}>{stats.total}</p>
+                <p className={`text-[10px] ${text.muted} font-bold uppercase tracking-wider`}>Total</p>
               </div>
             </div>
 
-            <div className="w-px h-10 bg-slate-200" />
+            <div className="w-px h-10" style={{ background: isDark ? 'rgba(2,132,199,0.18)' : 'rgba(203,213,225,0.5)' }} />
 
             {/* Adults */}
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center">
-                <Users className="w-3.5 h-3.5 text-slate-500" />
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={glassInner}>
+                <Users className={`w-3.5 h-3.5 ${text.muted}`} />
               </div>
               <div>
-                <p className="text-base font-bold text-slate-700 leading-none">{stats.adults}</p>
-                <p className="text-[10px] text-slate-400 font-semibold">Adults</p>
+                <p className={`text-base font-bold ${text.label} leading-none`}>{stats.adults}</p>
+                <p className={`text-[10px] ${text.muted} font-semibold`}>Adults</p>
               </div>
             </div>
 
             {/* Pediatric */}
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-pink-50 border border-pink-200 flex items-center justify-center">
-                <Baby className="w-3.5 h-3.5 text-pink-500" />
+              <div className="w-8 h-8 rounded-lg bg-pink-500/20 border border-pink-500/30 flex items-center justify-center">
+                <Baby className="w-3.5 h-3.5 text-pink-400" />
               </div>
               <div>
-                <p className="text-base font-bold text-slate-700 leading-none">{stats.pediatric}</p>
-                <p className="text-[10px] text-slate-400 font-semibold">Pediatric</p>
+                <p className={`text-base font-bold ${text.label} leading-none`}>{stats.pediatric}</p>
+                <p className={`text-[10px] ${text.muted} font-semibold`}>Pediatric</p>
               </div>
             </div>
 
-            <div className="w-px h-10 bg-slate-200" />
+            <div className="w-px h-10" style={{ background: isDark ? 'rgba(2,132,199,0.18)' : 'rgba(203,213,225,0.5)' }} />
 
             {/* Arrival modes */}
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200">
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg" style={glassInner}>
                 <span className="text-xs">🚶</span>
-                <span className="text-xs font-bold text-slate-600">{stats.walkIn}</span>
+                <span className={`text-xs font-bold ${text.body}`}>{stats.walkIn}</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-50 border border-red-200">
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-500/20 border border-red-500/30">
                 <span className="text-xs">🚑</span>
-                <span className="text-xs font-bold text-red-600">{stats.ambulance}</span>
+                <span className="text-xs font-bold text-red-400">{stats.ambulance}</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200">
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-500/20 border border-indigo-500/30">
                 <span className="text-xs">🏥</span>
-                <span className="text-xs font-bold text-indigo-600">{stats.referral}</span>
+                <span className="text-xs font-bold text-indigo-400">{stats.referral}</span>
               </div>
             </div>
 
@@ -241,7 +245,7 @@ export function PatientsList() {
             {/* Live indicator */}
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[10px] text-slate-400 font-medium">Registry Live</span>
+              <span className={`text-[10px] ${text.muted} font-medium`}>Registry Live</span>
             </div>
           </div>
         </div>
@@ -250,24 +254,24 @@ export function PatientsList() {
         <div className="flex flex-wrap items-center gap-3 animate-fade-up" style={{ animationDelay: '0.1s' }}>
           {/* Search */}
           <div className="relative flex-1 min-w-[240px] group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-cyan-500 transition-colors" />
+            <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${text.muted} group-focus-within:text-cyan-500 transition-colors`} />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, ID, phone, or location..."
-              className="w-full pl-11 pr-4 py-2.5 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all"
+              className={`w-full pl-11 pr-4 py-2.5 rounded-xl text-sm ${text.label} placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all`}
               style={glassInner}
             />
           </div>
 
           {/* Arrival Mode Filter */}
           <div className="relative">
-            <Siren className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <Siren className={`absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${text.muted} pointer-events-none`} />
             <select
               value={arrivalFilter}
               onChange={(e) => setArrivalFilter(e.target.value)}
-              className="appearance-none pl-9 pr-8 py-2.5 rounded-xl text-xs font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 cursor-pointer"
+              className={`appearance-none pl-9 pr-8 py-2.5 rounded-xl text-xs font-semibold ${text.body} focus:outline-none focus:ring-2 focus:ring-cyan-500/20 cursor-pointer`}
               style={glassInner}
             >
               <option value="all">All Arrivals</option>
@@ -275,20 +279,20 @@ export function PatientsList() {
               <option value="AMBULANCE">🚑 Ambulance</option>
               <option value="REFERRAL">🏥 Referral</option>
             </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${text.muted} pointer-events-none`} />
           </div>
 
           {/* Type Filter */}
           <div className="flex items-center gap-1.5">
-            <Filter className="w-3.5 h-3.5 text-slate-400" />
+            <Filter className={`w-3.5 h-3.5 ${text.muted}`} />
             {(['all', 'adult', 'pediatric'] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setTypeFilter(f)}
                 className={`px-3 py-2 rounded-xl text-[11px] font-bold transition-all duration-300 ${
                   typeFilter === f
-                    ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 text-white shadow-md shadow-cyan-500/20'
-                    : 'text-slate-500 hover:text-slate-700'
+                    ? 'bg-cyan-600 text-white shadow-md shadow-cyan-500/20'
+                    : `${text.body} hover:${text.label}`
                 }`}
                 style={typeFilter !== f ? glassInner : {}}
               >
@@ -300,7 +304,7 @@ export function PatientsList() {
           {/* Sort */}
           <button
             onClick={() => toggleSort(sortBy === 'time' ? 'name' : sortBy === 'name' ? 'age' : 'time')}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-700 transition-all"
+            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-semibold ${text.body} hover:${text.label} transition-all`}
             style={glassInner}
           >
             <ArrowUpDown className="w-3.5 h-3.5" />
@@ -309,25 +313,25 @@ export function PatientsList() {
         </div>
 
         {/* ── Patient List ── */}
-        <div className="rounded-2xl overflow-hidden animate-fade-up" style={{ ...glassCard, animationDelay: '0.15s' }}>
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={{ ...glassCard, animationDelay: '0.15s' }}>
           {/* Header bar */}
-          <div className="px-5 py-3.5 flex items-center justify-between" style={{ borderBottom: isDark ? '1px solid rgba(2,132,199,0.18)' : '1px solid rgba(203,213,225,0.3)' }}>
+          <div className="px-5 py-3.5 flex items-center justify-between" style={{ borderBottom: borderStyle }}>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Patient Records</span>
-              <span className="text-[10px] font-bold bg-cyan-50 text-cyan-600 border border-cyan-200 px-2 py-0.5 rounded-md">{filtered.length}</span>
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${text.muted}`}>Patient Records</span>
+              <span className="text-[10px] font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-md">{filtered.length}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[10px] text-slate-400 font-medium">Live</span>
+              <span className={`text-[10px] ${text.muted} font-medium`}>Live</span>
             </div>
           </div>
 
           {/* Rows */}
           {filtered.length === 0 ? (
             <div className="px-6 py-16 text-center">
-              <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-slate-400">No patients found</p>
-              <p className="text-xs text-slate-400 mt-1">Try adjusting your search or filters</p>
+              <Users className={`w-12 h-12 ${text.muted} opacity-50 mx-auto mb-3`} />
+              <p className={`text-sm font-semibold ${text.muted}`}>No patients found</p>
+              <p className={`text-xs ${text.muted} mt-1`}>Try adjusting your search or filters</p>
             </div>
           ) : (
             <div className="divide-y" style={{ borderColor: isDark ? 'rgba(2,132,199,0.15)' : 'rgba(203,213,225,0.15)' }}>
@@ -338,7 +342,7 @@ export function PatientsList() {
                 return (
                   <div
                     key={patient.id}
-                    className="px-5 py-4 transition-all duration-300 group cursor-pointer hover:bg-white/40 hover:-translate-y-0.5"
+                    className="px-5 py-4 transition-all duration-300 group cursor-pointer hover:bg-white/[0.03] hover:-translate-y-0.5"
                     onClick={() => navigate(`/patients/${patient.id}`)}
                   >
                     {/* Top row: Avatar + Name + Age + Arrival + Arrow */}
@@ -357,29 +361,46 @@ export function PatientsList() {
                       {/* Name + sub */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-slate-700 truncate group-hover:text-cyan-600 transition-colors">
+                          <p className={`text-sm font-semibold ${text.label} truncate group-hover:text-cyan-500 transition-colors`}>
                             {patient.fullName}
                           </p>
                           {peds && (
-                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded-md bg-violet-50 text-violet-600 border border-violet-200 flex-shrink-0">
+                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30 flex-shrink-0">
                               <Baby className="w-2.5 h-2.5" />
                               PEDS
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                        <p className={`text-[11px] ${text.muted} font-medium mt-0.5`}>
                           {patient.age < 1 ? `${Math.round(patient.age * 12)}mo` : `${patient.age}y`} · {patient.gender === 'MALE' ? 'Male' : patient.gender === 'FEMALE' ? 'Female' : '—'}
                         </p>
                       </div>
 
-                      {/* Arrival badge */}
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold flex-shrink-0 ${arrivalMode.bg} ${arrivalMode.text} border ${arrivalMode.border}`}>
+                      {/* Arrival badge — arrivalModeConfig colors branched dark-aware at point of use */}
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold flex-shrink-0 border"
+                        style={(() => {
+                          const mode = patient.arrivalMode;
+                          const dark = {
+                            WALK_IN: { bg: 'rgba(100,116,139,0.2)', color: '#cbd5e1', border: 'rgba(100,116,139,0.3)' },
+                            AMBULANCE: { bg: 'rgba(239,68,68,0.2)', color: '#fca5a5', border: 'rgba(239,68,68,0.3)' },
+                            REFERRAL: { bg: 'rgba(99,102,241,0.2)', color: '#a5b4fc', border: 'rgba(99,102,241,0.3)' },
+                          } as const;
+                          const light = {
+                            WALK_IN: { bg: '#f8fafc', color: '#475569', border: '#e2e8f0' },
+                            AMBULANCE: { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' },
+                            REFERRAL: { bg: '#eef2ff', color: '#4f46e5', border: '#c7d2fe' },
+                          } as const;
+                          const palette = (isDark ? dark : light)[mode as keyof typeof dark] ?? (isDark ? dark.WALK_IN : light.WALK_IN);
+                          return { background: palette.bg, color: palette.color, borderColor: palette.border };
+                        })()}
+                      >
                         <span>{arrivalMode.icon}</span>
                         <span className="hidden sm:inline">{arrivalMode.label}</span>
                       </span>
 
                       {/* Arrow */}
-                      <ChevronRightIcon className="w-4 h-4 text-slate-300 group-hover:text-cyan-500 transition-colors flex-shrink-0" />
+                      <ChevronRightIcon className={`w-4 h-4 ${text.muted} group-hover:text-cyan-500 transition-colors flex-shrink-0`} />
                     </div>
 
                     {/* Shift-handoff priority badges — pending labs, pending
@@ -394,8 +415,8 @@ export function PatientsList() {
                       {/* National ID — hidden from list view for privacy; visible on detail page */}
                       {patient.nationalId && (
                         <div className="flex items-center gap-1.5" title="National ID on file">
-                          <CreditCard className="w-3 h-3 text-slate-300 flex-shrink-0" />
-                          <span className="text-[11px] font-mono text-slate-500">
+                          <CreditCard className={`w-3 h-3 ${text.muted} opacity-70 flex-shrink-0`} />
+                          <span className={`text-[11px] font-mono ${text.body}`}>
                             &bull;&bull;&bull;&bull; {patient.nationalId.slice(-4)}
                           </span>
                         </div>
@@ -404,16 +425,16 @@ export function PatientsList() {
                       {/* Phone */}
                       {patient.phone && (
                         <div className="flex items-center gap-1.5">
-                          <Phone className="w-3 h-3 text-slate-300 flex-shrink-0" />
-                          <span className="text-[11px] text-slate-500">{patient.phone}</span>
+                          <Phone className={`w-3 h-3 ${text.muted} opacity-70 flex-shrink-0`} />
+                          <span className={`text-[11px] ${text.body}`}>{patient.phone}</span>
                         </div>
                       )}
 
                       {/* Location */}
                       {(patient.district || patient.province) && (
                         <div className="flex items-center gap-1.5">
-                          <MapPin className="w-3 h-3 text-slate-300 flex-shrink-0" />
-                          <span className="text-[11px] text-slate-500">
+                          <MapPin className={`w-3 h-3 ${text.muted} opacity-70 flex-shrink-0`} />
+                          <span className={`text-[11px] ${text.body}`}>
                             {patient.district && patient.province
                               ? `${patient.district}, ${patient.province}`
                               : patient.province || patient.district}
@@ -423,15 +444,15 @@ export function PatientsList() {
 
                       {/* Registered time */}
                       <div className="flex items-center gap-1.5">
-                        <Calendar className="w-3 h-3 text-slate-300 flex-shrink-0" />
-                        <span className="text-[10px] text-slate-400 font-medium">
+                        <Calendar className={`w-3 h-3 ${text.muted} opacity-70 flex-shrink-0`} />
+                        <span className={`text-[10px] ${text.muted} font-medium`}>
                           {formatDate(patient.registeredAt || patient.arrivalTimestamp)}
                         </span>
                       </div>
 
                       {/* Referring facility */}
                       {patient.referringFacility && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-200">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                           From: {patient.referringFacility}
                         </span>
                       )}
@@ -443,9 +464,9 @@ export function PatientsList() {
           )}
 
           {/* Footer */}
-          <div className="px-5 py-3 flex items-center justify-between text-xs text-slate-400 font-medium" style={{ borderTop: isDark ? '1px solid rgba(2,132,199,0.18)' : '1px solid rgba(203,213,225,0.2)' }}>
+          <div className={`px-5 py-3 flex items-center justify-between text-xs ${text.muted} font-medium`} style={{ borderTop: borderStyle }}>
             <span>Showing {filtered.length} of {allPatients.length} patients</span>
-            <span className="text-[10px] text-slate-400">Sorted by {sortBy === 'time' ? 'registration time' : sortBy === 'name' ? 'name' : 'age'}</span>
+            <span className={`text-[10px] ${text.muted}`}>Sorted by {sortBy === 'time' ? 'registration time' : sortBy === 'name' ? 'name' : 'age'}</span>
           </div>
         </div>
       </div>

@@ -25,6 +25,7 @@
  * and that misreading kills people.
  */
 import { useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
 import {
   ShieldAlert, Heart, Baby, Phone, AlertCircle, Loader2, Droplet, Activity,
   Pencil, Check, X,
@@ -58,12 +59,13 @@ interface Props {
  * state so the panel re-renders with the new value.
  */
 function EditableMedicalRow({
-  label, value, onSave, isDark, subtleTextCls, headerTextCls, emptyText, accentColorClass,
+  label, value, onSave, isDark, glassInner, subtleTextCls, headerTextCls, emptyText, accentColorClass,
 }: {
   label: string;
   value: string | null | undefined;
   onSave: (next: string | null) => Promise<void>;
   isDark: boolean;
+  glassInner: CSSProperties;
   subtleTextCls: string;
   headerTextCls: string;
   emptyText: string;
@@ -101,9 +103,10 @@ function EditableMedicalRow({
         onChange={(e) => setDraft(e.target.value)}
         rows={2}
         placeholder={emptyText}
-        className={`w-full px-2 py-1.5 text-sm rounded-md border resize-none outline-none ${
-          isDark ? 'bg-slate-800 text-white border-white/10' : 'bg-white text-slate-900 border-slate-300'
+        className={`w-full px-2 py-1.5 text-sm rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
+          isDark ? 'text-slate-200' : 'text-slate-700'
         }`}
+        style={glassInner}
       />
       {error && (
         <div className="text-[11px] text-red-500 flex items-center gap-1">
@@ -136,7 +139,7 @@ function EditableMedicalRow({
           disabled={saving}
           onClick={() => { setEditing(false); setError(null); setDraft(value ?? ''); }}
           className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-md ${
-            isDark ? 'bg-white/10 text-white' : 'bg-slate-200 text-slate-800'
+            isDark ? 'bg-white/10 text-white' : 'bg-slate-100 text-slate-700'
           } hover:opacity-80`}
         >
           <X className="w-3 h-3" /> Cancel
@@ -171,7 +174,7 @@ function isEmpty(v: string | null | undefined): boolean {
 }
 
 export function PatientProfilePanel({ patientId, patient: patientProp, editable = false }: Props) {
-  const { isDark, glassCard } = useTheme();
+  const { isDark, glassCard, text } = useTheme();
 
   const [patient, setPatient] = useState<PatientResponse | null>(patientProp ?? null);
   const [loading, setLoading] = useState(false);
@@ -215,15 +218,13 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
 
   if (!patientId && !patientProp) return null;
 
-  const cardCls = `rounded-xl shadow-md p-4 ${
-    isDark ? glassCard + ' border border-white/10' : 'bg-white border border-gray-200'
-  }`;
-  const headerTextCls = isDark ? 'text-white' : 'text-gray-900';
-  const subtleTextCls = isDark ? 'text-slate-400' : 'text-gray-500';
+  const cardCls = 'rounded-3xl p-4';
+  const headerTextCls = text.heading;
+  const subtleTextCls = text.muted;
 
   if (loading) {
     return (
-      <div className={cardCls}>
+      <div className={cardCls} style={glassCard}>
         <div className="flex items-center gap-2 text-sm">
           <Loader2 className={`w-4 h-4 animate-spin ${subtleTextCls}`} />
           <span className={subtleTextCls}>Loading patient profile…</span>
@@ -233,7 +234,7 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
   }
   if (error) {
     return (
-      <div className={cardCls}>
+      <div className={cardCls} style={glassCard}>
         <div className="flex items-center gap-2 text-sm text-red-500">
           <AlertCircle className="w-4 h-4" />
           {error}
@@ -252,15 +253,15 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
   // not let a clinician miss this." Empty case stays muted so absence
   // doesn't blend with presence.
   const allergyClasses = allergiesEmpty
-    ? `${isDark ? 'bg-white/[0.04] border-white/10' : 'bg-gray-50 border-gray-200'}`
-    : 'bg-red-50 border-red-300';
+    ? `${isDark ? 'bg-white/[0.04] border-white/10' : 'bg-slate-50 border-slate-200'}`
+    : `${isDark ? 'bg-red-500/15 border-red-500/30' : 'bg-red-50 border-red-300'}`;
 
   const conditionsClasses = conditionsEmpty
-    ? `${isDark ? 'bg-white/[0.04] border-white/10' : 'bg-gray-50 border-gray-200'}`
-    : 'bg-amber-50 border-amber-300';
+    ? `${isDark ? 'bg-white/[0.04] border-white/10' : 'bg-slate-50 border-slate-200'}`
+    : `${isDark ? 'bg-amber-500/15 border-amber-500/30' : 'bg-amber-50 border-amber-300'}`;
 
   return (
-    <div className={cardCls}>
+    <div className={cardCls} style={glassCard}>
       <div className="flex items-center justify-between mb-3">
         <h3 className={`text-sm font-bold flex items-center gap-2 ${headerTextCls}`}>
           <Activity className="w-4 h-4" />
@@ -268,14 +269,12 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
         </h3>
         <div className="flex items-center gap-1.5 flex-wrap">
           {patient.medicalRecordNumber && (
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-              isDark ? 'bg-blue-500/20 text-blue-200' : 'bg-blue-100 text-blue-700'
-            }`}>
+            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
               MRN {patient.medicalRecordNumber}
             </span>
           )}
           {patient.isPediatric && (
-            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-pink-100 text-pink-700 inline-flex items-center gap-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30 inline-flex items-center gap-1">
               <Baby className="w-3 h-3" />
               Pediatric
             </span>
@@ -284,15 +283,15 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
       </div>
 
       {/* ── Allergies (loudest treatment — safety critical) ───────── */}
-      <div className={`rounded-lg border p-2.5 mb-2 ${allergyClasses}`}>
+      <div className={`rounded-xl border p-2.5 mb-2 ${allergyClasses}`}>
         <div className="flex items-start gap-2">
           <ShieldAlert className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
-            allergiesEmpty ? subtleTextCls : 'text-red-600'
+            allergiesEmpty ? subtleTextCls : (isDark ? 'text-red-400' : 'text-red-600')
           }`} />
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
               <div className={`text-[11px] font-bold uppercase tracking-wider ${
-                allergiesEmpty ? subtleTextCls : 'text-red-700'
+                allergiesEmpty ? subtleTextCls : (isDark ? 'text-red-300' : 'text-red-700')
               }`}>
                 Allergies
               </div>
@@ -305,7 +304,7 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
                   free-text fallback). */}
             </div>
             <div className={`text-sm ${
-              allergiesEmpty ? subtleTextCls : 'text-red-900 font-semibold'
+              allergiesEmpty ? subtleTextCls : (isDark ? 'text-red-200 font-semibold' : 'text-red-900 font-semibold')
             } break-words`}>
               {allergiesEmpty
                 ? 'None on record'
@@ -322,7 +321,7 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
                 the legacy free-text textarea above for the safety check
                 — the engine reads structured rows first, falls back to
                 the free-text only when none exist. */}
-            <div className="mt-2 pt-2 border-t border-red-200/60">
+            <div className={`mt-2 pt-2 border-t ${isDark ? 'border-red-500/30' : 'border-red-200/60'}`}>
               <PatientAllergiesPanel patientId={patient.id} editable={editable} />
             </div>
           </div>
@@ -330,15 +329,15 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
       </div>
 
       {/* ── Chronic conditions (amber treatment — clinically relevant) */}
-      <div className={`rounded-lg border p-2.5 mb-2 ${conditionsClasses}`}>
+      <div className={`rounded-xl border p-2.5 mb-2 ${conditionsClasses}`}>
         <div className="flex items-start gap-2">
           <Heart className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
-            conditionsEmpty ? subtleTextCls : 'text-amber-600'
+            conditionsEmpty ? subtleTextCls : (isDark ? 'text-amber-400' : 'text-amber-600')
           }`} />
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
               <div className={`text-[11px] font-bold uppercase tracking-wider ${
-                conditionsEmpty ? subtleTextCls : 'text-amber-700'
+                conditionsEmpty ? subtleTextCls : (isDark ? 'text-amber-300' : 'text-amber-700')
               }`}>
                 Chronic conditions
               </div>
@@ -348,7 +347,7 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
                   read-only as a fallback for un-migrated patients. */}
             </div>
             <div className={`text-sm ${
-              conditionsEmpty ? subtleTextCls : 'text-amber-900 font-semibold'
+              conditionsEmpty ? subtleTextCls : (isDark ? 'text-amber-200 font-semibold' : 'text-amber-900 font-semibold')
             } break-words`}>
               {conditionsEmpty
                 ? 'None on record'
@@ -367,7 +366,7 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
                 refinement). Searchable curated catalog + status chips
                 + notes; the safety engine reads structured rows
                 first, falls back to free-text only when none exist. */}
-            <div className="mt-2 pt-2 border-t border-amber-200/60">
+            <div className={`mt-2 pt-2 border-t ${isDark ? 'border-amber-500/30' : 'border-amber-200/60'}`}>
               <PatientChronicConditionsPanel patientId={patient.id} editable={editable} />
             </div>
           </div>
@@ -375,11 +374,11 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
       </div>
 
       {/* ── Blood type ────────────────────────────────────────────── */}
-      <div className={`rounded-lg border p-2.5 mb-2 ${
-        isDark ? 'bg-white/[0.04] border-white/10' : 'bg-gray-50 border-gray-200'
+      <div className={`rounded-xl border p-2.5 mb-2 ${
+        isDark ? 'bg-white/[0.04] border-white/10' : 'bg-slate-50 border-slate-200'
       }`}>
         <div className="flex items-center gap-2">
-          <Droplet className={`w-4 h-4 ${bloodTypeEmpty ? subtleTextCls : 'text-red-600'}`} />
+          <Droplet className={`w-4 h-4 ${bloodTypeEmpty ? subtleTextCls : (isDark ? 'text-red-400' : 'text-red-600')}`} />
           <div className={`text-[11px] font-bold uppercase tracking-wider ${subtleTextCls}`}>
             Blood type
           </div>
@@ -393,7 +392,7 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
 
       {/* ── Guardian (only when pediatric or guardian fields populated) */}
       {(patient.isPediatric || patient.guardianName || patient.guardianPhone) && (
-        <div className={`rounded-lg border p-2.5 ${
+        <div className={`rounded-xl border p-2.5 ${
           isDark ? 'bg-purple-500/10 border-purple-500/30' : 'bg-purple-50 border-purple-200'
         }`}>
           <div className="flex items-start gap-2">
