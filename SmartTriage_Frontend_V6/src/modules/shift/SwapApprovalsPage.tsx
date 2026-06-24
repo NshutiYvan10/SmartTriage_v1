@@ -44,8 +44,10 @@ import {
 import { swapApi } from '@/api';
 import type { ShiftSwapResponse, SwapAssignmentSnapshot } from '@/api/types';
 import { useAuthStore } from '@/store/authStore';
+import { useTheme } from '@/hooks/useTheme';
 
 export function SwapApprovalsPage() {
+  const { glassCard, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   // HOSPITAL_ADMIN sees the queue read-only; only CHARGE_NURSE may decide.
@@ -81,58 +83,64 @@ export function SwapApprovalsPage() {
 
   if (!hospitalId) {
     return (
-      <div className="p-8 text-sm text-gray-500">
+      <div className={`p-8 text-sm ${text.muted}`}>
         No hospital is associated with your account.
       </div>
     );
   }
 
   return (
-    <div className="p-5 space-y-5">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <ShieldCheck className="w-5 h-5 text-gray-500" />
-          <div>
-            <div className="text-[11px] font-bold uppercase text-gray-400">Charge Nurse</div>
-            <h1 className="text-xl font-bold text-gray-900 tracking-tight">Swap approvals</h1>
-          </div>
-          <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold">
-            <Inbox className="w-3 h-3" />
-            {queue.length} pending
-          </span>
-        </div>
-        <button
-          onClick={() => void refresh()}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-        >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          Refresh
-        </button>
-      </header>
-
-      {err && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 px-3 py-2 rounded-lg text-xs flex items-center gap-2">
-          <AlertTriangle className="w-3.5 h-3.5" />
-          {err}
-        </div>
-      )}
-
-      {queue.length === 0 && !loading && !err && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center">
-          <Inbox className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-          <div className="text-sm font-bold text-gray-700">No swaps awaiting approval</div>
-          <div className="text-xs text-gray-500 mt-1">
-            New requests appear here once both staff members have agreed.
+    <div className="min-h-full">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5 text-cyan-300" />
+              </div>
+              <div>
+                <div className="text-white/50 text-xs font-bold uppercase">Charge Nurse</div>
+                <h1 className="text-lg font-bold text-white tracking-tight">Swap approvals</h1>
+              </div>
+              <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-bold">
+                <Inbox className="w-3 h-3" />
+                {queue.length} pending
+              </span>
+            </div>
+            <button
+              onClick={() => void refresh()}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              Refresh
+            </button>
           </div>
         </div>
-      )}
 
-      <ul className="space-y-3">
-        {queue.map((s) => (
-          <SwapApprovalRow key={s.id} swap={s} onChange={refresh} readOnly={isReadOnly} />
-        ))}
-      </ul>
+        {err && (
+          <div className="bg-rose-500/20 border border-rose-500/30 text-rose-300 px-3 py-2 rounded-xl text-xs flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            {err}
+          </div>
+        )}
+
+        {queue.length === 0 && !loading && !err && (
+          <div className="rounded-3xl p-10 text-center" style={glassCard}>
+            <Inbox className={`w-8 h-8 mx-auto mb-2 ${text.muted}`} />
+            <div className={`text-sm font-bold ${text.heading}`}>No swaps awaiting approval</div>
+            <div className={`text-xs mt-1 ${text.muted}`}>
+              New requests appear here once both staff members have agreed.
+            </div>
+          </div>
+        )}
+
+        <ul className="space-y-3">
+          {queue.map((s) => (
+            <SwapApprovalRow key={s.id} swap={s} onChange={refresh} readOnly={isReadOnly} />
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -146,6 +154,8 @@ function SwapApprovalRow({
   onChange: () => Promise<void>;
   readOnly: boolean;
 }) {
+  const { glassCard, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -168,25 +178,25 @@ function SwapApprovalRow({
   };
 
   return (
-    <li className="bg-white border border-gray-200 rounded-2xl p-4">
+    <li className="rounded-2xl p-4" style={glassCard}>
       <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="text-[11px] text-gray-500">
+        <div className={`text-[11px] ${text.muted}`}>
           Submitted {formatRel(swap.createdAt)}
           {swap.partnerRespondedAt && (
             <>
-              <span className="mx-1.5 text-gray-300">·</span>
+              <span className={`mx-1.5 ${text.muted}`}>·</span>
               Partner accepted {formatRel(swap.partnerRespondedAt)}
             </>
           )}
         </div>
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-blue-50 text-blue-700 border-blue-200">
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/20 text-amber-300 border-amber-500/30">
           Awaits CN
         </span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3 items-stretch">
         <SidePanel side="Requester" snap={swap.requesterSide} />
-        <div className="flex items-center justify-center text-gray-400">
+        <div className={`flex items-center justify-center ${text.muted}`}>
           <ArrowRightLeft className="w-5 h-5" />
         </div>
         <SidePanel side="Partner" snap={swap.partnerSide} />
@@ -195,16 +205,16 @@ function SwapApprovalRow({
       {(swap.requestReason || swap.partnerResponseNote) && (
         <div className="mt-3 space-y-1 text-[12px]">
           {swap.requestReason && (
-            <div className="text-gray-700">
-              <span className="text-[10px] font-bold uppercase text-gray-400 mr-1.5">
+            <div className={text.body}>
+              <span className={`text-[10px] font-bold uppercase mr-1.5 ${text.muted}`}>
                 Requester reason
               </span>
               <span className="italic">“{swap.requestReason}”</span>
             </div>
           )}
           {swap.partnerResponseNote && (
-            <div className="text-gray-700">
-              <span className="text-[10px] font-bold uppercase text-gray-400 mr-1.5">
+            <div className={text.body}>
+              <span className={`text-[10px] font-bold uppercase mr-1.5 ${text.muted}`}>
                 Partner note
               </span>
               <span className="italic">“{swap.partnerResponseNote}”</span>
@@ -214,15 +224,15 @@ function SwapApprovalRow({
       )}
 
       {err && (
-        <div className="mt-3 text-[11px] text-rose-700 bg-rose-50 border border-rose-200 px-2 py-1.5 rounded flex items-center gap-1.5">
+        <div className="mt-3 text-[11px] text-rose-300 bg-rose-500/20 border border-rose-500/30 px-2 py-1.5 rounded-xl flex items-center gap-1.5">
           <AlertTriangle className="w-3.5 h-3.5" />
           {err}
         </div>
       )}
 
-      <div className="mt-4 flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+      <div className="mt-4 flex items-center justify-end gap-2 pt-3" style={{ borderTop: borderStyle }}>
         {readOnly ? (
-          <span className="text-[11px] italic text-gray-500">
+          <span className={`text-[11px] italic ${text.muted}`}>
             Decisions are made by the Charge Nurse.
           </span>
         ) : (
@@ -230,7 +240,7 @@ function SwapApprovalRow({
             <button
               onClick={reject}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-300 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 disabled:opacity-50"
             >
               {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
               Reject
@@ -238,7 +248,7 @@ function SwapApprovalRow({
             <button
               onClick={approve}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
             >
               {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
               Approve swap
@@ -256,20 +266,21 @@ function SidePanel({
   side: 'Requester' | 'Partner';
   snap: SwapAssignmentSnapshot;
 }) {
+  const { glassInner, text } = useTheme();
   return (
-    <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-      <div className="text-[10px] font-bold uppercase text-gray-400 mb-1">{side}</div>
-      <div className="text-sm font-semibold text-gray-900">{snap.userName}</div>
-      <div className="text-[11px] text-gray-500 mt-1.5 flex items-center gap-1.5 flex-wrap">
+    <div className="rounded-xl p-3" style={glassInner}>
+      <div className={`text-[10px] font-bold uppercase mb-1 ${text.muted}`}>{side}</div>
+      <div className={`text-sm font-semibold ${text.heading}`}>{snap.userName}</div>
+      <div className={`text-[11px] mt-1.5 flex items-center gap-1.5 flex-wrap ${text.body}`}>
         {snap.shiftPeriod === 'DAY'
           ? <Sun className="w-3 h-3" />
           : <Moon className="w-3 h-3" />}
         <span className="font-mono">{snap.shiftDate}</span>
-        <span className="text-gray-300">·</span>
+        <span className={text.muted}>·</span>
         <span className="font-bold">{snap.shiftPeriod}</span>
-        <span className="text-gray-300">·</span>
+        <span className={text.muted}>·</span>
         <span className="font-bold">{snap.zone}</span>
-        <span className="text-gray-300">·</span>
+        <span className={text.muted}>·</span>
         <span>{snap.shiftFunction.replace(/_/g, ' ')}</span>
       </div>
     </div>

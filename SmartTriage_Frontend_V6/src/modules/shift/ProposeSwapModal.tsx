@@ -36,6 +36,7 @@ import {
   ArrowRightLeft, X, Loader2, Sun, Moon, ShieldAlert, Check,
 } from 'lucide-react';
 import { shiftApi, swapApi } from '@/api';
+import { useTheme } from '@/hooks/useTheme';
 import type {
   ShiftAssignmentResponse,
 } from '@/api/types';
@@ -59,6 +60,11 @@ function todayIso() { return fmtIso(new Date()); }
 export function ProposeSwapModal({
   myAssignment, onClose, onSubmitted,
 }: ProposeSwapModalProps) {
+  const { glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark
+    ? '1px solid rgba(2,132,199,0.12)'
+    : '1px solid rgba(203,213,225,0.3)';
+
   /* The date we're searching partners on — defaults to my own shift's
      date so the most common case (offer my Monday for someone else's
      Monday) is one click away. */
@@ -136,20 +142,25 @@ export function ProposeSwapModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div
+        style={glassCard}
+        className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in w-full max-w-2xl max-h-[90vh] flex flex-col"
+      >
         {/* ── Header ── */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4">
           <div className="flex items-center gap-2">
-            <ArrowRightLeft className="w-4 h-4 text-gray-500" />
-            <h2 className="text-base font-bold text-gray-900">Propose shift swap</h2>
+            <div className="w-9 h-9 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+              <ArrowRightLeft className="w-4 h-4 text-cyan-300" />
+            </div>
+            <h2 className="text-base font-bold text-white">Propose shift swap</h2>
           </div>
           <button
             onClick={onClose}
             disabled={submitting}
-            className="p-1 rounded hover:bg-gray-100 disabled:opacity-50"
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-white/70 hover:bg-white/10 disabled:opacity-50"
             aria-label="Close"
           >
-            <X className="w-4 h-4 text-gray-500" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -157,25 +168,26 @@ export function ProposeSwapModal({
         <div className="px-5 py-4 space-y-4 overflow-y-auto">
           {/* Your shift summary */}
           <section>
-            <div className="text-[11px] font-bold uppercase text-gray-400 mb-1.5">Your shift</div>
-            <ShiftLine assignment={myAssignment} highlight />
+            <div className={`text-[11px] font-bold uppercase ${text.muted} mb-1.5`}>Your shift</div>
+            <ShiftLine assignment={myAssignment} highlight glassInner={glassInner} text={text} />
           </section>
 
           {/* Date picker */}
           <section>
             <label className="block">
-              <div className="text-[11px] font-bold uppercase text-gray-500 mb-1">
+              <div className={`text-[11px] font-bold uppercase ${text.label} mb-1`}>
                 Find partner shifts on date
               </div>
               <input
                 type="date"
-                className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
+                style={glassInner}
+                className={`w-full text-sm rounded-lg px-2 py-1.5 ${text.body} focus:outline-none focus:ring-2 focus:ring-cyan-500/20`}
                 value={searchDate}
                 onChange={(e) => setSearchDate(e.target.value)}
                 min={todayIso()}
               />
             </label>
-            <div className="text-[11px] text-gray-400 mt-1">
+            <div className={`text-[11px] ${text.muted} mt-1`}>
               Defaults to your shift’s date. Pick another date to swap across days.
             </div>
           </section>
@@ -183,22 +195,22 @@ export function ProposeSwapModal({
           {/* Candidate list */}
           <section>
             <div className="flex items-center justify-between mb-1.5">
-              <div className="text-[11px] font-bold uppercase text-gray-500">
+              <div className={`text-[11px] font-bold uppercase ${text.label}`}>
                 Pick a partner ({filteredCandidates.length})
               </div>
               {loadingCandidates && (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
+                <Loader2 className={`w-3.5 h-3.5 animate-spin ${text.muted}`} />
               )}
             </div>
 
             {fetchErr && (
-              <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 px-2 py-1.5 rounded mb-2">
+              <div className="text-[11px] text-rose-300 bg-rose-500/20 border border-rose-500/30 px-2 py-1.5 rounded mb-2">
                 {fetchErr}
               </div>
             )}
 
             {!loadingCandidates && filteredCandidates.length === 0 && !fetchErr && (
-              <div className="text-xs text-gray-400 italic">
+              <div className={`text-xs ${text.muted} italic`}>
                 No active assignments on this date — try another day.
               </div>
             )}
@@ -211,41 +223,42 @@ export function ProposeSwapModal({
                     <button
                       type="button"
                       onClick={() => setSelectedId(c.id)}
+                      style={isSelected ? undefined : glassInner}
                       className={[
-                        'w-full text-left px-3 py-2 rounded-lg border transition-colors',
+                        'w-full text-left px-3 py-2 rounded-xl border transition-colors',
                         isSelected
-                          ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-200'
-                          : 'bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50',
+                          ? 'bg-cyan-500/20 border-cyan-500/30 ring-1 ring-cyan-500/30'
+                          : 'border-transparent hover:bg-white/5',
                       ].join(' ')}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-semibold text-gray-900 truncate">
+                          <div className={`text-sm font-semibold ${text.heading} truncate`}>
                             {c.userName}
                           </div>
-                          <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5">
+                          <div className={`text-[11px] ${text.body} mt-0.5 flex items-center gap-1.5`}>
                             {c.shiftPeriod === 'DAY'
                               ? <Sun className="w-3 h-3" />
                               : <Moon className="w-3 h-3" />}
                             <span>{c.shiftPeriod}</span>
-                            <span className="text-gray-300">·</span>
-                            <span className="font-bold text-gray-700">{c.zone}</span>
-                            <span className="text-gray-300">·</span>
+                            <span className={text.muted}>·</span>
+                            <span className={`font-bold ${text.label}`}>{c.zone}</span>
+                            <span className={text.muted}>·</span>
                             <span>{c.shiftFunction.replace(/_/g, ' ')}</span>
                             {c.isShiftLead && (
-                              <span className="ml-1 text-[9px] font-bold text-violet-700 bg-violet-50 px-1 py-0.5 rounded">
+                              <span className="ml-1 text-[9px] font-bold text-violet-300 bg-violet-500/20 border border-violet-500/30 px-1 py-0.5 rounded">
                                 LEAD
                               </span>
                             )}
                           </div>
                           {c.userDesignationLabel && (
-                            <div className="text-[11px] text-gray-400 mt-0.5">
+                            <div className={`text-[11px] ${text.muted} mt-0.5`}>
                               {c.userDesignationLabel}
                             </div>
                           )}
                         </div>
                         {isSelected && (
-                          <div className="shrink-0 mt-1 inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white">
+                          <div className="shrink-0 mt-1 inline-flex items-center justify-center w-5 h-5 rounded-full bg-cyan-600 text-white">
                             <Check className="w-3 h-3" />
                           </div>
                         )}
@@ -259,21 +272,21 @@ export function ProposeSwapModal({
 
           {/* Selected pair preview */}
           {selected && (
-            <section className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-              <div className="text-[11px] font-bold uppercase text-gray-500 mb-2">
+            <section style={glassInner} className="rounded-xl p-3">
+              <div className={`text-[11px] font-bold uppercase ${text.label} mb-2`}>
                 Swap preview
               </div>
-              <div className="text-[12px] text-gray-700 space-y-1">
+              <div className={`text-[12px] ${text.body} space-y-1`}>
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-400 w-12 text-[10px] font-bold uppercase">You</span>
-                  <ShiftLineInline assignment={myAssignment} />
+                  <span className={`${text.muted} w-12 text-[10px] font-bold uppercase`}>You</span>
+                  <ShiftLineInline assignment={myAssignment} text={text} />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-400 w-12 text-[10px] font-bold uppercase">Partner</span>
-                  <ShiftLineInline assignment={selected} />
+                  <span className={`${text.muted} w-12 text-[10px] font-bold uppercase`}>Partner</span>
+                  <ShiftLineInline assignment={selected} text={text} />
                 </div>
               </div>
-              <div className="text-[11px] text-gray-500 mt-2 italic">
+              <div className={`text-[11px] ${text.body} mt-2 italic`}>
                 On approval, you take {selected.userName}’s slot and they take yours.
                 Shift-lead status, if any, stays with the original holder.
               </div>
@@ -283,11 +296,12 @@ export function ProposeSwapModal({
           {/* Reason */}
           <section>
             <label className="block">
-              <div className="text-[11px] font-bold uppercase text-gray-500 mb-1">
+              <div className={`text-[11px] font-bold uppercase ${text.label} mb-1`}>
                 Reason (optional — visible to partner and Charge Nurse)
               </div>
               <textarea
-                className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 min-h-[60px]"
+                style={glassInner}
+                className={`w-full text-sm rounded-lg px-2 py-1.5 min-h-[60px] ${text.body} focus:outline-none focus:ring-2 focus:ring-cyan-500/20`}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="e.g. doctor’s appointment in the morning"
@@ -296,7 +310,7 @@ export function ProposeSwapModal({
           </section>
 
           {submitErr && (
-            <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 px-2 py-1.5 rounded flex items-center gap-1.5">
+            <div className="text-[11px] text-rose-300 bg-rose-500/20 border border-rose-500/30 px-2 py-1.5 rounded flex items-center gap-1.5">
               <ShieldAlert className="w-3.5 h-3.5" />
               {submitErr}
             </div>
@@ -304,22 +318,25 @@ export function ProposeSwapModal({
         </div>
 
         {/* ── Footer ── */}
-        <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between bg-gray-50 rounded-b-2xl">
-          <div className="text-[11px] text-gray-500">
+        <div
+          style={{ borderTop: borderStyle }}
+          className="px-5 py-3 flex items-center justify-between"
+        >
+          <div className={`text-[11px] ${text.muted}`}>
             Goes to your partner first, then the Charge Nurse for final approval.
           </div>
           <div className="flex gap-2">
             <button
               onClick={onClose}
               disabled={submitting}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold ${text.body} bg-white/10 hover:bg-white/15 disabled:opacity-50`}
             >
               Cancel
             </button>
             <button
               onClick={submit}
               disabled={submitting || !selected}
-              className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 rounded-xl bg-cyan-600 text-white text-xs font-bold hover:bg-cyan-700 inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
               Send swap request
@@ -333,15 +350,20 @@ export function ProposeSwapModal({
 
 /* ─── Compact one-line summary used inside the preview ─── */
 
-function ShiftLineInline({ assignment }: { assignment: ShiftAssignmentResponse }) {
+function ShiftLineInline({
+  assignment, text,
+}: {
+  assignment: ShiftAssignmentResponse;
+  text: ReturnType<typeof useTheme>['text'];
+}) {
   return (
-    <span className="text-[12px] text-gray-700">
+    <span className={`text-[12px] ${text.body}`}>
       <span className="font-mono">{assignment.shiftDate}</span>
-      <span className="mx-1.5 text-gray-300">·</span>
+      <span className={`mx-1.5 ${text.muted}`}>·</span>
       <span className="font-bold">{assignment.shiftPeriod}</span>
-      <span className="mx-1.5 text-gray-300">·</span>
+      <span className={`mx-1.5 ${text.muted}`}>·</span>
       <span className="font-bold">{assignment.zone}</span>
-      <span className="mx-1.5 text-gray-300">·</span>
+      <span className={`mx-1.5 ${text.muted}`}>·</span>
       <span>{assignment.shiftFunction.replace(/_/g, ' ')}</span>
     </span>
   );
@@ -350,34 +372,37 @@ function ShiftLineInline({ assignment }: { assignment: ShiftAssignmentResponse }
 /* ─── Card-style summary for the requester at top ─── */
 
 function ShiftLine({
-  assignment, highlight = false,
+  assignment, highlight = false, glassInner, text,
 }: {
   assignment: ShiftAssignmentResponse;
   highlight?: boolean;
+  glassInner: ReturnType<typeof useTheme>['glassInner'];
+  text: ReturnType<typeof useTheme>['text'];
 }) {
   return (
     <div
+      style={highlight ? undefined : glassInner}
       className={[
-        'rounded-lg border px-3 py-2',
-        highlight ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200',
+        'rounded-xl px-3 py-2',
+        highlight ? 'bg-cyan-500/20 border border-cyan-500/30' : '',
       ].join(' ')}
     >
-      <div className="text-sm font-semibold text-gray-900">
+      <div className={`text-sm font-semibold ${text.heading}`}>
         {new Date(assignment.shiftDate + 'T00:00:00').toLocaleDateString('en-US', {
           weekday: 'long', month: 'short', day: 'numeric',
         })}
       </div>
-      <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5">
+      <div className={`text-[11px] ${text.body} mt-0.5 flex items-center gap-1.5`}>
         {assignment.shiftPeriod === 'DAY'
           ? <Sun className="w-3 h-3" />
           : <Moon className="w-3 h-3" />}
         <span>{assignment.shiftPeriod === 'DAY' ? '07:00 – 19:00' : '19:00 – 07:00'}</span>
-        <span className="text-gray-300">·</span>
-        <span className="font-bold text-gray-700">{assignment.zone}</span>
-        <span className="text-gray-300">·</span>
+        <span className={text.muted}>·</span>
+        <span className={`font-bold ${text.label}`}>{assignment.zone}</span>
+        <span className={text.muted}>·</span>
         <span>{assignment.shiftFunction.replace(/_/g, ' ')}</span>
         {assignment.isShiftLead && (
-          <span className="ml-1 text-[9px] font-bold text-violet-700 bg-violet-50 px-1 py-0.5 rounded">
+          <span className="ml-1 text-[9px] font-bold text-violet-300 bg-violet-500/20 border border-violet-500/30 px-1 py-0.5 rounded">
             LEAD
           </span>
         )}

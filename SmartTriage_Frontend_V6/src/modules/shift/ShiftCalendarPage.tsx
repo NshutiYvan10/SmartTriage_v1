@@ -48,6 +48,7 @@ import type {
   UserResponse,
 } from '@/api/types';
 import { useAuthStore } from '@/store/authStore';
+import { useTheme } from '@/hooks/useTheme';
 
 const ALL_ZONES: EdZone[] = [
   'RESUS', 'ACUTE', 'GENERAL', 'AMBULATORY', 'TRIAGE',
@@ -106,6 +107,7 @@ interface DaySignals {
 /* ─── Component ─── */
 
 export function ShiftCalendarPage() {
+  const { glassCard, glassInner, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const isChargeNurse = user?.designation === 'CHARGE_NURSE';
@@ -195,76 +197,86 @@ export function ShiftCalendarPage() {
 
   if (!hospitalId) {
     return (
-      <div className="p-8 text-sm text-gray-500">
-        No hospital is associated with your account. The calendar requires a hospital context.
+      <div className="min-h-full">
+        <div className="p-4 lg:p-6 max-w-7xl mx-auto animate-fade-in">
+          <div className={`rounded-2xl p-8 text-sm ${text.body}`} style={glassCard}>
+            No hospital is associated with your account. The calendar requires a hospital context.
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-5 space-y-5">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Calendar className="w-5 h-5 text-gray-500" />
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Shift Calendar</h1>
-          <span className="text-sm text-gray-400">·</span>
-          <h2 className="text-base font-semibold text-gray-700">
-            {cursor.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
-          </h2>
-        </div>
-        <div className="flex items-center gap-2">
-          {canEdit && (
-            <>
+    <div className="min-h-full">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                <Calendar className="w-5 h-5 text-cyan-300" />
+              </div>
+              <div>
+                <div className="text-white/50 text-xs font-bold uppercase">Shift Calendar</div>
+                <div className="text-lg font-bold text-white tracking-tight">
+                  {cursor.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {canEdit && (
+                <>
+                  <button
+                    onClick={() => setShowCopyWeek(true)}
+                    className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-white transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    Copy Week
+                  </button>
+                  <button
+                    onClick={() => setShowApplyTemplate(true)}
+                    className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-white transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Apply Template
+                  </button>
+                  <span className="w-px h-6 bg-white/15 mx-1" />
+                </>
+              )}
               <button
-                onClick={() => setShowCopyWeek(true)}
-                className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors inline-flex items-center gap-1.5"
+                onClick={() => setCursor((c) => addMonths(c, -1))}
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/15 transition-colors inline-flex items-center justify-center"
+                aria-label="Previous month"
               >
-                <Copy className="w-3.5 h-3.5" />
-                Copy Week
+                <ChevronLeft className="w-4 h-4 text-white" />
               </button>
               <button
-                onClick={() => setShowApplyTemplate(true)}
-                className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors inline-flex items-center gap-1.5"
+                onClick={() => setCursor(startOfMonth(new Date()))}
+                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-white transition-colors"
               >
-                <FileText className="w-3.5 h-3.5" />
-                Apply Template
+                Today
               </button>
-              <span className="w-px h-6 bg-gray-200 mx-1" />
-            </>
-          )}
-          <button
-            onClick={() => setCursor((c) => addMonths(c, -1))}
-            className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-            aria-label="Previous month"
-          >
-            <ChevronLeft className="w-4 h-4 text-gray-600" />
-          </button>
-          <button
-            onClick={() => setCursor(startOfMonth(new Date()))}
-            className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            Today
-          </button>
-          <button
-            onClick={() => setCursor((c) => addMonths(c, 1))}
-            className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-            aria-label="Next month"
-          >
-            <ChevronRight className="w-4 h-4 text-gray-600" />
-          </button>
+              <button
+                onClick={() => setCursor((c) => addMonths(c, 1))}
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/15 transition-colors inline-flex items-center justify-center"
+                aria-label="Next month"
+              >
+                <ChevronRight className="w-4 h-4 text-white" />
+              </button>
+            </div>
+          </div>
         </div>
-      </header>
 
-      {toast && (
-        <div className="rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2 text-sm">
-          {toast}
-        </div>
-      )}
+        {toast && (
+          <div className="rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 px-4 py-2 text-sm">
+            {toast}
+          </div>
+        )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* ── Calendar grid (2/3) ── */}
-        <section className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-4">
-          <div className="grid grid-cols-7 gap-1 text-[11px] font-bold uppercase text-gray-400 mb-2">
+        <section className="lg:col-span-2 rounded-2xl p-4" style={glassCard}>
+          <div className={`grid grid-cols-7 gap-1 text-[11px] font-bold uppercase ${text.muted} mb-2`}>
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
               <div key={d} className="px-2 py-1">{d}</div>
             ))}
@@ -281,19 +293,22 @@ export function ShiftCalendarPage() {
                 <button
                   key={i}
                   onClick={() => setSelectedDate(iso)}
+                  style={inMonth ? glassInner : undefined}
                   className={[
-                    'group relative h-24 rounded-lg border p-2 text-left transition-all',
+                    'group relative h-24 rounded-xl p-2 text-left transition-all',
                     inMonth
-                      ? 'bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      : 'bg-gray-50 border-gray-100 text-gray-400',
-                    isSelected ? 'ring-2 ring-blue-500 border-blue-300' : '',
+                      ? `${text.body} hover:bg-white/5`
+                      : `${text.muted} opacity-60`,
+                    isSelected ? 'ring-2 ring-cyan-500' : '',
                   ].join(' ')}
                 >
                   <div className="flex items-center justify-between">
                     <span
                       className={[
                         'text-xs font-bold',
-                        isToday ? 'inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white' : '',
+                        isToday
+                          ? 'inline-flex items-center justify-center w-6 h-6 rounded-full bg-cyan-600 text-white'
+                          : text.heading,
                       ].join(' ')}
                     >
                       {cell.date.getDate()}
@@ -301,7 +316,7 @@ export function ShiftCalendarPage() {
                     {sig?.coverage && <CoveragePill level={sig.coverage} />}
                   </div>
                   {sig && inMonth && (
-                    <div className="mt-2 space-y-0.5 text-[11px] text-gray-600">
+                    <div className={`mt-2 space-y-0.5 text-[11px] ${text.body}`}>
                       {sig.scheduledCount > 0 && (
                         <div className="flex items-center gap-1">
                           <Users className="w-3 h-3" />
@@ -309,7 +324,7 @@ export function ShiftCalendarPage() {
                         </div>
                       )}
                       {sig.leaveCount > 0 && (
-                        <div className="flex items-center gap-1 text-amber-700">
+                        <div className="flex items-center gap-1 text-amber-400">
                           <UserMinus className="w-3 h-3" />
                           <span>{sig.leaveCount} on leave</span>
                         </div>
@@ -321,7 +336,7 @@ export function ShiftCalendarPage() {
             })}
           </div>
           {loading && (
-            <div className="mt-3 text-xs text-gray-400">Loading roster…</div>
+            <div className={`mt-3 text-xs ${text.muted}`}>Loading roster…</div>
           )}
         </section>
 
@@ -380,6 +395,7 @@ export function ShiftCalendarPage() {
           }}
         />
       )}
+      </div>
     </div>
   );
 }
@@ -428,20 +444,20 @@ function deriveCoverage(roster: ShiftAssignmentResponse[]): CoverageLevel {
 function CoveragePill({ level }: { level: CoverageLevel }) {
   if (level === 'GOOD') {
     return (
-      <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+      <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
         GOOD
       </span>
     );
   }
   if (level === 'THIN') {
     return (
-      <span className="px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-200">
+      <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
         THIN
       </span>
     );
   }
   return (
-    <span className="px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-bold border border-rose-200 inline-flex items-center gap-0.5">
+    <span className="px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[10px] font-bold border border-rose-500/30 inline-flex items-center gap-0.5">
       <AlertTriangle className="w-2.5 h-2.5" />
       GAP
     </span>
@@ -463,6 +479,7 @@ interface DayDetailProps {
 function DayDetailPanel({
   hospitalId, dateIso, monthLeaves, canEdit, reloadKey, onChange, onToast,
 }: DayDetailProps) {
+  const { glassCard, text } = useTheme();
   const [roster, setRoster] = useState<ShiftAssignmentResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [drawerPeriod, setDrawerPeriod] = useState<ShiftPeriod | null>(null);
@@ -521,10 +538,10 @@ function DayDetailPanel({
   const dayDate = new Date(dateIso + 'T00:00:00');
 
   return (
-    <aside className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
+    <aside className="rounded-2xl p-4 space-y-4" style={glassCard}>
       <div>
-        <div className="text-[11px] font-bold uppercase text-gray-400">Selected day</div>
-        <div className="text-sm font-bold text-gray-900">
+        <div className={`text-[11px] font-bold uppercase ${text.muted}`}>Selected day</div>
+        <div className={`text-sm font-bold ${text.heading}`}>
           {dayDate.toLocaleDateString('en-US', {
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
           })}
@@ -583,7 +600,7 @@ function DayDetailPanel({
         />
       )}
 
-      {loading && <div className="text-xs text-gray-400">Loading…</div>}
+      {loading && <div className={`text-xs ${text.muted}`}>Loading…</div>}
     </aside>
   );
 }
@@ -599,6 +616,7 @@ interface ShiftSectionProps {
 }
 
 function ShiftSection({ title, icon, rows, editable, onAdd, onRemove, onEdit }: ShiftSectionProps) {
+  const { text } = useTheme();
   if (rows.length === 0) {
     return (
       <div>
@@ -606,7 +624,7 @@ function ShiftSection({ title, icon, rows, editable, onAdd, onRemove, onEdit }: 
           <SectionTitle title={title} icon={icon} count={0} />
           {editable && <AddStaffButton onClick={onAdd} />}
         </div>
-        <div className="text-xs text-gray-400 italic">No staff scheduled.</div>
+        <div className={`text-xs italic ${text.muted}`}>No staff scheduled.</div>
       </div>
     );
   }
@@ -624,16 +642,16 @@ function ShiftSection({ title, icon, rows, editable, onAdd, onRemove, onEdit }: 
       <div className="space-y-1.5">
         {Object.entries(byZone).map(([zone, zRows]) => (
           <div key={zone} className="text-[12px]">
-            <div className="font-bold text-gray-700">{zone}</div>
+            <div className={`font-bold ${text.label}`}>{zone}</div>
             <ul className="ml-3 mt-0.5 space-y-0.5">
               {zRows.map((r) => (
-                <li key={r.id} className="text-gray-600 flex items-baseline gap-2 group">
-                  <span className="text-[10px] uppercase font-bold text-gray-400 w-24">
+                <li key={r.id} className={`flex items-baseline gap-2 group ${text.body}`}>
+                  <span className={`text-[10px] uppercase font-bold w-24 ${text.muted}`}>
                     {r.shiftFunction.replace(/_/g, ' ')}
                   </span>
                   <span>{r.userName}</span>
                   {r.isShiftLead && (
-                    <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] font-bold text-violet-300 bg-violet-500/20 border border-violet-500/30 px-1.5 py-0.5 rounded">
                       Shift Lead
                     </span>
                   )}
@@ -641,7 +659,7 @@ function ShiftSection({ title, icon, rows, editable, onAdd, onRemove, onEdit }: 
                     <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
                       <button
                         onClick={() => onEdit(r)}
-                        className="text-gray-300 hover:text-cyan-600"
+                        className={`${text.muted} hover:text-cyan-400`}
                         aria-label={`Edit ${r.userName}`}
                         title="Edit zone / function / shift-lead"
                       >
@@ -649,7 +667,7 @@ function ShiftSection({ title, icon, rows, editable, onAdd, onRemove, onEdit }: 
                       </button>
                       <button
                         onClick={() => onRemove(r.id, r.userName)}
-                        className="text-gray-300 hover:text-rose-600"
+                        className={`${text.muted} hover:text-rose-400`}
                         aria-label={`Remove ${r.userName}`}
                         title="Remove from shift"
                       >
@@ -671,7 +689,7 @@ function AddStaffButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-dashed border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+      className="text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30"
     >
       <Plus className="w-3 h-3" />
       Add staff
@@ -680,16 +698,18 @@ function AddStaffButton({ onClick }: { onClick: () => void }) {
 }
 
 function SectionTitle({ title, icon, count }: { title: string; icon: React.ReactNode; count: number }) {
+  const { text } = useTheme();
   return (
     <div className="flex items-center gap-2 mb-1.5">
-      <span className="text-gray-500">{icon}</span>
-      <span className="text-[11px] font-bold uppercase text-gray-500">{title}</span>
-      <span className="text-[10px] font-semibold text-gray-400">({count})</span>
+      <span className={text.body}>{icon}</span>
+      <span className={`text-[11px] font-bold uppercase ${text.body}`}>{title}</span>
+      <span className={`text-[10px] font-semibold ${text.muted}`}>({count})</span>
     </div>
   );
 }
 
 function ZoneCoverageSummary({ roster }: { roster: ShiftAssignmentResponse[] }) {
+  const { text } = useTheme();
   const counts = useMemo(() => {
     const m: Record<string, { day: number; night: number }> = {};
     for (const r of roster) {
@@ -704,17 +724,17 @@ function ZoneCoverageSummary({ roster }: { roster: ShiftAssignmentResponse[] }) 
 
   return (
     <div>
-      <div className="text-[11px] font-bold uppercase text-gray-500 mb-1.5">Zone coverage</div>
+      <div className={`text-[11px] font-bold uppercase ${text.body} mb-1.5`}>Zone coverage</div>
       <div className="text-[11px] grid grid-cols-3 gap-y-0.5 gap-x-2">
         <div />
-        <div className="text-gray-400 font-bold">DAY</div>
-        <div className="text-gray-400 font-bold">NIGHT</div>
+        <div className={`${text.muted} font-bold`}>DAY</div>
+        <div className={`${text.muted} font-bold`}>NIGHT</div>
         {zones.map((z) => {
           const isTier1 = TIER_1_ZONES.includes(z as EdZone);
           const c = counts[z];
           return (
             <div key={z} className="contents">
-              <div className="font-semibold text-gray-700">{z}</div>
+              <div className={`font-semibold ${text.label}`}>{z}</div>
               <NumCell n={c.day}   tier1={isTier1} />
               <NumCell n={c.night} tier1={isTier1} />
             </div>
@@ -726,21 +746,23 @@ function ZoneCoverageSummary({ roster }: { roster: ShiftAssignmentResponse[] }) 
 }
 
 function NumCell({ n, tier1 }: { n: number; tier1: boolean }) {
-  if (!tier1) return <div className="text-gray-600">{n}</div>;
-  if (n === 0)   return <div className="text-rose-700 font-bold">{n}</div>;
-  if (n === 1)   return <div className="text-amber-700 font-bold">{n}</div>;
-  return <div className="text-emerald-700 font-bold">{n}</div>;
+  const { text } = useTheme();
+  if (!tier1) return <div className={text.body}>{n}</div>;
+  if (n === 0)   return <div className="text-rose-400 font-bold">{n}</div>;
+  if (n === 1)   return <div className="text-amber-400 font-bold">{n}</div>;
+  return <div className="text-emerald-400 font-bold">{n}</div>;
 }
 
 function LeaveSection({ leaves }: { leaves: StaffLeaveResponse[] }) {
+  const { text } = useTheme();
   if (leaves.length === 0) return null;
   return (
     <div>
       <SectionTitle title="On leave" icon={<UserMinus className="w-3.5 h-3.5" />} count={leaves.length} />
       <ul className="space-y-0.5 text-[12px]">
         {leaves.map((l) => (
-          <li key={l.id} className="text-gray-600 flex items-baseline gap-2">
-            <span className="text-[10px] uppercase font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded w-24 text-center">
+          <li key={l.id} className={`flex items-baseline gap-2 ${text.body}`}>
+            <span className="text-[10px] uppercase font-bold text-amber-300 bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded w-24 text-center">
               {prettyLeaveType(l.leaveType)}
             </span>
             <span>{l.userName}</span>
@@ -799,6 +821,7 @@ function zoneForFunction(fn: ShiftFunction): EdZone | null {
 function QuickAssignDrawer({
   hospitalId, dateIso, period, existing, onClose, onAdded, onError,
 }: QuickAssignDrawerProps) {
+  const { glassCard, glassInner, text } = useTheme();
   const [users, setUsers] = useState<UserResponse[]>([]);
   const [userId, setUserId] = useState('');
   const [zone, setZone] = useState<EdZone>('GENERAL');
@@ -859,17 +882,17 @@ function QuickAssignDrawer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-      <div className="bg-white w-full sm:max-w-md rounded-2xl shadow-xl p-5 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="w-full sm:max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-5 space-y-4" style={glassCard}>
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold uppercase text-gray-400">Assign staff</div>
-            <div className="text-sm font-bold text-gray-900">
+            <div className={`text-[11px] font-bold uppercase ${text.muted}`}>Assign staff</div>
+            <div className={`text-sm font-bold ${text.heading}`}>
               {dateIso} · {period} shift
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
-            <X className="w-4 h-4 text-gray-500" />
+          <button onClick={onClose} className={`w-8 h-8 rounded-xl inline-flex items-center justify-center hover:bg-white/10 ${text.muted}`}>
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -879,7 +902,8 @@ function QuickAssignDrawer({
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
               disabled={loadingUsers}
-              className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+              className={`w-full rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+              style={glassInner}
             >
               <option value="">{loadingUsers ? 'Loading…' : 'Select…'}</option>
               {eligible.map((u) => (
@@ -889,7 +913,7 @@ function QuickAssignDrawer({
               ))}
             </select>
             {!loadingUsers && eligible.length === 0 && (
-              <div className="text-[11px] text-gray-400 mt-1">
+              <div className={`text-[11px] mt-1 ${text.muted}`}>
                 Every active user is already assigned to this shift.
               </div>
             )}
@@ -900,7 +924,8 @@ function QuickAssignDrawer({
               <select
                 value={zone}
                 onChange={(e) => { setZone(e.target.value as EdZone); setZoneTouched(true); }}
-                className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                className={`w-full rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+                style={glassInner}
               >
                 {ALL_ZONES.map((z) => <option key={z} value={z}>{z}</option>)}
               </select>
@@ -909,7 +934,8 @@ function QuickAssignDrawer({
               <select
                 value={shiftFunction}
                 onChange={(e) => setShiftFunction(e.target.value as ShiftFunction)}
-                className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                className={`w-full rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+                style={glassInner}
               >
                 {ALL_FUNCTIONS.map((f) => (
                   <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>
@@ -923,9 +949,10 @@ function QuickAssignDrawer({
               type="checkbox"
               checked={isShiftLead}
               onChange={(e) => setIsShiftLead(e.target.checked)}
+              className="accent-cyan-600"
             />
-            <span className="text-gray-700">Make shift-lead for this shift</span>
-            <span className="text-[10px] text-gray-400">
+            <span className={text.label}>Make shift-lead for this shift</span>
+            <span className={`text-[10px] ${text.muted}`}>
               (clears any existing badge holder)
             </span>
           </label>
@@ -934,14 +961,14 @@ function QuickAssignDrawer({
         <div className="flex justify-end gap-2 pt-1">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50"
+            className={`px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-white/10 ${text.body}`}
           >
             Cancel
           </button>
           <button
             onClick={submit}
             disabled={submitting || !userId}
-            className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 inline-flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 inline-flex items-center gap-1.5"
           >
             {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             Assign
@@ -971,6 +998,7 @@ interface EditAssignmentDrawerProps {
 function EditAssignmentDrawer({
   assignment, onClose, onSaved, onError,
 }: EditAssignmentDrawerProps) {
+  const { glassCard, glassInner, text } = useTheme();
   const [zone, setZone] = useState<EdZone>(assignment.zone as EdZone);
   const [shiftFunction, setShiftFunction] = useState<ShiftFunction>(assignment.shiftFunction as ShiftFunction);
   const [zoneTouched, setZoneTouched] = useState(false);
@@ -1005,17 +1033,17 @@ function EditAssignmentDrawer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-      <div className="bg-white w-full sm:max-w-md rounded-2xl shadow-xl p-5 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="w-full sm:max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-5 space-y-4" style={glassCard}>
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold uppercase text-gray-400">Edit assignment</div>
-            <div className="text-sm font-bold text-gray-900">
+            <div className={`text-[11px] font-bold uppercase ${text.muted}`}>Edit assignment</div>
+            <div className={`text-sm font-bold ${text.heading}`}>
               {assignment.userName} · {assignment.shiftDate} · {assignment.shiftPeriod} shift
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
-            <X className="w-4 h-4 text-gray-500" />
+          <button onClick={onClose} className={`w-8 h-8 rounded-xl inline-flex items-center justify-center hover:bg-white/10 ${text.muted}`}>
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -1025,7 +1053,8 @@ function EditAssignmentDrawer({
               <select
                 value={zone}
                 onChange={(e) => { setZone(e.target.value as EdZone); setZoneTouched(true); }}
-                className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                className={`w-full rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+                style={glassInner}
               >
                 {ALL_ZONES.map((z) => <option key={z} value={z}>{z}</option>)}
               </select>
@@ -1034,7 +1063,8 @@ function EditAssignmentDrawer({
               <select
                 value={shiftFunction}
                 onChange={(e) => setShiftFunction(e.target.value as ShiftFunction)}
-                className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                className={`w-full rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+                style={glassInner}
               >
                 {ALL_FUNCTIONS.map((f) => (
                   <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>
@@ -1048,9 +1078,10 @@ function EditAssignmentDrawer({
               type="checkbox"
               checked={isShiftLead}
               onChange={(e) => setIsShiftLead(e.target.checked)}
+              className="accent-cyan-600"
             />
-            <span className="text-gray-700">Shift-lead for this shift</span>
-            <span className="text-[10px] text-gray-400">
+            <span className={text.label}>Shift-lead for this shift</span>
+            <span className={`text-[10px] ${text.muted}`}>
               (clears any other badge holder)
             </span>
           </label>
@@ -1059,14 +1090,14 @@ function EditAssignmentDrawer({
         <div className="flex justify-end gap-2 pt-1">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50"
+            className={`px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-white/10 ${text.body}`}
           >
             Cancel
           </button>
           <button
             onClick={submit}
             disabled={submitting}
-            className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 inline-flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 inline-flex items-center gap-1.5"
           >
             {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             Save changes
@@ -1078,9 +1109,10 @@ function EditAssignmentDrawer({
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  const { text } = useTheme();
   return (
     <label className="block">
-      <div className="text-[10px] uppercase font-bold text-gray-500 mb-1">{label}</div>
+      <div className={`text-[10px] uppercase font-bold mb-1 ${text.label}`}>{label}</div>
       {children}
     </label>
   );
@@ -1101,6 +1133,7 @@ interface CopyWeekModalProps extends BulkOpModalProps<BulkPlanResult> {
 }
 
 function CopyWeekModal({ hospitalId, defaultFromMonday, onClose, onDone }: CopyWeekModalProps) {
+  const { glassInner, text } = useTheme();
   // Default the source to the most recently completed Monday (i.e., the
   // week containing the currently-selected day) and the target to the
   // following Monday. That matches the bread-and-butter case: "copy
@@ -1146,10 +1179,11 @@ function CopyWeekModal({ hospitalId, defaultFromMonday, onClose, onDone }: CopyW
             type="date"
             value={fromMonday}
             onChange={(e) => setFromMonday(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+            className={`w-full rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+            style={glassInner}
           />
           {fromMonday && !fromIsMon && (
-            <div className="text-[11px] text-rose-600 mt-1">Pick a Monday.</div>
+            <div className="text-[11px] text-rose-400 mt-1">Pick a Monday.</div>
           )}
         </Field>
         <Field label="Target week (Monday)">
@@ -1157,18 +1191,19 @@ function CopyWeekModal({ hospitalId, defaultFromMonday, onClose, onDone }: CopyW
             type="date"
             value={toMonday}
             onChange={(e) => setToMonday(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+            className={`w-full rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+            style={glassInner}
           />
           {toMonday && !toIsMon && (
-            <div className="text-[11px] text-rose-600 mt-1">Pick a Monday.</div>
+            <div className="text-[11px] text-rose-400 mt-1">Pick a Monday.</div>
           )}
         </Field>
-        <div className="text-[11px] text-gray-500">
+        <div className={`text-[11px] ${text.muted}`}>
           Slots that already have rows are skipped — a hand-edited day will
           not be overwritten. Users on approved leave are dropped from the
           copied roster automatically.
         </div>
-        {error && <div className="text-[12px] text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1">{error}</div>}
+        {error && <div className="text-[12px] text-rose-300 bg-rose-500/20 border border-rose-500/30 rounded px-2 py-1">{error}</div>}
       </div>
       <ModalActions
         submitting={submitting}
@@ -1195,6 +1230,7 @@ interface ApplyTemplateModalProps extends BulkOpModalProps<BulkPlanResult> {
 }
 
 function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: ApplyTemplateModalProps) {
+  const { glassInner, text } = useTheme();
   const [templates, setTemplates] = useState<ShiftTemplateResponse[]>([]);
   const [templateId, setTemplateId] = useState('');
   const [fromDate, setFromDate] = useState(defaultFromDate);
@@ -1262,7 +1298,8 @@ function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: Ap
             value={templateId}
             onChange={(e) => setTemplateId(e.target.value)}
             disabled={loadingTpls}
-            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+            className={`w-full rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+            style={glassInner}
           >
             <option value="">{loadingTpls ? 'Loading…' : 'Select…'}</option>
             {templates.map((t) => (
@@ -1272,7 +1309,7 @@ function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: Ap
             ))}
           </select>
           {!loadingTpls && templates.length === 0 && (
-            <div className="text-[11px] text-gray-400 mt-1">
+            <div className={`text-[11px] mt-1 ${text.muted}`}>
               No active templates. Create one in Shift Templates first.
             </div>
           )}
@@ -1283,7 +1320,8 @@ function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: Ap
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+              className={`w-full rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+              style={glassInner}
             />
           </Field>
           <Field label="To">
@@ -1291,12 +1329,13 @@ function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: Ap
               type="date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+              className={`w-full rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+              style={glassInner}
             />
           </Field>
         </div>
         {selected && (
-          <div className="text-[11px] text-gray-500">
+          <div className={`text-[11px] ${text.muted}`}>
             Will materialise <strong>{selected.shiftPeriod}</strong> shifts only —
             the template's own period. To stage day + night together, run
             this twice with the matching template for each.
@@ -1305,7 +1344,7 @@ function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: Ap
         {/* V55 — overwrite-by-default with explicit opt-out for fill-empty.
             Without this checkbox, clicking Apply on already-filled dates was
             silently a no-op (the user's reported bug). */}
-        <label className="flex items-start gap-2 text-[11px] text-gray-600 cursor-pointer select-none">
+        <label className={`flex items-start gap-2 text-[11px] cursor-pointer select-none ${text.body}`}>
           <input
             type="checkbox"
             checked={skipExisting}
@@ -1313,15 +1352,15 @@ function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: Ap
             className="mt-0.5 accent-cyan-600"
           />
           <span>
-            <span className="font-semibold text-gray-700">Skip dates that already have a roster</span>
-            <span className="block text-gray-500">
+            <span className={`font-semibold ${text.label}`}>Skip dates that already have a roster</span>
+            <span className={`block ${text.muted}`}>
               {skipExisting
                 ? 'Existing rosters will be left untouched. Only empty slots are filled.'
                 : 'Existing rosters on these dates will be replaced with this template (default).'}
             </span>
           </span>
         </label>
-        {error && <div className="text-[12px] text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1">{error}</div>}
+        {error && <div className="text-[12px] text-rose-300 bg-rose-500/20 border border-rose-500/30 rounded px-2 py-1">{error}</div>}
       </div>
       <ModalActions
         submitting={submitting}
@@ -1341,16 +1380,17 @@ function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: Ap
 function ModalShell({
   title, subtitle, children, onClose,
 }: { title: string; subtitle?: string; children: React.ReactNode; onClose: () => void }) {
+  const { glassCard, text } = useTheme();
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl p-5 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-5 space-y-4" style={glassCard}>
         <div className="flex items-start justify-between">
           <div>
-            <div className="text-base font-bold text-gray-900">{title}</div>
-            {subtitle && <div className="text-[11px] text-gray-500">{subtitle}</div>}
+            <div className={`text-base font-bold ${text.heading}`}>{title}</div>
+            {subtitle && <div className={`text-[11px] ${text.muted}`}>{subtitle}</div>}
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
-            <X className="w-4 h-4 text-gray-500" />
+          <button onClick={onClose} className={`w-8 h-8 rounded-xl inline-flex items-center justify-center hover:bg-white/10 ${text.muted}`}>
+            <X className="w-4 h-4" />
           </button>
         </div>
         {children}
@@ -1368,18 +1408,19 @@ function ModalActions({
   onCancel: () => void;
   onSubmit: () => void;
 }) {
+  const { text } = useTheme();
   return (
     <div className="flex justify-end gap-2 pt-1">
       <button
         onClick={onCancel}
-        className="px-3 py-1.5 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50"
+        className={`px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-white/10 ${text.body}`}
       >
         Cancel
       </button>
       <button
         onClick={onSubmit}
         disabled={submitting || disabled}
-        className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 inline-flex items-center gap-1.5"
+        className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 inline-flex items-center gap-1.5"
       >
         {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
         {submitLabel}

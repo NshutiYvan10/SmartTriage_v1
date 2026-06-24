@@ -39,6 +39,7 @@ import type {
   SwapStatus,
 } from '@/api/types';
 import { useAuthStore } from '@/store/authStore';
+import { useTheme } from '@/hooks/useTheme';
 import { ProposeSwapModal } from './ProposeSwapModal';
 
 const LEAVE_TYPES: LeaveType[] = [
@@ -58,6 +59,7 @@ function todayIso() { return fmtIso(new Date()); }
 
 export function MySchedulePage() {
   const user = useAuthStore((s) => s.user);
+  const { glassCard, isDark, text } = useTheme();
 
   const [shifts, setShifts] = useState<ShiftAssignmentResponse[]>([]);
   const [leaves, setLeaves] = useState<StaffLeaveResponse[]>([]);
@@ -107,27 +109,35 @@ export function MySchedulePage() {
   const nextShift = upcomingShifts[0];
 
   if (!user) {
-    return <div className="p-8 text-sm text-gray-500">Not signed in.</div>;
+    return <div className={`p-8 text-sm ${text.muted}`}>Not signed in.</div>;
   }
 
   return (
-    <div className="p-5 space-y-5">
-      <header className="flex items-center justify-between">
-        <div>
-          <div className="text-[11px] font-bold uppercase text-gray-400">My schedule</div>
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight">{user.fullName}</h1>
+    <div className="min-h-full">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                <CalendarClock className="w-5 h-5 text-cyan-300" />
+              </div>
+              <div>
+                <div className="text-white/50 text-xs font-bold uppercase">My schedule</div>
+                <div className="text-lg font-bold text-white tracking-tight">{user.fullName}</div>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowLeaveForm(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-600 text-white text-xs font-bold hover:bg-cyan-700 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Request leave
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => setShowLeaveForm(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Request leave
-        </button>
-      </header>
 
       {err && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 px-3 py-2 rounded-lg text-xs flex items-center gap-2">
+        <div className="bg-rose-500/20 border border-rose-500/30 text-rose-300 px-3 py-2 rounded-xl text-xs flex items-center gap-2">
           <AlertTriangle className="w-3.5 h-3.5" />
           {err}
         </div>
@@ -135,7 +145,7 @@ export function MySchedulePage() {
 
       <NextShiftBanner shift={nextShift} loading={loading} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <UpcomingShiftsCard
           shifts={upcomingShifts}
           loading={loading}
@@ -177,6 +187,7 @@ export function MySchedulePage() {
           }}
         />
       )}
+      </div>
     </div>
   );
 }
@@ -184,9 +195,10 @@ export function MySchedulePage() {
 /* ═══════════════════════ Next-shift banner ═══════════════════════ */
 
 function NextShiftBanner({ shift, loading }: { shift?: ShiftAssignmentResponse; loading: boolean }) {
+  const { glassCard, text } = useTheme();
   if (loading && !shift) {
     return (
-      <div className="bg-white rounded-2xl border border-gray-200 p-5 text-sm text-gray-400 flex items-center gap-2">
+      <div className={`rounded-2xl p-5 text-sm flex items-center gap-2 ${text.muted}`} style={glassCard}>
         <Loader2 className="w-4 h-4 animate-spin" />
         Loading…
       </div>
@@ -194,15 +206,15 @@ function NextShiftBanner({ shift, loading }: { shift?: ShiftAssignmentResponse; 
   }
   if (!shift) {
     return (
-      <div className="bg-white rounded-2xl border border-gray-200 p-5">
-        <div className="text-[11px] font-bold uppercase text-gray-400 mb-1">Next shift</div>
-        <div className="text-sm text-gray-500">No upcoming shifts on the books.</div>
+      <div className="rounded-2xl p-5" style={glassCard}>
+        <div className={`text-[11px] font-bold uppercase mb-1 ${text.muted}`}>Next shift</div>
+        <div className={`text-sm ${text.body}`}>No upcoming shifts on the books.</div>
       </div>
     );
   }
   const isToday = shift.shiftDate === todayIso();
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+    <div className="rounded-2xl overflow-hidden" style={glassCard}>
       <div className={`px-6 py-5 ${isToday ? 'bg-gradient-to-r from-blue-700 to-blue-600' : 'bg-gradient-to-r from-slate-800 to-slate-700'}`}>
         <div className="flex items-center justify-between">
           <div>
@@ -248,42 +260,44 @@ function UpcomingShiftsCard({
   loading: boolean;
   onProposeSwap: (s: ShiftAssignmentResponse) => void;
 }) {
+  const { glassCard, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   return (
-    <section className="bg-white rounded-2xl border border-gray-200 p-5">
+    <section className="rounded-2xl p-5" style={glassCard}>
       <div className="flex items-center gap-2 mb-3">
-        <CalendarClock className="w-4 h-4 text-gray-500" />
-        <h2 className="text-sm font-bold text-gray-900">Upcoming shifts</h2>
-        <span className="text-[10px] font-semibold text-gray-400">({shifts.length})</span>
+        <CalendarClock className={`w-4 h-4 ${text.muted}`} />
+        <h2 className={`text-sm font-bold ${text.heading}`}>Upcoming shifts</h2>
+        <span className={`text-[10px] font-semibold ${text.muted}`}>({shifts.length})</span>
       </div>
       {loading && shifts.length === 0 && (
-        <div className="text-xs text-gray-400">Loading…</div>
+        <div className={`text-xs ${text.muted}`}>Loading…</div>
       )}
       {!loading && shifts.length === 0 && (
-        <div className="text-xs text-gray-400 italic">Nothing scheduled.</div>
+        <div className={`text-xs italic ${text.muted}`}>Nothing scheduled.</div>
       )}
-      <ul className="divide-y divide-gray-100">
+      <ul>
         {shifts.slice(0, 14).map((s) => (
-          <li key={s.id} className="py-2.5 flex items-center justify-between gap-3 text-sm">
+          <li key={s.id} className="py-2.5 flex items-center justify-between gap-3 text-sm" style={{ borderTop: borderStyle }}>
             <div className="min-w-0">
-              <div className="font-semibold text-gray-900">
+              <div className={`font-semibold ${text.heading}`}>
                 {new Date(s.shiftDate + 'T00:00:00').toLocaleDateString('en-US', {
                   weekday: 'short', month: 'short', day: 'numeric',
                 })}
               </div>
-              <div className="text-[11px] text-gray-500">
+              <div className={`text-[11px] ${text.body}`}>
                 {s.shiftPeriod} · {s.zone} · {s.shiftFunction.replace(/_/g, ' ')}
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {s.isShiftLead && (
-                <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded">
+                <span className="text-[10px] font-bold text-violet-300 bg-violet-500/20 border border-violet-500/30 px-1.5 py-0.5 rounded">
                   Shift Lead
                 </span>
               )}
               {s.active && (
                 <button
                   onClick={() => onProposeSwap(s)}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-cyan-400 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/30 transition-colors"
                   title="Propose a swap from this shift"
                 >
                   <ArrowRightLeft className="w-3 h-3" />
@@ -309,19 +323,20 @@ function SwapsCard({
   loading: boolean;
   onChange: () => Promise<void>;
 }) {
+  const { glassCard, text } = useTheme();
   return (
-    <section className="bg-white rounded-2xl border border-gray-200 p-5">
+    <section className="rounded-2xl p-5" style={glassCard}>
       <div className="flex items-center gap-2 mb-3">
-        <ArrowRightLeft className="w-4 h-4 text-gray-500" />
-        <h2 className="text-sm font-bold text-gray-900">My swap requests</h2>
-        <span className="text-[10px] font-semibold text-gray-400">({open.length} open)</span>
+        <ArrowRightLeft className={`w-4 h-4 ${text.muted}`} />
+        <h2 className={`text-sm font-bold ${text.heading}`}>My swap requests</h2>
+        <span className={`text-[10px] font-semibold ${text.muted}`}>({open.length} open)</span>
       </div>
 
       {loading && open.length === 0 && (
-        <div className="text-xs text-gray-400">Loading…</div>
+        <div className={`text-xs ${text.muted}`}>Loading…</div>
       )}
       {!loading && open.length === 0 && (
-        <div className="text-xs text-gray-400 italic mb-3">No open swap requests.</div>
+        <div className={`text-xs italic mb-3 ${text.muted}`}>No open swap requests.</div>
       )}
 
       <ul className="space-y-3">
@@ -332,7 +347,7 @@ function SwapsCard({
 
       {history.filter(h => !open.some(o => o.id === h.id)).length > 0 && (
         <details className="mt-4">
-          <summary className="text-[11px] font-bold uppercase text-gray-400 cursor-pointer hover:text-gray-600">
+          <summary className={`text-[11px] font-bold uppercase cursor-pointer ${text.muted} hover:${text.body}`}>
             History
           </summary>
           <ul className="mt-2 space-y-2">
@@ -340,7 +355,7 @@ function SwapsCard({
               .filter(h => !open.some(o => o.id === h.id))
               .slice(0, 10)
               .map((s) => (
-                <li key={s.id} className="text-[11px] text-gray-500 flex justify-between">
+                <li key={s.id} className={`text-[11px] flex justify-between ${text.body}`}>
                   <span>{describeSwap(s, userId)}</span>
                   <SwapStatusPill status={s.status} />
                 </li>
@@ -359,6 +374,7 @@ function SwapRow({
   userId: string;
   onChange: () => Promise<void>;
 }) {
+  const { glassInner, text } = useTheme();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -373,26 +389,26 @@ function SwapRow({
   };
 
   return (
-    <li className="border border-gray-200 rounded-lg p-3 text-sm">
+    <li className="rounded-xl p-3 text-sm" style={glassInner}>
       <div className="flex items-start justify-between gap-3">
-        <div className="text-[12px] text-gray-700 flex-1">
-          <div className="font-semibold">
+        <div className={`text-[12px] flex-1 ${text.body}`}>
+          <div className={`font-semibold ${text.heading}`}>
             {isRequester ? 'You ↔ ' + swap.partnerSide.userName : swap.requesterSide.userName + ' ↔ You'}
           </div>
-          <div className="text-[11px] text-gray-500 mt-0.5">
+          <div className={`text-[11px] mt-0.5 ${text.muted}`}>
             <span className="font-mono">{swap.requesterSide.shiftDate}</span> {swap.requesterSide.shiftPeriod} {swap.requesterSide.zone}
-            <span className="text-gray-400 mx-1">↔</span>
+            <span className={`mx-1 ${text.muted}`}>↔</span>
             <span className="font-mono">{swap.partnerSide.shiftDate}</span> {swap.partnerSide.shiftPeriod} {swap.partnerSide.zone}
           </div>
           {swap.requestReason && (
-            <div className="text-[11px] text-gray-500 mt-1 italic">“{swap.requestReason}”</div>
+            <div className={`text-[11px] mt-1 italic ${text.muted}`}>“{swap.requestReason}”</div>
           )}
         </div>
         <SwapStatusPill status={swap.status} />
       </div>
 
       {err && (
-        <div className="mt-2 text-[11px] text-rose-700 bg-rose-50 border border-rose-200 px-2 py-1 rounded">
+        <div className="mt-2 text-[11px] text-rose-300 bg-rose-500/20 border border-rose-500/30 px-2 py-1 rounded">
           {err}
         </div>
       )}
@@ -454,12 +470,12 @@ function isTerminal(s: SwapStatus) {
 
 function SwapStatusPill({ status }: { status: SwapStatus }) {
   const cfg: Record<SwapStatus, { label: string; cls: string }> = {
-    REQUESTED: { label: 'Requested', cls: 'bg-gray-100 text-gray-700 border-gray-200' },
-    PENDING_PARTNER_ACCEPT: { label: 'Awaits partner', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
-    PENDING_CHARGE_APPROVAL: { label: 'Awaits CN', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
-    APPROVED: { label: 'Approved', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-    REJECTED: { label: 'Rejected', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
-    CANCELLED: { label: 'Cancelled', cls: 'bg-gray-50 text-gray-500 border-gray-200' },
+    REQUESTED: { label: 'Requested', cls: 'bg-slate-500/20 text-slate-300 border-slate-500/30' },
+    PENDING_PARTNER_ACCEPT: { label: 'Awaits partner', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+    PENDING_CHARGE_APPROVAL: { label: 'Awaits CN', cls: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' },
+    APPROVED: { label: 'Approved', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+    REJECTED: { label: 'Rejected', cls: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
+    CANCELLED: { label: 'Cancelled', cls: 'bg-slate-500/20 text-slate-400 border-slate-500/30' },
   };
   const c = cfg[status];
   return (
@@ -479,22 +495,23 @@ function MyLeaveCard({
   loading: boolean;
   onChange: () => Promise<void>;
 }) {
+  const { glassCard, text } = useTheme();
   return (
-    <section className="bg-white rounded-2xl border border-gray-200 p-5">
+    <section className="rounded-2xl p-5" style={glassCard}>
       <div className="flex items-center gap-2 mb-3">
-        <ClipboardList className="w-4 h-4 text-gray-500" />
-        <h2 className="text-sm font-bold text-gray-900">My leave</h2>
-        <span className="text-[10px] font-semibold text-gray-400">({leaves.length})</span>
+        <ClipboardList className={`w-4 h-4 ${text.muted}`} />
+        <h2 className={`text-sm font-bold ${text.heading}`}>My leave</h2>
+        <span className={`text-[10px] font-semibold ${text.muted}`}>({leaves.length})</span>
       </div>
 
       {loading && leaves.length === 0 && (
-        <div className="text-xs text-gray-400">Loading…</div>
+        <div className={`text-xs ${text.muted}`}>Loading…</div>
       )}
       {!loading && leaves.length === 0 && (
-        <div className="text-xs text-gray-400 italic">No leave history.</div>
+        <div className={`text-xs italic ${text.muted}`}>No leave history.</div>
       )}
 
-      <ul className="divide-y divide-gray-100">
+      <ul>
         {leaves.map((l) => (
           <LeaveRow key={l.id} leave={l} userId={userId} onChange={onChange} />
         ))}
@@ -510,6 +527,8 @@ function LeaveRow({
   userId: string;
   onChange: () => Promise<void>;
 }) {
+  const { isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const isOwner = leave.userId === userId;
@@ -517,21 +536,21 @@ function LeaveRow({
     && (leave.leaveStatus === 'REQUESTED' || leave.leaveStatus === 'APPROVED');
 
   return (
-    <li className="py-2.5 text-sm">
+    <li className="py-2.5 text-sm" style={{ borderTop: borderStyle }}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-900">{prettyType(leave.leaveType)}</span>
+            <span className={`font-semibold ${text.heading}`}>{prettyType(leave.leaveType)}</span>
             <LeaveStatusPill status={leave.leaveStatus} />
           </div>
-          <div className="text-[11px] text-gray-500 mt-0.5">
+          <div className={`text-[11px] mt-0.5 ${text.muted}`}>
             <span className="font-mono">{leave.startsOn}</span> → <span className="font-mono">{leave.endsOn}</span>
           </div>
           {leave.reason && (
-            <div className="text-[11px] text-gray-500 mt-0.5 italic">“{leave.reason}”</div>
+            <div className={`text-[11px] mt-0.5 italic ${text.muted}`}>“{leave.reason}”</div>
           )}
           {leave.rejectionReason && (
-            <div className="text-[11px] text-rose-700 mt-0.5">
+            <div className="text-[11px] text-rose-300 mt-0.5">
               Rejected: {leave.rejectionReason}
             </div>
           )}
@@ -554,7 +573,7 @@ function LeaveRow({
         )}
       </div>
       {err && (
-        <div className="mt-1 text-[11px] text-rose-700 bg-rose-50 border border-rose-200 px-2 py-1 rounded">
+        <div className="mt-1 text-[11px] text-rose-300 bg-rose-500/20 border border-rose-500/30 px-2 py-1 rounded">
           {err}
         </div>
       )}
@@ -564,10 +583,10 @@ function LeaveRow({
 
 function LeaveStatusPill({ status }: { status: LeaveStatus }) {
   const cfg: Record<LeaveStatus, { label: string; cls: string }> = {
-    REQUESTED: { label: 'Pending', cls: 'bg-gray-100 text-gray-700 border-gray-200' },
-    APPROVED: { label: 'Approved', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-    REJECTED: { label: 'Rejected', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
-    CANCELLED: { label: 'Cancelled', cls: 'bg-gray-50 text-gray-500 border-gray-200' },
+    REQUESTED: { label: 'Pending', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+    APPROVED: { label: 'Approved', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+    REJECTED: { label: 'Rejected', cls: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
+    CANCELLED: { label: 'Cancelled', cls: 'bg-slate-500/20 text-slate-400 border-slate-500/30' },
   };
   const c = cfg[status];
   return (
@@ -597,6 +616,8 @@ function RequestLeaveModal({
   onClose: () => void;
   onSubmitted: () => Promise<void>;
 }) {
+  const { glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const [leaveType, setLeaveType] = useState<LeaveType>('ANNUAL');
   const [startsOn, setStartsOn] = useState(todayIso());
   const [endsOn, setEndsOn]     = useState(todayIso());
@@ -626,15 +647,16 @@ function RequestLeaveModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-md p-5 space-y-4">
+      <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in w-full max-w-md p-5 space-y-4" style={glassCard}>
         <div className="flex items-center gap-2">
-          <UserMinus className="w-4 h-4 text-gray-500" />
-          <h2 className="text-base font-bold text-gray-900">Request leave</h2>
+          <UserMinus className={`w-4 h-4 ${text.muted}`} />
+          <h2 className={`text-base font-bold ${text.heading}`}>Request leave</h2>
         </div>
 
         <FormRow label="Leave type">
           <select
-            className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
+            className={`w-full text-sm rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+            style={glassInner}
             value={leaveType}
             onChange={(e) => setLeaveType(e.target.value as LeaveType)}
           >
@@ -648,7 +670,8 @@ function RequestLeaveModal({
           <FormRow label="Start">
             <input
               type="date"
-              className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
+              className={`w-full text-sm rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+              style={glassInner}
               value={startsOn}
               onChange={(e) => setStartsOn(e.target.value)}
             />
@@ -656,7 +679,8 @@ function RequestLeaveModal({
           <FormRow label="End">
             <input
               type="date"
-              className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
+              className={`w-full text-sm rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+              style={glassInner}
               value={endsOn}
               onChange={(e) => setEndsOn(e.target.value)}
             />
@@ -665,7 +689,8 @@ function RequestLeaveModal({
 
         <FormRow label="Reason (optional, but recommended for SICK / COMPASSIONATE)">
           <textarea
-            className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 min-h-[60px]"
+            className={`w-full text-sm rounded-lg px-2 py-1.5 min-h-[60px] focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+            style={glassInner}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="e.g. flu symptoms; daughter's wedding"
@@ -673,16 +698,16 @@ function RequestLeaveModal({
         </FormRow>
 
         {err && (
-          <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 px-2 py-1.5 rounded flex items-center gap-1.5">
+          <div className="text-[11px] text-rose-300 bg-rose-500/20 border border-rose-500/30 px-2 py-1.5 rounded flex items-center gap-1.5">
             <ShieldAlert className="w-3.5 h-3.5" />
             {err}
           </div>
         )}
 
-        <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+        <div className="flex justify-end gap-2 pt-2" style={{ borderTop: borderStyle }}>
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-50"
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/15 ${text.body}`}
             disabled={submitting}
           >
             Cancel
@@ -690,7 +715,7 @@ function RequestLeaveModal({
           <button
             onClick={submit}
             disabled={submitting}
-            className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 inline-flex items-center gap-1.5 disabled:opacity-50"
+            className="px-3 py-1.5 rounded-lg bg-cyan-600 text-white text-xs font-bold hover:bg-cyan-700 inline-flex items-center gap-1.5 disabled:opacity-50"
           >
             {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
             Submit request
@@ -702,9 +727,10 @@ function RequestLeaveModal({
 }
 
 function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
+  const { text } = useTheme();
   return (
     <label className="block">
-      <div className="text-[11px] font-bold uppercase text-gray-500 mb-1">{label}</div>
+      <div className={`text-[11px] font-bold uppercase mb-1 ${text.label}`}>{label}</div>
       {children}
     </label>
   );
@@ -724,8 +750,8 @@ function ActionButton({
   const cls = variant === 'primary'
     ? 'bg-emerald-600 text-white hover:bg-emerald-700'
     : variant === 'danger'
-    ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
-    : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100';
+    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/30'
+    : 'bg-white/10 text-slate-300 border border-white/10 hover:bg-white/15';
   return (
     <button
       disabled={busy}

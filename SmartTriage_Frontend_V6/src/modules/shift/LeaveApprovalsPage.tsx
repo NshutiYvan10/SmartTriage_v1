@@ -33,8 +33,10 @@ import {
 import { leaveApi } from '@/api';
 import type { LeaveType, StaffLeaveResponse } from '@/api/types';
 import { useAuthStore } from '@/store/authStore';
+import { useTheme } from '@/hooks/useTheme';
 
 export function LeaveApprovalsPage() {
+  const { glassCard, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   // HOSPITAL_ADMIN sees the queue read-only; only CHARGE_NURSE may decide.
@@ -69,58 +71,64 @@ export function LeaveApprovalsPage() {
 
   if (!hospitalId) {
     return (
-      <div className="p-8 text-sm text-gray-500">
+      <div className={`p-8 text-sm ${text.muted}`}>
         No hospital is associated with your account.
       </div>
     );
   }
 
   return (
-    <div className="p-5 space-y-5">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <ClipboardList className="w-5 h-5 text-gray-500" />
-          <div>
-            <div className="text-[11px] font-bold uppercase text-gray-400">Charge Nurse</div>
-            <h1 className="text-xl font-bold text-gray-900 tracking-tight">Leave approvals</h1>
-          </div>
-          <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold">
-            <Inbox className="w-3 h-3" />
-            {queue.length} pending
-          </span>
-        </div>
-        <button
-          onClick={() => void refresh()}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-        >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          Refresh
-        </button>
-      </header>
-
-      {err && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 px-3 py-2 rounded-lg text-xs flex items-center gap-2">
-          <AlertTriangle className="w-3.5 h-3.5" />
-          {err}
-        </div>
-      )}
-
-      {queue.length === 0 && !loading && !err && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center">
-          <Inbox className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-          <div className="text-sm font-bold text-gray-700">No leave requests awaiting approval</div>
-          <div className="text-xs text-gray-500 mt-1">
-            New requests appear here as soon as staff submit them.
+    <div className="min-h-full">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center shrink-0">
+                <ClipboardList className="w-5 h-5 text-cyan-300" />
+              </div>
+              <div>
+                <div className="text-[11px] font-bold uppercase text-white/50">Charge Nurse</div>
+                <h1 className="text-lg font-bold text-white tracking-tight">Leave approvals</h1>
+              </div>
+              <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold">
+                <Inbox className="w-3 h-3" />
+                {queue.length} pending
+              </span>
+            </div>
+            <button
+              onClick={() => void refresh()}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              Refresh
+            </button>
           </div>
         </div>
-      )}
 
-      <ul className="space-y-3">
-        {queue.map((l) => (
-          <LeaveApprovalRow key={l.id} leave={l} onChange={refresh} readOnly={isReadOnly} />
-        ))}
-      </ul>
+        {err && (
+          <div className="bg-rose-500/20 border border-rose-500/30 text-rose-300 px-3 py-2 rounded-xl text-xs flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            {err}
+          </div>
+        )}
+
+        {queue.length === 0 && !loading && !err && (
+          <div className="rounded-3xl p-10 text-center" style={glassCard}>
+            <Inbox className={`w-8 h-8 ${text.muted} mx-auto mb-2`} />
+            <div className={`text-sm font-bold ${text.heading}`}>No leave requests awaiting approval</div>
+            <div className={`text-xs ${text.muted} mt-1`}>
+              New requests appear here as soon as staff submit them.
+            </div>
+          </div>
+        )}
+
+        <ul className="space-y-3">
+          {queue.map((l) => (
+            <LeaveApprovalRow key={l.id} leave={l} onChange={refresh} readOnly={isReadOnly} />
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -134,6 +142,8 @@ function LeaveApprovalRow({
   onChange: () => Promise<void>;
   readOnly: boolean;
 }) {
+  const { glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -164,13 +174,13 @@ function LeaveApprovalRow({
   };
 
   return (
-    <li className="bg-white border border-gray-200 rounded-2xl p-4">
+    <li className="rounded-2xl p-4" style={glassCard}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2 min-w-0">
-          <UserMinus className="w-4 h-4 text-gray-500 shrink-0" />
+          <UserMinus className={`w-4 h-4 ${text.muted} shrink-0`} />
           <div className="min-w-0">
-            <div className="text-sm font-bold text-gray-900 truncate">{leave.userName}</div>
-            <div className="text-[11px] text-gray-500">
+            <div className={`text-sm font-bold ${text.heading} truncate`}>{leave.userName}</div>
+            <div className={`text-[11px] ${text.muted}`}>
               Submitted {formatRel(leave.requestedAt)}
               {leave.requestedByName && leave.requestedById !== leave.userId && (
                 <> · on behalf, by <span className="font-semibold">{leave.requestedByName}</span></>
@@ -193,22 +203,22 @@ function LeaveApprovalRow({
       </div>
 
       {leave.reason && (
-        <div className="text-[12px] text-gray-700 mb-3">
-          <span className="text-[10px] font-bold uppercase text-gray-400 mr-1.5">Reason</span>
+        <div className={`text-[12px] ${text.body} mb-3`}>
+          <span className={`text-[10px] font-bold uppercase ${text.muted} mr-1.5`}>Reason</span>
           <span className="italic">“{leave.reason}”</span>
         </div>
       )}
 
       {err && (
-        <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 px-2 py-1.5 rounded flex items-center gap-1.5 mb-3">
+        <div className="text-[11px] text-rose-300 bg-rose-500/20 border border-rose-500/30 px-2 py-1.5 rounded-lg flex items-center gap-1.5 mb-3">
           <AlertTriangle className="w-3.5 h-3.5" />
           {err}
         </div>
       )}
 
-      <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+      <div className="flex items-center justify-end gap-2 pt-3" style={{ borderTop: borderStyle }}>
         {readOnly ? (
-          <span className="text-[11px] italic text-gray-500">
+          <span className={`text-[11px] italic ${text.muted}`}>
             Decisions are made by the Charge Nurse.
           </span>
         ) : (
@@ -216,7 +226,7 @@ function LeaveApprovalRow({
             <button
               onClick={reject}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-300 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 disabled:opacity-50"
             >
               {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
               Reject
@@ -224,7 +234,7 @@ function LeaveApprovalRow({
             <button
               onClick={approve}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50"
             >
               {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
               Approve leave
@@ -239,10 +249,11 @@ function LeaveApprovalRow({
 /* ─── Cells ─── */
 
 function DateBox({ label, iso }: { label: string; iso: string }) {
+  const { glassInner, text } = useTheme();
   return (
-    <div className="border border-gray-200 rounded-lg p-2.5 bg-gray-50">
-      <div className="text-[10px] font-bold uppercase text-gray-400">{label}</div>
-      <div className="text-sm font-semibold text-gray-900 mt-0.5">
+    <div className="rounded-xl p-2.5" style={glassInner}>
+      <div className={`text-[10px] font-bold uppercase ${text.muted}`}>{label}</div>
+      <div className={`text-sm font-semibold ${text.heading} mt-0.5`}>
         {new Date(iso + 'T00:00:00').toLocaleDateString('en-US', {
           weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
         })}
@@ -252,13 +263,14 @@ function DateBox({ label, iso }: { label: string; iso: string }) {
 }
 
 function DurationBox({ startsOn, endsOn }: { startsOn: string; endsOn: string }) {
+  const { glassInner, text } = useTheme();
   const days = inclusiveDayCount(startsOn, endsOn);
   return (
-    <div className="border border-gray-200 rounded-lg p-2.5 bg-gray-50 flex items-center gap-2">
-      <CalendarRange className="w-4 h-4 text-gray-400" />
+    <div className="rounded-xl p-2.5 flex items-center gap-2" style={glassInner}>
+      <CalendarRange className={`w-4 h-4 ${text.muted}`} />
       <div>
-        <div className="text-[10px] font-bold uppercase text-gray-400">Duration</div>
-        <div className="text-sm font-semibold text-gray-900 mt-0.5">
+        <div className={`text-[10px] font-bold uppercase ${text.muted}`}>Duration</div>
+        <div className={`text-sm font-semibold ${text.heading} mt-0.5`}>
           {days} {days === 1 ? 'day' : 'days'}
         </div>
       </div>
@@ -280,17 +292,17 @@ function severityClasses(t: LeaveType): string {
   switch (t) {
     case 'SICK':
     case 'BEREAVEMENT':
-      return 'bg-rose-50 text-rose-700 border-rose-200';
+      return 'bg-rose-500/20 text-rose-300 border-rose-500/30';
     case 'MATERNITY':
     case 'COMPASSIONATE':
-      return 'bg-violet-50 text-violet-700 border-violet-200';
+      return 'bg-violet-500/20 text-violet-300 border-violet-500/30';
     case 'STUDY':
-      return 'bg-blue-50 text-blue-700 border-blue-200';
+      return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
     case 'ANNUAL':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
     case 'OTHER':
     default:
-      return 'bg-gray-50 text-gray-700 border-gray-200';
+      return 'bg-slate-500/20 text-slate-300 border-slate-500/30';
   }
 }
 

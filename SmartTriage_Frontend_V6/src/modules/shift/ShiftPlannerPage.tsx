@@ -410,7 +410,8 @@ export function ShiftPlannerPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="min-h-full">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
       {/* Read-only banner (Hospital Admin governance view) */}
       {isReadOnly && (
         <div className="rounded-2xl px-5 py-3 bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-sm font-semibold flex items-center gap-3">
@@ -433,22 +434,18 @@ export function ShiftPlannerPage() {
       )}
 
       {/* ══════════ HEADER ══════════ */}
-      <div className={`${cardClass} overflow-hidden`} style={glassCard}>
-        <div className="p-5 md:p-6">
+      <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+        <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div
-                className={`w-12 h-12 ${cardClass} flex items-center justify-center bg-gradient-to-br ${
-                  isDark ? 'from-cyan-500/20 to-blue-500/20' : 'from-cyan-50 to-blue-50'
-                }`}
-              >
-                <CalendarDays className={`w-6 h-6 ${text.accent}`} />
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                <CalendarDays className="w-5 h-5 text-cyan-400" />
               </div>
               <div>
-                <h1 className={`text-xl md:text-2xl font-bold tracking-tight ${text.heading}`}>
+                <h1 className="text-lg font-bold text-white">
                   Shift Planner
                 </h1>
-                <p className={`text-sm mt-0.5 ${text.muted}`}>
+                <p className="text-white/50 text-xs mt-0.5">
                   Design reusable rosters — the scheduler materializes them at 06:45 / 18:45 Kigali
                 </p>
               </div>
@@ -457,17 +454,16 @@ export function ShiftPlannerPage() {
             <button
               onClick={loadData}
               disabled={loading}
-              className={`w-10 h-10 ${cardClass} flex items-center justify-center transition-colors ${
-                isDark ? 'hover:bg-white/10 text-slate-300' : 'hover:bg-slate-100 text-slate-500'
-              }`}
-              style={glassInner}
+              className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors bg-white/10 hover:bg-white/15 text-white"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             </button>
           </div>
+        </div>
 
+        <div className="p-5 md:p-6">
           {/* Period tabs */}
-          <div className="flex items-center gap-3 mt-5">
+          <div className="flex items-center gap-3">
             {(['DAY', 'NIGHT'] as ShiftPeriod[]).map((p) => {
               const meta = SHIFT_PERIOD_META[p];
               const Icon = meta.icon;
@@ -926,6 +922,7 @@ export function ShiftPlannerPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

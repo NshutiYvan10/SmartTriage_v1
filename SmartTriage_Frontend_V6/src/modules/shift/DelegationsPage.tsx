@@ -43,8 +43,10 @@ import type {
   UserResponse,
 } from '@/api/types';
 import { useAuthStore } from '@/store/authStore';
+import { useTheme } from '@/hooks/useTheme';
 
 export function DelegationsPage() {
+  const { glassCard, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   // HOSPITAL_ADMIN sees delegations read-only; only CHARGE_NURSE may
@@ -89,110 +91,117 @@ export function DelegationsPage() {
 
   if (!hospitalId) {
     return (
-      <div className="p-8 text-sm text-gray-500">
+      <div className={`p-8 text-sm ${text.muted}`}>
         No hospital is associated with your account.
       </div>
     );
   }
 
   return (
-    <div className="p-5 space-y-5">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <ShieldCheck className="w-5 h-5 text-gray-500" />
-          <div>
-            <div className="text-[11px] font-bold uppercase text-gray-400">Charge Nurse</div>
-            <h1 className="text-xl font-bold text-gray-900 tracking-tight">Delegations</h1>
+    <div className="min-h-full">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
+        {/* Header banner */}
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5 text-cyan-300" />
+              </div>
+              <div>
+                <div className="text-white/50 text-xs font-bold uppercase tracking-wide">Charge Nurse</div>
+                <h1 className="text-lg font-bold text-white tracking-tight">Delegations</h1>
+              </div>
+              <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-bold">
+                <UserCheck className="w-3 h-3" />
+                {active.length} active
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => void refresh()}
+                disabled={loading}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-white disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Refresh
+              </button>
+              {!isReadOnly && (
+                <button
+                  onClick={() => setShowIssueForm(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-600 text-white text-xs font-bold hover:bg-cyan-700 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Issue delegation
+                </button>
+              )}
+            </div>
           </div>
-          <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 text-xs font-bold">
-            <UserCheck className="w-3 h-3" />
-            {active.length} active
-          </span>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => void refresh()}
-            disabled={loading}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-            Refresh
-          </button>
-          {!isReadOnly && (
-            <button
-              onClick={() => setShowIssueForm(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Issue delegation
-            </button>
+
+        {err && (
+          <div className="bg-rose-500/20 border border-rose-500/30 text-rose-300 px-3 py-2 rounded-xl text-xs flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            {err}
+          </div>
+        )}
+
+        {/* Active delegations */}
+        <section className="rounded-3xl p-5 animate-fade-up" style={glassCard}>
+          <div className="flex items-center gap-2 mb-3">
+            <UserCheck className="w-4 h-4 text-emerald-400" />
+            <h2 className={`text-sm font-bold ${text.heading}`}>Active right now</h2>
+            <span className={`text-[10px] font-semibold ${text.muted}`}>({active.length})</span>
+          </div>
+          {loading && active.length === 0 && (
+            <div className={`text-xs ${text.muted}`}>Loading…</div>
           )}
-        </div>
-      </header>
+          {!loading && active.length === 0 && (
+            <EmptyState
+              label="No active delegations."
+              sub="Issue a delegation when you'll be off-shift so swap and leave decisions can still be made."
+            />
+          )}
+          <ul className="space-y-3">
+            {active.map((d) => (
+              <DelegationRow key={d.id} delegation={d} active onChange={refresh} readOnly={isReadOnly} />
+            ))}
+          </ul>
+        </section>
 
-      {err && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 px-3 py-2 rounded-lg text-xs flex items-center gap-2">
-          <AlertTriangle className="w-3.5 h-3.5" />
-          {err}
-        </div>
-      )}
+        {/* My history */}
+        <section className="rounded-3xl p-5 animate-fade-up" style={glassCard}>
+          <div className="flex items-center gap-2 mb-3">
+            <Clock className={`w-4 h-4 ${text.muted}`} />
+            <h2 className={`text-sm font-bold ${text.heading}`}>Issued by me</h2>
+            <span className={`text-[10px] font-semibold ${text.muted}`}>({myIssued.length})</span>
+          </div>
+          {loading && myIssued.length === 0 && (
+            <div className={`text-xs ${text.muted}`}>Loading…</div>
+          )}
+          {!loading && myIssued.length === 0 && (
+            <EmptyState
+              label="You haven't issued any delegations."
+              sub="Anything you delegate from here will show up in this audit list."
+            />
+          )}
+          <ul className="space-y-3">
+            {myIssued.map((d) => (
+              <DelegationRow key={d.id} delegation={d} active={false} onChange={refresh} readOnly={isReadOnly} />
+            ))}
+          </ul>
+        </section>
 
-      {/* Active delegations */}
-      <section className="bg-white rounded-2xl border border-gray-200 p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <UserCheck className="w-4 h-4 text-emerald-600" />
-          <h2 className="text-sm font-bold text-gray-900">Active right now</h2>
-          <span className="text-[10px] font-semibold text-gray-400">({active.length})</span>
-        </div>
-        {loading && active.length === 0 && (
-          <div className="text-xs text-gray-400">Loading…</div>
-        )}
-        {!loading && active.length === 0 && (
-          <EmptyState
-            label="No active delegations."
-            sub="Issue a delegation when you'll be off-shift so swap and leave decisions can still be made."
+        {showIssueForm && (
+          <IssueDelegationModal
+            hospitalId={hospitalId}
+            onClose={() => setShowIssueForm(false)}
+            onSubmitted={async () => {
+              setShowIssueForm(false);
+              await refresh();
+            }}
           />
         )}
-        <ul className="space-y-3">
-          {active.map((d) => (
-            <DelegationRow key={d.id} delegation={d} active onChange={refresh} readOnly={isReadOnly} />
-          ))}
-        </ul>
-      </section>
-
-      {/* My history */}
-      <section className="bg-white rounded-2xl border border-gray-200 p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <Clock className="w-4 h-4 text-gray-500" />
-          <h2 className="text-sm font-bold text-gray-900">Issued by me</h2>
-          <span className="text-[10px] font-semibold text-gray-400">({myIssued.length})</span>
-        </div>
-        {loading && myIssued.length === 0 && (
-          <div className="text-xs text-gray-400">Loading…</div>
-        )}
-        {!loading && myIssued.length === 0 && (
-          <EmptyState
-            label="You haven't issued any delegations."
-            sub="Anything you delegate from here will show up in this audit list."
-          />
-        )}
-        <ul className="space-y-3">
-          {myIssued.map((d) => (
-            <DelegationRow key={d.id} delegation={d} active={false} onChange={refresh} readOnly={isReadOnly} />
-          ))}
-        </ul>
-      </section>
-
-      {showIssueForm && (
-        <IssueDelegationModal
-          hospitalId={hospitalId}
-          onClose={() => setShowIssueForm(false)}
-          onSubmitted={async () => {
-            setShowIssueForm(false);
-            await refresh();
-          }}
-        />
-      )}
+      </div>
     </div>
   );
 }
@@ -200,11 +209,12 @@ export function DelegationsPage() {
 /* ─── Empty-state ─── */
 
 function EmptyState({ label, sub }: { label: string; sub?: string }) {
+  const { text } = useTheme();
   return (
     <div className="text-center py-6">
-      <Inbox className="w-7 h-7 text-gray-300 mx-auto mb-2" />
-      <div className="text-xs font-bold text-gray-700">{label}</div>
-      {sub && <div className="text-[11px] text-gray-500 mt-0.5">{sub}</div>}
+      <Inbox className={`w-7 h-7 ${text.muted} mx-auto mb-2`} />
+      <div className={`text-xs font-bold ${text.label}`}>{label}</div>
+      {sub && <div className={`text-[11px] ${text.muted} mt-0.5`}>{sub}</div>}
     </div>
   );
 }
@@ -219,6 +229,7 @@ function DelegationRow({
   onChange: () => Promise<void>;
   readOnly?: boolean;
 }) {
+  const { glassInner, text } = useTheme();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -242,36 +253,36 @@ function DelegationRow({
   const status = describeStatus(delegation);
 
   return (
-    <li className="border border-gray-200 rounded-lg p-3">
+    <li className="rounded-xl p-3" style={glassInner}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm">
-            <span className="font-bold text-gray-900">{delegation.delegatingUserName}</span>
-            <span className="text-gray-400 mx-1.5">→</span>
-            <span className="font-bold text-gray-900">{delegation.delegateUserName}</span>
+            <span className={`font-bold ${text.heading}`}>{delegation.delegatingUserName}</span>
+            <span className={`${text.muted} mx-1.5`}>→</span>
+            <span className={`font-bold ${text.heading}`}>{delegation.delegateUserName}</span>
           </div>
-          <div className="text-[11px] text-gray-500 mt-1 flex items-center gap-1.5 flex-wrap">
+          <div className={`text-[11px] ${text.muted} mt-1 flex items-center gap-1.5 flex-wrap`}>
             <Clock className="w-3 h-3" />
             <span>From {fmtDateTime(delegation.startsAt)}</span>
             {delegation.endsAt ? (
               <>
-                <span className="text-gray-300">·</span>
+                <span className={text.muted}>·</span>
                 <span>until {fmtDateTime(delegation.endsAt)}</span>
               </>
             ) : (
               <>
-                <span className="text-gray-300">·</span>
+                <span className={text.muted}>·</span>
                 <span className="italic">no end date</span>
               </>
             )}
           </div>
           {delegation.reason && (
-            <div className="text-[12px] text-gray-700 mt-1.5 italic">
+            <div className={`text-[12px] ${text.body} mt-1.5 italic`}>
               “{delegation.reason}”
             </div>
           )}
           {delegation.revokedAt && (
-            <div className="text-[11px] text-rose-700 mt-1.5">
+            <div className="text-[11px] text-rose-300 mt-1.5">
               Revoked {fmtDateTime(delegation.revokedAt)}
               {delegation.revokedByName && <> by {delegation.revokedByName}</>}
               {delegation.revocationReason && <>: “{delegation.revocationReason}”</>}
@@ -290,7 +301,7 @@ function DelegationRow({
             <button
               onClick={revoke}
               disabled={busy}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 disabled:opacity-50"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-xl text-[10px] font-bold text-rose-300 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 disabled:opacity-50"
             >
               {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Ban className="w-3 h-3" />}
               Revoke
@@ -299,7 +310,7 @@ function DelegationRow({
         </div>
       </div>
       {err && (
-        <div className="mt-2 text-[11px] text-rose-700 bg-rose-50 border border-rose-200 px-2 py-1 rounded">
+        <div className="mt-2 text-[11px] text-rose-300 bg-rose-500/20 border border-rose-500/30 px-2 py-1 rounded">
           {err}
         </div>
       )}
@@ -313,13 +324,13 @@ function describeStatus(d: ChargeNurseDelegationResponse): StatusInfo {
   if (d.revokedAt) {
     return {
       label: 'Revoked',
-      classes: 'bg-rose-50 text-rose-700 border-rose-200',
+      classes: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
     };
   }
   if (d.currentlyActive) {
     return {
       label: 'Active',
-      classes: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      classes: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
     };
   }
   // Not active and not revoked → either future-dated or already
@@ -330,18 +341,18 @@ function describeStatus(d: ChargeNurseDelegationResponse): StatusInfo {
   if (start > now) {
     return {
       label: 'Scheduled',
-      classes: 'bg-blue-50 text-blue-700 border-blue-200',
+      classes: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
     };
   }
   if (end !== null && end < now) {
     return {
       label: 'Expired',
-      classes: 'bg-gray-50 text-gray-500 border-gray-200',
+      classes: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
     };
   }
   return {
     label: 'Inactive',
-    classes: 'bg-gray-50 text-gray-500 border-gray-200',
+    classes: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
   };
 }
 
@@ -362,6 +373,10 @@ function IssueDelegationModal({
   onClose: () => void;
   onSubmitted: () => void | Promise<void>;
 }) {
+  const { glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark
+    ? '1px solid rgba(2,132,199,0.12)'
+    : '1px solid rgba(203,213,225,0.3)';
   const me = useAuthStore((s) => s.user);
 
   const [users, setUsers] = useState<UserResponse[]>([]);
@@ -463,20 +478,26 @@ function IssueDelegationModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div
+        className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in w-full max-w-2xl max-h-[90vh] flex flex-col"
+        style={glassCard}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <div
+          className="flex items-center justify-between px-5 py-4"
+          style={{ borderBottom: borderStyle }}
+        >
           <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-gray-500" />
-            <h2 className="text-base font-bold text-gray-900">Issue acting-CN delegation</h2>
+            <ShieldCheck className={`w-4 h-4 ${text.muted}`} />
+            <h2 className={`text-base font-bold ${text.heading}`}>Issue acting-CN delegation</h2>
           </div>
           <button
             onClick={onClose}
             disabled={submitting}
-            className="p-1 rounded hover:bg-gray-100 disabled:opacity-50"
+            className={`w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/10 disabled:opacity-50 ${text.muted}`}
             aria-label="Close"
           >
-            <X className="w-4 h-4 text-gray-500" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -485,14 +506,15 @@ function IssueDelegationModal({
           {/* Delegate picker */}
           <section>
             <label className="block">
-              <div className="text-[11px] font-bold uppercase text-gray-500 mb-1">
+              <div className={`text-[11px] font-bold uppercase ${text.label} mb-1`}>
                 Delegate to (NURSE role only)
               </div>
               <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <Search className={`absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${text.muted}`} />
                 <input
                   type="text"
-                  className="w-full text-sm border border-gray-200 rounded-lg pl-7 pr-2 py-1.5"
+                  className={`w-full text-sm rounded-xl pl-7 pr-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+                  style={glassInner}
                   placeholder="Search by name or email…"
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
@@ -500,20 +522,20 @@ function IssueDelegationModal({
               </div>
             </label>
 
-            <div className="mt-2 max-h-56 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100 bg-gray-50">
+            <div className="mt-2 max-h-56 overflow-y-auto rounded-xl" style={glassInner}>
               {loadingUsers && (
-                <div className="px-3 py-2 text-xs text-gray-400 flex items-center gap-1.5">
+                <div className={`px-3 py-2 text-xs ${text.muted} flex items-center gap-1.5`}>
                   <Loader2 className="w-3 h-3 animate-spin" />
                   Loading colleagues…
                 </div>
               )}
               {usersErr && (
-                <div className="px-3 py-2 text-[11px] text-rose-700">
+                <div className="px-3 py-2 text-[11px] text-rose-300">
                   {usersErr}
                 </div>
               )}
               {!loadingUsers && filtered.length === 0 && !usersErr && (
-                <div className="px-3 py-2 text-xs text-gray-400 italic">
+                <div className={`px-3 py-2 text-xs ${text.muted} italic`}>
                   No matching nurses.
                 </div>
               )}
@@ -527,19 +549,19 @@ function IssueDelegationModal({
                     className={[
                       'w-full text-left px-3 py-2 text-sm transition-colors',
                       isSelected
-                        ? 'bg-blue-50 ring-1 ring-blue-200'
-                        : 'bg-white hover:bg-gray-50',
+                        ? 'bg-cyan-500/20 ring-1 ring-cyan-500/30'
+                        : 'hover:bg-white/5',
                     ].join(' ')}
                   >
-                    <div className="font-semibold text-gray-900">
+                    <div className={`font-semibold ${text.heading}`}>
                       {u.firstName} {u.lastName}
                       {u.designationLabel && (
-                        <span className="ml-2 text-[10px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                        <span className={`ml-2 text-[10px] font-bold ${text.muted} bg-white/10 px-1.5 py-0.5 rounded`}>
                           {u.designationLabel}
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-gray-500 mt-0.5">
+                    <div className={`text-[11px] ${text.muted} mt-0.5`}>
                       {u.email}
                       {u.department && <span className="ml-2">· {u.department}</span>}
                     </div>
@@ -549,7 +571,7 @@ function IssueDelegationModal({
             </div>
 
             {selected && (
-              <div className="text-[11px] text-blue-700 mt-1.5 inline-flex items-center gap-1">
+              <div className="text-[11px] text-cyan-400 mt-1.5 inline-flex items-center gap-1">
                 <ChevronDown className="w-3 h-3" />
                 Selected: <span className="font-bold">{selected.firstName} {selected.lastName}</span>
               </div>
@@ -561,7 +583,8 @@ function IssueDelegationModal({
             <FormRow label="Starts at">
               <input
                 type="datetime-local"
-                className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
+                className={`w-full text-sm rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+                style={glassInner}
                 value={startsAt}
                 onChange={(e) => setStartsAt(e.target.value)}
               />
@@ -569,7 +592,8 @@ function IssueDelegationModal({
             <FormRow label="Ends at (optional)">
               <input
                 type="datetime-local"
-                className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
+                className={`w-full text-sm rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+                style={glassInner}
                 value={endsAt}
                 onChange={(e) => setEndsAt(e.target.value)}
                 placeholder="Leave blank for open-ended"
@@ -579,7 +603,8 @@ function IssueDelegationModal({
 
           <FormRow label="Reason (required, audit-visible)">
             <textarea
-              className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 min-h-[60px]"
+              className={`w-full text-sm rounded-xl px-2 py-1.5 min-h-[60px] focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
+              style={glassInner}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. Annual leave 6–12 May; cover swap and leave approvals."
@@ -587,7 +612,7 @@ function IssueDelegationModal({
           </FormRow>
 
           {submitErr && (
-            <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 px-2 py-1.5 rounded flex items-center gap-1.5">
+            <div className="text-[11px] text-rose-300 bg-rose-500/20 border border-rose-500/30 px-2 py-1.5 rounded flex items-center gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5" />
               {submitErr}
             </div>
@@ -595,22 +620,25 @@ function IssueDelegationModal({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between bg-gray-50 rounded-b-2xl">
-          <div className="text-[11px] text-gray-500">
+        <div
+          className="px-5 py-3 flex items-center justify-between"
+          style={{ borderTop: borderStyle }}
+        >
+          <div className={`text-[11px] ${text.muted}`}>
             The delegate inherits Charge Nurse authority on swap and leave decisions during this window.
           </div>
           <div className="flex gap-2">
             <button
               onClick={onClose}
               disabled={submitting}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-white/10 disabled:opacity-50 ${text.body}`}
             >
               Cancel
             </button>
             <button
               onClick={submit}
               disabled={submitting || !delegateUserId || !reason.trim()}
-              className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 rounded-xl bg-cyan-600 text-white text-xs font-bold hover:bg-cyan-700 inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
               Issue delegation
@@ -623,9 +651,10 @@ function IssueDelegationModal({
 }
 
 function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
+  const { text } = useTheme();
   return (
     <label className="block">
-      <div className="text-[11px] font-bold uppercase text-gray-500 mb-1">{label}</div>
+      <div className={`text-[11px] font-bold uppercase ${text.label} mb-1`}>{label}</div>
       {children}
     </label>
   );
