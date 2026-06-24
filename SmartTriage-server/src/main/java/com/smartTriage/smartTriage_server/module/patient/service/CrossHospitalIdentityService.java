@@ -46,18 +46,37 @@ public class CrossHospitalIdentityService {
     private final MedicationAdministrationRepository medicationAdministrationRepository;
     private final AuditService auditService;
 
+    /** Cross-hospital safety summary resolved by national ID. */
     public CrossHospitalSafetySummaryResponse getByNationalId(String nationalId) {
-        String nid = nationalId == null ? null : nationalId.trim();
-        auditCrossHospitalRead(nid);
+        String nid = normalize(nationalId);
+        auditCrossHospitalRead("nid", nid);
+        if (nid == null) {
+            return CrossHospitalSafetySummaryResponse.builder().found(false).nationalId(null).build();
+        }
+        return personIdentityRepository.findByNationalIdAndIsActiveTrue(nid)
+                .map(this::assemble)
+                .orElseGet(() -> CrossHospitalSafetySummaryResponse.builder().found(false).nationalId(nid).build());
+    }
 
-        if (nid == null || nid.isEmpty()) {
-            return CrossHospitalSafetySummaryResponse.builder().found(false).nationalId(nid).build();
+    /**
+     * Cross-hospital safety summary resolved by RFID card UID — the system-wide tap-to-identify
+     * read (V95). Works for card-anchored patients with no national ID. Reuses the same assembly.
+     */
+    public CrossHospitalSafetySummaryResponse getByRfidCardId(String rfidCardId) {
+        String card = normalize(rfidCardId);
+        auditCrossHospitalRead("card", card);
+        if (card == null) {
+            return CrossHospitalSafetySummaryResponse.builder().found(false).build();
         }
-        Optional<PersonIdentity> identity = personIdentityRepository.findByNationalIdAndIsActiveTrue(nid);
-        if (identity.isEmpty()) {
-            return CrossHospitalSafetySummaryResponse.builder().found(false).nationalId(nid).build();
-        }
-        List<Patient> linked = patientRepository.findByPersonIdentityIdAndIsActiveTrue(identity.get().getId());
+        return personIdentityRepository.findByRfidCardIdAndIsActiveTrue(card)
+                .map(this::assemble)
+                .orElseGet(() -> CrossHospitalSafetySummaryResponse.builder().found(false).build());
+    }
+
+    /** Fan out over every local patient linked to the shared identity and assemble the safety floor. */
+    private CrossHospitalSafetySummaryResponse assemble(PersonIdentity identity) {
+        String nid = identity.getNationalId();
+        List<Patient> linked = patientRepository.findByPersonIdentityIdAndIsActiveTrue(identity.getId());
         if (linked.isEmpty()) {
             return CrossHospitalSafetySummaryResponse.builder().found(false).nationalId(nid).build();
         }
@@ -147,11 +166,17 @@ public class CrossHospitalIdentityService {
         return out;
     }
 
-    private void auditCrossHospitalRead(String nid) {
+    private static String normalize(String s) {
+        if (s == null) return null;
+        String t = s.trim();
+        return t.isEmpty() ? null : t;
+    }
+
+    private void auditCrossHospitalRead(String keyType, String value) {
         // The GET is not covered by AuditInterceptor (mutating requests only); log it explicitly.
-        // REQUIRES_NEW + fail-safe inside AuditService — never breaks the read.
-        String masked = nid == null || nid.length() < 4 ? "(none)" : "***" + nid.substring(nid.length() - 4);
+        // REQUIRES_NEW + fail-safe inside AuditService — never breaks the read. Identifier masked.
+        String masked = value == null || value.length() < 4 ? "(none)" : "***" + value.substring(value.length() - 4);
         auditService.record("GET", "/api/v1/patient-identity/safety-summary",
-                "CROSS_HOSPITAL_SAFETY_SUMMARY_READ nid=" + masked, 200);
+                "CROSS_HOSPITAL_SAFETY_SUMMARY_READ " + keyType + "=" + masked, 200);
     }
 }

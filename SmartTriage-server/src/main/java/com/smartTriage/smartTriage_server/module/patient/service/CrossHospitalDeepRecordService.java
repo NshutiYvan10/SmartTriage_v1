@@ -75,47 +75,73 @@ public class CrossHospitalDeepRecordService {
     private final AuditService auditService;
     private final com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher realTimeEventPublisher;
 
+    /** Deep cross-hospital record resolved by national ID (consent / break-the-glass gated). */
     @Transactional
     public CrossHospitalDeepRecordResponse getByNationalId(String nationalId, String breakTheGlassReason) {
-        String nid = nationalId == null ? null : nationalId.trim();
-
-        if (nid == null || nid.isEmpty()) {
-            audit(nid, "DENIED");
+        String nid = normalize(nationalId);
+        if (nid == null) {
+            audit("nid=(none)", "DENIED");
             return CrossHospitalDeepRecordResponse.builder().found(false).accessGranted(false)
-                    .accessBasis("DENIED").nationalId(nid).build();
+                    .accessBasis("DENIED").build();
         }
-        Optional<PersonIdentity> identityOpt = personIdentityRepository.findByNationalIdAndIsActiveTrue(nid);
-        if (identityOpt.isEmpty()) {
-            audit(nid, "DENIED");
+        PersonIdentity identity = personIdentityRepository.findByNationalIdAndIsActiveTrue(nid).orElse(null);
+        if (identity == null) {
+            audit("nid=" + mask(nid), "DENIED");
             return notFound(nid);
         }
-        PersonIdentity identity = identityOpt.get();
+        return serve(identity, "nid=" + mask(nid), breakTheGlassReason);
+    }
+
+    /**
+     * Deep cross-hospital record resolved by RFID card UID (V95) — same consent / break-the-glass
+     * gate and bounded-history assembly as the national-ID path. Works for card-anchored patients.
+     */
+    @Transactional
+    public CrossHospitalDeepRecordResponse getByRfidCardId(String rfidCardId, String breakTheGlassReason) {
+        String card = normalize(rfidCardId);
+        if (card == null) {
+            audit("card=(none)", "DENIED");
+            return CrossHospitalDeepRecordResponse.builder().found(false).accessGranted(false)
+                    .accessBasis("DENIED").build();
+        }
+        PersonIdentity identity = personIdentityRepository.findByRfidCardIdAndIsActiveTrue(card).orElse(null);
+        if (identity == null) {
+            audit("card=" + mask(card), "DENIED");
+            return CrossHospitalDeepRecordResponse.builder().found(false).accessGranted(false)
+                    .accessBasis("DENIED").build();
+        }
+        return serve(identity, "card=" + mask(card), breakTheGlassReason);
+    }
+
+    /** Shared gate + bounded-history assembly for a resolved identity (national-ID or card path). */
+    private CrossHospitalDeepRecordResponse serve(PersonIdentity identity, String auditLabel,
+                                                  String breakTheGlassReason) {
         List<Patient> linked = patientRepository.findByPersonIdentityIdAndIsActiveTrue(identity.getId());
         if (linked.isEmpty()) {
-            audit(nid, "DENIED");
-            return notFound(nid);
+            audit(auditLabel, "DENIED");
+            return notFound(identity.getNationalId());
         }
 
         boolean hasConsent = dataSharingConsentService.getCurrentEffectiveConsent(identity.getId()).isPresent();
-        String reason = breakTheGlassReason == null ? null : breakTheGlassReason.trim();
+        String reason = normalize(breakTheGlassReason);
 
         String basis;
         if (hasConsent) {
             basis = "CONSENT";
-        } else if (reason != null && !reason.isEmpty()) {
+        } else if (reason != null) {
             basis = "BREAK_THE_GLASS";
             recordBreakTheGlass(identity, reason);
         } else {
             basis = "DENIED";
         }
-        audit(nid, basis);
+        audit(auditLabel, basis);
 
         if (basis.equals("DENIED")) {
             return CrossHospitalDeepRecordResponse.builder()
                     .found(true).accessGranted(false).accessBasis("DENIED").consentRequired(true)
-                    .nationalId(mask(nid)).linkedHospitalCount(linked.size()).build();
+                    .nationalId(mask(identity.getNationalId())).linkedHospitalCount(linked.size()).build();
         }
-        return assemble(nid, basis, linked);
+        return assemble(identity.getNationalId(), basis, linked);
     }
 
     // ── break-the-glass forensic record ──
@@ -292,13 +318,19 @@ public class CrossHospitalDeepRecordService {
                 .found(false).accessGranted(false).accessBasis("DENIED").nationalId(mask(nid)).build();
     }
 
-    private void audit(String nid, String basis) {
+    private void audit(String identifierLabel, String basis) {
         auditService.record("GET", "/api/v1/patient-identity/deep-record",
-                "CROSS_HOSPITAL_DEEP_RECORD_READ nid=" + mask(nid) + " basis=" + basis, 200);
+                "CROSS_HOSPITAL_DEEP_RECORD_READ " + identifierLabel + " basis=" + basis, 200);
     }
 
-    private static String mask(String nid) {
-        return nid == null || nid.length() < 4 ? "(none)" : "***" + nid.substring(nid.length() - 4);
+    private static String mask(String value) {
+        return value == null || value.length() < 4 ? "(none)" : "***" + value.substring(value.length() - 4);
+    }
+
+    private static String normalize(String s) {
+        if (s == null) return null;
+        String t = s.trim();
+        return t.isEmpty() ? null : t;
     }
 
     private User resolveCurrentUser() {

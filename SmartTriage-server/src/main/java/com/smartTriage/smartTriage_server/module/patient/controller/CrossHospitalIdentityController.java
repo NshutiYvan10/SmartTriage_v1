@@ -53,4 +53,26 @@ public class CrossHospitalIdentityController {
         return ResponseEntity.ok(ApiResponse.success(
                 crossHospitalDeepRecordService.getByNationalId(nationalId, breakTheGlassReason)));
     }
+
+    /**
+     * Same cross-hospital safety summary, resolved by RFID card UID (V95) — the system-wide
+     * tap-to-identify read. Works for card-anchored patients with no national ID. Same authz + audit.
+     */
+    @GetMapping("/safety-summary-by-card")
+    @PreAuthorize("@clinicalAuthz.canReadCrossHospitalSafetySummary(authentication)")
+    public ResponseEntity<ApiResponse<CrossHospitalSafetySummaryResponse>> getSafetySummaryByCard(
+            @RequestParam String cardId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                crossHospitalIdentityService.getByRfidCardId(cardId)));
+    }
+
+    /** Same DEEP record (consent / break-the-glass gated), resolved by RFID card UID (V95). */
+    @GetMapping("/deep-record-by-card")
+    @PreAuthorize("@clinicalAuthz.canAccessCrossHospitalDeepRecord(authentication)")
+    public ResponseEntity<ApiResponse<CrossHospitalDeepRecordResponse>> getDeepRecordByCard(
+            @RequestParam String cardId,
+            @RequestParam(required = false) String breakTheGlassReason) {
+        return ResponseEntity.ok(ApiResponse.success(
+                crossHospitalDeepRecordService.getByRfidCardId(cardId, breakTheGlassReason)));
+    }
 }
