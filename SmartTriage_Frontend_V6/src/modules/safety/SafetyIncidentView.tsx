@@ -31,18 +31,18 @@ const SEVERITIES = ['CRITICAL', 'MAJOR', 'MODERATE', 'MINOR', 'NEAR_MISS'] as co
 const STATUSES = ['REPORTED', 'UNDER_INVESTIGATION', 'INVESTIGATION_COMPLETE', 'CLOSED'] as const;
 
 const SEVERITY_STYLE: Record<string, { bg: string; border: string; text: string; dot: string }> = {
-  CRITICAL:  { bg: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', text: 'text-red-600', dot: 'bg-red-500' },
-  MAJOR:     { bg: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', text: 'text-amber-600', dot: 'bg-amber-500' },
-  MODERATE:  { bg: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)', text: 'text-yellow-600', dot: 'bg-yellow-500' },
-  MINOR:     { bg: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', text: 'text-blue-600', dot: 'bg-blue-500' },
-  NEAR_MISS: { bg: 'rgba(148,163,184,0.08)', border: '1px solid rgba(148,163,184,0.2)', text: 'text-slate-500', dot: 'bg-slate-400' },
+  CRITICAL:  { bg: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.3)', text: 'text-red-300', dot: 'bg-red-500' },
+  MAJOR:     { bg: 'rgba(245,158,11,0.2)', border: '1px solid rgba(245,158,11,0.3)', text: 'text-amber-300', dot: 'bg-amber-500' },
+  MODERATE:  { bg: 'rgba(234,179,8,0.2)', border: '1px solid rgba(234,179,8,0.3)', text: 'text-yellow-300', dot: 'bg-yellow-500' },
+  MINOR:     { bg: 'rgba(59,130,246,0.2)', border: '1px solid rgba(59,130,246,0.3)', text: 'text-blue-300', dot: 'bg-blue-500' },
+  NEAR_MISS: { bg: 'rgba(148,163,184,0.2)', border: '1px solid rgba(148,163,184,0.3)', text: 'text-slate-300', dot: 'bg-slate-400' },
 };
 
 const STATUS_STYLE: Record<string, { bg: string; border: string; text: string }> = {
-  REPORTED:                { bg: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', text: 'text-red-600' },
-  UNDER_INVESTIGATION:     { bg: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', text: 'text-amber-600' },
-  INVESTIGATION_COMPLETE:  { bg: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', text: 'text-blue-600' },
-  CLOSED:                  { bg: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', text: 'text-emerald-600' },
+  REPORTED:                { bg: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.3)', text: 'text-red-300' },
+  UNDER_INVESTIGATION:     { bg: 'rgba(245,158,11,0.2)', border: '1px solid rgba(245,158,11,0.3)', text: 'text-amber-300' },
+  INVESTIGATION_COMPLETE:  { bg: 'rgba(59,130,246,0.2)', border: '1px solid rgba(59,130,246,0.3)', text: 'text-blue-300' },
+  CLOSED:                  { bg: 'rgba(34,197,94,0.2)', border: '1px solid rgba(34,197,94,0.3)', text: 'text-emerald-300' },
 };
 
 function getSeverityStyle(s: string) { return SEVERITY_STYLE[s] || SEVERITY_STYLE.MINOR; }
@@ -272,8 +272,8 @@ export function SafetyIncidentView() {
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg">
-                  <ShieldAlert className="w-6 h-6 text-white" />
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                  <ShieldAlert className="w-5 h-5 text-cyan-300" />
                 </div>
                 <div>
                   <h1 className="text-lg font-bold text-white tracking-wide">Patient Safety Incidents</h1>
@@ -460,7 +460,7 @@ export function SafetyIncidentView() {
                           </span>
                           {/* Patient harmed */}
                           {incident.patientHarmed && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg uppercase tracking-wider text-red-600 bg-red-500/10 border border-red-500/20">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg uppercase tracking-wider text-red-300 bg-red-500/20 border border-red-500/30">
                               <Ban className="w-3 h-3" /> Patient Harmed
                             </span>
                           )}
@@ -597,8 +597,8 @@ export function SafetyIncidentView() {
          Report New Incident Dialog
          ═══════════════════════════════════════════════════════════════ */}
       {showForm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !formSubmitting && setShowForm(false)} />
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+          <div className="absolute inset-0 backdrop-blur-sm" onClick={() => !formSubmitting && setShowForm(false)} />
           <div className="relative w-full max-w-lg mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in max-h-[85vh] overflow-y-auto" style={glassCard}>
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
@@ -757,8 +757,8 @@ export function SafetyIncidentView() {
          Action Dialog — Investigate / Complete / Close
          ═══════════════════════════════════════════════════════════════ */}
       {actionDialog && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !actionSubmitting && setActionDialog(null)} />
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+          <div className="absolute inset-0 backdrop-blur-sm" onClick={() => !actionSubmitting && setActionDialog(null)} />
           <div className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in" style={glassCard}>
             {/* Header */}
             <div className="flex items-center justify-between mb-5">

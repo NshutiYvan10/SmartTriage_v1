@@ -17,7 +17,7 @@ import {
 
 /* ── Premium tooltip (donut) ── */
 function CustomTooltip({ active, payload }: any) {
-  const { isDark } = useTheme();
+  const { isDark, text } = useTheme();
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-xl px-4 py-3" style={{
@@ -28,8 +28,8 @@ function CustomTooltip({ active, payload }: any) {
       {payload.map((entry: any, i: number) => (
         <p key={i} className="text-[11px] flex items-center gap-2 py-0.5 font-medium" style={{ color: entry.color }}>
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-          <span className="text-slate-500">{entry.name}:</span>
-          <span className="font-bold text-slate-800">{entry.value}</span>
+          <span className={text.body}>{entry.name}:</span>
+          <span className={`font-bold ${text.heading}`}>{entry.value}</span>
         </p>
       ))}
     </div>
@@ -58,7 +58,7 @@ const REPORT_LINKS: ReportLink[] = [
 ];
 
 export function ReportsView() {
-  const { glassCard, isDark } = useTheme();
+  const { glassCard, glassInner, isDark, text } = useTheme();
   const navigate = useNavigate();
   const patients = usePatientStore((state) => state.patients);
   const role = useAuthStore((s) => s.user?.role);
@@ -91,16 +91,16 @@ export function ReportsView() {
       <div className="p-4 lg:p-6 max-w-6xl mx-auto space-y-4 animate-fade-in">
 
         {/* ── Header ── */}
-        <div className="glass-card-dark rounded-3xl overflow-hidden animate-fade-up">
+        <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg">
-                  <BarChart3 className="w-6 h-6 text-white" />
+                <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center shadow-lg">
+                  <BarChart3 className="w-5 h-5 text-cyan-300" />
                 </div>
                 <div>
                   <h1 className="text-lg font-bold text-white tracking-wide">Reports &amp; Analytics</h1>
-                  <p className="text-white/70 text-xs font-medium">A live snapshot plus a launcher to every reporting surface you can access</p>
+                  <p className="text-white/50 text-xs font-medium">A live snapshot plus a launcher to every reporting surface you can access</p>
                 </div>
               </div>
               <button
@@ -115,8 +115,8 @@ export function ReportsView() {
 
         {/* ── Live census snapshot (real, from the patient store) ── */}
         <div className="rounded-2xl p-5 animate-fade-up" style={{ ...glassCard, animationDelay: '0.08s' } as any}>
-          <h3 className="text-base font-extrabold text-slate-800 tracking-tight mb-0.5">Current census</h3>
-          <p className="text-xs text-slate-500 font-medium mb-4">Live, from the active patient list</p>
+          <h3 className={`text-base font-extrabold ${text.heading} tracking-tight mb-0.5`}>Current census</h3>
+          <p className={`text-xs ${text.body} font-medium mb-4`}>Live, from the active patient list</p>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
               { label: 'Total Patients', value: stats.totalPatients, sublabel: 'In the system now', icon: Users, iconBg: 'rgba(6,182,212,0.12)', iconColor: 'text-cyan-600' },
@@ -126,16 +126,13 @@ export function ReportsView() {
             ].map((stat) => {
               const Icon = stat.icon;
               return (
-                <div key={stat.label} className="flex items-center gap-3 p-3 rounded-xl" style={{
-                  background: isDark ? 'rgba(12,74,110,0.18)' : 'rgba(255,255,255,0.6)',
-                  border: isDark ? '1px solid rgba(2,132,199,0.22)' : '1px solid rgba(203,213,225,0.4)',
-                }}>
+                <div key={stat.label} className="flex items-center gap-3 p-3 rounded-xl" style={glassInner}>
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: stat.iconBg }}>
                     <Icon className={`w-[18px] h-[18px] ${stat.iconColor}`} />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-lg font-extrabold text-slate-800 leading-none">{stat.value}</div>
-                    <div className="text-[11px] text-slate-400 font-medium mt-0.5">{stat.sublabel}</div>
+                    <div className={`text-lg font-extrabold ${text.heading} leading-none`}>{stat.value}</div>
+                    <div className={`text-[11px] ${text.muted} font-medium mt-0.5`}>{stat.sublabel}</div>
                   </div>
                 </div>
               );
@@ -150,12 +147,12 @@ export function ReportsView() {
               <BarChart3 className="w-[18px] h-[18px] text-cyan-600" />
             </div>
             <div>
-              <h2 className="text-base font-extrabold text-slate-800 tracking-tight">Triage Distribution</h2>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">Current breakdown by severity</p>
+              <h2 className={`text-base font-extrabold ${text.heading} tracking-tight`}>Triage Distribution</h2>
+              <p className={`text-xs ${text.body} font-medium mt-0.5`}>Current breakdown by severity</p>
             </div>
           </div>
           {pieData.length === 0 ? (
-            <p className="text-sm text-slate-400 py-8 text-center">No patients in the system yet.</p>
+            <p className={`text-sm ${text.muted} py-8 text-center`}>No patients in the system yet.</p>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">
               <div style={{ height: 200 }}>
@@ -196,12 +193,12 @@ export function ReportsView() {
               <FileText className="w-[18px] h-[18px] text-cyan-600" />
             </div>
             <div>
-              <h2 className="text-base font-extrabold text-slate-800 tracking-tight">Reports &amp; exports</h2>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">Open a reporting surface — each has its own live data, PDF, and/or CSV export</p>
+              <h2 className={`text-base font-extrabold ${text.heading} tracking-tight`}>Reports &amp; exports</h2>
+              <p className={`text-xs ${text.body} font-medium mt-0.5`}>Open a reporting surface — each has its own live data, PDF, and/or CSV export</p>
             </div>
           </div>
           {links.length === 0 ? (
-            <p className="text-sm text-slate-400 py-6 text-center">Your role has no reporting surfaces.</p>
+            <p className={`text-sm ${text.muted} py-6 text-center`}>Your role has no reporting surfaces.</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {links.map((l) => {
@@ -211,27 +208,24 @@ export function ReportsView() {
                     key={l.page}
                     onClick={() => navigate(l.path)}
                     className="w-full flex items-center justify-between p-3.5 rounded-xl hover:-translate-y-1 transition-all group text-left"
-                    style={{
-                      background: isDark ? 'rgba(12,74,110,0.18)' : 'rgba(255,255,255,0.6)',
-                      border: isDark ? '1px solid rgba(2,132,199,0.22)' : '1px solid rgba(203,213,225,0.4)',
-                    }}
+                    style={glassInner}
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform" style={{ backgroundColor: l.iconBg }}>
                         <Icon className={`w-[18px] h-[18px] ${l.iconColor}`} />
                       </div>
                       <div>
-                        <div className="text-[13px] font-bold text-slate-800">{l.name}</div>
-                        <div className="text-[11px] text-slate-400 font-medium">{l.description}</div>
+                        <div className={`text-[13px] font-bold ${text.heading}`}>{l.name}</div>
+                        <div className={`text-[11px] ${text.muted} font-medium`}>{l.description}</div>
                       </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-cyan-600 transition-colors flex-shrink-0 ml-3" />
+                    <ChevronRight className={`w-4 h-4 ${text.muted} group-hover:text-cyan-600 transition-colors flex-shrink-0 ml-3`} />
                   </button>
                 );
               })}
             </div>
           )}
-          <p className="text-[11px] text-slate-400 mt-4">
+          <p className={`text-[11px] ${text.muted} mt-4`}>
             Per-visit SBAR handover PDFs are available on each patient's chart (Handover tab).
           </p>
         </div>

@@ -37,7 +37,7 @@ const overdueColor = (hours: number | null): string => {
 };
 
 export function RegistrarReportsView() {
-  const { glassCard, isDark, text } = useTheme();
+  const { glassCard, glassInner, isDark, text } = useTheme();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
@@ -188,30 +188,34 @@ export function RegistrarReportsView() {
           <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
             {/* Controls */}
             <div className="px-5 py-3 flex flex-wrap items-center gap-3" style={{ borderBottom: borderStyle }}>
-              <label className={`text-xs font-semibold ${text.body}`}>From</label>
+              <label className={`text-xs font-semibold ${text.label}`}>From</label>
               <input
                 type="date" value={from} max={to}
                 onChange={(e) => setFrom(e.target.value)}
-                className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200"
+                style={glassInner}
+                className={`px-2 py-1 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
               />
-              <label className={`text-xs font-semibold ${text.body}`}>To</label>
+              <label className={`text-xs font-semibold ${text.label}`}>To</label>
               <input
                 type="date" value={to} min={from} max={today}
                 onChange={(e) => setTo(e.target.value)}
-                className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200"
+                style={glassInner}
+                className={`px-2 py-1 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
               />
               <div className="flex-1" />
               <button
                 onClick={loadIntake}
-                className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                style={glassInner}
+                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/5 transition-colors"
                 title="Refresh"
               >
-                <RefreshCw className="w-3.5 h-3.5 text-white" />
+                <RefreshCw className={`w-3.5 h-3.5 ${text.body}`} />
               </button>
               <button
                 onClick={exportIntakeCsv}
                 disabled={exporting || intake.length === 0}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 text-white text-xs font-bold hover:bg-white/15 transition-colors disabled:opacity-50"
+                style={glassInner}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-white/5 transition-colors disabled:opacity-50 ${text.heading}`}
               >
                 {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                 Export CSV
@@ -229,7 +233,7 @@ export function RegistrarReportsView() {
               </div>
             ) : intake.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 px-6">
-                <ClipboardList className="w-10 h-10 text-slate-500 mb-3" />
+                <ClipboardList className={`w-10 h-10 mb-3 ${text.muted}`} />
                 <p className={`text-sm font-semibold ${text.heading}`}>No registrations in this window</p>
               </div>
             ) : (
@@ -284,15 +288,17 @@ export function RegistrarReportsView() {
               <div className="flex-1" />
               <button
                 onClick={loadUnidentified}
-                className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                style={glassInner}
+                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/5 transition-colors"
                 title="Refresh"
               >
-                <RefreshCw className="w-3.5 h-3.5 text-white" />
+                <RefreshCw className={`w-3.5 h-3.5 ${text.body}`} />
               </button>
               <button
                 onClick={exportUnidCsv}
                 disabled={exporting || unidentified.length === 0}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 text-white text-xs font-bold hover:bg-white/15 transition-colors disabled:opacity-50"
+                style={glassInner}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-white/5 transition-colors disabled:opacity-50 ${text.heading}`}
               >
                 {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                 Export CSV
@@ -327,7 +333,7 @@ export function RegistrarReportsView() {
                       onClick={() => navigate(`/patients/${r.patientId}`)}
                       className="w-full flex items-center justify-between p-3.5 rounded-xl hover:-translate-y-0.5 transition-all group text-left"
                       style={{
-                        background: isDark ? 'rgba(12,74,110,0.18)' : 'rgba(255,255,255,0.6)',
+                        ...glassInner,
                         border: isDark ? '1px solid rgba(245,158,11,0.25)' : '1px solid rgba(245,158,11,0.3)',
                       }}
                     >
@@ -347,7 +353,7 @@ export function RegistrarReportsView() {
                           </div>
                           <div className={`text-[10px] ${text.body}`}>waiting</div>
                         </div>
-                        <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-amber-400 transition-colors flex-shrink-0" />
+                        <ChevronRight className={`w-4 h-4 group-hover:text-amber-400 transition-colors flex-shrink-0 ${text.muted}`} />
                       </div>
                     </button>
                   ))}
@@ -363,7 +369,8 @@ export function RegistrarReportsView() {
             <div className="flex items-center justify-end">
               <button
                 onClick={loadCensus}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 text-white text-xs font-bold hover:bg-white/15 transition-colors"
+                style={glassInner}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-white/5 transition-colors ${text.heading}`}
               >
                 <RefreshCw className="w-3.5 h-3.5" /> Refresh
               </button>

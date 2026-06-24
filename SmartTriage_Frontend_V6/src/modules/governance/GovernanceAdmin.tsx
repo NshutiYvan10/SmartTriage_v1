@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Scale, Plus, Send, CheckCircle2, ShieldCheck, Archive, PauseCircle,
   ChevronDown, ChevronRight, Loader2, RefreshCw, Clock, FileText,
-  Search, History, User, AlertTriangle, ArrowRight, Filter,
+  Search, History, User, AlertTriangle, ArrowRight, Filter, X,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
@@ -31,25 +31,25 @@ const POLICY_TYPES = [
 ] as const;
 
 const POLICY_TYPE_CONFIG: Record<string, { color: string; bg: string }> = {
-  TRIAGE_PROTOCOL:         { color: 'text-blue-600',    bg: 'rgba(59,130,246,0.10)' },
-  MEDICATION_GUIDELINE:    { color: 'text-emerald-600', bg: 'rgba(34,197,94,0.10)' },
-  INFECTION_CONTROL:       { color: 'text-red-600',     bg: 'rgba(239,68,68,0.10)' },
-  ICU_CRITERIA:            { color: 'text-orange-600',  bg: 'rgba(249,115,22,0.10)' },
-  DOCUMENTATION_STANDARD:  { color: 'text-slate-600',   bg: 'rgba(100,116,139,0.10)' },
-  SAFETY_PROTOCOL:         { color: 'text-amber-600',   bg: 'rgba(245,158,11,0.10)' },
-  QUALITY_STANDARD:        { color: 'text-violet-600',  bg: 'rgba(139,92,246,0.10)' },
-  TRAINING_REQUIREMENT:    { color: 'text-cyan-600',    bg: 'rgba(6,182,212,0.10)' },
-  EQUIPMENT_MAINTENANCE:   { color: 'text-teal-600',    bg: 'rgba(20,184,166,0.10)' },
-  STAFFING_GUIDELINE:      { color: 'text-pink-600',    bg: 'rgba(236,72,153,0.10)' },
+  TRIAGE_PROTOCOL:         { color: 'text-blue-400',    bg: 'rgba(59,130,246,0.10)' },
+  MEDICATION_GUIDELINE:    { color: 'text-emerald-400', bg: 'rgba(34,197,94,0.10)' },
+  INFECTION_CONTROL:       { color: 'text-red-400',     bg: 'rgba(239,68,68,0.10)' },
+  ICU_CRITERIA:            { color: 'text-orange-400',  bg: 'rgba(249,115,22,0.10)' },
+  DOCUMENTATION_STANDARD:  { color: 'text-slate-400',   bg: 'rgba(100,116,139,0.10)' },
+  SAFETY_PROTOCOL:         { color: 'text-amber-400',   bg: 'rgba(245,158,11,0.10)' },
+  QUALITY_STANDARD:        { color: 'text-violet-400',  bg: 'rgba(139,92,246,0.10)' },
+  TRAINING_REQUIREMENT:    { color: 'text-cyan-400',    bg: 'rgba(6,182,212,0.10)' },
+  EQUIPMENT_MAINTENANCE:   { color: 'text-teal-400',    bg: 'rgba(20,184,166,0.10)' },
+  STAFFING_GUIDELINE:      { color: 'text-pink-400',    bg: 'rgba(236,72,153,0.10)' },
 };
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-  DRAFT:             { color: 'text-slate-600',   bg: 'rgba(100,116,139,0.10)', label: 'Draft' },
-  PENDING_APPROVAL:  { color: 'text-amber-600',   bg: 'rgba(245,158,11,0.10)', label: 'Pending Approval' },
-  APPROVED:          { color: 'text-blue-600',    bg: 'rgba(59,130,246,0.10)',  label: 'Approved' },
-  ACTIVE:            { color: 'text-emerald-600', bg: 'rgba(34,197,94,0.10)',   label: 'Active' },
-  SUSPENDED:         { color: 'text-red-600',     bg: 'rgba(239,68,68,0.10)',   label: 'Suspended' },
-  ARCHIVED:          { color: 'text-slate-500',   bg: 'rgba(100,116,139,0.08)', label: 'Archived' },
+  DRAFT:             { color: 'text-slate-400',   bg: 'rgba(100,116,139,0.10)', label: 'Draft' },
+  PENDING_APPROVAL:  { color: 'text-amber-400',   bg: 'rgba(245,158,11,0.10)', label: 'Pending Approval' },
+  APPROVED:          { color: 'text-blue-400',    bg: 'rgba(59,130,246,0.10)',  label: 'Approved' },
+  ACTIVE:            { color: 'text-emerald-400', bg: 'rgba(34,197,94,0.10)',   label: 'Active' },
+  SUSPENDED:         { color: 'text-red-400',     bg: 'rgba(239,68,68,0.10)',   label: 'Suspended' },
+  ARCHIVED:          { color: 'text-slate-400',   bg: 'rgba(100,116,139,0.08)', label: 'Archived' },
 };
 
 const STATUS_PIPELINE = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'ACTIVE'];
@@ -226,12 +226,7 @@ export function GovernanceAdmin() {
     catch { /* */ } finally { setActionLoading(null); }
   }, [loadPolicies]);
 
-  /* -- Input styling helper --------------------------------------- */
-  const inputStyle = {
-    background: isDark ? 'rgba(12,74,110,0.18)' : 'rgba(255,255,255,0.7)',
-    border: isDark ? '1px solid rgba(2,132,199,0.22)' : '1px solid rgba(203,213,225,0.5)',
-    boxShadow: isDark ? '0 1px 4px rgba(0,0,0,0.2)' : '0 1px 4px rgba(0,0,0,0.03), inset 0 1px 0 rgba(255,255,255,0.8)',
-  };
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
 
   const totalPages = Math.ceil(totalElements / 20);
   const auditTotalPages = Math.ceil(auditTotal / 20);
@@ -245,13 +240,13 @@ export function GovernanceAdmin() {
         <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-violet-500/30 to-purple-500/30 rounded-2xl flex items-center justify-center shadow-lg border border-violet-400/20">
-                  <Scale className="w-6 h-6 text-violet-300" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                  <Scale className="w-5 h-5 text-cyan-300" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-white tracking-wide">Clinical Governance</h1>
-                  <p className="text-white/70 text-xs font-medium">Policy lifecycle management, approval workflows & audit trail</p>
+                  <h1 className="text-lg font-bold text-white">Clinical Governance</h1>
+                  <p className="text-sm text-white/50">Policy lifecycle management, approval workflows & audit trail</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -270,7 +265,7 @@ export function GovernanceAdmin() {
                   <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                 </button>
                 <div className="bg-white/15 backdrop-blur rounded-xl px-3 py-1.5 flex items-center gap-2">
-                  <div className="w-2 h-2 bg-violet-400 rounded-full animate-pulse" />
+                  <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
                   <span className="text-xs font-semibold text-white/90">Module 24</span>
                 </div>
               </div>
@@ -289,8 +284,8 @@ export function GovernanceAdmin() {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 ${
                 activeTab === tab.id
-                  ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
-                  : `${text.body} hover:bg-white/40`
+                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                  : `${text.body} hover:bg-white/5 border border-transparent`
               }`}
             >
               <tab.icon className="w-3.5 h-3.5" />
@@ -316,10 +311,10 @@ export function GovernanceAdmin() {
                 );
               })}
               <span className={`text-[10px] ${text.muted} mx-1`}>|</span>
-              <span className="text-[10px] font-bold text-red-600 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(239,68,68,0.10)' }}>
+              <span className="text-[10px] font-bold text-red-400 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(239,68,68,0.10)' }}>
                 Suspended
               </span>
-              <span className="text-[10px] font-bold text-slate-500 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(100,116,139,0.08)' }}>
+              <span className="text-[10px] font-bold text-slate-400 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(100,116,139,0.08)' }}>
                 Archived
               </span>
             </div>
@@ -348,8 +343,8 @@ export function GovernanceAdmin() {
                     <select
                       value={formType}
                       onChange={(e) => setFormType(e.target.value)}
-                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-all duration-300`}
-                      style={inputStyle}
+                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300`}
+                      style={glassInner}
                     >
                       {POLICY_TYPES.map((t) => (
                         <option key={t.value} value={t.value}>{t.label}</option>
@@ -365,8 +360,8 @@ export function GovernanceAdmin() {
                       value={formName}
                       onChange={(e) => setFormName(e.target.value)}
                       placeholder="e.g. Emergency Triage Standard Operating Procedure"
-                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-all duration-300`}
-                      style={inputStyle}
+                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300`}
+                      style={glassInner}
                     />
                   </div>
 
@@ -378,8 +373,8 @@ export function GovernanceAdmin() {
                       value={formCode}
                       onChange={(e) => setFormCode(e.target.value)}
                       placeholder="e.g. POL-TRI-001"
-                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-all duration-300`}
-                      style={inputStyle}
+                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300`}
+                      style={glassInner}
                     />
                   </div>
 
@@ -390,8 +385,8 @@ export function GovernanceAdmin() {
                       type="date"
                       value={formEffective}
                       onChange={(e) => setFormEffective(e.target.value)}
-                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-all duration-300`}
-                      style={inputStyle}
+                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300`}
+                      style={glassInner}
                     />
                   </div>
                 </div>
@@ -404,8 +399,8 @@ export function GovernanceAdmin() {
                     value={formDesc}
                     onChange={(e) => setFormDesc(e.target.value)}
                     placeholder="Brief description of the policy scope and purpose"
-                    className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-all duration-300`}
-                    style={inputStyle}
+                    className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300`}
+                    style={glassInner}
                   />
                 </div>
 
@@ -417,12 +412,12 @@ export function GovernanceAdmin() {
                     onChange={(e) => setFormContent(e.target.value)}
                     placeholder="Full policy content..."
                     rows={8}
-                    className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-all duration-300 resize-none`}
-                    style={inputStyle}
+                    className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300 resize-none`}
+                    style={glassInner}
                   />
                 </div>
 
-                <div className="flex items-center justify-end gap-3 mt-4 pt-3 border-t border-gray-100/30">
+                <div className="flex items-center justify-end gap-3 mt-4 pt-3" style={{ borderTop: borderStyle }}>
                   <button
                     onClick={() => setShowCreateForm(false)}
                     className={`px-4 py-2 text-xs font-semibold ${text.body} hover:opacity-80 transition-all duration-300 rounded-xl`}
@@ -450,8 +445,8 @@ export function GovernanceAdmin() {
               <select
                 value={statusFilter}
                 onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${text.heading} focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-all duration-300`}
-                style={inputStyle}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${text.heading} focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300`}
+                style={glassInner}
               >
                 <option value="">All Statuses</option>
                 {ALL_STATUSES.filter(Boolean).map((st) => (
@@ -538,7 +533,7 @@ export function GovernanceAdmin() {
 
                         {/* Expanded detail */}
                         {isExpanded && (
-                          <div className="px-4 pb-4 pt-1 border-t border-gray-100/30">
+                          <div className="px-4 pb-4 pt-1" style={{ borderTop: borderStyle }}>
                             {/* Meta grid */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
                               <div className="rounded-xl p-3" style={glassInner}>
@@ -578,7 +573,7 @@ export function GovernanceAdmin() {
                             </div>
 
                             {/* Action buttons */}
-                            <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100/30 flex-wrap">
+                            <div className="flex items-center gap-2 mt-4 pt-3 flex-wrap" style={{ borderTop: borderStyle }}>
                               {policy.status === 'DRAFT' && (
                                 <button
                                   onClick={() => handleSubmitForApproval(policy.id)}
@@ -705,8 +700,8 @@ export function GovernanceAdmin() {
                     if (id) loadAuditLog(id, 0);
                     else { setAuditLogs([]); setAuditTotal(0); }
                   }}
-                  className={`flex-1 min-w-[200px] px-3 py-2 rounded-xl text-xs font-semibold ${text.heading} focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-all duration-300`}
-                  style={inputStyle}
+                  className={`flex-1 min-w-[200px] px-3 py-2 rounded-xl text-xs font-semibold ${text.heading} focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300`}
+                  style={glassInner}
                 >
                   <option value="">Select a policy...</option>
                   {policies.map((p) => (
@@ -752,7 +747,7 @@ export function GovernanceAdmin() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="text-[10px] font-bold text-violet-600 px-2 py-0.5 rounded-md uppercase tracking-wider" style={{ background: 'rgba(139,92,246,0.10)' }}>
+                          <span className="text-[10px] font-bold text-violet-400 px-2 py-0.5 rounded-md uppercase tracking-wider" style={{ background: 'rgba(139,92,246,0.10)' }}>
                             {log.action}
                           </span>
                           <span className={`text-[10px] ${text.muted} flex items-center gap-1`}>
@@ -804,16 +799,24 @@ export function GovernanceAdmin() {
 
         {/* -- Approve Modal ---------------------------------------- */}
         {approveTarget && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in">
-            <div className="rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl" style={glassCard}>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'rgba(59,130,246,0.12)' }}>
-                  <CheckCircle2 className="w-5 h-5 text-blue-500" />
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+            <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-md" style={glassCard}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/20 border border-blue-500/30">
+                    <CheckCircle2 className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className={`text-sm font-extrabold ${text.heading}`}>Approve Policy</h3>
+                    <p className={`text-[10px] ${text.muted}`}>Approving as {user?.fullName || 'Unknown'}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className={`text-sm font-extrabold ${text.heading}`}>Approve Policy</h3>
-                  <p className={`text-[10px] ${text.muted}`}>Approving as {user?.fullName || 'Unknown'}</p>
-                </div>
+                <button
+                  onClick={() => { setApproveTarget(null); setApproveNotes(''); }}
+                  className={`p-1.5 rounded-lg ${text.muted} hover:bg-white/5 transition-all duration-300`}
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
               <div>
                 <label className={`block text-[11px] font-bold ${text.muted} uppercase tracking-wider mb-1.5`}>Notes (optional)</label>
@@ -823,7 +826,7 @@ export function GovernanceAdmin() {
                   placeholder="Optional approval notes..."
                   rows={3}
                   className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all duration-300 resize-none`}
-                  style={inputStyle}
+                  style={glassInner}
                 />
               </div>
               <div className="flex items-center justify-end gap-3 mt-4">
@@ -848,16 +851,24 @@ export function GovernanceAdmin() {
 
         {/* -- Suspend Modal ---------------------------------------- */}
         {suspendTarget && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in">
-            <div className="rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl" style={glassCard}>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'rgba(239,68,68,0.12)' }}>
-                  <PauseCircle className="w-5 h-5 text-red-500" />
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+            <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-md" style={glassCard}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/20 border border-red-500/30">
+                    <PauseCircle className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className={`text-sm font-extrabold ${text.heading}`}>Suspend Policy</h3>
+                    <p className={`text-[10px] ${text.muted}`}>Provide a reason for suspension</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className={`text-sm font-extrabold ${text.heading}`}>Suspend Policy</h3>
-                  <p className={`text-[10px] ${text.muted}`}>Provide a reason for suspension</p>
-                </div>
+                <button
+                  onClick={() => { setSuspendTarget(null); setSuspendReason(''); }}
+                  className={`p-1.5 rounded-lg ${text.muted} hover:bg-white/5 transition-all duration-300`}
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
               <textarea
                 value={suspendReason}
@@ -865,7 +876,7 @@ export function GovernanceAdmin() {
                 placeholder="Reason for suspension..."
                 rows={4}
                 className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/20 transition-all duration-300 resize-none`}
-                style={inputStyle}
+                style={glassInner}
               />
               <div className="flex items-center justify-end gap-3 mt-4">
                 <button
@@ -889,12 +900,12 @@ export function GovernanceAdmin() {
 
         {/* -- Version History Modal -------------------------------- */}
         {historyTarget && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in">
-            <div className="rounded-2xl p-6 w-full max-w-lg mx-4 shadow-2xl max-h-[80vh] overflow-y-auto" style={glassCard}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+            <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" style={glassCard}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'rgba(139,92,246,0.12)' }}>
-                    <History className="w-5 h-5 text-violet-500" />
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-cyan-500/20 border border-cyan-500/30">
+                    <History className="w-5 h-5 text-cyan-400" />
                   </div>
                   <div>
                     <h3 className={`text-sm font-extrabold ${text.heading}`}>Version History</h3>
@@ -903,10 +914,9 @@ export function GovernanceAdmin() {
                 </div>
                 <button
                   onClick={() => { setHistoryTarget(null); setHistoryItems([]); }}
-                  className={`px-3 py-1.5 text-xs font-semibold ${text.body} hover:opacity-80 transition-all rounded-xl`}
-                  style={glassInner}
+                  className={`p-1.5 rounded-lg ${text.muted} hover:bg-white/5 transition-all duration-300`}
                 >
-                  Close
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 

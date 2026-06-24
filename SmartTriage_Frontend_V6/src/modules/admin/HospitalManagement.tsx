@@ -14,6 +14,7 @@ import { RwandaLocationPicker } from '@/components/RwandaLocationPicker';
 
 export function HospitalManagement() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
 
   const [hospitals, setHospitals] = useState<HospitalResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -173,12 +174,12 @@ export function HospitalManagement() {
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-violet-500/20 flex items-center justify-center">
-                  <Building2 className="w-5 h-5 text-violet-400" />
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                  <Building2 className="w-5 h-5 text-cyan-300" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-white tracking-wide">Hospital Management</h1>
-                  <p className="text-white/50 text-xs">Manage healthcare facilities</p>
+                  <h1 className="text-lg font-bold text-white">Hospital Management</h1>
+                  <p className="text-sm text-white/50">Manage healthcare facilities</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -224,18 +225,18 @@ export function HospitalManagement() {
               ] as const).map(({ label, key, placeholder }) => (
                 <div key={key}>
                   <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>{label}</label>
-                  <input value={(form as any)[key] || ''} onChange={(e) => setForm({ ...form, [key]: e.target.value })} placeholder={placeholder} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
+                  <input value={(form as any)[key] || ''} onChange={(e) => setForm({ ...form, [key]: e.target.value })} placeholder={placeholder} className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body} ${isDark ? 'placeholder-slate-500' : 'placeholder-slate-400'}`} style={glassInner} />
                 </div>
               ))}
               {editId && (
                 <div>
                   <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Code (auto-generated)</label>
-                  <input value={form.hospitalCode} readOnly className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none font-mono opacity-70 ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner} />
+                  <input value={form.hospitalCode} readOnly className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 font-mono opacity-70 ${text.body}`} style={glassInner} />
                 </div>
               )}
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Tier</label>
-                <select value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
+                <select value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value })} className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner}>
                   {TIERS.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
                 </select>
               </div>
@@ -252,7 +253,7 @@ export function HospitalManagement() {
                     value={(form as any)[key]}
                     onChange={(e) => setForm({ ...form, [key]: e.target.value })}
                     placeholder={placeholder}
-                    className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+                    className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body} ${isDark ? 'placeholder-slate-500' : 'placeholder-slate-400'}`}
                     style={glassInner}
                   />
                 </div>
@@ -365,9 +366,9 @@ export function HospitalManagement() {
                   </div>
                   <div className="flex items-center gap-2">
                     {h.active === false ? (
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg text-rose-500 bg-rose-500/10">Inactive</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg text-rose-300 bg-rose-500/20 border border-rose-500/30">Inactive</span>
                     ) : (
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg text-emerald-500 bg-emerald-500/10">Active</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg text-emerald-300 bg-emerald-500/20 border border-emerald-500/30">Active</span>
                     )}
                     <button title="Edit" onClick={() => startEdit(h)} className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'} transition-colors`}>
                       <Pencil className="w-3.5 h-3.5 text-slate-400" />
@@ -385,7 +386,7 @@ export function HospitalManagement() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg text-slate-500 bg-slate-500/10`}>{h.tier?.replace(/_/g, ' ')}</span>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg text-slate-300 bg-slate-500/20 border border-slate-500/30`}>{h.tier?.replace(/_/g, ' ')}</span>
                   {h.address && (
                     <p className={`flex items-center gap-1.5 text-xs ${text.body}`}>
                       <MapPin className="w-3 h-3 text-slate-400 shrink-0" /> {h.address}
@@ -410,8 +411,8 @@ export function HospitalManagement() {
 
       {/* Confirm activation / deactivation modal */}
       {confirmTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="rounded-2xl p-6 max-w-md w-full animate-fade-up" style={glassCard}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+          <div className="rounded-2xl overflow-hidden shadow-2xl p-6 max-w-md w-full animate-scale-in" style={glassCard}>
             <div className="flex items-start gap-4">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                 confirmTarget.action === 'deactivate' ? 'bg-rose-500/15' : 'bg-emerald-500/15'

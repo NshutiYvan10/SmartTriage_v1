@@ -399,7 +399,7 @@ export function IoTDeviceManagement() {
                   <select
                     value={selectedHospitalId}
                     onChange={(e) => setSelectedHospitalId(e.target.value)}
-                    className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none font-medium ${isDark ? 'text-white' : 'text-slate-800'}`}
+                    className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 font-medium ${text.body}`}
                     style={glassInner}
                   >
                     {hospitals.map(h => (
@@ -410,21 +410,21 @@ export function IoTDeviceManagement() {
               )}
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Device Name</label>
-                <input value={form.deviceName} onChange={(e) => setForm({ ...form, deviceName: e.target.value })} placeholder="e.g., Ward A Monitor 1" className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
+                <input value={form.deviceName} onChange={(e) => setForm({ ...form, deviceName: e.target.value })} placeholder="e.g., Ward A Monitor 1" className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body} ${isDark ? 'placeholder-slate-500' : 'placeholder-slate-400'}`} style={glassInner} />
               </div>
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Device Type</label>
-                <select value={form.deviceType} onChange={(e) => setForm({ ...form, deviceType: e.target.value })} className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`} style={glassInner}>
+                <select value={form.deviceType} onChange={(e) => setForm({ ...form, deviceType: e.target.value })} className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner}>
                   {DEVICE_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
                 </select>
               </div>
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Serial Number</label>
-                <input value={form.serialNumber} onChange={(e) => setForm({ ...form, serialNumber: e.target.value })} placeholder="e.g., SN-12345678" className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
+                <input value={form.serialNumber} onChange={(e) => setForm({ ...form, serialNumber: e.target.value })} placeholder="e.g., SN-12345678" className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body} ${isDark ? 'placeholder-slate-500' : 'placeholder-slate-400'}`} style={glassInner} />
               </div>
               <div>
                 <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Firmware Version</label>
-                <input value={form.firmwareVersion} onChange={(e) => setForm({ ...form, firmwareVersion: e.target.value })} placeholder="e.g., v2.1.0" className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`} style={glassInner} />
+                <input value={form.firmwareVersion} onChange={(e) => setForm({ ...form, firmwareVersion: e.target.value })} placeholder="e.g., v2.1.0" className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body} ${isDark ? 'placeholder-slate-500' : 'placeholder-slate-400'}`} style={glassInner} />
               </div>
               {/* V53 — Location field removed; the device's assigned
                   bed (set on a separate flow) is the canonical location
@@ -482,24 +482,24 @@ export function IoTDeviceManagement() {
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className={`text-[10px] ${text.muted}`}>Serial</span>
-                      <span className={`text-[10px] font-mono font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>{device.serialNumber}</span>
+                      <span className={`text-[10px] font-mono font-bold ${text.body}`}>{device.serialNumber}</span>
                     </div>
                     {device.firmwareVersion && (
                       <div className="flex items-center justify-between">
                         <span className={`text-[10px] ${text.muted}`}>Firmware</span>
-                        <span className={`text-[10px] font-mono ${isDark ? 'text-white' : 'text-slate-800'}`}>{device.firmwareVersion}</span>
+                        <span className={`text-[10px] font-mono ${text.body}`}>{device.firmwareVersion}</span>
                       </div>
                     )}
                     {device.location && (
                       <div className="flex items-center justify-between">
                         <span className={`text-[10px] ${text.muted}`}>Location</span>
-                        <span className={`text-[10px] font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>{device.location}</span>
+                        <span className={`text-[10px] font-bold ${text.body}`}>{device.location}</span>
                       </div>
                     )}
                     {device.lastHeartbeatAt && (
                       <div className="flex items-center justify-between">
                         <span className={`text-[10px] ${text.muted}`}>Last Heartbeat</span>
-                        <span className={`text-[10px] ${isDark ? 'text-white' : 'text-slate-800'}`}>{format(new Date(device.lastHeartbeatAt), 'HH:mm:ss')}</span>
+                        <span className={`text-[10px] ${text.body}`}>{format(new Date(device.lastHeartbeatAt), 'HH:mm:ss')}</span>
                       </div>
                     )}
                   </div>
@@ -534,12 +534,12 @@ export function IoTDeviceManagement() {
                   <div className="flex flex-col gap-2 mt-3 pt-3" style={{ borderTop: isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.2)' }}>
                     {/* V53 — Admin service status pill (read-only context for the toggle below) */}
                     {isAdmin && (
-                      <div className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg ${device.inService ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-slate-500/10 border border-slate-500/20'}`}>
+                      <div className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg ${device.inService ? 'bg-emerald-500/20 border border-emerald-500/30' : 'bg-slate-500/20 border border-slate-500/30'}`}>
                         <div className="flex items-center gap-1.5">
                           {device.inService
-                            ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                            ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                             : <PowerOff className="w-3.5 h-3.5 text-slate-400" />}
-                          <span className={`text-[10px] font-bold ${device.inService ? 'text-emerald-600' : isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                          <span className={`text-[10px] font-bold ${device.inService ? 'text-emerald-300' : text.muted}`}>
                             {device.inService ? 'In Service' : 'Out of Service'}
                           </span>
                         </div>
@@ -550,7 +550,7 @@ export function IoTDeviceManagement() {
                       <button
                         onClick={() => handleReturnToService(device)}
                         disabled={serviceLoadingId === device.id}
-                        className="flex-1 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                        className="flex-1 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
                       >
                         {serviceLoadingId === device.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />} Return to Service
                       </button>
@@ -560,7 +560,7 @@ export function IoTDeviceManagement() {
                       <button
                         onClick={() => { setServiceError(null); setOutOfServiceTarget(device); }}
                         disabled={serviceLoadingId === device.id}
-                        className="flex-1 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                        className="flex-1 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
                       >
                         {serviceLoadingId === device.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <PowerOff className="w-3 h-3" />} Take Out of Service
                       </button>
@@ -575,10 +575,8 @@ export function IoTDeviceManagement() {
                           : 'Mark this monitor as the triage-station device so nurses can pull vitals during triage.'}
                         className={`flex-1 px-3 py-1.5 text-[10px] font-bold rounded-lg transition-colors flex items-center justify-center gap-1 disabled:opacity-50 ${
                           device.triageMonitor
-                            ? 'bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border border-purple-500/30'
-                            : isDark
-                              ? 'bg-white/5 text-slate-300 hover:bg-white/10 border border-white/10'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+                            ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30'
+                            : `${text.body} hover:bg-white/5 border border-transparent`
                         }`}
                       >
                         {triageLoadingId === device.id
@@ -589,7 +587,7 @@ export function IoTDeviceManagement() {
                     )}
                     {/* Clinical staff (Nurse): Assign to Patient for ONLINE devices */}
                     {isClinicalStaff && device.status === 'ONLINE' && (
-                      <button onClick={() => handleStartMonitoring(device)} className="flex-1 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20 transition-colors flex items-center justify-center gap-1">
+                      <button onClick={() => handleStartMonitoring(device)} className="flex-1 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 transition-colors flex items-center justify-center gap-1">
                         <Power className="w-3 h-3" /> Assign to Patient
                       </button>
                     )}
@@ -598,21 +596,21 @@ export function IoTDeviceManagement() {
                       const attachedBed = bedByDeviceId.get(device.id);
                       if (attachedBed) {
                         return (
-                          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10">
-                            <BedDouble className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/20">
+                            <BedDouble className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <p className="text-[10px] font-bold text-emerald-600">
+                              <p className="text-[10px] font-bold text-emerald-300">
                                 Bed {attachedBed.code} · {attachedBed.zone}
                               </p>
                               {attachedBed.label && (
-                                <p className="text-[9px] text-emerald-500/80 truncate">{attachedBed.label}</p>
+                                <p className="text-[9px] text-emerald-300/80 truncate">{attachedBed.label}</p>
                               )}
                             </div>
                             {(isAdmin || isClinicalStaff) && (
                               <button
                                 onClick={() => handleUnassignFromBed(attachedBed.id)}
                                 disabled={bedAssignLoading}
-                                className="text-[9px] font-bold text-emerald-500 hover:text-emerald-600 disabled:opacity-50"
+                                className="text-[9px] font-bold text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
                                 title="Detach this device from the bed"
                               >
                                 Detach
@@ -624,7 +622,7 @@ export function IoTDeviceManagement() {
                       return (isAdmin || isClinicalStaff) && device.status !== 'DECOMMISSIONED' ? (
                         <button
                           onClick={() => { setBedAssignDevice(device); setBedSearch(''); setBedAssignError(''); }}
-                          className="flex-1 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors flex items-center justify-center gap-1"
+                          className="flex-1 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 transition-colors flex items-center justify-center gap-1"
                         >
                           <BedDouble className="w-3 h-3" /> Assign to Bed
                         </button>
@@ -632,9 +630,9 @@ export function IoTDeviceManagement() {
                     })()}
                     {/* Nurse hint: device not powered on yet */}
                     {isClinicalStaff && (device.status === 'REGISTERED' || device.status === 'OFFLINE') && (
-                      <div className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg ${isDark ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-amber-50 border border-amber-200'}`}>
-                        <AlertTriangle className={`w-3.5 h-3.5 flex-shrink-0 ${isDark ? 'text-amber-400' : 'text-amber-500'}`} />
-                        <p className={`text-[10px] font-medium ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>
+                      <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-amber-500/20 border border-amber-500/30">
+                        <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
+                        <p className="text-[10px] font-medium text-amber-300">
                           Device not powered on — ask admin to activate
                         </p>
                       </div>
@@ -645,7 +643,7 @@ export function IoTDeviceManagement() {
                       return (
                         <div className="flex-1 space-y-1.5">
                           {pt && (
-                            <div className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-lg ${isDark ? 'text-cyan-400 bg-cyan-500/10' : 'text-cyan-600 bg-cyan-50'}`}>
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-lg text-cyan-300 bg-cyan-500/20">
                               <UserCheck className="w-3 h-3" />
                               {pt.fullName}
                               {pt.category && <span className={`ml-auto px-1.5 py-0.5 rounded text-[8px] font-bold text-white ${pt.category === 'RED' ? 'bg-red-500' : pt.category === 'ORANGE' ? 'bg-orange-500' : pt.category === 'YELLOW' ? 'bg-yellow-500' : 'bg-green-500'}`}>{pt.category}</span>}
@@ -653,7 +651,7 @@ export function IoTDeviceManagement() {
                           )}
                           {/* Clinical staff can stop the monitoring session */}
                           {isClinicalStaff && session && (
-                            <button onClick={() => handleStopMonitoring(session.id)} className="w-full px-3 py-1.5 text-[10px] font-bold rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1">
+                            <button onClick={() => handleStopMonitoring(session.id)} className="w-full px-3 py-1.5 text-[10px] font-bold rounded-lg bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 transition-colors flex items-center justify-center gap-1">
                               <PowerOff className="w-3 h-3" /> Stop Monitoring
                             </button>
                           )}
@@ -662,7 +660,7 @@ export function IoTDeviceManagement() {
                             <button
                               onClick={() => { setServiceError(null); setOutOfServiceTarget(device); }}
                               disabled={serviceLoadingId === device.id}
-                              className="w-full px-3 py-1.5 text-[10px] font-bold rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                              className="w-full px-3 py-1.5 text-[10px] font-bold rounded-lg bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
                             >
                               {serviceLoadingId === device.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <PowerOff className="w-3 h-3" />} Take Out of Service
                             </button>
@@ -721,7 +719,7 @@ export function IoTDeviceManagement() {
               <div className="flex items-center gap-2 mb-1">
                 <Activity className="w-4 h-4 text-cyan-500" />
                 <h3 className={`text-sm font-bold ${text.heading}`}>Active Monitor Performance</h3>
-                <span className="ml-auto px-2 py-0.5 rounded-lg bg-cyan-500/10 text-cyan-500 text-[10px] font-bold">{sessions.length} active</span>
+                <span className="ml-auto px-2 py-0.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold">{sessions.length} active</span>
               </div>
               <p className={`text-[10px] ${text.muted} mb-3`}>
                 Device health for every active monitoring session — battery, signal, throughput, state.
@@ -732,10 +730,10 @@ export function IoTDeviceManagement() {
                 <div className="flex items-center gap-1.5 mb-3 flex-wrap">
                   <button
                     onClick={() => setSessionZoneFilter(null)}
-                    className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-colors ${
+                    className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-colors border ${
                       sessionZoneFilter === null
-                        ? 'bg-cyan-600 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                        : `${text.body} hover:bg-white/5 border-transparent`
                     }`}
                   >
                     All ({sessions.length})
@@ -747,10 +745,10 @@ export function IoTDeviceManagement() {
                       <button
                         key={z}
                         onClick={() => setSessionZoneFilter(active ? null : z)}
-                        className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-colors ${
+                        className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-colors border ${
                           active
-                            ? 'bg-cyan-600 text-white'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                            : `${text.body} hover:bg-white/5 border-transparent`
                         }`}
                       >
                         {z} ({count})
@@ -828,9 +826,9 @@ export function IoTDeviceManagement() {
 
         {/* ── Patient Selection Dialog (modal overlay) ── */}
         {assignDevice && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => { setAssignDevice(null); setAssignError(''); }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in" style={{ background: 'rgba(2,11,20,0.55)' }} onClick={() => { setAssignDevice(null); setAssignError(''); }}>
             <div
-              className="w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden mx-4 animate-fade-up"
+              className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
               style={glassCard}
               onClick={(e) => e.stopPropagation()}
             >
@@ -865,8 +863,8 @@ export function IoTDeviceManagement() {
                     value={patientSearch}
                     onChange={(e) => setPatientSearch(e.target.value)}
                     placeholder="Search by name or complaint..."
-                    className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-xs font-medium outline-none border-2 border-transparent focus:border-cyan-500/40 transition-colors ${
-                      isDark ? 'text-white placeholder-slate-500 bg-white/5' : 'text-slate-800 placeholder-slate-400 bg-slate-50'
+                    className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-colors ${text.body} ${
+                      isDark ? 'placeholder-slate-500' : 'placeholder-slate-400'
                     }`}
                     style={glassInner}
                     autoFocus
@@ -887,7 +885,7 @@ export function IoTDeviceManagement() {
                 <div className="max-h-72 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                   {filteredPatients.length === 0 ? (
                     <div className="text-center py-10">
-                      <div className={`w-14 h-14 mx-auto mb-3 rounded-2xl flex items-center justify-center ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
+                      <div className="w-14 h-14 mx-auto mb-3 rounded-2xl flex items-center justify-center" style={glassInner}>
                         <Users className="w-6 h-6 text-slate-400" />
                       </div>
                       <p className={`text-xs font-bold ${text.heading}`}>No patients found</p>
@@ -972,9 +970,7 @@ export function IoTDeviceManagement() {
                               <Loader2 className="w-4 h-4 animate-spin text-cyan-500" />
                             </div>
                           ) : (
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${
-                              isDark ? 'bg-white/5 group-hover:bg-cyan-500/15' : 'bg-slate-100 group-hover:bg-cyan-500/10'
-                            }`}>
+                            <div className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors group-hover:bg-cyan-500/15" style={glassInner}>
                               <Power className="w-4 h-4 text-cyan-500" />
                             </div>
                           )}
@@ -1008,11 +1004,12 @@ export function IoTDeviceManagement() {
           });
           return (
             <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in"
+              className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in"
+              style={{ background: 'rgba(2,11,20,0.55)' }}
               onClick={() => { setBedAssignDevice(null); setBedAssignError(''); }}
             >
               <div
-                className="w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden mx-4 animate-fade-up"
+                className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
                 style={glassCard}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -1045,8 +1042,8 @@ export function IoTDeviceManagement() {
                       value={bedSearch}
                       onChange={(e) => setBedSearch(e.target.value)}
                       placeholder="Filter by code, zone, or label…"
-                      className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-xs font-medium outline-none border-2 border-transparent focus:border-emerald-500/40 transition-colors ${
-                        isDark ? 'text-white placeholder-slate-500 bg-white/5' : 'text-slate-800 placeholder-slate-400 bg-slate-50'
+                      className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-colors ${text.body} ${
+                        isDark ? 'placeholder-slate-500' : 'placeholder-slate-400'
                       }`}
                       style={glassInner}
                       autoFocus
@@ -1065,7 +1062,7 @@ export function IoTDeviceManagement() {
                   <div className="max-h-72 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
                     {visibleBeds.length === 0 ? (
                       <div className="text-center py-10">
-                        <div className={`w-14 h-14 mx-auto mb-3 rounded-2xl flex items-center justify-center ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
+                        <div className="w-14 h-14 mx-auto mb-3 rounded-2xl flex items-center justify-center" style={glassInner}>
                           <BedDouble className="w-6 h-6 text-slate-400" />
                         </div>
                         <p className={`text-xs font-bold ${text.heading}`}>No beds match</p>
@@ -1093,11 +1090,11 @@ export function IoTDeviceManagement() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <p className={`text-[13px] font-bold truncate ${text.heading}`}>Bed {b.code}</p>
-                              <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-extrabold uppercase tracking-wider ${
-                                b.status === 'AVAILABLE' ? 'bg-emerald-500/10 text-emerald-600'
-                                  : b.status === 'OCCUPIED' ? 'bg-slate-500/10 text-slate-500'
-                                  : b.status === 'CLEANING' ? 'bg-amber-500/10 text-amber-600'
-                                  : 'bg-rose-500/10 text-rose-600'
+                              <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-extrabold uppercase tracking-wider border ${
+                                b.status === 'AVAILABLE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                  : b.status === 'OCCUPIED' ? 'bg-slate-500/20 text-slate-300 border-slate-500/30'
+                                  : b.status === 'CLEANING' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                  : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
                               }`}>
                                 {b.status}
                               </span>
@@ -1105,7 +1102,7 @@ export function IoTDeviceManagement() {
                             <div className="flex items-center gap-2 mt-0.5">
                               <p className={`text-[10px] ${text.muted}`}>{b.zone}{b.label ? ` · ${b.label}` : ''}</p>
                               {hasOtherDevice && (
-                                <span className="text-[9px] font-bold text-amber-600">replaces {b.assignedDeviceName || 'current monitor'}</span>
+                                <span className="text-[9px] font-bold text-amber-400">replaces {b.assignedDeviceName || 'current monitor'}</span>
                               )}
                             </div>
                           </div>
@@ -1115,7 +1112,7 @@ export function IoTDeviceManagement() {
                                 <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
                               </div>
                             ) : (
-                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
+                              <div className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors" style={glassInner}>
                                 <BedDouble className="w-4 h-4 text-emerald-500" />
                               </div>
                             )}
@@ -1138,8 +1135,8 @@ export function IoTDeviceManagement() {
 
         {/* ─── API Key Modal (shown once after registration) ─── */}
         {registeredDevice && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-up">
-            <div className="w-full max-w-md rounded-2xl p-6 mx-4" style={glassCard}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in" style={{ background: 'rgba(2,11,20,0.55)' }}>
+            <div className="w-full max-w-md rounded-2xl p-6 overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
                   <Key className="w-5 h-5 text-amber-500" />
@@ -1153,19 +1150,19 @@ export function IoTDeviceManagement() {
               <div className="space-y-3 mb-5">
                 <div className="flex items-center justify-between">
                   <span className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Device</span>
-                  <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>{registeredDevice.deviceName}</span>
+                  <span className={`text-xs font-bold ${text.body}`}>{registeredDevice.deviceName}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Serial</span>
-                  <span className={`text-xs font-mono font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>{registeredDevice.serialNumber}</span>
+                  <span className={`text-xs font-mono font-bold ${text.body}`}>{registeredDevice.serialNumber}</span>
                 </div>
                 <div>
                   <span className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>API Key</span>
-                  <div className={`flex items-center gap-2 p-3 rounded-xl font-mono text-xs break-all ${isDark ? 'bg-slate-800/80 text-emerald-400' : 'bg-slate-100 text-emerald-700'}`}>
+                  <div className="flex items-center gap-2 p-3 rounded-xl font-mono text-xs break-all text-emerald-300" style={glassInner}>
                     <span className="flex-1 select-all">{registeredDevice.apiKey}</span>
                     <button
                       onClick={handleCopyApiKey}
-                      className={`flex-shrink-0 p-1.5 rounded-lg transition-colors ${apiKeyCopied ? 'bg-emerald-500/20 text-emerald-500' : 'bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white'}`}
+                      className={`flex-shrink-0 p-1.5 rounded-lg transition-colors ${apiKeyCopied ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white'}`}
                       title="Copy to clipboard"
                     >
                       {apiKeyCopied ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
@@ -1174,9 +1171,9 @@ export function IoTDeviceManagement() {
                 </div>
               </div>
 
-              <div className={`flex items-center gap-2 px-3 py-2 rounded-xl mb-4 ${isDark ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-amber-50 border border-amber-200'}`}>
-                <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-amber-400' : 'text-amber-500'}`} />
-                <p className={`text-[10px] ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl mb-4 bg-amber-500/20 border border-amber-500/30">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-400" />
+                <p className="text-[10px] text-amber-300">
                   This API key is needed by the Python monitor simulator. Copy it now — you won't see it again.
                 </p>
               </div>
@@ -1194,11 +1191,12 @@ export function IoTDeviceManagement() {
         {/* V53 — In-app "Take Out of Service" confirmation modal (replaces window.confirm) */}
         {outOfServiceTarget && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in"
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in"
+            style={{ background: 'rgba(2,11,20,0.55)' }}
             onClick={() => { if (serviceLoadingId !== outOfServiceTarget.id) setOutOfServiceTarget(null); }}
           >
             <div
-              className="w-full max-w-md rounded-3xl shadow-2xl overflow-hidden mx-4 animate-fade-up"
+              className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
               style={glassCard}
               onClick={(e) => e.stopPropagation()}
             >
@@ -1257,13 +1255,11 @@ export function IoTDeviceManagement() {
               </div>
 
               {/* Footer actions */}
-              <div className={`px-6 py-4 flex items-center justify-end gap-2 ${isDark ? 'bg-white/5' : 'bg-slate-50'}`}>
+              <div className="px-6 py-4 flex items-center justify-end gap-2" style={glassInner}>
                 <button
                   onClick={() => setOutOfServiceTarget(null)}
                   disabled={serviceLoadingId === outOfServiceTarget.id}
-                  className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors disabled:opacity-50 ${
-                    isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                  }`}
+                  className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors disabled:opacity-50 bg-white/10 hover:bg-white/20 ${text.body}`}
                 >
                   Cancel
                 </button>

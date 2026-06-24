@@ -36,20 +36,20 @@ const REPORT_TYPES = [
 ] as const;
 
 const REPORT_TYPE_CONFIG: Record<string, { color: string; bg: string }> = {
-  DAILY_SUMMARY:         { color: 'text-blue-600',    bg: 'rgba(59,130,246,0.10)' },
-  WEEKLY_SURVEILLANCE:   { color: 'text-cyan-600',    bg: 'rgba(6,182,212,0.10)' },
-  MONTHLY_STATISTICS:    { color: 'text-indigo-600',  bg: 'rgba(99,102,241,0.10)' },
-  QUARTERLY_REVIEW:      { color: 'text-violet-600',  bg: 'rgba(139,92,246,0.10)' },
-  ANNUAL_REPORT:         { color: 'text-emerald-600', bg: 'rgba(34,197,94,0.10)' },
-  OUTBREAK_NOTIFICATION: { color: 'text-amber-600',   bg: 'rgba(245,158,11,0.10)' },
-  MORTALITY_REVIEW:      { color: 'text-red-600',     bg: 'rgba(239,68,68,0.10)' },
+  DAILY_SUMMARY:         { color: 'text-blue-300',    bg: 'rgba(59,130,246,0.10)' },
+  WEEKLY_SURVEILLANCE:   { color: 'text-cyan-300',    bg: 'rgba(6,182,212,0.10)' },
+  MONTHLY_STATISTICS:    { color: 'text-indigo-300',  bg: 'rgba(99,102,241,0.10)' },
+  QUARTERLY_REVIEW:      { color: 'text-violet-300',  bg: 'rgba(139,92,246,0.10)' },
+  ANNUAL_REPORT:         { color: 'text-emerald-300', bg: 'rgba(34,197,94,0.10)' },
+  OUTBREAK_NOTIFICATION: { color: 'text-amber-300',   bg: 'rgba(245,158,11,0.10)' },
+  MORTALITY_REVIEW:      { color: 'text-red-300',     bg: 'rgba(239,68,68,0.10)' },
 };
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-  DRAFT:     { color: 'text-slate-600',   bg: 'rgba(100,116,139,0.10)', label: 'Draft' },
-  SUBMITTED: { color: 'text-blue-600',    bg: 'rgba(59,130,246,0.10)',  label: 'Submitted' },
-  ACCEPTED:  { color: 'text-emerald-600', bg: 'rgba(34,197,94,0.10)',   label: 'Accepted' },
-  REJECTED:  { color: 'text-red-600',     bg: 'rgba(239,68,68,0.10)',   label: 'Rejected' },
+  DRAFT:     { color: 'text-slate-300',   bg: 'rgba(100,116,139,0.10)', label: 'Draft' },
+  SUBMITTED: { color: 'text-blue-300',    bg: 'rgba(59,130,246,0.10)',  label: 'Submitted' },
+  ACCEPTED:  { color: 'text-emerald-300', bg: 'rgba(34,197,94,0.10)',   label: 'Accepted' },
+  REJECTED:  { color: 'text-red-300',     bg: 'rgba(239,68,68,0.10)',   label: 'Rejected' },
 };
 
 const STATUS_PIPELINE = ['DRAFT', 'SUBMITTED', 'ACCEPTED'];
@@ -62,6 +62,7 @@ function getTypeLabel(type: string): string {
 
 export function MohReportView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const user = useAuthStore((s) => s.user);
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const userHospitalId = user?.hospitalId || '';
@@ -181,13 +182,6 @@ export function MohReportView() {
     } catch { /* handled */ } finally { setActionLoading(null); }
   }, []);
 
-  /* -- Input styling helper --------------------------------------- */
-  const inputStyle = {
-    background: isDark ? 'rgba(12,74,110,0.18)' : 'rgba(255,255,255,0.7)',
-    border: isDark ? '1px solid rgba(2,132,199,0.22)' : '1px solid rgba(203,213,225,0.5)',
-    boxShadow: isDark ? '0 1px 4px rgba(0,0,0,0.2)' : '0 1px 4px rgba(0,0,0,0.03), inset 0 1px 0 rgba(255,255,255,0.8)',
-  };
-
   const totalPages = Math.ceil(totalElements / 20);
 
   /* =============================================================== */
@@ -200,12 +194,12 @@ export function MohReportView() {
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500/30 to-indigo-500/30 rounded-2xl flex items-center justify-center shadow-lg border border-blue-400/20">
-                  <FileBarChart className="w-6 h-6 text-blue-300" />
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                  <FileBarChart className="w-5 h-5 text-cyan-300" />
                 </div>
                 <div>
                   <h1 className="text-lg font-bold text-white tracking-wide">Ministry of Health Reports</h1>
-                  <p className="text-white/70 text-xs font-medium">De-identified aggregate reporting for Rwanda MoH compliance</p>
+                  <p className="text-sm text-white/50 font-medium">De-identified aggregate reporting for Rwanda MoH compliance</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -248,8 +242,8 @@ export function MohReportView() {
               <select
                 value={selectedScope}
                 onChange={(e) => setSelectedScope(e.target.value)}
-                className={`w-full px-3 py-2 rounded-xl text-sm ${text.heading} focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all duration-300`}
-                style={inputStyle}
+                className={`w-full px-3 py-2 rounded-xl text-sm ${text.heading} focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300`}
+                style={glassInner}
               >
                 <option value={NATIONAL}>National — all hospitals (de-identified rollup)</option>
                 {hospitals.map((h) => (
@@ -284,8 +278,8 @@ export function MohReportView() {
                 <select
                   value={formType}
                   onChange={(e) => setFormType(e.target.value)}
-                  className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all duration-300`}
-                  style={inputStyle}
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300`}
+                  style={glassInner}
                 >
                   {REPORT_TYPES.map((t) => (
                     <option key={t.value} value={t.value}>{t.label}</option>
@@ -300,8 +294,8 @@ export function MohReportView() {
                   type="date"
                   value={periodStart}
                   onChange={(e) => setPeriodStart(e.target.value)}
-                  className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all duration-300`}
-                  style={inputStyle}
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300`}
+                  style={glassInner}
                 />
               </div>
 
@@ -312,13 +306,13 @@ export function MohReportView() {
                   type="date"
                   value={periodEnd}
                   onChange={(e) => setPeriodEnd(e.target.value)}
-                  className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all duration-300`}
-                  style={inputStyle}
+                  className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300`}
+                  style={glassInner}
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 mt-4 pt-3 border-t border-gray-100/30">
+            <div className="flex items-center justify-end gap-3 mt-4 pt-3" style={{ borderTop: borderStyle }}>
               <button
                 onClick={() => setShowForm(false)}
                 className={`px-4 py-2 text-xs font-semibold ${text.body} hover:opacity-80 transition-all duration-300 rounded-xl`}
@@ -379,7 +373,7 @@ export function MohReportView() {
               );
             })}
             <span className={`text-[10px] ${text.muted} mx-1`}>or</span>
-            <span className="text-[10px] font-bold text-red-600 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(239,68,68,0.10)' }}>
+            <span className="text-[10px] font-bold text-red-300 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(239,68,68,0.10)' }}>
               Rejected
             </span>
           </div>
@@ -417,7 +411,7 @@ export function MohReportView() {
               {reports.map((report, idx) => {
                 const isExpanded = expandedId === report.id;
                 const typeCfg = REPORT_TYPE_CONFIG[report.reportType]
-                  || { color: 'text-slate-600', bg: 'rgba(100,116,139,0.10)' };
+                  || { color: 'text-slate-300', bg: 'rgba(100,116,139,0.10)' };
                 const statusCfg = STATUS_CONFIG[report.status] || STATUS_CONFIG.DRAFT;
                 const isLoading = actionLoading === report.id;
 
@@ -446,7 +440,7 @@ export function MohReportView() {
                               {statusCfg.label}
                             </span>
                             {report.reportLevel === 'NATIONAL' ? (
-                              <span className="text-[10px] font-bold text-emerald-600 px-2 py-0.5 rounded-md uppercase tracking-wider inline-flex items-center gap-1" style={{ background: 'rgba(16,185,129,0.10)' }}>
+                              <span className="text-[10px] font-bold text-emerald-300 px-2 py-0.5 rounded-md uppercase tracking-wider inline-flex items-center gap-1" style={{ background: 'rgba(16,185,129,0.10)' }}>
                                 <Globe className="w-2.5 h-2.5" /> National · {report.includedHospitalCount ?? 0} hosp
                               </span>
                             ) : report.hospitalName ? (
@@ -477,7 +471,7 @@ export function MohReportView() {
 
                     {/* Expanded detail */}
                     {isExpanded && (
-                      <div className="px-4 pb-4 pt-1 border-t border-gray-100/30">
+                      <div className="px-4 pb-4 pt-1" style={{ borderTop: borderStyle }}>
                         {/* Aggregate Stats Grid */}
                         <p className={`text-[10px] font-bold ${text.muted} uppercase tracking-wider mb-3 mt-2`}>De-identified Aggregate Statistics</p>
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -520,7 +514,7 @@ export function MohReportView() {
                         )}
 
                         {/* Action buttons */}
-                        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100/30 flex-wrap">
+                        <div className="flex items-center gap-2 mt-4 pt-3 flex-wrap" style={{ borderTop: borderStyle }}>
                           {/* PDF export — available for every report state (statutory MoH / HMIS return) */}
                           <button
                             onClick={() => handleDownloadPdf(report.id)}
@@ -564,15 +558,15 @@ export function MohReportView() {
                             </>
                           )}
                           {report.status === 'ACCEPTED' && (
-                            <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'rgba(34,197,94,0.10)' }}>
-                              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                              <span className="text-xs font-bold text-emerald-600">Accepted by MoH</span>
+                            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                              <span className="text-xs font-bold text-emerald-300">Accepted by MoH</span>
                             </div>
                           )}
                           {report.status === 'REJECTED' && (
-                            <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'rgba(239,68,68,0.10)' }}>
-                              <XCircle className="w-4 h-4 text-red-500" />
-                              <span className="text-xs font-bold text-red-600">Rejected by MoH</span>
+                            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-500/20 border border-red-500/30">
+                              <XCircle className="w-4 h-4 text-red-400" />
+                              <span className="text-xs font-bold text-red-300">Rejected by MoH</span>
                             </div>
                           )}
                         </div>
@@ -612,11 +606,11 @@ export function MohReportView() {
 
         {/* -- Reject Modal ----------------------------------------- */}
         {rejectTarget && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in">
-            <div className="rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl" style={glassCard}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+            <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-md" style={glassCard}>
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'rgba(239,68,68,0.12)' }}>
-                  <XCircle className="w-5 h-5 text-red-500" />
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/20 border border-red-500/30">
+                  <XCircle className="w-5 h-5 text-red-400" />
                 </div>
                 <div>
                   <h3 className={`text-sm font-extrabold ${text.heading}`}>Reject Report</h3>
@@ -629,7 +623,7 @@ export function MohReportView() {
                 placeholder="Reason for rejection..."
                 rows={4}
                 className={`w-full px-3 py-2.5 rounded-xl text-sm ${text.heading} focus:outline-none focus:ring-2 focus:ring-red-500/20 transition-all duration-300 resize-none`}
-                style={inputStyle}
+                style={glassInner}
               />
               <div className="flex items-center justify-end gap-3 mt-4">
                 <button
