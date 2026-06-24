@@ -228,7 +228,7 @@ export function QualityDashboard() {
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   period === value
                     ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
-                    : `${text.secondary} hover:bg-white/5`
+                    : `${text.body} hover:bg-white/5`
                 }`}
               >
                 {label}
@@ -249,8 +249,8 @@ export function QualityDashboard() {
           <div className="rounded-3xl overflow-hidden" style={glassCard}>
             <div className="flex flex-col items-center justify-center py-16 px-6">
               <BarChart3 className="w-12 h-12 text-slate-500 mb-4" />
-              <p className={`text-sm font-semibold ${text.primary}`}>No Quality Snapshots Available</p>
-              <p className={`text-xs mt-1 ${text.secondary}`}>Generate a snapshot to view quality metrics</p>
+              <p className={`text-sm font-semibold ${text.heading}`}>No Quality Snapshots Available</p>
+              <p className={`text-xs mt-1 ${text.body}`}>Generate a snapshot to view quality metrics</p>
             </div>
           </div>
         )}
@@ -264,7 +264,7 @@ export function QualityDashboard() {
               <div className="px-5 py-3" style={{ borderBottom: borderStyle }}>
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-blue-400" />
-                  <h2 className={`text-sm font-bold ${text.primary}`}>Patient Volume</h2>
+                  <h2 className={`text-sm font-bold ${text.heading}`}>Patient Volume</h2>
                 </div>
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-px" style={{ background: borderStyle.includes('rgba') ? 'transparent' : undefined }}>
@@ -281,8 +281,8 @@ export function QualityDashboard() {
                       </div>
                       <DeltaBadge current={current[key]} previous={prevVal(key)} />
                     </div>
-                    <p className={`text-2xl font-bold ${text.primary}`}>{current[key].toLocaleString()}</p>
-                    <p className={`text-xs mt-0.5 ${text.secondary}`}>{label}</p>
+                    <p className={`text-2xl font-bold ${text.heading}`}>{current[key].toLocaleString()}</p>
+                    <p className={`text-xs mt-0.5 ${text.body}`}>{label}</p>
                   </div>
                 ))}
               </div>
@@ -293,7 +293,7 @@ export function QualityDashboard() {
               <div className="px-5 py-3" style={{ borderBottom: borderStyle }}>
                 <div className="flex items-center gap-2">
                   <Activity className="w-4 h-4 text-orange-400" />
-                  <h2 className={`text-sm font-bold ${text.primary}`}>Triage Distribution</h2>
+                  <h2 className={`text-sm font-bold ${text.heading}`}>Triage Distribution</h2>
                 </div>
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-5 gap-px">
@@ -323,7 +323,7 @@ export function QualityDashboard() {
                             style={{ width: `${Math.min(parseFloat(pct), 100)}%` }}
                           />
                         </div>
-                        <p className={`text-[10px] mt-1 ${text.secondary}`}>{pct}% of total</p>
+                        <p className={`text-[10px] mt-1 ${text.body}`}>{pct}% of total</p>
                       </div>
                     </div>
                   );
@@ -336,7 +336,7 @@ export function QualityDashboard() {
               <div className="px-5 py-3" style={{ borderBottom: borderStyle }}>
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-cyan-400" />
-                  <h2 className={`text-sm font-bold ${text.primary}`}>Time Metrics</h2>
+                  <h2 className={`text-sm font-bold ${text.heading}`}>Time Metrics</h2>
                 </div>
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-px">
@@ -357,9 +357,9 @@ export function QualityDashboard() {
                       </div>
                       <p className={`text-2xl font-bold ${timeColor(value, target)}`}>
                         {value.toFixed(0)}
-                        <span className={`text-xs font-normal ml-1 ${text.secondary}`}>{unit}</span>
+                        <span className={`text-xs font-normal ml-1 ${text.body}`}>{unit}</span>
                       </p>
-                      <p className={`text-xs mt-0.5 ${text.secondary}`}>{label}</p>
+                      <p className={`text-xs mt-0.5 ${text.body}`}>{label}</p>
                       <div className="mt-2">
                         <div className="w-full h-1.5 rounded-full bg-white/5">
                           <div
@@ -369,7 +369,7 @@ export function QualityDashboard() {
                             style={{ width: `${Math.min((value / (target * 2)) * 100, 100)}%` }}
                           />
                         </div>
-                        <p className={`text-[10px] mt-1 ${text.secondary}`}>Target: {target} {unit}</p>
+                        <p className={`text-[10px] mt-1 ${text.body}`}>Target: {target} {unit}</p>
                       </div>
                     </div>
                   );
@@ -382,7 +382,7 @@ export function QualityDashboard() {
               <div className="px-5 py-3" style={{ borderBottom: borderStyle }}>
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <h2 className={`text-sm font-bold ${text.primary}`}>Clinical Quality</h2>
+                  <h2 className={`text-sm font-bold ${text.heading}`}>Clinical Quality</h2>
                 </div>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-px">
@@ -402,9 +402,9 @@ export function QualityDashboard() {
                       </div>
                       <p className={`text-2xl font-bold ${rateColor(value)}`}>
                         {value.toFixed(1)}
-                        <span className={`text-xs font-normal ml-0.5 ${text.secondary}`}>%</span>
+                        <span className={`text-xs font-normal ml-0.5 ${text.body}`}>%</span>
                       </p>
-                      <p className={`text-xs mt-0.5 ${text.secondary}`}>{label}</p>
+                      <p className={`text-xs mt-0.5 ${text.body}`}>{label}</p>
                       <div className="mt-2">
                         <div className="w-full h-1.5 rounded-full bg-white/5">
                           <div
@@ -414,7 +414,7 @@ export function QualityDashboard() {
                             style={{ width: `${Math.min(value, 100)}%` }}
                           />
                         </div>
-                        <p className={`text-[10px] mt-1 ${text.secondary}`}>Target: 90%</p>
+                        <p className={`text-[10px] mt-1 ${text.body}`}>Target: 90%</p>
                       </div>
                     </div>
                   );
@@ -430,7 +430,7 @@ export function QualityDashboard() {
                 <div className="px-5 py-3" style={{ borderBottom: borderStyle }}>
                   <div className="flex items-center gap-2">
                     <Bed className="w-4 h-4 text-violet-400" />
-                    <h2 className={`text-sm font-bold ${text.primary}`}>Capacity</h2>
+                    <h2 className={`text-sm font-bold ${text.heading}`}>Capacity</h2>
                   </div>
                 </div>
                 <div className="px-5 py-4 space-y-4">
@@ -444,10 +444,10 @@ export function QualityDashboard() {
                     return (
                       <div key={key}>
                         <div className="flex items-center justify-between mb-1.5">
-                          <p className={`text-xs font-semibold ${text.secondary}`}>{label}</p>
+                          <p className={`text-xs font-semibold ${text.body}`}>{label}</p>
                           <div className="flex items-center gap-2">
                             <DeltaBadge current={value} previous={prevVal(key)} invert />
-                            <span className={`text-sm font-bold ${isHigh ? 'text-red-400' : text.primary}`}>
+                            <span className={`text-sm font-bold ${isHigh ? 'text-red-400' : text.heading}`}>
                               {key === 'icuBedUtilizationPercent' ? `${value.toFixed(1)}%` : value.toFixed(0)}
                             </span>
                           </div>
@@ -469,7 +469,7 @@ export function QualityDashboard() {
                 <div className="px-5 py-3" style={{ borderBottom: borderStyle }}>
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 text-amber-400" />
-                    <h2 className={`text-sm font-bold ${text.primary}`}>Safety Indicators</h2>
+                    <h2 className={`text-sm font-bold ${text.heading}`}>Safety Indicators</h2>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-px">
@@ -483,9 +483,9 @@ export function QualityDashboard() {
                     </div>
                     <p className={`text-2xl font-bold ${current.edMortalityRate > 2 ? 'text-red-400' : current.edMortalityRate > 1 ? 'text-amber-400' : 'text-emerald-400'}`}>
                       {current.edMortalityRate.toFixed(2)}
-                      <span className={`text-xs font-normal ml-0.5 ${text.secondary}`}>%</span>
+                      <span className={`text-xs font-normal ml-0.5 ${text.body}`}>%</span>
                     </p>
-                    <p className={`text-xs mt-0.5 ${text.secondary}`}>ED Mortality Rate</p>
+                    <p className={`text-xs mt-0.5 ${text.body}`}>ED Mortality Rate</p>
                   </div>
 
                   {/* LWBS */}
@@ -499,7 +499,7 @@ export function QualityDashboard() {
                     <p className={`text-2xl font-bold ${current.totalLeftWithoutBeingSeen > 10 ? 'text-red-400' : current.totalLeftWithoutBeingSeen > 5 ? 'text-amber-400' : 'text-emerald-400'}`}>
                       {current.totalLeftWithoutBeingSeen}
                     </p>
-                    <p className={`text-xs mt-0.5 ${text.secondary}`}>Left Without Being Seen</p>
+                    <p className={`text-xs mt-0.5 ${text.body}`}>Left Without Being Seen</p>
                   </div>
 
                   {/* Deaths */}
@@ -510,8 +510,8 @@ export function QualityDashboard() {
                       </div>
                       <DeltaBadge current={current.totalDeaths} previous={prevVal('totalDeaths')} invert />
                     </div>
-                    <p className={`text-2xl font-bold ${text.primary}`}>{current.totalDeaths}</p>
-                    <p className={`text-xs mt-0.5 ${text.secondary}`}>Total Deaths</p>
+                    <p className={`text-2xl font-bold ${text.heading}`}>{current.totalDeaths}</p>
+                    <p className={`text-xs mt-0.5 ${text.body}`}>Total Deaths</p>
                   </div>
 
                   {/* Pediatric */}
@@ -523,7 +523,7 @@ export function QualityDashboard() {
                       <DeltaBadge current={current.pediatricPatients} previous={prevVal('pediatricPatients')} />
                     </div>
                     <p className={`text-2xl font-bold text-pink-400`}>{current.pediatricPatients}</p>
-                    <p className={`text-xs mt-0.5 ${text.secondary}`}>Pediatric Patients</p>
+                    <p className={`text-xs mt-0.5 ${text.body}`}>Pediatric Patients</p>
                   </div>
                 </div>
               </div>

@@ -249,7 +249,7 @@ export function DoctorWorkspace() {
             onClick={() => { loadData(); refreshShift(); }}
             className={`p-2.5 rounded-xl transition-all ${isDark ? 'hover:bg-white/5 text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}
           >
-            <RefreshCw className="w-4.5 h-4.5" />
+            <RefreshCw className="w-5 h-5" />
           </button>
         </div>
       </div>

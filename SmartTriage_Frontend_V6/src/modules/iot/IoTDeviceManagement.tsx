@@ -839,7 +839,7 @@ export function IoTDeviceManagement() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                      <Monitor className="w-4.5 h-4.5 text-white" />
+                      <Monitor className="w-5 h-5 text-white" />
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-white">Assign Device to Patient</h3>
@@ -1020,7 +1020,7 @@ export function IoTDeviceManagement() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                        <BedDouble className="w-4.5 h-4.5 text-white" />
+                        <BedDouble className="w-5 h-5 text-white" />
                       </div>
                       <div>
                         <h3 className="text-sm font-bold text-white">Assign Monitor to Bed</h3>
@@ -1207,7 +1207,7 @@ export function IoTDeviceManagement() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                      <AlertTriangle className="w-4.5 h-4.5 text-white" />
+                      <AlertTriangle className="w-5 h-5 text-white" />
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-white">Take Device Out of Service?</h3>

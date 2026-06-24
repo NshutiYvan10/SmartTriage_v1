@@ -2632,7 +2632,7 @@ function DispositionTab({ visit, onDisposition, formLoading, glassCard, glassInn
 
       {/* Disposition type selection */}
       <div className="rounded-2xl p-5" style={glassCard}>
-        <h3 className={`font-bold mb-3 ${text.primary}`}>
+        <h3 className={`font-bold mb-3 ${text.heading}`}>
           {isAlreadyDisposed ? 'Disposition Details' : 'Select Disposition'}
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

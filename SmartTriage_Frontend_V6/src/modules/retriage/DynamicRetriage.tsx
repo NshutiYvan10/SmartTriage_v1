@@ -200,7 +200,7 @@ export function DynamicRetriage() {
               <div key={stat.label} className="rounded-2xl p-4" style={glassCard}>
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: stat.bg }}>
-                    <Icon className={`w-4.5 h-4.5 ${stat.color}`} />
+                    <Icon className={`w-5 h-5 ${stat.color}`} />
                   </div>
                   <div>
                     <p className="text-lg font-extrabold text-slate-800">{stat.value}</p>

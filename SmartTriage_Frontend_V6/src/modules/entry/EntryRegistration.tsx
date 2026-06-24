@@ -1170,7 +1170,7 @@ export function EntryRegistration() {
                         </div>
                         <div>
                           <p className="font-bold text-red-600 text-sm">Guardian Required</p>
-                          <p className="text-xs text-red-500/70 font-medium mt-0.5">Pediatric patients (age &lt; 15) must have a guardian/caregiver registered. This is mandatory to proceed.</p>
+                          <p className="text-xs text-red-500/70 font-medium mt-0.5">Pediatric patients (age &lt; 13) must have a guardian/caregiver registered. This is mandatory to proceed.</p>
                         </div>
                       </div>
                     )}

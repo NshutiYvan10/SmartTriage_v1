@@ -240,8 +240,8 @@ export function MohReportView() {
               style={{ backgroundColor: isNational ? 'rgba(16,185,129,0.12)' : 'rgba(59,130,246,0.12)' }}
             >
               {isNational
-                ? <Globe className="w-4.5 h-4.5 text-emerald-500" />
-                : <Building2 className="w-4.5 h-4.5 text-blue-500" />}
+                ? <Globe className="w-5 h-5 text-emerald-500" />
+                : <Building2 className="w-5 h-5 text-blue-500" />}
             </div>
             <div className="flex-1 min-w-[220px]">
               <label className={`block text-[10px] font-bold ${text.muted} uppercase tracking-wider mb-1`}>Reporting Scope</label>
@@ -352,7 +352,7 @@ export function MohReportView() {
             <div key={ind.label} className="rounded-2xl p-4" style={glassCard}>
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: ind.bg }}>
-                  <ind.icon className={`w-4.5 h-4.5 ${ind.color}`} />
+                  <ind.icon className={`w-5 h-5 ${ind.color}`} />
                 </div>
                 <div>
                   <p className={`text-[10px] font-bold ${text.muted} uppercase tracking-wider`}>{ind.label}</p>
@@ -434,7 +434,7 @@ export function MohReportView() {
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: typeCfg.bg }}>
-                          <FileBarChart className={`w-4.5 h-4.5 ${typeCfg.color}`} />
+                          <FileBarChart className={`w-5 h-5 ${typeCfg.color}`} />
                         </div>
 
                         <div className="flex-1 min-w-0">
