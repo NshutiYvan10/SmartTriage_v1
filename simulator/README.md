@@ -135,3 +135,37 @@ and runs the AI monitoring engine.
 
 If no `--serial` / `--api-key` / `--config` is given, the script enters
 interactive mode and prompts you.
+
+---
+
+## RFID Reader Simulator (`rfid_simulator.py`, V95)
+
+Simulates the registration-desk ESP32 + RFID reader without hardware. It makes the exact call the
+firmware makes — `POST /api/v1/iot/rfid/tap` with the device's `X-Device-API-Key` — and prints what
+the reader's screen + buzzer would show for each result.
+
+First register an `RFID_READER` device (IoT Devices page, or `POST /api/v1/iot/devices` with
+`deviceType=RFID_READER`) to get its API key.
+
+```bash
+# Tap a card — identifies the patient system-wide and surfaces them on the registrar dashboard
+python rfid_simulator.py --server localhost:8080 --api-key <KEY> --card 04A2B9C1
+
+# Demonstrate the offline state (unreachable server)
+python rfid_simulator.py --server localhost:9999 --api-key <KEY> --card 04A2B9C1
+```
+
+| Result | Screen / buzzer |
+|---|---|
+| `FOUND` | patient name shown, positive tone — registrar confirms & opens a visit |
+| `NOT_FOUND` | "register manually", distinct tone |
+| `CARD_CAPTURED` | reader was armed in registration bind mode; UID captured into the form |
+| offline | device shows "No connection" + error tone (server unreachable) |
+
+| Flag | Meaning | Default |
+|------|---------|---------|
+| `--server`   | SmartTriage server address          | required |
+| `--api-key`  | RFID reader device API key          | required |
+| `--card`     | Card UID to tap                     | required |
+| `--repeat`   | Number of taps to send              | `1`      |
+| `--interval` | Seconds between taps (if `--repeat`) | `3.0`   |
