@@ -35,21 +35,21 @@ const REPORT_TYPES = [
   { value: 'MORTALITY_REVIEW', label: 'Mortality Review' },
 ] as const;
 
-const REPORT_TYPE_CONFIG: Record<string, { color: string; bg: string }> = {
-  DAILY_SUMMARY:         { color: 'text-blue-300',    bg: 'rgba(59,130,246,0.10)' },
-  WEEKLY_SURVEILLANCE:   { color: 'text-cyan-300',    bg: 'rgba(6,182,212,0.10)' },
-  MONTHLY_STATISTICS:    { color: 'text-indigo-300',  bg: 'rgba(99,102,241,0.10)' },
-  QUARTERLY_REVIEW:      { color: 'text-violet-300',  bg: 'rgba(139,92,246,0.10)' },
-  ANNUAL_REPORT:         { color: 'text-emerald-300', bg: 'rgba(34,197,94,0.10)' },
-  OUTBREAK_NOTIFICATION: { color: 'text-amber-300',   bg: 'rgba(245,158,11,0.10)' },
-  MORTALITY_REVIEW:      { color: 'text-red-300',     bg: 'rgba(239,68,68,0.10)' },
+const REPORT_TYPE_CONFIG: Record<string, { color: string; bg: string; border: string }> = {
+  DAILY_SUMMARY:         { color: 'text-blue-600',    bg: 'rgba(59,130,246,0.08)',  border: '1px solid rgba(59,130,246,0.2)' },
+  WEEKLY_SURVEILLANCE:   { color: 'text-cyan-600',    bg: 'rgba(6,182,212,0.08)',   border: '1px solid rgba(6,182,212,0.2)' },
+  MONTHLY_STATISTICS:    { color: 'text-indigo-600',  bg: 'rgba(99,102,241,0.08)',  border: '1px solid rgba(99,102,241,0.2)' },
+  QUARTERLY_REVIEW:      { color: 'text-violet-600',  bg: 'rgba(139,92,246,0.08)',  border: '1px solid rgba(139,92,246,0.2)' },
+  ANNUAL_REPORT:         { color: 'text-emerald-600', bg: 'rgba(16,185,129,0.08)',  border: '1px solid rgba(16,185,129,0.2)' },
+  OUTBREAK_NOTIFICATION: { color: 'text-amber-600',   bg: 'rgba(245,158,11,0.08)',  border: '1px solid rgba(245,158,11,0.2)' },
+  MORTALITY_REVIEW:      { color: 'text-red-600',     bg: 'rgba(239,68,68,0.08)',   border: '1px solid rgba(239,68,68,0.2)' },
 };
 
-const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-  DRAFT:     { color: 'text-slate-300',   bg: 'rgba(100,116,139,0.10)', label: 'Draft' },
-  SUBMITTED: { color: 'text-blue-300',    bg: 'rgba(59,130,246,0.10)',  label: 'Submitted' },
-  ACCEPTED:  { color: 'text-emerald-300', bg: 'rgba(34,197,94,0.10)',   label: 'Accepted' },
-  REJECTED:  { color: 'text-red-300',     bg: 'rgba(239,68,68,0.10)',   label: 'Rejected' },
+const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string; label: string }> = {
+  DRAFT:     { color: 'text-slate-600',   bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)', label: 'Draft' },
+  SUBMITTED: { color: 'text-blue-600',    bg: 'rgba(59,130,246,0.08)',  border: '1px solid rgba(59,130,246,0.2)',  label: 'Submitted' },
+  ACCEPTED:  { color: 'text-emerald-600', bg: 'rgba(16,185,129,0.08)',  border: '1px solid rgba(16,185,129,0.2)',  label: 'Accepted' },
+  REJECTED:  { color: 'text-red-600',     bg: 'rgba(239,68,68,0.08)',   border: '1px solid rgba(239,68,68,0.2)',   label: 'Rejected' },
 };
 
 const STATUS_PIPELINE = ['DRAFT', 'SUBMITTED', 'ACCEPTED'];
@@ -322,7 +322,7 @@ export function MohReportView() {
               <button
                 onClick={handleGenerate}
                 disabled={!periodStart || !periodEnd || actionLoading === 'generate'}
-                className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {actionLoading === 'generate' ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -365,7 +365,7 @@ export function MohReportView() {
               const cfg = STATUS_CONFIG[st];
               return (
                 <div key={st} className="flex items-center gap-2">
-                  <span className={`text-[10px] font-bold ${cfg.color} px-2.5 py-1 rounded-lg`} style={{ background: cfg.bg }}>
+                  <span className={`text-[10px] font-bold ${cfg.color} px-2.5 py-1 rounded-lg`} style={{ background: cfg.bg, border: cfg.border }}>
                     {cfg.label}
                   </span>
                   {i < STATUS_PIPELINE.length - 1 && <ArrowRight className={`w-3 h-3 ${text.muted}`} />}
@@ -373,7 +373,7 @@ export function MohReportView() {
               );
             })}
             <span className={`text-[10px] ${text.muted} mx-1`}>or</span>
-            <span className="text-[10px] font-bold text-red-300 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(239,68,68,0.10)' }}>
+            <span className="text-[10px] font-bold text-red-600 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
               Rejected
             </span>
           </div>
@@ -433,18 +433,18 @@ export function MohReportView() {
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                            <span className={`text-[10px] font-bold ${typeCfg.color} px-2 py-0.5 rounded-md uppercase tracking-wider`} style={{ background: typeCfg.bg }}>
+                            <span className={`text-[10px] font-bold ${typeCfg.color} px-2 py-0.5 rounded-lg uppercase tracking-wider`} style={{ background: typeCfg.bg, border: typeCfg.border }}>
                               {getTypeLabel(report.reportType)}
                             </span>
-                            <span className={`text-[10px] font-bold ${statusCfg.color} px-2 py-0.5 rounded-md uppercase tracking-wider`} style={{ background: statusCfg.bg }}>
+                            <span className={`text-[10px] font-bold ${statusCfg.color} px-2 py-0.5 rounded-lg uppercase tracking-wider`} style={{ background: statusCfg.bg, border: statusCfg.border }}>
                               {statusCfg.label}
                             </span>
                             {report.reportLevel === 'NATIONAL' ? (
-                              <span className="text-[10px] font-bold text-emerald-300 px-2 py-0.5 rounded-md uppercase tracking-wider inline-flex items-center gap-1" style={{ background: 'rgba(16,185,129,0.10)' }}>
+                              <span className="text-[10px] font-bold text-emerald-600 px-2 py-0.5 rounded-lg uppercase tracking-wider inline-flex items-center gap-1" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
                                 <Globe className="w-2.5 h-2.5" /> National · {report.includedHospitalCount ?? 0} hosp
                               </span>
                             ) : report.hospitalName ? (
-                              <span className={`text-[10px] font-semibold ${text.muted} px-2 py-0.5 rounded-md inline-flex items-center gap-1`} style={{ background: 'rgba(100,116,139,0.10)' }}>
+                              <span className="text-[10px] font-semibold text-slate-600 px-2 py-0.5 rounded-lg inline-flex items-center gap-1" style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>
                                 <Building2 className="w-2.5 h-2.5" /> {report.hospitalName}
                               </span>
                             ) : null}
@@ -531,7 +531,7 @@ export function MohReportView() {
                             <button
                               onClick={() => handleSubmit(report.id)}
                               disabled={isLoading}
-                              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
+                              className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
                             >
                               {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                               Submit to MoH
@@ -542,7 +542,7 @@ export function MohReportView() {
                               <button
                                 onClick={() => handleAccept(report.id)}
                                 disabled={isLoading}
-                                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
+                                className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
                               >
                                 {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                                 Accept
@@ -558,15 +558,15 @@ export function MohReportView() {
                             </>
                           )}
                           {report.status === 'ACCEPTED' && (
-                            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30">
-                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                              <span className="text-xs font-bold text-emerald-300">Accepted by MoH</span>
+                            <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              <span className="text-xs font-bold text-emerald-600">Accepted by MoH</span>
                             </div>
                           )}
                           {report.status === 'REJECTED' && (
-                            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-500/20 border border-red-500/30">
-                              <XCircle className="w-4 h-4 text-red-400" />
-                              <span className="text-xs font-bold text-red-300">Rejected by MoH</span>
+                            <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                              <XCircle className="w-4 h-4 text-red-600" />
+                              <span className="text-xs font-bold text-red-600">Rejected by MoH</span>
                             </div>
                           )}
                         </div>
@@ -606,7 +606,7 @@ export function MohReportView() {
 
         {/* -- Reject Modal ----------------------------------------- */}
         {rejectTarget && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
             <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-md" style={glassCard}>
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/20 border border-red-500/30">

@@ -191,7 +191,7 @@ export function QualityDashboard() {
                 <button
                   onClick={handleGenerate}
                   disabled={generating}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-xs font-bold hover:bg-indigo-500/30 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold transition-colors disabled:opacity-50"
                 >
                   {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                   Generate Snapshot
@@ -225,9 +225,9 @@ export function QualityDashboard() {
               <button
                 key={value}
                 onClick={() => setPeriod(value)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                   period === value
-                    ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
+                    ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
                     : `${text.body} hover:bg-white/5`
                 }`}
               >

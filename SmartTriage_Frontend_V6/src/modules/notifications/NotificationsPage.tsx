@@ -36,11 +36,11 @@ function formatTimeAgo(date: Date): string {
   return `${days}d ago`;
 }
 
-const typeConfig: Record<NotificationType, { icon: any; color: string; bg: string; iconBg: string; badge: string; label: string }> = {
-  critical: { icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50', iconBg: 'bg-gradient-to-br from-red-500 to-red-600', badge: 'bg-red-500/20 text-red-300 border-red-500/30', label: 'Critical' },
-  warning: { icon: AlertCircle, color: 'text-amber-600', bg: 'bg-amber-50', iconBg: 'bg-gradient-to-br from-amber-500 to-amber-600', badge: 'bg-amber-500/20 text-amber-300 border-amber-500/30', label: 'Warning' },
-  info: { icon: Info, color: 'text-blue-600', bg: 'bg-blue-50', iconBg: 'bg-gradient-to-br from-blue-500 to-blue-600', badge: 'bg-blue-500/20 text-blue-300 border-blue-500/30', label: 'Info' },
-  success: { icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50', iconBg: 'bg-gradient-to-br from-emerald-500 to-emerald-600', badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', label: 'Success' },
+const typeConfig: Record<NotificationType, { icon: any; color: string; bg: string; iconBg: string; badge: string; badgeStyle: { background: string; border: string }; label: string }> = {
+  critical: { icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50', iconBg: 'bg-gradient-to-br from-red-500 to-red-600', badge: 'text-red-600', badgeStyle: { background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }, label: 'Critical' },
+  warning: { icon: AlertCircle, color: 'text-amber-600', bg: 'bg-amber-50', iconBg: 'bg-gradient-to-br from-amber-500 to-amber-600', badge: 'text-amber-600', badgeStyle: { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }, label: 'Warning' },
+  info: { icon: Info, color: 'text-blue-600', bg: 'bg-blue-50', iconBg: 'bg-gradient-to-br from-blue-500 to-blue-600', badge: 'text-blue-600', badgeStyle: { background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }, label: 'Info' },
+  success: { icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50', iconBg: 'bg-gradient-to-br from-emerald-500 to-emerald-600', badge: 'text-emerald-600', badgeStyle: { background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }, label: 'Success' },
 };
 
 const categoryConfig: Record<NotificationCategory, { icon: any; label: string }> = {
@@ -217,7 +217,7 @@ export function NotificationsPage() {
                     onClick={() => setCategoryFilter(cat)}
                     className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl transition-all duration-300 ${
                       isActive
-                        ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-lg shadow-slate-800/20'
+                        ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
                         : isDark
                           ? 'text-slate-400 hover:text-white hover:bg-white/5'
                           : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
@@ -296,14 +296,20 @@ export function NotificationsPage() {
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <h3 className={`text-sm font-bold ${text.heading}`}>{n.title}</h3>
                         {!n.read && (
-                          <span className="px-2 py-0.5 rounded-lg bg-red-500/20 text-red-300 text-[10px] font-bold border border-red-500/30">
+                          <span
+                            className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-red-600"
+                            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                          >
                             NEW
                           </span>
                         )}
                       </div>
                       <p className={`text-xs leading-relaxed mb-3 ${text.body}`}>{n.message}</p>
                       <div className="flex items-center gap-3 flex-wrap">
-                        <span className={`inline-flex items-center px-2.5 py-1 text-[10px] font-bold rounded-lg border ${config.badge}`}>
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${config.badge}`}
+                          style={config.badgeStyle}
+                        >
                           {config.label}
                         </span>
                         {n.patientName && (

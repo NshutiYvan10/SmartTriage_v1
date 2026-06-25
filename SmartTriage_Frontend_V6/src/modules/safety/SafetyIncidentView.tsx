@@ -31,18 +31,18 @@ const SEVERITIES = ['CRITICAL', 'MAJOR', 'MODERATE', 'MINOR', 'NEAR_MISS'] as co
 const STATUSES = ['REPORTED', 'UNDER_INVESTIGATION', 'INVESTIGATION_COMPLETE', 'CLOSED'] as const;
 
 const SEVERITY_STYLE: Record<string, { bg: string; border: string; text: string; dot: string }> = {
-  CRITICAL:  { bg: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.3)', text: 'text-red-300', dot: 'bg-red-500' },
-  MAJOR:     { bg: 'rgba(245,158,11,0.2)', border: '1px solid rgba(245,158,11,0.3)', text: 'text-amber-300', dot: 'bg-amber-500' },
-  MODERATE:  { bg: 'rgba(234,179,8,0.2)', border: '1px solid rgba(234,179,8,0.3)', text: 'text-yellow-300', dot: 'bg-yellow-500' },
-  MINOR:     { bg: 'rgba(59,130,246,0.2)', border: '1px solid rgba(59,130,246,0.3)', text: 'text-blue-300', dot: 'bg-blue-500' },
-  NEAR_MISS: { bg: 'rgba(148,163,184,0.2)', border: '1px solid rgba(148,163,184,0.3)', text: 'text-slate-300', dot: 'bg-slate-400' },
+  CRITICAL:  { bg: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', text: 'text-red-600', dot: 'bg-red-500' },
+  MAJOR:     { bg: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', text: 'text-amber-600', dot: 'bg-amber-500' },
+  MODERATE:  { bg: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)', text: 'text-yellow-600', dot: 'bg-yellow-500' },
+  MINOR:     { bg: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', text: 'text-blue-600', dot: 'bg-blue-500' },
+  NEAR_MISS: { bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)', text: 'text-slate-600', dot: 'bg-slate-400' },
 };
 
 const STATUS_STYLE: Record<string, { bg: string; border: string; text: string }> = {
-  REPORTED:                { bg: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.3)', text: 'text-red-300' },
-  UNDER_INVESTIGATION:     { bg: 'rgba(245,158,11,0.2)', border: '1px solid rgba(245,158,11,0.3)', text: 'text-amber-300' },
-  INVESTIGATION_COMPLETE:  { bg: 'rgba(59,130,246,0.2)', border: '1px solid rgba(59,130,246,0.3)', text: 'text-blue-300' },
-  CLOSED:                  { bg: 'rgba(34,197,94,0.2)', border: '1px solid rgba(34,197,94,0.3)', text: 'text-emerald-300' },
+  REPORTED:                { bg: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', text: 'text-red-600' },
+  UNDER_INVESTIGATION:     { bg: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', text: 'text-amber-600' },
+  INVESTIGATION_COMPLETE:  { bg: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', text: 'text-blue-600' },
+  CLOSED:                  { bg: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', text: 'text-emerald-600' },
 };
 
 function getSeverityStyle(s: string) { return SEVERITY_STYLE[s] || SEVERITY_STYLE.MINOR; }
@@ -289,7 +289,7 @@ export function SafetyIncidentView() {
                 )}
                 <button
                   onClick={() => setShowForm(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-red-500/80 hover:bg-red-500 rounded-xl transition-all shadow-md"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-xl transition-all shadow-md"
                 >
                   <Plus className="w-3.5 h-3.5" /> Report Incident
                 </button>
@@ -439,28 +439,32 @@ export function SafetyIncidentView() {
                             {incident.incidentNumber}
                           </span>
                           {/* Type badge */}
-                          <span className={`inline-flex items-center px-2.5 py-1 text-[10px] font-bold rounded-lg uppercase tracking-wider ${
-                            isDark ? 'bg-white/5 text-slate-300 border border-white/10' : 'bg-slate-100 text-slate-600 border border-slate-200/60'
-                          }`}>
+                          <span
+                            className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-slate-600"
+                            style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}
+                          >
                             {formatLabel(incident.incidentType)}
                           </span>
                           {/* Severity badge */}
                           <span
-                            className={`inline-flex items-center px-2.5 py-1 text-[10px] font-bold rounded-lg uppercase tracking-wider ${sevStyle.text}`}
+                            className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${sevStyle.text}`}
                             style={{ background: sevStyle.bg, border: sevStyle.border }}
                           >
                             {formatLabel(incident.severity)}
                           </span>
                           {/* Status badge */}
                           <span
-                            className={`inline-flex items-center px-2.5 py-1 text-[10px] font-bold rounded-lg uppercase tracking-wider ${statStyle.text}`}
+                            className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${statStyle.text}`}
                             style={{ background: statStyle.bg, border: statStyle.border }}
                           >
                             {formatLabel(incident.status)}
                           </span>
                           {/* Patient harmed */}
                           {incident.patientHarmed && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg uppercase tracking-wider text-red-300 bg-red-500/20 border border-red-500/30">
+                            <span
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-red-600"
+                              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                            >
                               <Ban className="w-3 h-3" /> Patient Harmed
                             </span>
                           )}
@@ -498,7 +502,7 @@ export function SafetyIncidentView() {
                         {incident.status === 'REPORTED' && (
                           <button
                             onClick={(e) => { e.stopPropagation(); openAction('investigate', incident.id); }}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-white bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl shadow-md hover:-translate-y-0.5 transition-all"
+                            className="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-xl shadow-md hover:-translate-y-0.5 transition-all"
                           >
                             <Eye className="w-3 h-3" /> Investigate
                           </button>
@@ -506,7 +510,7 @@ export function SafetyIncidentView() {
                         {incident.status === 'UNDER_INVESTIGATION' && (
                           <button
                             onClick={(e) => { e.stopPropagation(); openAction('complete', incident.id); }}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl shadow-md hover:-translate-y-0.5 transition-all"
+                            className="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-xl shadow-md hover:-translate-y-0.5 transition-all"
                           >
                             <FileText className="w-3 h-3" /> Complete
                           </button>
@@ -597,8 +601,8 @@ export function SafetyIncidentView() {
          Report New Incident Dialog
          ═══════════════════════════════════════════════════════════════ */}
       {showForm && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
-          <div className="absolute inset-0 backdrop-blur-sm" onClick={() => !formSubmitting && setShowForm(false)} />
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+          <div className="absolute inset-0" onClick={() => !formSubmitting && setShowForm(false)} />
           <div className="relative w-full max-w-lg mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in max-h-[85vh] overflow-y-auto" style={glassCard}>
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
@@ -743,7 +747,7 @@ export function SafetyIncidentView() {
               <button
                 onClick={handleSubmitIncident}
                 disabled={formSubmitting || !formData.description.trim()}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-red-500 to-red-600 shadow-red-500/20 hover:shadow-red-500/30 hover:-translate-y-0.5"
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-cyan-600 hover:bg-cyan-700 hover:-translate-y-0.5"
               >
                 {formSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldAlert className="w-3.5 h-3.5" />}
                 {formSubmitting ? 'Submitting...' : 'Submit Report'}
@@ -757,8 +761,8 @@ export function SafetyIncidentView() {
          Action Dialog — Investigate / Complete / Close
          ═══════════════════════════════════════════════════════════════ */}
       {actionDialog && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
-          <div className="absolute inset-0 backdrop-blur-sm" onClick={() => !actionSubmitting && setActionDialog(null)} />
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+          <div className="absolute inset-0" onClick={() => !actionSubmitting && setActionDialog(null)} />
           <div className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in" style={glassCard}>
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
@@ -894,13 +898,7 @@ export function SafetyIncidentView() {
                   (actionDialog.mode === 'complete' && (!actionFields.rootCauseAnalysis.trim() || !actionFields.rootCauseCategory.trim() || !actionFields.correctiveAction.trim())) ||
                   (actionDialog.mode === 'close' && !actionFields.lessonsLearned.trim())
                 }
-                className={`inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5 ${
-                  actionDialog.mode === 'investigate'
-                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 shadow-amber-500/20'
-                    : actionDialog.mode === 'complete'
-                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 shadow-blue-500/20'
-                    : 'bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-emerald-500/20'
-                }`}
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5 bg-cyan-600 hover:bg-cyan-700"
               >
                 {actionSubmitting ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />

@@ -274,9 +274,9 @@ export function ClinicalNotesPanel({ visitId, className }: ClinicalNotesPanelPro
           <button
             type="submit"
             disabled={!composerContent.trim() || submitting || !authUser}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition-colors ${
               composerContent.trim() && !submitting && authUser
-                ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
           >
@@ -396,7 +396,7 @@ export function ClinicalNotesPanel({ visitId, className }: ClinicalNotesPanelPro
                         type="button"
                         onClick={cancelSupersede}
                         disabled={supersedeBusy}
-                        className={`text-xs px-2.5 py-1 rounded-md ${
+                        className={`text-xs px-2.5 py-1 rounded-xl ${
                           isDark ? 'text-slate-300 hover:bg-white/5' : 'text-gray-600 hover:bg-gray-100'
                         }`}
                       >
@@ -406,9 +406,9 @@ export function ClinicalNotesPanel({ visitId, className }: ClinicalNotesPanelPro
                         type="button"
                         onClick={() => submitSupersede(note)}
                         disabled={!supersedeContent.trim() || supersedeBusy}
-                        className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md font-semibold ${
+                        className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-xl font-semibold ${
                           supersedeContent.trim() && !supersedeBusy
-                            ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                            ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
                             : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                         }`}
                       >
@@ -425,7 +425,7 @@ export function ClinicalNotesPanel({ visitId, className }: ClinicalNotesPanelPro
                     <button
                       type="button"
                       onClick={() => startSupersede(note)}
-                      className={`text-[11px] inline-flex items-center gap-1 px-2 py-0.5 rounded ${
+                      className={`text-[11px] inline-flex items-center gap-1 px-2 py-0.5 rounded-xl ${
                         isDark
                           ? 'text-amber-300 hover:bg-amber-500/10'
                           : 'text-amber-700 hover:bg-amber-100'

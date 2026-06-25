@@ -13,21 +13,24 @@ import { userApi } from '@/api/users';
 import { hospitalApi } from '@/api/hospitals';
 import type { UserResponse, HospitalResponse, Role, Designation, AccountStatus } from '@/api/types';
 
-const ROLE_COLORS: Record<string, { color: string; bg: string }> = {
-  SUPER_ADMIN:    { color: 'text-red-500', bg: 'bg-red-500/10' },
-  HOSPITAL_ADMIN: { color: 'text-violet-500', bg: 'bg-violet-500/10' },
-  DOCTOR:         { color: 'text-cyan-500', bg: 'bg-cyan-500/10' },
-  NURSE:          { color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-  REGISTRAR:      { color: 'text-blue-500', bg: 'bg-blue-500/10' },
-  PARAMEDIC:      { color: 'text-amber-500', bg: 'bg-amber-500/10' },
-  LAB_TECHNICIAN: { color: 'text-pink-500', bg: 'bg-pink-500/10' },
-  READ_ONLY:      { color: 'text-slate-500', bg: 'bg-slate-500/10' },
+// Badge styling follows the Pathways standard: translucent bg/border
+// (rgba COLOR @ 0.08 / 0.2) + semantic text-COLOR-600, preserving each
+// role/status hue.
+const ROLE_COLORS: Record<string, { color: string; style: { background: string; border: string } }> = {
+  SUPER_ADMIN:    { color: 'text-red-600',     style: { background: 'rgba(239,68,68,0.08)',  border: '1px solid rgba(239,68,68,0.2)' } },
+  HOSPITAL_ADMIN: { color: 'text-violet-600',  style: { background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' } },
+  DOCTOR:         { color: 'text-cyan-600',     style: { background: 'rgba(6,182,212,0.08)',  border: '1px solid rgba(6,182,212,0.2)' } },
+  NURSE:          { color: 'text-emerald-600',  style: { background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' } },
+  REGISTRAR:      { color: 'text-blue-600',     style: { background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' } },
+  PARAMEDIC:      { color: 'text-amber-600',    style: { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' } },
+  LAB_TECHNICIAN: { color: 'text-pink-600',     style: { background: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.2)' } },
+  READ_ONLY:      { color: 'text-slate-600',    style: { background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' } },
 };
 
-const STATUS_STYLES: Record<AccountStatus, { color: string; bg: string; label: string }> = {
-  PENDING_ACTIVATION: { color: 'text-amber-500', bg: 'bg-amber-500/10', label: 'Pending' },
-  ACTIVE:             { color: 'text-emerald-500', bg: 'bg-emerald-500/10', label: 'Active' },
-  DEACTIVATED:        { color: 'text-slate-500', bg: 'bg-slate-500/10', label: 'Deactivated' },
+const STATUS_STYLES: Record<AccountStatus, { color: string; style: { background: string; border: string }; label: string }> = {
+  PENDING_ACTIVATION: { color: 'text-amber-600',   style: { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' },  label: 'Pending' },
+  ACTIVE:             { color: 'text-emerald-600', style: { background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }, label: 'Active' },
+  DEACTIVATED:        { color: 'text-slate-600',   style: { background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }, label: 'Deactivated' },
 };
 
 // Role dropdown values. Triage-station assignment is a per-shift
@@ -345,7 +348,7 @@ export function UserManagement() {
                 <button onClick={loadUsers} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors">
                   <RefreshCw className="w-4 h-4 text-white" />
                 </button>
-                <button onClick={openInviteForm} className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all">
+                <button onClick={openInviteForm} className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
                   <MailPlus className="w-3.5 h-3.5" /> Invite User
                 </button>
               </div>
@@ -446,7 +449,7 @@ export function UserManagement() {
               </div>
             </div>
             <div className="flex items-center gap-3 mt-4">
-              <button onClick={handleInvite} disabled={formLoading || !inviteForm.email} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
+              <button onClick={handleInvite} disabled={formLoading || !inviteForm.email} className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all disabled:opacity-50">
                 {formLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Send Invitation
               </button>
               <button onClick={() => { setShowForm(false); }} className={`px-4 py-2.5 text-xs font-bold rounded-xl ${text.muted}`}>Cancel</button>
@@ -549,7 +552,7 @@ export function UserManagement() {
               </div>
             </div>
             <div className="flex items-center gap-3 mt-4">
-              <button onClick={handleUpdate} disabled={formLoading || !editForm.firstName || !editForm.lastName || !editForm.email} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
+              <button onClick={handleUpdate} disabled={formLoading || !editForm.firstName || !editForm.lastName || !editForm.email} className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all disabled:opacity-50">
                 {formLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Update
               </button>
               <button onClick={() => { setShowForm(false); setEditId(null); }} className={`px-4 py-2.5 text-xs font-bold rounded-xl ${text.muted}`}>Cancel</button>
@@ -607,13 +610,13 @@ export function UserManagement() {
                           <p className={`text-xs ${text.body}`}>{u.email}</p>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg ${rc.bg} ${rc.color}`}>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${rc.color}`} style={rc.style}>
                             {u.role?.replace(/_/g, ' ')}
                           </span>
                         </td>
                         <td className="px-4 py-3">
                           {u.designationLabel ? (
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg text-violet-500 bg-violet-500/10">
+                            <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg text-violet-600" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
                               {u.designationLabel}
                             </span>
                           ) : (
@@ -624,7 +627,7 @@ export function UserManagement() {
                           <p className={`text-xs ${text.muted}`}>{u.phoneNumber || '—'}</p>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg ${sc.bg} ${sc.color}`}>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${sc.color}`} style={sc.style}>
                             {sc.label}
                           </span>
                         </td>
@@ -710,8 +713,8 @@ export function UserManagement() {
       {/* In-app confirmation dialog for destructive row actions (replaces window.confirm) */}
       {confirmDialog && (
         <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-          style={{ background: 'rgba(2,11,20,0.55)' }}
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+          style={{ background: 'rgba(2,6,23,0.65)' }}
           onClick={() => !confirmLoading && setConfirmDialog(null)}
         >
           <div

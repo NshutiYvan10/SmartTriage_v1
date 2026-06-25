@@ -108,15 +108,14 @@ export class ErrorBoundary extends Component<Props, State> {
               <div className="mt-5 flex flex-wrap gap-3">
                 <button
                   onClick={this.handleReset}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-white inline-flex items-center gap-2"
-                  style={{ background: '#0284c7' }}
+                  className="px-4 py-2 rounded-xl text-sm font-medium text-white inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700"
                 >
                   <RotateCcw className="w-4 h-4" />
                   Try again
                 </button>
                 <button
                   onClick={this.handleReload}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-slate-700 inline-flex items-center gap-2"
+                  className="px-4 py-2 rounded-xl text-sm font-medium text-slate-700 inline-flex items-center gap-2"
                   style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(203,213,225,0.6)' }}
                 >
                   <RefreshCw className="w-4 h-4" />

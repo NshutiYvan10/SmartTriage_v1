@@ -926,7 +926,7 @@ export function ConstantMonitoring() {
                   </p>
                   <button
                     onClick={() => navigate('/iot-devices')}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white text-xs font-bold rounded-xl hover:-translate-y-0.5 transition-all shadow-md"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl hover:-translate-y-0.5 transition-all shadow-md"
                   >
                     <Cpu className="w-3.5 h-3.5" /> Manage IoT Devices
                   </button>

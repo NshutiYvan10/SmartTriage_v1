@@ -224,7 +224,10 @@ export function Dashboard() {
             <div className="flex items-center gap-2 mt-0.5">
               <p className="text-slate-500 text-sm font-medium">Real-time patient management & triage overview</p>
               {myZone && (
-                <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${isDark ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border border-cyan-200'}`}>
+                <span
+                  className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-cyan-600"
+                  style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}
+                >
                   {ZONE_LABELS[myZone] || myZone} Zone
                 </span>
               )}
@@ -296,7 +299,10 @@ export function Dashboard() {
                                     {a.title || (isDoctor ? 'Doctor Notification' : 'Clinical Alert')}
                                   </p>
                                   {a.escalationTier && a.escalationTier > 1 && (
-                                    <span className="text-[9px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-md">TIER {a.escalationTier}</span>
+                                    <span
+                                      className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-red-600"
+                                      style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                                    >TIER {a.escalationTier}</span>
                                   )}
                                 </div>
                                 <p className={`text-xs ${isDark ? 'text-slate-300' : 'text-gray-600'} mt-0.5 leading-relaxed line-clamp-2`}>
@@ -314,7 +320,10 @@ export function Dashboard() {
                                     </span>
                                   )}
                                   {a.targetZone && (
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/20 text-cyan-300' : 'bg-cyan-50 text-cyan-700'}`}>{a.targetZone}</span>
+                                    <span
+                                      className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-cyan-600"
+                                      style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}
+                                    >{a.targetZone}</span>
                                   )}
                                 </div>
                               </div>
@@ -503,7 +512,7 @@ export function Dashboard() {
             <div className="flex-1" />
 
             {/* Compact Apply Button */}
-            <button className="w-8 h-8 flex items-center justify-center rounded-full bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
+            <button className="w-8 h-8 flex items-center justify-center rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
               <Search className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -753,7 +762,10 @@ export function Dashboard() {
                   </p>
                 </div>
                 {zoneAlerts.length > 0 && (
-                  <span className="text-[11px] font-bold bg-red-500 text-white px-2.5 py-1 rounded-full shadow-sm animate-pulse">{zoneAlerts.length}</span>
+                  <span
+                    className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg text-red-600 animate-pulse"
+                    style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                  >{zoneAlerts.length}</span>
                 )}
               </div>
               <div className="space-y-2">
@@ -782,7 +794,10 @@ export function Dashboard() {
                         <div className="flex items-center gap-2">
                           <p className="text-[13px] font-semibold text-slate-800 leading-snug truncate">{alert.title || alert.message}</p>
                           {alert.escalationTier && alert.escalationTier > 1 && (
-                            <span className="text-[8px] font-bold bg-red-500 text-white px-1 py-0.5 rounded">T{alert.escalationTier}</span>
+                            <span
+                              className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-red-600"
+                              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                            >T{alert.escalationTier}</span>
                           )}
                         </div>
                         {alert.patientName && (
@@ -800,11 +815,18 @@ export function Dashboard() {
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1">
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${
-                          alert.severity === 'CRITICAL' ? 'bg-red-50 text-red-600' :
-                          alert.severity === 'HIGH' ? 'bg-orange-50 text-orange-600' :
-                          'bg-yellow-50 text-yellow-600'
-                        }`}>{alert.severity}</span>
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider flex-shrink-0 ${
+                            alert.severity === 'CRITICAL' ? 'text-red-600' :
+                            alert.severity === 'HIGH' ? 'text-orange-600' :
+                            'text-yellow-600'
+                          }`}
+                          style={
+                            alert.severity === 'CRITICAL' ? { background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' } :
+                            alert.severity === 'HIGH' ? { background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.2)' } :
+                            { background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)' }
+                          }
+                        >{alert.severity}</span>
                         {!alert.acknowledgedAt && (
                           <button
                             onClick={(e) => { e.stopPropagation(); acknowledgeAlertApi(alert.id); }}

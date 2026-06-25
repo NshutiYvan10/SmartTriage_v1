@@ -181,6 +181,9 @@ export function AuditTrail() {
                 const Icon = failed ? AlertTriangle : CheckCircle;
                 const color = failed ? 'text-rose-600' : 'text-emerald-600';
                 const bg = failed ? 'rgba(244,63,94,0.1)' : 'rgba(34,197,94,0.1)';
+                const badgeStyle = failed
+                  ? { background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' }
+                  : { background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' };
                 const isExpanded = expandedEntry === entry.id;
                 return (
                   <div key={entry.id} className="rounded-2xl overflow-hidden transition-all hover:-translate-y-0.5" style={glassCard}>
@@ -191,7 +194,7 @@ export function AuditTrail() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                            <span className={`text-[10px] font-bold ${color} px-2 py-0.5 rounded-md uppercase tracking-wider`} style={{ background: bg }}>
+                            <span className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${color}`} style={badgeStyle}>
                               {entry.outcome}{entry.statusCode ? ` · ${entry.statusCode}` : ''}
                             </span>
                             <span className={`text-[10px] ${text.muted} flex items-center gap-1`}>

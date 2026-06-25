@@ -76,7 +76,7 @@ export function RfidPatientFoundBanner() {
           </p>
           <button
             onClick={() => { navigate('/entry'); dismiss(); }}
-            className="inline-flex items-center gap-1.5 mt-2.5 text-xs font-semibold text-cyan-700 hover:text-cyan-900 px-2.5 py-1 rounded-md hover:bg-cyan-50 transition-colors"
+            className="inline-flex items-center gap-1.5 mt-2.5 text-xs font-semibold text-cyan-700 hover:text-cyan-900 px-2.5 py-1 rounded-xl hover:bg-cyan-50 transition-colors"
           >
             Register manually
           </button>
@@ -121,14 +121,14 @@ export function RfidPatientFoundBanner() {
             <button
               onClick={openVisit}
               disabled={opening}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 px-3.5 py-1.5 rounded-xl transition-colors disabled:opacity-50"
             >
               {opening ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserCheck className="w-3.5 h-3.5" />}
               Open visit
             </button>
             <button
               onClick={dismiss}
-              className="text-xs font-semibold text-slate-500 hover:text-slate-700 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+              className="text-xs font-semibold text-slate-500 hover:text-slate-700 px-2.5 py-1.5 rounded-xl hover:bg-slate-100 transition-colors"
             >
               Dismiss
             </button>

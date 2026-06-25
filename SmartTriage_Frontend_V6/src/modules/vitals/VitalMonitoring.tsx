@@ -85,7 +85,7 @@ export function VitalMonitoring() {
           <p className={`text-sm mb-4 ${text.body}`}>The patient record could not be located</p>
           <button
             onClick={() => navigate('/monitoring')}
-            className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-all text-sm"
+            className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl transition-all text-sm"
           >
             Return to Monitoring
           </button>
@@ -606,12 +606,12 @@ export function VitalMonitoring() {
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-300 ${
                     isActive
-                      ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                      ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
                       : `${text.body} hover:bg-white/5`
                   }`}
                 >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-cyan-400' : text.muted}`} />
-                  <span className={`font-bold ${isActive ? 'text-cyan-400' : text.label}`}>{tab.label}</span>
+                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : text.muted}`} />
+                  <span className={`font-bold ${isActive ? 'text-white' : text.label}`}>{tab.label}</span>
                 </button>
               );
             })}

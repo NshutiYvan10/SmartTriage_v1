@@ -163,7 +163,10 @@ export function AlertPanel({ alerts, onAcknowledge, onClose }: AlertPanelProps) 
                       {alert.title || alert.message}
                     </p>
                     {alert.escalationTier && alert.escalationTier > 1 && (
-                      <span className="text-[9px] font-extrabold bg-red-500 text-white px-1.5 py-0.5 rounded-md tracking-wide">
+                      <span
+                        className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-red-600"
+                        style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                      >
                         TIER {alert.escalationTier}
                       </span>
                     )}
@@ -178,7 +181,7 @@ export function AlertPanel({ alerts, onAcknowledge, onClose }: AlertPanelProps) 
 
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                     <span
-                      className="text-[9px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wide"
+                      className="text-[9px] font-bold px-1.5 py-0.5 rounded-lg uppercase tracking-wide"
                       style={{ background: meta.badgeBg, color: meta.badgeText }}
                     >
                       {alert.severity}
@@ -187,7 +190,10 @@ export function AlertPanel({ alerts, onAcknowledge, onClose }: AlertPanelProps) 
                       {formatDistanceToNow(new Date(alert.timestamp), { addSuffix: true })}
                     </span>
                     {alert.targetZone && (
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/20 text-cyan-300' : 'bg-cyan-50 text-cyan-700'}`}>
+                      <span
+                        className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-lg text-cyan-600"
+                        style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}
+                      >
                         {alert.targetZone}
                       </span>
                     )}
@@ -210,11 +216,17 @@ export function AlertPanel({ alerts, onAcknowledge, onClose }: AlertPanelProps) 
 
                       {alert.previousCategory && alert.recommendedCategory && (
                         <div className="flex items-center gap-2 text-[11px]">
-                          <span className="px-2 py-0.5 rounded-md font-bold bg-amber-100 text-amber-700">
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded-lg font-bold text-amber-600"
+                            style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+                          >
                             {alert.previousCategory}
                           </span>
                           <ArrowRight className="w-3 h-3 text-slate-400" />
-                          <span className="px-2 py-0.5 rounded-md font-bold bg-red-100 text-red-700">
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded-lg font-bold text-red-600"
+                            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                          >
                             {alert.recommendedCategory}
                           </span>
                         </div>
@@ -243,7 +255,7 @@ export function AlertPanel({ alerts, onAcknowledge, onClose }: AlertPanelProps) 
                           />
                           <button
                             onClick={() => onAcknowledge(alert.id, commentDraft[alert.id])}
-                            className="inline-flex items-center gap-1.5 text-[11px] font-bold text-white bg-cyan-600 hover:bg-cyan-500 px-3 py-1.5 rounded-lg transition-all shadow-sm hover:shadow"
+                            className="inline-flex items-center gap-1.5 text-[11px] font-bold text-white bg-cyan-600 hover:bg-cyan-700 px-3 py-1.5 rounded-xl transition-all shadow-sm hover:shadow"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             Acknowledge

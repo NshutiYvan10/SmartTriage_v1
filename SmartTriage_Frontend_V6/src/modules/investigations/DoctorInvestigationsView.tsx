@@ -33,8 +33,10 @@ type Section = {
   title: string;
   helper: string;
   icon: typeof FlaskConical;
-  /** Tailwind tint for the section header chip. */
+  /** Semantic text color for the section header chip. */
   tint: string;
+  /** Translucent bg/border for the section header chip. */
+  chipStyle: React.CSSProperties;
 };
 
 const SECTIONS: Section[] = [
@@ -43,35 +45,40 @@ const SECTIONS: Section[] = [
     title: 'Resulted',
     helper: 'Result available — review and act',
     icon: CheckCircle2,
-    tint: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+    tint: 'text-emerald-600',
+    chipStyle: { background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' },
   },
   {
     status: 'IN_PROGRESS',
     title: 'In progress',
     helper: 'Specimen received by lab, processing',
     icon: Loader2,
-    tint: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+    tint: 'text-cyan-600',
+    chipStyle: { background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' },
   },
   {
     status: 'SPECIMEN_COLLECTED',
     title: 'Specimen collected',
     helper: 'Drawn — on its way to the lab',
     icon: FileSearch,
-    tint: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    tint: 'text-amber-600',
+    chipStyle: { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' },
   },
   {
     status: 'ORDERED',
     title: 'Pending',
     helper: 'Ordered — specimen not yet drawn',
     icon: Clock,
-    tint: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
+    tint: 'text-slate-600',
+    chipStyle: { background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' },
   },
   {
     status: 'CANCELLED',
     title: 'Cancelled',
     helper: 'Cancelled — for audit only',
     icon: XCircle,
-    tint: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+    tint: 'text-rose-600',
+    chipStyle: { background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' },
   },
 ];
 
@@ -179,7 +186,10 @@ export function DoctorInvestigationsView() {
           <FilterChip active={filter === 'ORDERED'}         label={`Pending ${totals.ORDERED}`}        onClick={() => setFilter('ORDERED')} accent="slate" />
           <FilterChip active={filter === 'CANCELLED'}       label={`Cancelled ${totals.CANCELLED}`}    onClick={() => setFilter('CANCELLED')} accent="rose" />
           {totals.abnormal > 0 && (
-            <span className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-md bg-red-500/20 text-red-300 border border-red-500/30 text-[11px] font-bold">
+            <span
+              className="ml-auto inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold text-red-600"
+              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+            >
               <AlertTriangle className="w-3 h-3" /> {totals.abnormal} abnormal/critical need review
             </span>
           )}
@@ -237,21 +247,15 @@ function FilterChip({
   onClick: () => void;
   accent?: 'emerald' | 'cyan' | 'amber' | 'slate' | 'rose';
 }) {
-  const accents: Record<string, string> = {
-    emerald: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-    cyan: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
-    amber: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-    slate: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
-    rose: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
-  };
+  void accent;
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-colors ${
         active
-          ? (accent ? accents[accent] : 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30')
-          : 'border-transparent text-slate-400 hover:bg-white/5'
+          ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
+          : 'text-slate-400 hover:text-white hover:bg-white/5'
       }`}
     >
       {label}
@@ -276,7 +280,10 @@ function SectionCard({
       <div className={`px-4 py-2.5 flex items-center gap-2 border-b ${
         isDark ? 'border-white/10' : 'border-slate-200/60'
       }`}>
-        <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border ${section.tint}`}>
+        <span
+          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${section.tint}`}
+          style={section.chipStyle}
+        >
           <Icon className="w-3 h-3" />
           {section.title}
           <span className="ml-1 inline-flex items-center justify-center min-w-[20px] px-1 rounded bg-white/10">
@@ -293,11 +300,18 @@ function SectionCard({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-sm font-bold ${text.heading}`}>{r.testName}</span>
-                <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                  r.priority === 'STAT' ? 'bg-red-500/20 text-red-300 border border-red-500/30'
-                  : r.priority === 'URGENT' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                  : 'bg-slate-500/20 text-slate-300 border border-slate-500/30'
-                }`}>
+                <span
+                  className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${
+                    r.priority === 'STAT' ? 'text-red-600'
+                    : r.priority === 'URGENT' ? 'text-amber-600'
+                    : 'text-slate-600'
+                  }`}
+                  style={
+                    r.priority === 'STAT' ? { background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }
+                    : r.priority === 'URGENT' ? { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }
+                    : { background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }
+                  }
+                >
                   {r.priority || 'ROUTINE'}
                 </span>
                 <span className={`text-[10px] uppercase tracking-wider ${text.muted}`}>
@@ -309,7 +323,10 @@ function SectionCard({
                   </span>
                 )}
                 {!r.isCritical && r.isAbnormal && (
-                  <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  <span
+                    className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-amber-600"
+                    style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+                  >
                     Abnormal
                   </span>
                 )}
@@ -329,7 +346,7 @@ function SectionCard({
             </div>
             <Link
               to={`/visit/${r.visitId}`}
-              className={`inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold ${cardClass} bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30 transition-colors`}
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white transition-colors"
             >
               Open visit <ChevronRight className="w-3 h-3" />
             </Link>

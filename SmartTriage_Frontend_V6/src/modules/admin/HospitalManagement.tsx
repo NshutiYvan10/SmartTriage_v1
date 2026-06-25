@@ -189,7 +189,7 @@ export function HospitalManagement() {
                 <button onClick={loadHospitals} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors">
                   <RefreshCw className="w-4 h-4 text-white" />
                 </button>
-                <button onClick={() => { setForm(emptyForm); setEditId(null); setShowForm(!showForm); }} className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all">
+                <button onClick={() => { setForm(emptyForm); setEditId(null); setShowForm(!showForm); }} className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
                   <Plus className="w-3.5 h-3.5" /> Add Hospital
                 </button>
               </div>
@@ -327,7 +327,7 @@ export function HospitalManagement() {
             </div>
 
             <div className="flex items-center gap-3 mt-4">
-              <button onClick={handleSave} disabled={formLoading || !form.name} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
+              <button onClick={handleSave} disabled={formLoading || !form.name} className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all disabled:opacity-50">
                 {formLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} {editId ? 'Update' : 'Register'}
               </button>
               <button onClick={() => { setShowForm(false); setEditId(null); }} className={`px-4 py-2.5 text-xs font-bold rounded-xl ${text.muted}`}>Cancel</button>
@@ -366,9 +366,9 @@ export function HospitalManagement() {
                   </div>
                   <div className="flex items-center gap-2">
                     {h.active === false ? (
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg text-rose-300 bg-rose-500/20 border border-rose-500/30">Inactive</span>
+                      <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-rose-600" style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' }}>Inactive</span>
                     ) : (
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg text-emerald-300 bg-emerald-500/20 border border-emerald-500/30">Active</span>
+                      <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-emerald-600" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>Active</span>
                     )}
                     <button title="Edit" onClick={() => startEdit(h)} className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'} transition-colors`}>
                       <Pencil className="w-3.5 h-3.5 text-slate-400" />
@@ -386,7 +386,7 @@ export function HospitalManagement() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg text-slate-300 bg-slate-500/20 border border-slate-500/30`}>{h.tier?.replace(/_/g, ' ')}</span>
+                  <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-slate-600" style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>{h.tier?.replace(/_/g, ' ')}</span>
                   {h.address && (
                     <p className={`flex items-center gap-1.5 text-xs ${text.body}`}>
                       <MapPin className="w-3 h-3 text-slate-400 shrink-0" /> {h.address}
@@ -411,7 +411,7 @@ export function HospitalManagement() {
 
       {/* Confirm activation / deactivation modal */}
       {confirmTarget && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
           <div className="rounded-2xl overflow-hidden shadow-2xl p-6 max-w-md w-full animate-scale-in" style={glassCard}>
             <div className="flex items-start gap-4">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${

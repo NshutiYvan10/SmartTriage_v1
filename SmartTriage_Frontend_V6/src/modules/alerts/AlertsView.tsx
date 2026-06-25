@@ -305,7 +305,7 @@ export function AlertsView() {
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
-                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-[11px] font-bold rounded-lg transition-all ${
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-[11px] font-bold rounded-xl transition-all ${
                     filter === f
                       ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
                       : isDark ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
@@ -332,13 +332,10 @@ export function AlertsView() {
               <button
                 key={c}
                 onClick={() => setCategoryFilter(c)}
-                className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide rounded-lg border transition-all ${
+                className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide rounded-xl transition-all ${
                   categoryFilter === c
-                    ? c === 'CLINICAL'    ? 'bg-rose-600 text-white border-rose-700'
-                    : c === 'OPERATIONAL' ? 'bg-sky-600 text-white border-sky-700'
-                    : c === 'SYSTEM'      ? 'bg-slate-600 text-white border-slate-700'
-                    : 'bg-slate-800 text-white border-slate-900'
-                    : isDark ? 'text-slate-400 border-slate-700 hover:text-white' : 'text-slate-500 border-slate-200 hover:text-slate-800 hover:bg-white/60'
+                    ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
+                    : isDark ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
                 }`}
               >
                 {c === 'all' ? 'All' : c.charAt(0) + c.slice(1).toLowerCase()}
@@ -422,7 +419,7 @@ export function AlertsView() {
                           const cat = categoryOf(alert);
                           const cs = styleFor(cat);
                           return (
-                            <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-md border uppercase tracking-wide ${cs.chipClass}`}>
+                            <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-lg border uppercase tracking-wider ${cs.chipClass}`}>
                               {cs.label}
                             </span>
                           );
@@ -431,7 +428,10 @@ export function AlertsView() {
                           {alert.alertType?.replace(/_/g, ' ')}
                         </span>
                         {alert.targetZone && (
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${isDark ? 'bg-cyan-500/10 text-cyan-400' : 'bg-cyan-50 text-cyan-600'}`}>
+                          <span
+                            className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-lg text-cyan-600"
+                            style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}
+                          >
                             {alert.targetZone}
                           </span>
                         )}
@@ -486,7 +486,7 @@ export function AlertsView() {
                       <div className="flex-shrink-0 pt-1 flex flex-col gap-2">
                         <button
                           onClick={() => openDialog('acknowledge', alert.id)}
-                          className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-slate-800 to-slate-700 hover:shadow-lg hover:-translate-y-0.5 rounded-xl transition-all shadow-md shadow-slate-800/15"
+                          className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 hover:shadow-lg hover:-translate-y-0.5 rounded-xl transition-all shadow-md shadow-cyan-600/15"
                         >
                           <Eye className="w-3.5 h-3.5" /> Acknowledge
                         </button>
@@ -523,16 +523,19 @@ export function AlertsView() {
          Comment Dialog — replaces native prompt()
          ═══════════════════════════════════════════════════════════════ */}
       {dialogOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+          style={{ background: 'rgba(2,6,23,0.65)' }}
+        >
           {/* Backdrop */}
           <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            className="absolute inset-0"
             onClick={() => !dialogSubmitting && setDialogOpen(false)}
           />
 
           {/* Dialog card */}
           <div
-            className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in"
+            className="relative w-full max-w-md mx-4 rounded-2xl overflow-hidden p-6 shadow-2xl animate-scale-in"
             style={glassCard}
           >
             {/* Header */}
@@ -601,8 +604,8 @@ export function AlertsView() {
                 disabled={dialogSubmitting || (dialogMode === 'dismiss' && !dialogComment.trim())}
                 className={`inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                   dialogMode === 'dismiss'
-                    ? 'bg-gradient-to-r from-red-500 to-red-600 shadow-red-500/20 hover:shadow-red-500/30'
-                    : 'bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-emerald-500/20 hover:shadow-emerald-500/30'
+                    ? 'bg-red-600 hover:bg-red-700 shadow-red-500/20'
+                    : 'bg-cyan-600 hover:bg-cyan-700 shadow-cyan-500/20'
                 } ${dialogSubmitting ? '' : 'hover:-translate-y-0.5'}`}
               >
                 {dialogSubmitting ? (

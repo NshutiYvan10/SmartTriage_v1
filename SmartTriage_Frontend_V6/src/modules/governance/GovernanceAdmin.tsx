@@ -30,26 +30,26 @@ const POLICY_TYPES = [
   { value: 'STAFFING_GUIDELINE', label: 'Staffing Guideline' },
 ] as const;
 
-const POLICY_TYPE_CONFIG: Record<string, { color: string; bg: string }> = {
-  TRIAGE_PROTOCOL:         { color: 'text-blue-400',    bg: 'rgba(59,130,246,0.10)' },
-  MEDICATION_GUIDELINE:    { color: 'text-emerald-400', bg: 'rgba(34,197,94,0.10)' },
-  INFECTION_CONTROL:       { color: 'text-red-400',     bg: 'rgba(239,68,68,0.10)' },
-  ICU_CRITERIA:            { color: 'text-orange-400',  bg: 'rgba(249,115,22,0.10)' },
-  DOCUMENTATION_STANDARD:  { color: 'text-slate-400',   bg: 'rgba(100,116,139,0.10)' },
-  SAFETY_PROTOCOL:         { color: 'text-amber-400',   bg: 'rgba(245,158,11,0.10)' },
-  QUALITY_STANDARD:        { color: 'text-violet-400',  bg: 'rgba(139,92,246,0.10)' },
-  TRAINING_REQUIREMENT:    { color: 'text-cyan-400',    bg: 'rgba(6,182,212,0.10)' },
-  EQUIPMENT_MAINTENANCE:   { color: 'text-teal-400',    bg: 'rgba(20,184,166,0.10)' },
-  STAFFING_GUIDELINE:      { color: 'text-pink-400',    bg: 'rgba(236,72,153,0.10)' },
+const POLICY_TYPE_CONFIG: Record<string, { color: string; bg: string; border: string }> = {
+  TRIAGE_PROTOCOL:         { color: 'text-blue-600',    bg: 'rgba(59,130,246,0.08)',  border: '1px solid rgba(59,130,246,0.2)' },
+  MEDICATION_GUIDELINE:    { color: 'text-emerald-600', bg: 'rgba(16,185,129,0.08)',  border: '1px solid rgba(16,185,129,0.2)' },
+  INFECTION_CONTROL:       { color: 'text-red-600',     bg: 'rgba(239,68,68,0.08)',   border: '1px solid rgba(239,68,68,0.2)' },
+  ICU_CRITERIA:            { color: 'text-orange-600',  bg: 'rgba(249,115,22,0.08)',  border: '1px solid rgba(249,115,22,0.2)' },
+  DOCUMENTATION_STANDARD:  { color: 'text-slate-600',   bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' },
+  SAFETY_PROTOCOL:         { color: 'text-amber-600',   bg: 'rgba(245,158,11,0.08)',  border: '1px solid rgba(245,158,11,0.2)' },
+  QUALITY_STANDARD:        { color: 'text-violet-600',  bg: 'rgba(139,92,246,0.08)',  border: '1px solid rgba(139,92,246,0.2)' },
+  TRAINING_REQUIREMENT:    { color: 'text-cyan-600',    bg: 'rgba(6,182,212,0.08)',   border: '1px solid rgba(6,182,212,0.2)' },
+  EQUIPMENT_MAINTENANCE:   { color: 'text-teal-600',    bg: 'rgba(20,184,166,0.08)',  border: '1px solid rgba(20,184,166,0.2)' },
+  STAFFING_GUIDELINE:      { color: 'text-pink-600',    bg: 'rgba(236,72,153,0.08)',  border: '1px solid rgba(236,72,153,0.2)' },
 };
 
-const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-  DRAFT:             { color: 'text-slate-400',   bg: 'rgba(100,116,139,0.10)', label: 'Draft' },
-  PENDING_APPROVAL:  { color: 'text-amber-400',   bg: 'rgba(245,158,11,0.10)', label: 'Pending Approval' },
-  APPROVED:          { color: 'text-blue-400',    bg: 'rgba(59,130,246,0.10)',  label: 'Approved' },
-  ACTIVE:            { color: 'text-emerald-400', bg: 'rgba(34,197,94,0.10)',   label: 'Active' },
-  SUSPENDED:         { color: 'text-red-400',     bg: 'rgba(239,68,68,0.10)',   label: 'Suspended' },
-  ARCHIVED:          { color: 'text-slate-400',   bg: 'rgba(100,116,139,0.08)', label: 'Archived' },
+const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string; label: string }> = {
+  DRAFT:             { color: 'text-slate-600',   bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)', label: 'Draft' },
+  PENDING_APPROVAL:  { color: 'text-amber-600',   bg: 'rgba(245,158,11,0.08)',  border: '1px solid rgba(245,158,11,0.2)',  label: 'Pending Approval' },
+  APPROVED:          { color: 'text-blue-600',    bg: 'rgba(59,130,246,0.08)',  border: '1px solid rgba(59,130,246,0.2)',  label: 'Approved' },
+  ACTIVE:            { color: 'text-emerald-600', bg: 'rgba(16,185,129,0.08)',  border: '1px solid rgba(16,185,129,0.2)',  label: 'Active' },
+  SUSPENDED:         { color: 'text-red-600',     bg: 'rgba(239,68,68,0.08)',   border: '1px solid rgba(239,68,68,0.2)',   label: 'Suspended' },
+  ARCHIVED:          { color: 'text-slate-600',   bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)', label: 'Archived' },
 };
 
 const STATUS_PIPELINE = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'ACTIVE'];
@@ -284,7 +284,7 @@ export function GovernanceAdmin() {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 ${
                 activeTab === tab.id
-                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                  ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
                   : `${text.body} hover:bg-white/5 border border-transparent`
               }`}
             >
@@ -303,7 +303,7 @@ export function GovernanceAdmin() {
                 const cfg = STATUS_CONFIG[st];
                 return (
                   <div key={st} className="flex items-center gap-2">
-                    <span className={`text-[10px] font-bold ${cfg.color} px-2.5 py-1 rounded-lg`} style={{ background: cfg.bg }}>
+                    <span className={`text-[10px] font-bold ${cfg.color} px-2.5 py-1 rounded-lg`} style={{ background: cfg.bg, border: cfg.border }}>
                       {cfg.label}
                     </span>
                     {i < STATUS_PIPELINE.length - 1 && <ArrowRight className={`w-3 h-3 ${text.muted}`} />}
@@ -311,10 +311,10 @@ export function GovernanceAdmin() {
                 );
               })}
               <span className={`text-[10px] ${text.muted} mx-1`}>|</span>
-              <span className="text-[10px] font-bold text-red-400 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(239,68,68,0.10)' }}>
+              <span className="text-[10px] font-bold text-red-600 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
                 Suspended
               </span>
-              <span className="text-[10px] font-bold text-slate-400 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(100,116,139,0.08)' }}>
+              <span className="text-[10px] font-bold text-slate-600 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>
                 Archived
               </span>
             </div>
@@ -427,7 +427,7 @@ export function GovernanceAdmin() {
                   <button
                     onClick={handleCreate}
                     disabled={!formName || !formContent || !formEffective || actionLoading === 'create'}
-                    className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 px-5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {actionLoading === 'create' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                     Create Policy
@@ -497,14 +497,14 @@ export function GovernanceAdmin() {
 
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                                <span className={`text-[10px] font-bold ${typeCfg.color} px-2 py-0.5 rounded-md uppercase tracking-wider`} style={{ background: typeCfg.bg }}>
+                                <span className={`text-[10px] font-bold ${typeCfg.color} px-2 py-0.5 rounded-lg uppercase tracking-wider`} style={{ background: typeCfg.bg, border: typeCfg.border }}>
                                   {getTypeLabel(policy.policyType)}
                                 </span>
-                                <span className={`text-[10px] font-bold ${statusCfg.color} px-2 py-0.5 rounded-md uppercase tracking-wider`} style={{ background: statusCfg.bg }}>
+                                <span className={`text-[10px] font-bold ${statusCfg.color} px-2 py-0.5 rounded-lg uppercase tracking-wider`} style={{ background: statusCfg.bg, border: statusCfg.border }}>
                                   {statusCfg.label}
                                 </span>
                                 {policy.policyVersion && (
-                                  <span className={`text-[10px] font-semibold ${text.muted} px-2 py-0.5 rounded-md`} style={{ background: isDark ? 'rgba(12,74,110,0.18)' : 'rgba(100,116,139,0.06)' }}>
+                                  <span className="text-[10px] font-semibold text-slate-600 px-2 py-0.5 rounded-lg" style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>
                                     v{policy.policyVersion}
                                   </span>
                                 )}
@@ -578,7 +578,7 @@ export function GovernanceAdmin() {
                                 <button
                                   onClick={() => handleSubmitForApproval(policy.id)}
                                   disabled={isLoading}
-                                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
+                                  className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
                                 >
                                   {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                                   Submit for Approval
@@ -588,7 +588,7 @@ export function GovernanceAdmin() {
                                 <button
                                   onClick={() => setApproveTarget(policy.id)}
                                   disabled={isLoading}
-                                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
+                                  className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
                                 >
                                   {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                                   Approve
@@ -598,7 +598,7 @@ export function GovernanceAdmin() {
                                 <button
                                   onClick={() => handleActivate(policy.id)}
                                   disabled={isLoading}
-                                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
+                                  className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
                                 >
                                   {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
                                   Activate
@@ -747,7 +747,7 @@ export function GovernanceAdmin() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="text-[10px] font-bold text-violet-400 px-2 py-0.5 rounded-md uppercase tracking-wider" style={{ background: 'rgba(139,92,246,0.10)' }}>
+                          <span className="text-[10px] font-bold text-violet-600 px-2 py-0.5 rounded-lg uppercase tracking-wider" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
                             {log.action}
                           </span>
                           <span className={`text-[10px] ${text.muted} flex items-center gap-1`}>
@@ -799,7 +799,7 @@ export function GovernanceAdmin() {
 
         {/* -- Approve Modal ---------------------------------------- */}
         {approveTarget && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
             <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-md" style={glassCard}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
@@ -839,7 +839,7 @@ export function GovernanceAdmin() {
                 <button
                   onClick={handleApprove}
                   disabled={actionLoading === approveTarget}
-                  className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
+                  className="flex items-center gap-2 px-5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
                 >
                   {actionLoading === approveTarget ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                   Approve Policy
@@ -851,7 +851,7 @@ export function GovernanceAdmin() {
 
         {/* -- Suspend Modal ---------------------------------------- */}
         {suspendTarget && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
             <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-md" style={glassCard}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
@@ -900,7 +900,7 @@ export function GovernanceAdmin() {
 
         {/* -- Version History Modal -------------------------------- */}
         {historyTarget && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
             <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" style={glassCard}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
@@ -938,7 +938,7 @@ export function GovernanceAdmin() {
                           {ver.policyVersion && (
                             <span className={`text-[10px] font-bold ${text.accent}`}>v{ver.policyVersion}</span>
                           )}
-                          <span className={`text-[10px] font-bold ${sCfg.color} px-2 py-0.5 rounded-md`} style={{ background: sCfg.bg }}>
+                          <span className={`text-[10px] font-bold ${sCfg.color} px-2 py-0.5 rounded-lg`} style={{ background: sCfg.bg, border: sCfg.border }}>
                             {sCfg.label}
                           </span>
                           <span className={`text-[10px] ${text.muted} flex items-center gap-1 ml-auto`}>

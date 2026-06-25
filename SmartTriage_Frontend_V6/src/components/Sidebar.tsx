@@ -561,9 +561,10 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
                   is the matching visual cue. */}
               {isOnApprovedLeave && (
                 <span
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full
-                             bg-amber-500/25 border border-amber-400/60 text-amber-200
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg
+                             text-amber-600
                              text-[9px] font-bold uppercase tracking-wider flex-shrink-0"
+                  style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
                   title="You have an approved leave row covering today. Shift-management actions are blocked while on leave."
                 >
                   On Leave

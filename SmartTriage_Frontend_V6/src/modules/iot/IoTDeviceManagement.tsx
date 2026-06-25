@@ -368,17 +368,17 @@ export function IoTDeviceManagement() {
                     ))}
                   </select>
                 )}
-                <div className="px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30">
-                  <span className="text-emerald-400 text-xs font-bold">{activeCount} Active</span>
+                <div className="px-3 py-1.5 rounded-lg" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                  <span className="text-emerald-600 text-xs font-bold">{activeCount} Active</span>
                 </div>
-                <div className="px-3 py-1.5 rounded-lg bg-cyan-500/20 border border-cyan-500/30">
-                  <span className="text-cyan-400 text-xs font-bold">{monitoringCount} Monitoring</span>
+                <div className="px-3 py-1.5 rounded-lg" style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}>
+                  <span className="text-cyan-600 text-xs font-bold">{monitoringCount} Monitoring</span>
                 </div>
                 <button onClick={loadDevices} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors">
                   <RefreshCw className="w-4 h-4 text-white" />
                 </button>
                 {isAdmin && (
-                  <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all">
+                  <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
                     <Plus className="w-3.5 h-3.5" /> Register Device
                   </button>
                 )}
@@ -437,7 +437,7 @@ export function IoTDeviceManagement() {
                   {formError}
                 </div>
               )}
-              <button onClick={handleRegister} disabled={formLoading || !form.deviceName || !form.serialNumber} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
+              <button onClick={handleRegister} disabled={formLoading || !form.deviceName || !form.serialNumber} className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all disabled:opacity-50">
                 {formLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Register
               </button>
               <button onClick={() => setShowForm(false)} className={`px-4 py-2.5 text-xs font-bold rounded-xl ${text.muted}`}>Cancel</button>
@@ -719,7 +719,7 @@ export function IoTDeviceManagement() {
               <div className="flex items-center gap-2 mb-1">
                 <Activity className="w-4 h-4 text-cyan-500" />
                 <h3 className={`text-sm font-bold ${text.heading}`}>Active Monitor Performance</h3>
-                <span className="ml-auto px-2 py-0.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold">{sessions.length} active</span>
+                <span className="ml-auto inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-cyan-600" style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}>{sessions.length} active</span>
               </div>
               <p className={`text-[10px] ${text.muted} mb-3`}>
                 Device health for every active monitoring session — battery, signal, throughput, state.
@@ -826,7 +826,7 @@ export function IoTDeviceManagement() {
 
         {/* ── Patient Selection Dialog (modal overlay) ── */}
         {assignDevice && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in" style={{ background: 'rgba(2,11,20,0.55)' }} onClick={() => { setAssignDevice(null); setAssignError(''); }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }} onClick={() => { setAssignDevice(null); setAssignError(''); }}>
             <div
               className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
               style={glassCard}
@@ -1004,8 +1004,8 @@ export function IoTDeviceManagement() {
           });
           return (
             <div
-              className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in"
-              style={{ background: 'rgba(2,11,20,0.55)' }}
+              className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+              style={{ background: 'rgba(2,6,23,0.65)' }}
               onClick={() => { setBedAssignDevice(null); setBedAssignError(''); }}
             >
               <div
@@ -1135,7 +1135,7 @@ export function IoTDeviceManagement() {
 
         {/* ─── API Key Modal (shown once after registration) ─── */}
         {registeredDevice && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in" style={{ background: 'rgba(2,11,20,0.55)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
             <div className="w-full max-w-md rounded-2xl p-6 overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
@@ -1180,7 +1180,7 @@ export function IoTDeviceManagement() {
 
               <button
                 onClick={() => setRegisteredDevice(null)}
-                className="w-full px-4 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all"
+                className="w-full px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all"
               >
                 {apiKeyCopied ? 'Done — Key Copied ✓' : 'I\'ve Saved the Key — Close'}
               </button>
@@ -1191,8 +1191,8 @@ export function IoTDeviceManagement() {
         {/* V53 — In-app "Take Out of Service" confirmation modal (replaces window.confirm) */}
         {outOfServiceTarget && (
           <div
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in"
-            style={{ background: 'rgba(2,11,20,0.55)' }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+            style={{ background: 'rgba(2,6,23,0.65)' }}
             onClick={() => { if (serviceLoadingId !== outOfServiceTarget.id) setOutOfServiceTarget(null); }}
           >
             <div

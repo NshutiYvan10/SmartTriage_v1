@@ -226,7 +226,7 @@ export function HandoverView() {
                 </button>
                 <button
                   onClick={() => setShowGenerateForm(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-cyan-500/80 hover:bg-cyan-500 rounded-xl transition-all shadow-md"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-xl transition-all shadow-md"
                 >
                   <Plus className="w-3.5 h-3.5" /> Generate Handover
                 </button>
@@ -406,7 +406,7 @@ export function HandoverView() {
                         {!report.isAcknowledged && (
                           <button
                             onClick={(e) => { e.stopPropagation(); setAckDialog({ reportId: report.id }); setAckName(''); }}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl shadow-md hover:-translate-y-0.5 transition-all"
+                            className="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-xl shadow-md hover:-translate-y-0.5 transition-all"
                           >
                             <UserCheck className="w-3 h-3" /> Acknowledge
                           </button>
@@ -498,9 +498,9 @@ export function HandoverView() {
          Generate Handover Dialog
          ═══════════════════════════════════════════════════════════════ */}
       {showGenerateForm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !generating && setShowGenerateForm(false)} />
-          <div className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in" style={glassCard}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+          <div className="absolute inset-0" onClick={() => !generating && setShowGenerateForm(false)} />
+          <div className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in overflow-hidden" style={glassCard}>
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
@@ -575,7 +575,7 @@ export function HandoverView() {
               <button
                 onClick={handleGenerate}
                 disabled={generating || !generateVisitId.trim()}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-cyan-500 to-cyan-600 shadow-cyan-500/20 hover:shadow-cyan-500/30 hover:-translate-y-0.5"
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-cyan-600 hover:bg-cyan-700 shadow-cyan-500/20 hover:shadow-cyan-500/30 hover:-translate-y-0.5"
               >
                 {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ClipboardCheck className="w-3.5 h-3.5" />}
                 {generating ? 'Generating...' : 'Generate Report'}
@@ -589,9 +589,9 @@ export function HandoverView() {
          Acknowledge Dialog
          ═══════════════════════════════════════════════════════════════ */}
       {ackDialog && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !ackSubmitting && setAckDialog(null)} />
-          <div className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in" style={glassCard}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+          <div className="absolute inset-0" onClick={() => !ackSubmitting && setAckDialog(null)} />
+          <div className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in overflow-hidden" style={glassCard}>
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
@@ -645,7 +645,7 @@ export function HandoverView() {
               <button
                 onClick={handleAcknowledge}
                 disabled={ackSubmitting || !ackName.trim()}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-emerald-500/20 hover:shadow-emerald-500/30 hover:-translate-y-0.5"
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-cyan-600 hover:bg-cyan-700 shadow-cyan-500/20 hover:shadow-cyan-500/30 hover:-translate-y-0.5"
               >
                 {ackSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
                 {ackSubmitting ? 'Acknowledging...' : 'Acknowledge'}

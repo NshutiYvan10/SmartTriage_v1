@@ -275,7 +275,10 @@ export function PendingTransfersDashboard() {
                         </button>
                         <span className={`text-[10px] font-mono ${text.muted}`}>{t.visitNumber}</span>
                         {t.isPediatric && (
-                          <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-pink-500/15 border border-pink-500/30 ${isDark ? 'text-pink-300' : 'text-pink-700'}`}>
+                          <span
+                            className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-pink-600"
+                            style={{ background: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.2)' }}
+                          >
                             Peds
                           </span>
                         )}
@@ -317,7 +320,7 @@ export function PendingTransfersDashboard() {
                         type="button"
                         disabled={acting}
                         onClick={() => onAct(t.id, 'accept')}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50"
                         title="Charge nurse acknowledges and takes the patient"
                       >
                         <CheckCircle2 className="w-3 h-3" />
@@ -327,7 +330,7 @@ export function PendingTransfersDashboard() {
                         type="button"
                         disabled={acting}
                         onClick={() => onAct(t.id, 'resus')}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-md bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
                         title="Treat at higher acuity in the current physical location"
                       >
                         <Stethoscope className="w-3 h-3" />
@@ -340,7 +343,7 @@ export function PendingTransfersDashboard() {
                           const reason = window?.prompt('Decline reason (e.g. Resus full):');
                           if (reason && reason.trim()) onAct(t.id, 'decline', reason.trim());
                         }}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-md bg-red-500/20 border border-red-500/30 hover:bg-red-500/30 disabled:opacity-50 ${isDark ? 'text-red-300' : 'text-red-700'}`}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-red-500/20 border border-red-500/30 hover:bg-red-500/30 disabled:opacity-50 ${isDark ? 'text-red-300' : 'text-red-700'}`}
                       >
                         <XCircle className="w-3 h-3" />
                         Decline

@@ -170,9 +170,9 @@ export function RegistrarReportsView() {
               <button
                 key={value}
                 onClick={() => setTab(value)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                   tab === value
-                    ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30'
+                    ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
                     : `${text.body} hover:bg-white/5`
                 }`}
               >
@@ -255,7 +255,10 @@ export function RegistrarReportsView() {
                         <td className={`px-4 py-2.5 text-xs font-semibold ${text.heading}`}>
                           {r.patientName}
                           {r.unidentified && (
-                            <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            <span
+                              className="ml-2 inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-amber-600"
+                              style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+                            >
                               UNIDENTIFIED
                             </span>
                           )}
