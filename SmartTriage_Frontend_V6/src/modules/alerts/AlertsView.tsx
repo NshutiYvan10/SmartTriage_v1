@@ -67,6 +67,10 @@ export function AlertsView() {
   const [filter, setFilter] = useState<FilterMode>('all');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'CLINICAL' | 'OPERATIONAL' | 'SYSTEM'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  // Distinguishes a genuine empty feed from a failed load (403/network). On a
+  // life-critical system the Alert Center must NEVER show a falsely-reassuring
+  // "All Clear" when it actually couldn't read the feed.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // ── Comment dialog state ──
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -82,9 +86,14 @@ export function AlertsView() {
     try {
       const page = await alertApi.getAll(hospitalId, 0, 200);
       setAlerts(page.content || []);
+      setLoadError(null);
     } catch (err) {
       console.error('[AlertsView] Failed to load alerts:', err);
       setAlerts([]);
+      setLoadError(
+        'Could not load the alert feed — this is an access or connection problem, '
+        + 'NOT confirmation that the floor is clear. Retry, or ask a charge nurse / admin.',
+      );
     } finally {
       setLoading(false);
     }
@@ -363,6 +372,21 @@ export function AlertsView() {
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-7 h-7 animate-spin text-cyan-500" />
+          </div>
+        ) : loadError ? (
+          <div className="rounded-2xl p-12 text-center animate-fade-up" style={glassCard}>
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: 'rgba(239,68,68,0.1)' }}>
+              <AlertTriangle className="w-8 h-8 text-red-400" />
+            </div>
+            <p className={`text-sm font-bold ${text.heading}`}>Alert feed unavailable</p>
+            <p className={`text-xs font-medium mt-1 max-w-md mx-auto ${text.body}`}>{loadError}</p>
+            <button
+              type="button"
+              onClick={loadAlerts}
+              className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded-xl transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Retry
+            </button>
           </div>
         ) : filteredAlerts.length === 0 ? (
           <div className="rounded-2xl p-12 text-center animate-fade-up" style={glassCard}>

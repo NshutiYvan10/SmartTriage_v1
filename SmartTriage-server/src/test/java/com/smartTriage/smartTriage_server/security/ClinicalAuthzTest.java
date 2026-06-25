@@ -164,6 +164,28 @@ class ClinicalAuthzTest {
                 authFor(user(Role.DOCTOR, null, hospitalId)), missing));
     }
 
+    // ── canReadHospitalAlerts (gates the operational alert feed → Alert Center) ──
+
+    @Test
+    void canReadHospitalAlerts_allowsDoctorAtOwnHospital() {
+        // Regression: a roaming doctor was silently denied the hospital-wide alert
+        // feed, so the Alert Center showed a falsely-reassuring "All Clear".
+        assertTrue(authz.canReadHospitalAlerts(
+                authFor(user(Role.DOCTOR, null, hospitalId)), hospitalId));
+    }
+
+    @Test
+    void canReadHospitalAlerts_deniesDoctorAtOtherHospital() {
+        assertFalse(authz.canReadHospitalAlerts(
+                authFor(user(Role.DOCTOR, null, UUID.randomUUID())), hospitalId));
+    }
+
+    @Test
+    void canReadHospitalAlerts_deniesHospitalAdmin() {
+        assertFalse(authz.canReadHospitalAlerts(
+                authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), hospitalId));
+    }
+
     // ── canAccessMedicationSafetyCheck (scopes the medication-safety OVERRIDE endpoint) ──
 
     @Test

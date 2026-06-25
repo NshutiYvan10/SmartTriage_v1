@@ -435,7 +435,7 @@ function MedRow({
   onOpenVisit: (visitId: string) => void;
   currentUserId: string | undefined;
 }) {
-  const { text } = useTheme();
+  const { glassInner, text } = useTheme();
   const meta = priorityMeta(med.priority);
   const sla = slaInfo(med);
 
@@ -443,18 +443,15 @@ function MedRow({
   // light-only MEDICATION_PRIORITIES tint/overdueTint (red / orange /
   // emerald, escalating on overdue) but in the glass-surface palette.
   const priority = med.priority ?? 'ROUTINE';
-  const rowTint =
-    sla.isOverdue
-      ? priority === 'STAT'
-        ? 'bg-red-500/25 border border-red-500/40 text-red-300'
-        : priority === 'URGENT'
-        ? 'bg-orange-500/25 border border-orange-500/40 text-orange-300'
-        : 'bg-amber-500/25 border border-amber-500/40 text-amber-300'
-      : priority === 'STAT'
-      ? 'bg-red-500/15 border border-red-500/30 text-red-300'
-      : priority === 'URGENT'
-      ? 'bg-orange-500/15 border border-orange-500/30 text-orange-300'
-      : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300';
+  // Clean glass row with a semantic LEFT-accent bar for at-a-glance priority
+  // (red=STAT, orange=URGENT, emerald=ROUTINE) instead of a fully-saturated
+  // colored block. Overdue rows escalate to a red bar + red ring so the
+  // safety signal stays unmissable.
+  const hueRgb =
+    priority === 'STAT' ? '239,68,68'
+    : priority === 'URGENT' ? '249,115,22'
+    : '16,185,129';
+  const barRgb = sla.isOverdue ? '239,68,68' : hueRgb;
 
   // Front-end-side guard: warn the prescriber up-front instead of
   // letting them click and bounce off the backend 400. Backend
@@ -467,7 +464,10 @@ function MedRow({
   ].filter(Boolean);
 
   return (
-    <li className={`rounded-xl p-3 ${rowTint}`}>
+    <li
+      className={`rounded-xl p-3 ${text.body} ${sla.isOverdue ? 'ring-1 ring-red-500/40' : ''}`}
+      style={{ ...glassInner, borderLeft: `4px solid rgba(${barRgb},0.75)` }}
+    >
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">

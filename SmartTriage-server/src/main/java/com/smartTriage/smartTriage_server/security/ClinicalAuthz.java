@@ -301,6 +301,15 @@ public class ClinicalAuthz {
             if (user.getRole() == Role.HOSPITAL_ADMIN) {
                 return false;
             }
+            // Doctors are not zone-bound the way nurses are — they roam the whole
+            // floor, so the operational alert feed is theirs to read, scoped to
+            // their own hospital. (A regular zone nurse still goes through the
+            // cross-zone authority below; when denied the hospital-wide list the
+            // Alert Center surfaces an honest "no access" state rather than a
+            // falsely-reassuring "all clear".)
+            if (user.getRole() == Role.DOCTOR) {
+                return belongsToHospital(user, hospitalId);
+            }
             return canSeeAllZonesAtHospital(authentication, hospitalId);
         } catch (Exception e) {
             log.error("canReadHospitalAlerts error for hospital {}: {}",

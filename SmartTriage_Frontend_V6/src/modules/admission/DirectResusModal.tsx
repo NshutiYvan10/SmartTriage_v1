@@ -128,7 +128,7 @@ export function DirectResusModal({
         <div className="p-5 space-y-4">
           {/* Reason — required, short clinical phrase */}
           <div>
-            <label className={`block text-[11px] font-bold uppercase tracking-wider ${text.muted} mb-1.5`}>
+            <label className={`block text-[11px] font-bold uppercase tracking-wider ${text.label} mb-1.5`}>
               Clinical reason <span className="text-rose-500">*</span>
             </label>
             <input
@@ -140,7 +140,7 @@ export function DirectResusModal({
               style={glassInner}
               className={`w-full px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
             />
-            <p className={`text-[10px] ${text.muted} mt-1`}>
+            <p className={`text-[10px] ${text.body} mt-1`}>
               One short clinical phrase. This becomes the admission's audit anchor.
             </p>
           </div>
@@ -195,7 +195,7 @@ export function DirectResusModal({
           {/* Estimated gender — only relevant for unidentified */}
           {isUnidentified && (
             <div>
-              <label className={`block text-[11px] font-bold uppercase tracking-wider ${text.muted} mb-1.5`}>
+              <label className={`block text-[11px] font-bold uppercase tracking-wider ${text.label} mb-1.5`}>
                 Apparent gender <span className={`${text.muted} font-normal`}>(optional, for med-dosing)</span>
               </label>
               <div className="grid grid-cols-2 gap-2">
@@ -221,7 +221,7 @@ export function DirectResusModal({
           {/* Pre-arrival notes — only if ambulance call-ahead */}
           {ambulancePreArrival && (
             <div>
-              <label className={`block text-[11px] font-bold uppercase tracking-wider ${text.muted} mb-1.5`}>
+              <label className={`block text-[11px] font-bold uppercase tracking-wider ${text.label} mb-1.5`}>
                 Pre-hospital notes <span className={`${text.muted} font-normal`}>(optional)</span>
               </label>
               <textarea
