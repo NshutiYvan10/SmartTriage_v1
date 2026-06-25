@@ -32,6 +32,7 @@ import { useAuthStore } from '@/store/authStore';
 import { medicationApi } from '@/api/medications';
 import { subscribeToMedications, subscribeToZoneMedications } from '@/api/websocket';
 import { useScopedView } from '@/hooks/useScopedView';
+import { NurseMedicationQueue } from './NurseMedicationQueue';
 import { useTheme } from '@/hooks/useTheme';
 import type {
   EdZone, MedicationDoseResponse, MedicationOrderAudit,
@@ -84,6 +85,7 @@ export function MedicationBoard() {
   const navigate = useNavigate();
   const scope = useScopedView();
 
+  const [activeTab, setActiveTab] = useState<'board' | 'orders'>('board');
   const [board, setBoard] = useState<ZoneMedicationBoard | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -269,18 +271,9 @@ export function MedicationBoard() {
       </div>
     );
   }
-  if (scope.mode === 'RESTRICTED') {
-    return (
-      <div className="max-w-xl mx-auto mt-16 rounded-2xl p-8 text-center" style={glassCard}>
-        <ShieldAlert className="w-10 h-10 mx-auto text-amber-500 mb-3" />
-        <h2 className={`text-lg font-bold ${text.heading}`}>No active shift</h2>
-        <p className={`text-sm mt-2 ${text.body}`}>
-          The medication board is zone-scoped. You don't have an active shift
-          assignment right now — ask the charge nurse if you believe this is wrong.
-        </p>
-      </div>
-    );
-  }
+  // NOTE: the RESTRICTED (off-shift) scope guard is applied inside the Dose
+  // Schedule tab only — the New Orders tab stays hospital-wide as the standalone
+  // Med Queue was, so a STAT order is never hidden from an off-shift nurse.
 
   const witnessNeeded =
     (modal?.kind === 'administer' && modal.dose.requiresWitness) ||
@@ -349,6 +342,39 @@ export function MedicationBoard() {
           </div>
         </div>
 
+        {/* ── Tab bar: Dose Schedule | New Orders (the merged Med Queue) ── */}
+        <div className="rounded-2xl p-1.5 flex items-center gap-1.5" style={glassInner}>
+          {([['board', 'Dose Schedule'], ['orders', 'New Orders']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setActiveTab(key)}
+              className={`inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-xl transition-all ${
+                activeTab === key
+                  ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
+                  : `${text.body} hover:bg-white/5`
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* New Orders tab = the order-level queue (PRESCRIBED, awaiting first administration) */}
+        {activeTab === 'orders' && <NurseMedicationQueue embedded />}
+
+      {activeTab === 'board' && (
+        scope.mode === 'RESTRICTED' ? (
+          <div className="rounded-2xl p-8 text-center" style={glassCard}>
+            <ShieldAlert className="w-10 h-10 mx-auto text-amber-500 mb-3" />
+            <h2 className={`text-lg font-bold ${text.heading}`}>No active shift</h2>
+            <p className={`text-sm mt-2 ${text.body}`}>
+              The dose schedule is zone-scoped — you don't have an active shift
+              assignment right now (ask the charge nurse if that's wrong). New orders
+              awaiting first administration are still listed under the New Orders tab.
+            </p>
+          </div>
+        ) : (<>
       {err && (
         <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-3 text-sm text-red-400 font-semibold">
           {err}
@@ -608,6 +634,8 @@ export function MedicationBoard() {
             )}
           </section>
         </>
+      )}
+      </>)
       )}
 
       {/* ── Action modal ── */}

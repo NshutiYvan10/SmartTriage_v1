@@ -84,7 +84,7 @@ const CLASS_META: Record<OverrideClass, ClassMeta> = {
   renal:       { label: 'Renal',       Icon: Droplet,       color: 'text-violet-300',  bg: 'bg-violet-500/10',  ring: 'border-violet-500/30',  bar: 'bg-violet-500',  badgeColor: 'text-violet-600',  badgeRgb: '139,92,246' },
   duplicate:   { label: 'Duplicate',   Icon: Layers,        color: 'text-amber-300',   bg: 'bg-amber-500/10',   ring: 'border-amber-500/30',   bar: 'bg-amber-500',   badgeColor: 'text-amber-600',   badgeRgb: '245,158,11' },
   geriatric:   { label: 'Geriatric',   Icon: UserMinus,     color: 'text-fuchsia-300', bg: 'bg-fuchsia-500/10', ring: 'border-fuchsia-500/30', bar: 'bg-fuchsia-500', badgeColor: 'text-fuchsia-600', badgeRgb: '217,70,239' },
-  emergency:   { label: 'Emergency / administration', Icon: Zap, color: 'text-red-200', bg: 'bg-red-600/15', ring: 'border-red-600/40', bar: 'bg-red-600', badgeColor: 'text-red-600', badgeRgb: '239,68,68' },
+  emergency:   { label: 'Emergency / administration', Icon: Zap, color: 'text-red-300', bg: 'bg-red-500/10', ring: 'border-red-500/30', bar: 'bg-red-500', badgeColor: 'text-red-600', badgeRgb: '239,68,68' },
   other:       { label: 'Other',       Icon: ShieldAlert,   color: 'text-slate-300',   bg: 'bg-slate-500/10',   ring: 'border-slate-500/30',   bar: 'bg-slate-500',   badgeColor: 'text-slate-600',   badgeRgb: '100,116,139' },
 };
 

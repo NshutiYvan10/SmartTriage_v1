@@ -65,8 +65,9 @@ function priorityMeta(p: MedicationPriority | undefined) {
     ?? MEDICATION_PRIORITIES[MEDICATION_PRIORITIES.length - 1];
 }
 
-export function NurseMedicationQueue() {
-  const { glassCard, isDark, text } = useTheme();
+export function NurseMedicationQueue({ embedded = false }: { embedded?: boolean }) {
+  const { glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const userId = user?.id;
@@ -76,6 +77,11 @@ export function NurseMedicationQueue() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // In-app action error (replaces the old window.alert) + reason-capture
+  // modal (replaces the old window.prompt for hold/refuse).
+  const [actionErr, setActionErr] = useState<string | null>(null);
+  const [reasonModal, setReasonModal] = useState<{ medId: string; action: 'hold' | 'refuse' } | null>(null);
+  const [reasonText, setReasonText] = useState('');
 
   // STAT-toast banner. We deliberately only flash on STAT (not URGENT)
   // because the toast is meant to interrupt the nurse on another
@@ -136,6 +142,7 @@ export function NurseMedicationQueue() {
     action: 'administer' | 'hold' | 'refuse',
     reason?: string,
   ) => {
+    setActionErr(null);
     try {
       if (action === 'administer') {
         await medicationApi.administer(medId, {
@@ -157,8 +164,7 @@ export function NurseMedicationQueue() {
       // separation-of-duties message ("the clinician who prescribed
       // this cannot also record administration").
       const message = e instanceof Error ? e.message : 'Action failed';
-      // eslint-disable-next-line no-alert
-      window.alert(message);
+      setActionErr(message);
     }
   }, [user, load]);
 
@@ -168,11 +174,17 @@ export function NurseMedicationQueue() {
   const urgent = useMemo(() => queue.filter((m) => m.priority === 'URGENT'), [queue]);
   const routine = useMemo(() => queue.filter((m) => m.priority === 'ROUTINE' || !m.priority), [queue]);
 
-  return (
-    <div className="min-h-full">
-      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
+  const onRequestReason = (medId: string, action: 'hold' | 'refuse') => {
+    setReasonText('');
+    setReasonModal({ medId, action });
+  };
 
-        {/* Header */}
+  return (
+    <div className={embedded ? '' : 'min-h-full'}>
+      <div className={embedded ? 'space-y-4 animate-fade-in' : 'p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in'}>
+
+        {/* Header — own-page only; embedded in the Med Board it inherits the board's chrome */}
+        {!embedded && (
         <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
@@ -199,6 +211,7 @@ export function NurseMedicationQueue() {
             </div>
           </div>
         </div>
+        )}
 
         {/* STAT toast */}
         {statBanner && (
@@ -233,6 +246,17 @@ export function NurseMedicationQueue() {
           </div>
         )}
 
+        {/* Action error — in-app, replaces the old window.alert */}
+        {actionErr && (
+          <div className="rounded-lg bg-red-500/20 border border-red-500/30 px-3 py-2 text-[11px] text-red-300 flex items-start gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+            <span className="flex-1">{actionErr}</span>
+            <button type="button" onClick={() => setActionErr(null)} className="text-red-400 hover:text-red-300" aria-label="Dismiss">
+              <XCircle className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Loading */}
         {loading && queue.length === 0 && (
           <div className={`text-sm ${text.muted} inline-flex items-center gap-2`}>
@@ -259,6 +283,7 @@ export function NurseMedicationQueue() {
             tint="red"
             rows={stat}
             onAction={callAction}
+            onRequestReason={onRequestReason}
             onOpenVisit={(visitId) => navigate(`/visits/${visitId}`)}
             currentUserId={userId}
           />
@@ -270,6 +295,7 @@ export function NurseMedicationQueue() {
             tint="orange"
             rows={urgent}
             onAction={callAction}
+            onRequestReason={onRequestReason}
             onOpenVisit={(visitId) => navigate(`/visits/${visitId}`)}
             currentUserId={userId}
           />
@@ -281,9 +307,66 @@ export function NurseMedicationQueue() {
             tint="emerald"
             rows={routine}
             onAction={callAction}
+            onRequestReason={onRequestReason}
             onOpenVisit={(visitId) => navigate(`/visits/${visitId}`)}
             currentUserId={userId}
           />
+        )}
+
+        {/* Reason capture — in-app modal, replaces window.prompt for hold/refuse */}
+        {reasonModal && (
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+            style={{ background: 'rgba(2,6,23,0.65)' }}
+            onClick={() => setReasonModal(null)}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in"
+              style={glassCard}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-center justify-between">
+                <h2 className="text-sm font-bold text-white">
+                  {reasonModal.action === 'hold' ? 'Hold medication' : 'Record refusal'}
+                </h2>
+                <button type="button" onClick={() => setReasonModal(null)} aria-label="Close" className="text-white/70 hover:text-white">
+                  <XCircle className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="p-5 space-y-3">
+                <label className={`text-xs font-semibold ${text.label}`}>
+                  {reasonModal.action === 'hold'
+                    ? 'Hold reason (e.g. NPO before procedure, awaiting labs)'
+                    : 'Refusal reason (patient declined / unable to take)'}
+                </label>
+                <textarea
+                  value={reasonText}
+                  onChange={(e) => setReasonText(e.target.value)}
+                  rows={3}
+                  autoFocus
+                  placeholder="Minimum 3 characters"
+                  className={`w-full px-3 py-2 rounded-xl text-sm ${text.body} focus:outline-none focus:ring-2 focus:ring-cyan-500/20`}
+                  style={glassInner}
+                />
+                <div className="flex items-center justify-end gap-2 pt-2" style={{ borderTop: borderStyle }}>
+                  <button type="button" onClick={() => setReasonModal(null)} className={`text-xs font-semibold ${text.body} hover:text-cyan-400 px-3 py-2`}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const r = reasonText.trim();
+                      if (r.length >= 3) { void callAction(reasonModal.medId, reasonModal.action, r); setReasonModal(null); }
+                    }}
+                    disabled={reasonText.trim().length < 3}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded-xl transition-colors disabled:opacity-50"
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -295,13 +378,14 @@ export function NurseMedicationQueue() {
    ════════════════════════════════════════════════════════════════════ */
 
 function PriorityGroup({
-  title, subtitle, tint, rows, onAction, onOpenVisit, currentUserId,
+  title, subtitle, tint, rows, onAction, onRequestReason, onOpenVisit, currentUserId,
 }: {
   title: string;
   subtitle: string;
   tint: 'red' | 'orange' | 'emerald';
   rows: MedicationResponse[];
   onAction: (id: string, action: 'administer' | 'hold' | 'refuse', reason?: string) => void;
+  onRequestReason: (id: string, action: 'hold' | 'refuse') => void;
   onOpenVisit: (visitId: string) => void;
   currentUserId: string | undefined;
 }) {
@@ -328,6 +412,7 @@ function PriorityGroup({
             key={med.id}
             med={med}
             onAction={onAction}
+            onRequestReason={onRequestReason}
             onOpenVisit={onOpenVisit}
             currentUserId={currentUserId}
           />
@@ -342,10 +427,11 @@ function PriorityGroup({
    ════════════════════════════════════════════════════════════════════ */
 
 function MedRow({
-  med, onAction, onOpenVisit, currentUserId,
+  med, onAction, onRequestReason, onOpenVisit, currentUserId,
 }: {
   med: MedicationResponse;
   onAction: (id: string, action: 'administer' | 'hold' | 'refuse', reason?: string) => void;
+  onRequestReason: (id: string, action: 'hold' | 'refuse') => void;
   onOpenVisit: (visitId: string) => void;
   currentUserId: string | undefined;
 }) {
@@ -459,22 +545,14 @@ function MedRow({
         </button>
         <button
           type="button"
-          onClick={() => {
-            // eslint-disable-next-line no-alert
-            const reason = window.prompt('Hold reason (e.g. NPO before procedure, awaiting labs)');
-            if (reason && reason.trim().length >= 3) onAction(med.id, 'hold', reason.trim());
-          }}
+          onClick={() => onRequestReason(med.id, 'hold')}
           className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30"
         >
           <Pause className="w-3 h-3" /> Hold
         </button>
         <button
           type="button"
-          onClick={() => {
-            // eslint-disable-next-line no-alert
-            const reason = window.prompt('Refusal reason (patient declined / unable to take)');
-            if (reason && reason.trim().length >= 3) onAction(med.id, 'refuse', reason.trim());
-          }}
+          onClick={() => onRequestReason(med.id, 'refuse')}
           className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30"
         >
           <XCircle className="w-3 h-3" /> Refuse

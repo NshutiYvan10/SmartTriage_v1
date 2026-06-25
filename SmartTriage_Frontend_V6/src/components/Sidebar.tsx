@@ -142,9 +142,11 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         // status transitions on /lab). RoleGuard hides it from non-
         // DOCTORs via canAccessPage.
         { id: 'investigations', label: 'Investigations', icon: FlaskConical, pageId: 'investigations' as AppPage },
-        { id: 'med-queue', label: 'Med Queue', icon: Pill, pageId: 'med-queue' as AppPage },
         // V67 — dose-level medication board: scheduled doses due/overdue,
         // PRN quick-give, infusions, high-alert approvals. Zone-scoped.
+        // The order-level Med Queue (new prescriptions awaiting first
+        // administration) is now the "New Orders" tab inside this board, so it
+        // no longer needs its own sidebar entry.
         { id: 'med-board', label: 'Med Board', icon: Pill, pageId: 'med-board' as AppPage },
         { id: 'ems', label: 'Siren', icon: Siren, pageId: 'ems' as AppPage },
         { id: 'documentation', label: 'Documentation', icon: FileText, pageId: 'documentation' as AppPage },
