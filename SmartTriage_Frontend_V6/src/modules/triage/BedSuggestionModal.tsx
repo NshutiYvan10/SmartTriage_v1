@@ -8,6 +8,7 @@
  */
 import { AlertTriangle, BedDouble, Loader2, Monitor, X } from 'lucide-react';
 import type { EdZone } from '@/api/types';
+import { useTheme } from '@/hooks/useTheme';
 
 export interface BedSuggestion {
   id: string;
@@ -26,19 +27,23 @@ interface Props {
 }
 
 export function BedSuggestionModal({ bed, category, placing, error, onConfirm, onCancel }: Props) {
+  const { glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const categoryColor =
-    category === 'RED' ? 'bg-red-100 text-red-700' :
-    category === 'ORANGE' ? 'bg-orange-100 text-orange-700' :
-    category === 'YELLOW' ? 'bg-yellow-100 text-yellow-700' :
-    'bg-slate-100 text-slate-700';
+    category === 'RED' ? 'bg-red-500/20 text-red-300 border border-red-500/30' :
+    category === 'ORANGE' ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' :
+    category === 'YELLOW' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :
+    'bg-slate-500/20 text-slate-300 border border-slate-500/30';
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      style={{ background: 'rgba(2,11,20,0.55)' }}
       onClick={placing ? undefined : onCancel}
     >
       <div
-        className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden bg-white border border-slate-200"
+        style={glassCard}
+        className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="bg-gradient-to-r from-cyan-600 to-emerald-600 px-5 py-3 flex items-center justify-between">
@@ -61,19 +66,22 @@ export function BedSuggestionModal({ bed, category, placing, error, onConfirm, o
               <span className="text-xs font-extrabold text-white leading-none">{bed.code}</span>
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-bold text-slate-900">Bed {bed.code}</p>
-              <p className="text-[11px] text-slate-500">Zone: {bed.zone}</p>
+              <p className={`text-sm font-bold ${text.heading}`}>Bed {bed.code}</p>
+              <p className={`text-[11px] ${text.muted}`}>Zone: {bed.zone}</p>
             </div>
             <span className={`ml-auto text-[10px] font-bold px-2 py-1 rounded ${categoryColor}`}>{category}</span>
           </div>
 
-          <div className={`rounded-lg p-3 flex items-start gap-2 ${bed.hasMonitor ? 'bg-cyan-50 border border-cyan-200' : 'bg-slate-50 border border-slate-200'}`}>
-            <Monitor className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${bed.hasMonitor ? 'text-cyan-600' : 'text-slate-400'}`} />
+          <div
+            className={`rounded-lg p-3 flex items-start gap-2 ${bed.hasMonitor ? 'bg-cyan-500/20 border border-cyan-500/30' : ''}`}
+            style={bed.hasMonitor ? undefined : glassInner}
+          >
+            <Monitor className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${bed.hasMonitor ? 'text-cyan-300' : text.muted}`} />
             <div>
-              <p className={`text-[11px] font-bold ${bed.hasMonitor ? 'text-cyan-800' : 'text-slate-600'}`}>
+              <p className={`text-[11px] font-bold ${bed.hasMonitor ? 'text-cyan-300' : text.body}`}>
                 {bed.hasMonitor ? 'Monitor assigned' : 'No monitor assigned'}
               </p>
-              <p className={`text-[10px] mt-0.5 ${bed.hasMonitor ? 'text-cyan-700' : 'text-slate-500'}`}>
+              <p className={`text-[10px] mt-0.5 ${bed.hasMonitor ? 'text-cyan-200' : text.muted}`}>
                 {bed.hasMonitor
                   ? 'Vitals will start streaming to this patient automatically.'
                   : 'You can attach a monitor manually after placement.'}
@@ -82,27 +90,27 @@ export function BedSuggestionModal({ bed, category, placing, error, onConfirm, o
           </div>
 
           {error && (
-            <div className="rounded-lg p-3 flex items-start gap-2 bg-rose-50 border border-rose-200">
-              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-rose-600" />
+            <div className="rounded-lg p-3 flex items-start gap-2 bg-rose-500/20 border border-rose-500/30">
+              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-rose-400" />
               <div>
-                <p className="text-[11px] font-bold text-rose-800">Could not place patient</p>
-                <p className="text-[10px] text-rose-700 mt-0.5">{error}</p>
+                <p className="text-[11px] font-bold text-rose-300">Could not place patient</p>
+                <p className="text-[10px] text-rose-200 mt-0.5">{error}</p>
               </div>
             </div>
           )}
 
-          <p className="text-[10px] text-slate-500 leading-relaxed">
+          <p className={`text-[10px] leading-relaxed ${text.muted}`}>
             This is a suggestion only — the patient is not yet placed. Click
             confirm to place them in this bed, or skip to handle placement
             manually from the bed grid.
           </p>
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-200 bg-slate-50/60">
+        <div className="flex items-center justify-end gap-2 px-5 py-3" style={{ borderTop: borderStyle }}>
           <button
             onClick={onCancel}
             disabled={placing}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-white/5 disabled:opacity-50 ${text.body}`}
           >
             Skip — place manually
           </button>

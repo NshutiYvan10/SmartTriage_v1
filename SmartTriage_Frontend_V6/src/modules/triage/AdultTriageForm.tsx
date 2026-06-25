@@ -181,6 +181,7 @@ function columnToTableIndex(col: number): number { return col + 3; }
 // ════════════════════════════════════════════════════════════
 
 function CategoryTimer({ category, startedAt }: { category: AdultTriageCategory; startedAt: Date }) {
+  const { isDark } = useTheme();
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     const interval = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt.getTime()) / 1000)), 1000);
@@ -193,7 +194,17 @@ function CategoryTimer({ category, startedAt }: { category: AdultTriageCategory;
   const secs = elapsed % 60;
   const pct = limitSec > 0 ? (elapsed / limitSec) * 100 : 0;
   const status = category === 'RED' ? 'overdue' : pct >= 100 ? (pct >= 150 ? 'escalated' : 'overdue') : pct >= 80 ? 'warning' : 'normal';
-  const statusColor = { normal: 'text-green-700 bg-green-50 border-green-200', warning: 'text-amber-700 bg-amber-50 border-amber-200', overdue: 'text-red-700 bg-red-50 border-red-200', escalated: 'text-red-900 bg-red-100 border-red-400' }[status];
+  const statusColor = (isDark ? {
+    normal: 'text-green-300 bg-green-500/15 border-green-500/30',
+    warning: 'text-amber-300 bg-amber-500/15 border-amber-500/30',
+    overdue: 'text-red-300 bg-red-500/15 border-red-500/30',
+    escalated: 'text-red-200 bg-red-500/25 border-red-500/50',
+  } : {
+    normal: 'text-green-700 bg-green-50 border-green-200',
+    warning: 'text-amber-700 bg-amber-50 border-amber-200',
+    overdue: 'text-red-700 bg-red-50 border-red-200',
+    escalated: 'text-red-900 bg-red-100 border-red-400',
+  })[status];
   const remaining = limitSec > 0 ? Math.max(0, limitSec - elapsed) : null;
   const remMins = remaining !== null ? Math.floor(remaining / 60) : null;
   const remSecs = remaining !== null ? remaining % 60 : null;
@@ -839,10 +850,10 @@ export function AdultTriageForm() {
     const range = normalRanges[key];
     if (!range) return '';
     const s = getAdultVitalStatus(num, range);
-    if (s === 'critical') return 'bg-red-50 border-red-300 ring-1 ring-red-200';
-    if (s === 'warning') return 'bg-amber-50 border-amber-300 ring-1 ring-amber-200';
-    return 'bg-green-50 border-green-300';
-  }, [normalRanges]);
+    if (s === 'critical') return isDark ? 'bg-red-500/15 border-red-500/40 ring-1 ring-red-500/30' : 'bg-red-50 border-red-300 ring-1 ring-red-200';
+    if (s === 'warning') return isDark ? 'bg-amber-500/15 border-amber-500/40 ring-1 ring-amber-500/30' : 'bg-amber-50 border-amber-300 ring-1 ring-amber-200';
+    return isDark ? 'bg-green-500/15 border-green-500/40' : 'bg-green-50 border-green-300';
+  }, [normalRanges, isDark]);
 
   const isDemo = !!patientId && !patient;
 
@@ -851,14 +862,16 @@ export function AdultTriageForm() {
   const categoryBg: Record<AdultTriageCategory, string> = { RED: 'bg-red-50', ORANGE: 'bg-orange-50', YELLOW: 'bg-yellow-50', GREEN: 'bg-green-50' };
   const catTextColor = categoryResult.category === 'RED' ? '#dc2626' : categoryResult.category === 'ORANGE' ? '#ea580c' : categoryResult.category === 'YELLOW' ? '#ca8a04' : '#16a34a';
 
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
+
   const currentGroup = EMERGENCY_SIGN_GROUPS[signPage];
-  const inputCls = 'w-full px-2.5 py-1.5 bg-white/80 border border-slate-200/60 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all placeholder:text-slate-400';
-  const labelCls = 'block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5';
-  const selectCls = 'w-full px-2.5 py-1.5 bg-white/80 border border-slate-200/60 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 appearance-none transition-all';
+  const inputCls = `w-full px-2.5 py-1.5 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all ${isDark ? 'bg-white/5 border border-cyan-500/15 text-slate-200 placeholder:text-slate-500 focus:border-cyan-400' : 'bg-white/80 border border-slate-200/60 text-slate-700 placeholder:text-slate-400 focus:border-cyan-400'}`;
+  const labelCls = `block text-[10px] font-semibold ${text.body} uppercase tracking-wider mb-0.5`;
+  const selectCls = `w-full px-2.5 py-1.5 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 appearance-none transition-all ${isDark ? 'bg-white/5 border border-cyan-500/15 text-slate-200 focus:border-cyan-400' : 'bg-white/80 border border-slate-200/60 text-slate-700 focus:border-cyan-400'}`;
 
   return (
-    <div className={`min-h-full ${isDark ? '' : 'bg-gradient-to-br from-slate-50/80 via-cyan-50/30 to-slate-100/80'}`}>
-      <div className="p-4 lg:p-6 space-y-4">
+    <div className="min-h-full">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
 
         {/* Round 4a — context banner when the form was opened from a
             RETRIAGE_REQUIRED alert. We deliberately don't auto-flag the
@@ -867,8 +880,8 @@ export function AdultTriageForm() {
             looking at the patient. The banner just makes sure they know
             what triggered the re-triage and what to confirm. */}
         {fromAlertId && (
-          <div className="rounded-2xl px-4 py-3 flex items-start gap-3 bg-amber-500/10 border border-amber-500/40 text-amber-900">
-            <Sparkles className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-600" />
+          <div className={`rounded-2xl px-4 py-3 flex items-start gap-3 bg-amber-500/10 border border-amber-500/40 ${isDark ? 'text-amber-200' : 'text-amber-900'}`}>
+            <Sparkles className={`w-5 h-5 flex-shrink-0 mt-0.5 ${isDark ? 'text-amber-300' : 'text-amber-600'}`} />
             <div className="flex-1 min-w-0">
               <p className="font-bold text-xs">Re-triage prompted by clinical-sign worsening</p>
               <p className="text-[11px] mt-0.5">
@@ -901,15 +914,15 @@ export function AdultTriageForm() {
         )}
 
         {/* HEADER */}
-        <div className="rounded-2xl overflow-hidden shadow-xl" style={glassCard}>
-          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-5 py-4 flex items-center justify-between">
+        <div className="rounded-3xl overflow-hidden animate-fade-up shadow-xl" style={glassCard}>
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center backdrop-blur-sm border border-white/10">
-                <Shield className="w-5 h-5 text-cyan-400" />
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                <Shield className="w-5 h-5 text-cyan-300" />
               </div>
               <div>
-                <h1 className="text-base font-bold text-white tracking-wide">Adult Triage Form</h1>
-                <p className="text-white/50 text-[11px]">King Faisal Hospital — Ages 12+</p>
+                <h1 className="text-lg font-bold text-white">Adult Triage Form</h1>
+                <p className="text-sm text-white/50">King Faisal Hospital — Ages 12+</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -926,16 +939,16 @@ export function AdultTriageForm() {
           </div>
 
           <div className={`border-b px-5 py-2 flex items-center gap-2 ${isDark ? 'bg-cyan-900/20 border-cyan-500/20' : 'bg-gradient-to-r from-cyan-50/80 to-cyan-100/60 border-cyan-200/40'}`}>
-            <Users className="w-3.5 h-3.5 text-cyan-600" />
+            <Users className={`w-3.5 h-3.5 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
             <span className={`text-[11px] font-medium ${isDark ? 'text-cyan-400' : 'text-cyan-700'}`}>Adult patient — Age 12 and above</span>
           </div>
 
           {/* Patient Information */}
           <div className="p-4">
             <div className="flex items-center gap-1.5 mb-3">
-              <FileText className="w-3.5 h-3.5 text-slate-400" />
-              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Patient Information</span>
-              {patient && <span className="ml-auto text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Pre-loaded</span>}
+              <FileText className={`w-3.5 h-3.5 ${text.muted}`} />
+              <span className={`text-[10px] font-semibold ${text.body} uppercase tracking-wider`}>Patient Information</span>
+              {patient && <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${isDark ? 'bg-green-500/20 text-green-300' : 'bg-green-100 text-green-700'}`}>Pre-loaded</span>}
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <div><label className={labelCls}>Patient Names</label><input type="text" value={patientNames} onChange={(e) => setPatientNames(e.target.value)} className={inputCls} /></div>
@@ -964,10 +977,10 @@ export function AdultTriageForm() {
               <div>
                 <label className={labelCls}>ED Zone (auto)</label>
                 <div className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-semibold flex items-center gap-1.5 ${
-                  categoryResult.category === 'RED' ? 'bg-red-50 border-red-300 text-red-700' :
-                  categoryResult.category === 'ORANGE' ? 'bg-orange-50 border-orange-300 text-orange-700' :
-                  categoryResult.category === 'YELLOW' ? 'bg-yellow-50 border-yellow-300 text-yellow-700' :
-                  'bg-green-50 border-green-300 text-green-700'
+                  categoryResult.category === 'RED' ? (isDark ? 'bg-red-500/15 border-red-500/40 text-red-300' : 'bg-red-50 border-red-300 text-red-700') :
+                  categoryResult.category === 'ORANGE' ? (isDark ? 'bg-orange-500/15 border-orange-500/40 text-orange-300' : 'bg-orange-50 border-orange-300 text-orange-700') :
+                  categoryResult.category === 'YELLOW' ? (isDark ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-300' : 'bg-yellow-50 border-yellow-300 text-yellow-700') :
+                  (isDark ? 'bg-green-500/15 border-green-500/40 text-green-300' : 'bg-green-50 border-green-300 text-green-700')
                 }`}>
                   <span className={`w-2 h-2 rounded-full ${categoryColor[categoryResult.category]}`} />
                   {categoryResult.category === 'RED' ? 'Resuscitation' :
@@ -977,25 +990,25 @@ export function AdultTriageForm() {
                 </div>
               </div>
               <div><label className={labelCls}>Arrival Mode</label>
-                <div className="w-full px-2.5 py-1.5 bg-slate-100/80 border border-slate-200/60 rounded-lg text-xs text-slate-600">
+                <div className={`w-full px-2.5 py-1.5 rounded-lg text-xs ${text.body}`} style={glassInner}>
                   {arrivalMode === 'AMBULANCE' ? '🚑 Ambulance' : arrivalMode === 'REFERRAL' ? '🏥 Referral' : '🚶 Walk-in'}
                 </div>
               </div>
-              <div><label className={labelCls}>Next of Kin {patient?.contactPerson && <span className="text-green-600 text-[8px]">✓ loaded</span>}</label><input type="text" value={nextOfKin} onChange={(e) => setNextOfKin(e.target.value)} className={inputCls} /></div>
-              <div><label className={labelCls}>Phone Number {patient?.contactPerson && <span className="text-green-600 text-[8px]">✓ loaded</span>}</label><input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="+250 ..." className={inputCls} /></div>
+              <div><label className={labelCls}>Next of Kin {patient?.contactPerson && <span className={`text-[8px] ${isDark ? 'text-green-400' : 'text-green-600'}`}>✓ loaded</span>}</label><input type="text" value={nextOfKin} onChange={(e) => setNextOfKin(e.target.value)} className={inputCls} /></div>
+              <div><label className={labelCls}>Phone Number {patient?.contactPerson && <span className={`text-[8px] ${isDark ? 'text-green-400' : 'text-green-600'}`}>✓ loaded</span>}</label><input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="+250 ..." className={inputCls} /></div>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
               <div><label className={labelCls}>Date / Time</label><input type="datetime-local" value={dateTime} onChange={(e) => setDateTime(e.target.value)} className={inputCls} /></div>
               <div>
                 <label className={labelCls}>Arrival Time (locked)</label>
-                <div className="w-full px-2.5 py-1.5 bg-slate-100/80 border border-slate-200/60 rounded-lg text-xs text-slate-600 flex items-center gap-1.5">
-                  <Clock className="w-3 h-3 text-slate-400" />{arrivalTime.toLocaleTimeString()}
+                <div className={`w-full px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-1.5 ${text.body}`} style={glassInner}>
+                  <Clock className={`w-3 h-3 ${text.muted}`} />{arrivalTime.toLocaleTimeString()}
                 </div>
               </div>
             </div>
             <div className="mt-3">
               <label className={labelCls}>Chief Complaint</label>
-              <textarea value={chiefComplaint} onChange={(e) => setChiefComplaint(e.target.value)} rows={2} className="w-full px-2.5 py-1.5 bg-white/80 border border-slate-200/60 rounded-lg text-xs resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 placeholder:text-slate-400" placeholder="Describe the presenting complaint..." />
+              <textarea value={chiefComplaint} onChange={(e) => setChiefComplaint(e.target.value)} rows={2} className={`${inputCls} resize-none`} placeholder="Describe the presenting complaint..." />
             </div>
           </div>
         </div>
@@ -1014,12 +1027,12 @@ export function AdultTriageForm() {
 
         {/* EMERGENCY SIGNS - PAGINATED */}
         <div className="rounded-2xl overflow-hidden" style={glassCard}>
-          <div className="px-4 py-3 border-b border-white/40 flex items-center justify-between">
+          <div className={`px-4 py-3 flex items-center justify-between ${isDark ? 'border-b border-cyan-500/15' : 'border-b border-white/40'}`}>
             <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center"><AlertCircle className="w-4 h-4 text-red-600" /></div>
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? 'bg-red-500/20' : 'bg-red-100'}`}><AlertCircle className={`w-4 h-4 ${isDark ? 'text-red-300' : 'text-red-600'}`} /></div>
               <div>
-                <h2 className="text-sm font-bold text-slate-800">Emergency Signs</h2>
-                <p className="text-[10px] text-slate-500">Check all that apply — Critical signs → RED</p>
+                <h2 className={`text-sm font-bold ${text.heading}`}>Emergency Signs</h2>
+                <p className={`text-[10px] ${text.body}`}>Check all that apply — Critical signs → RED</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -1027,24 +1040,24 @@ export function AdultTriageForm() {
                 {EMERGENCY_SIGN_GROUPS.map((g, i) => {
                   const gc = g.signs.filter(s => checkedSigns[s.id]).length;
                   return (
-                    <button key={i} onClick={() => setSignPage(i)} className={`w-6 h-6 rounded-full text-[9px] font-bold transition-all flex items-center justify-center ${i === signPage ? 'bg-cyan-600 text-white shadow-md shadow-cyan-500/30 scale-110' : gc > 0 ? 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`} title={g.title}>{i + 1}</button>
+                    <button key={i} onClick={() => setSignPage(i)} className={`w-6 h-6 rounded-full text-[9px] font-bold transition-all flex items-center justify-center ${i === signPage ? 'bg-cyan-600 text-white shadow-md shadow-cyan-500/30 scale-110' : gc > 0 ? (isDark ? 'bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30' : 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200') : (isDark ? 'bg-white/5 text-slate-400 hover:bg-white/10' : 'bg-slate-100 text-slate-400 hover:bg-slate-200')}`} title={g.title}>{i + 1}</button>
                   );
                 })}
               </div>
               {!signsReviewed ? (
                 <button onClick={handleReviewAllSigns} className="px-3 py-1.5 bg-cyan-600 text-white text-[10px] font-semibold rounded-lg hover:bg-cyan-500 transition-all shadow-sm">Mark Reviewed</button>
               ) : (
-                <span className="flex items-center gap-1 text-[10px] font-semibold text-green-700 bg-green-50 px-2 py-1 rounded-full"><CheckCircle className="w-3 h-3" /> Reviewed</span>
+                <span className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full ${isDark ? 'text-green-300 bg-green-500/15' : 'text-green-700 bg-green-50'}`}><CheckCircle className="w-3 h-3" /> Reviewed</span>
               )}
             </div>
           </div>
 
           <div className="p-4">
-            <div className={`rounded-lg px-3 py-2 flex items-center gap-2 mb-3 ${currentGroup.bgColor}`}>
+            <div className={`rounded-lg px-3 py-2 flex items-center gap-2 mb-3 ${isDark ? '' : currentGroup.bgColor}`} style={isDark ? glassInner : undefined}>
               <currentGroup.icon className={`w-3.5 h-3.5 ${currentGroup.color}`} />
-              <span className="text-xs font-bold text-slate-700">{currentGroup.title}</span>
-              <span className="ml-auto text-[10px] bg-white/80 text-slate-500 px-2 py-0.5 rounded-full font-medium">{currentGroup.signs.filter(s => checkedSigns[s.id]).length}/{currentGroup.signs.length}</span>
-              <span className="text-[10px] text-slate-400">Step {signPage + 1} of {totalSignPages}</span>
+              <span className={`text-xs font-bold ${text.label}`}>{currentGroup.title}</span>
+              <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${isDark ? 'bg-white/10 text-slate-300' : 'bg-white/80 text-slate-500'}`}>{currentGroup.signs.filter(s => checkedSigns[s.id]).length}/{currentGroup.signs.length}</span>
+              <span className={`text-[10px] ${text.muted}`}>Step {signPage + 1} of {totalSignPages}</span>
             </div>
 
             <div className="space-y-1">

@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import type { DoctorOnDutyResponse, EdZone } from '@/api/types';
 import { shiftApi } from '@/api/shifts';
+import { useTheme } from '@/hooks/useTheme';
 
 interface Props {
   hospitalId: string | undefined;
@@ -60,6 +61,7 @@ export default function DoctorOnDutyPicker({
   selectedHint = 'selected',
   freeTextPlaceholder = 'Dr. name',
 }: Props) {
+  const { glassInner, isDark, text } = useTheme();
   const [doctors, setDoctors] = useState<DoctorOnDutyResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -127,10 +129,10 @@ export default function DoctorOnDutyPicker({
   if (!zone) {
     return (
       <div>
-        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+        <label className={`block text-[10px] font-bold ${text.muted} uppercase tracking-wider mb-1`}>
           {label}
         </label>
-        <div className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-400 italic">
+        <div style={glassInner} className={`px-2.5 py-1.5 rounded-lg text-xs ${text.muted} italic`}>
           Pick a triage category to see doctors on duty
         </div>
       </div>
@@ -139,11 +141,11 @@ export default function DoctorOnDutyPicker({
 
   return (
     <div>
-      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-        <Stethoscope className="w-3 h-3 text-slate-400" />
+      <label className={`block text-[10px] font-bold ${text.body} uppercase tracking-wider mb-1 flex items-center gap-1.5`}>
+        <Stethoscope className={`w-3 h-3 ${text.muted}`} />
         {label}
         {(userId || (name && freeText)) && (
-          <span className="text-green-600 text-[8px] normal-case font-bold tracking-normal">
+          <span className={`${isDark ? 'text-green-400' : 'text-green-600'} text-[8px] normal-case font-bold tracking-normal`}>
             ✓ {selectedHint}
           </span>
         )}
@@ -157,29 +159,30 @@ export default function DoctorOnDutyPicker({
             value={name}
             onChange={(e) => onChange(e.target.value, null)}
             placeholder={freeTextPlaceholder}
-            className="flex-1 px-2.5 py-1.5 border border-amber-300 bg-amber-50/50 rounded-lg text-xs"
+            className={`flex-1 px-2.5 py-1.5 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'bg-amber-500/10 border border-amber-500/30 text-amber-200' : 'bg-amber-50/50 border border-amber-300 text-slate-800'}`}
             onFocus={refetchIfStale}
           />
           <button
             type="button"
             onClick={() => { setFreeText(false); onChange('', null); }}
-            className="px-2 py-1.5 text-[10px] font-bold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
+            style={glassInner}
+            className={`px-2 py-1.5 text-[10px] font-bold rounded-lg ${text.body} hover:bg-white/5`}
             title="Back to on-duty doctor list"
           >
             ← List
           </button>
         </div>
       ) : loading ? (
-        <div className="flex items-center gap-2 px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-500">
+        <div style={glassInner} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs ${text.body}`}>
           <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-500" />
           Loading doctors on duty in {zone}…
         </div>
       ) : doctors.length === 0 ? (
         // Reached only on error (no-doctors triggers the freeText fallback above).
         <div className="space-y-1.5">
-          <div className="flex items-start gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-200">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
-            <p className="text-[10px] text-amber-700">
+          <div className={`flex items-start gap-1.5 px-2.5 py-1.5 rounded-lg ${isDark ? 'bg-amber-500/20 border border-amber-500/30' : 'bg-amber-50 border border-amber-200'}`}>
+            <AlertTriangle className={`w-3.5 h-3.5 ${isDark ? 'text-amber-300' : 'text-amber-500'} flex-shrink-0 mt-0.5`} />
+            <p className={`text-[10px] ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
               {error || `No doctor on duty in ${zone}.`}{' '}
               Hospital-wide alert will fire on Tier 2 escalation after 2 min.
               Enter the name of any doctor stepping in:
@@ -190,7 +193,8 @@ export default function DoctorOnDutyPicker({
             value={name}
             onChange={(e) => onChange(e.target.value, null)}
             placeholder={freeTextPlaceholder}
-            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
+            style={glassInner}
+            className={`w-full px-2.5 py-1.5 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
           />
         </div>
       ) : (
@@ -212,7 +216,8 @@ export default function DoctorOnDutyPicker({
               if (d) onChange(d.fullName, d.userId);
             }}
             onFocus={refetchIfStale}
-            className="w-full px-2.5 py-1.5 pr-7 border border-slate-300 rounded-lg text-xs appearance-none bg-white cursor-pointer"
+            style={glassInner}
+            className={`w-full px-2.5 py-1.5 pr-7 rounded-lg text-xs appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
           >
             {doctors.length > 1 && <option value="">— Select doctor —</option>}
             {doctors.map((d) => (
@@ -224,17 +229,17 @@ export default function DoctorOnDutyPicker({
             ))}
             <option value="__other__">Other / locum…</option>
           </select>
-          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <ChevronDown className={`w-3.5 h-3.5 ${text.muted} absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none`} />
           {/* Selected confirmation for the single-doctor pre-select case */}
           {doctors.length === 1 && userId && (
-            <p className="mt-1 flex items-center gap-1 text-[10px] text-emerald-600">
+            <p className={`mt-1 flex items-center gap-1 text-[10px] ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
               <CheckCircle className="w-3 h-3" />
               Only doctor on duty in {zone} — auto-selected. Tap to change.
             </p>
           )}
           {/* Hint for multi-doctor case — until they pick someone */}
           {doctors.length > 1 && !userId && (
-            <p className="mt-1 flex items-center gap-1 text-[10px] text-slate-500">
+            <p className={`mt-1 flex items-center gap-1 text-[10px] ${text.body}`}>
               <Pencil className="w-3 h-3" />
               {doctors.length} doctors on duty — pick one to notify
             </p>

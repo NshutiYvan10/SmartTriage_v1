@@ -850,13 +850,14 @@ export function PediatricTriageForm() {
   const catTextColor = categoryResult.category === 'RED' ? '#dc2626' : categoryResult.category === 'ORANGE' ? '#ea580c' : categoryResult.category === 'YELLOW' ? '#ca8a04' : '#16a34a';
 
   const currentGroup = EMERGENCY_SIGN_GROUPS[signPage];
-  const inputCls = 'w-full px-2.5 py-1.5 bg-white/80 border border-slate-200/60 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all placeholder:text-slate-400';
-  const labelCls = 'block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5';
-  const selectCls = 'w-full px-2.5 py-1.5 bg-white/80 border border-slate-200/60 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 appearance-none transition-all';
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
+  const inputCls = `w-full px-2.5 py-1.5 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all ${isDark ? 'bg-white/5 border border-white/10 text-slate-200 placeholder:text-slate-500 focus:border-cyan-400/40' : 'bg-white/80 border border-slate-200/60 text-slate-700 placeholder:text-slate-400 focus:border-cyan-400'}`;
+  const labelCls = `block text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${text.label}`;
+  const selectCls = `w-full px-2.5 py-1.5 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 appearance-none transition-all ${isDark ? 'bg-white/5 border border-white/10 text-slate-200 focus:border-cyan-400/40' : 'bg-white/80 border border-slate-200/60 text-slate-700 focus:border-cyan-400'}`;
 
   return (
-    <div className={`min-h-full ${isDark ? '' : 'bg-gradient-to-br from-slate-50/80 via-cyan-50/30 to-slate-100/80'}`}>
-      <div className="p-4 lg:p-6 space-y-4">
+    <div className="min-h-full">
+      <div className="p-4 lg:p-6 space-y-4 animate-fade-in">
 
         {/* Round 4a — context banner when opened from a RETRIAGE_REQUIRED
             alert. We intentionally don't auto-flag the trigger sign on
@@ -929,9 +930,9 @@ export function PediatricTriageForm() {
           {/* Patient Information */}
           <div className="p-4">
             <div className="flex items-center gap-1.5 mb-3">
-              <FileText className="w-3.5 h-3.5 text-slate-400" />
-              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Patient Information</span>
-              {patient && <span className="ml-auto text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Pre-loaded</span>}
+              <FileText className={`w-3.5 h-3.5 ${text.muted}`} />
+              <span className={`text-[10px] font-semibold uppercase tracking-wider ${text.body}`}>Patient Information</span>
+              {patient && <span className="ml-auto text-[10px] bg-green-500/20 text-green-300 border border-green-500/30 px-2 py-0.5 rounded-full font-medium">Pre-loaded</span>}
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <div><label className={labelCls}>Patient Names</label><input type="text" value={patientNames} onChange={(e) => setPatientNames(e.target.value)} className={inputCls} /></div>
@@ -993,12 +994,12 @@ export function PediatricTriageForm() {
 
         {/* EMERGENCY SIGNS - PAGINATED */}
         <div className="rounded-2xl overflow-hidden" style={glassCard}>
-          <div className="px-4 py-3 border-b border-white/40 flex items-center justify-between">
+          <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: borderStyle }}>
             <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center"><AlertCircle className="w-4 h-4 text-red-600" /></div>
+              <div className="w-7 h-7 rounded-lg bg-red-500/20 border border-red-500/30 flex items-center justify-center"><AlertCircle className="w-4 h-4 text-red-500" /></div>
               <div>
-                <h2 className="text-sm font-bold text-slate-800">Emergency Signs</h2>
-                <p className="text-[10px] text-slate-500">Check all that apply — Critical signs → RED</p>
+                <h2 className={`text-sm font-bold ${text.heading}`}>Emergency Signs</h2>
+                <p className={`text-[10px] ${text.muted}`}>Check all that apply — Critical signs → RED</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -1006,24 +1007,24 @@ export function PediatricTriageForm() {
                 {EMERGENCY_SIGN_GROUPS.map((g, i) => {
                   const gc = g.signs.filter(s => checkedSigns[s.id]).length;
                   return (
-                    <button key={i} onClick={() => setSignPage(i)} className={`w-6 h-6 rounded-full text-[9px] font-bold transition-all flex items-center justify-center ${i === signPage ? 'bg-cyan-600 text-white shadow-md shadow-cyan-500/30 scale-110' : gc > 0 ? 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`} title={g.title}>{i + 1}</button>
+                    <button key={i} onClick={() => setSignPage(i)} className={`w-6 h-6 rounded-full text-[9px] font-bold transition-all flex items-center justify-center ${i === signPage ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 scale-110' : gc > 0 ? 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30' : `${text.muted} hover:bg-white/5 border border-transparent`}`} title={g.title}>{i + 1}</button>
                   );
                 })}
               </div>
               {!signsReviewed ? (
                 <button onClick={handleReviewAllSigns} className="px-3 py-1.5 bg-cyan-600 text-white text-[10px] font-semibold rounded-lg hover:bg-cyan-500 transition-all shadow-sm">Mark Reviewed</button>
               ) : (
-                <span className="flex items-center gap-1 text-[10px] font-semibold text-green-700 bg-green-50 px-2 py-1 rounded-full"><CheckCircle className="w-3 h-3" /> Reviewed</span>
+                <span className="flex items-center gap-1 text-[10px] font-semibold text-green-300 bg-green-500/20 border border-green-500/30 px-2 py-1 rounded-full"><CheckCircle className="w-3 h-3" /> Reviewed</span>
               )}
             </div>
           </div>
 
           <div className="p-4">
-            <div className={`rounded-lg px-3 py-2 flex items-center gap-2 mb-3 ${currentGroup.bgColor}`}>
+            <div className="rounded-lg px-3 py-2 flex items-center gap-2 mb-3" style={glassInner}>
               <currentGroup.icon className={`w-3.5 h-3.5 ${currentGroup.color}`} />
-              <span className="text-xs font-bold text-slate-700">{currentGroup.title}</span>
-              <span className="ml-auto text-[10px] bg-white/80 text-slate-500 px-2 py-0.5 rounded-full font-medium">{currentGroup.signs.filter(s => checkedSigns[s.id]).length}/{currentGroup.signs.length}</span>
-              <span className="text-[10px] text-slate-400">Step {signPage + 1} of {totalSignPages}</span>
+              <span className={`text-xs font-bold ${text.label}`}>{currentGroup.title}</span>
+              <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${isDark ? 'bg-white/10 text-slate-300' : 'bg-white/80 text-slate-500'}`}>{currentGroup.signs.filter(s => checkedSigns[s.id]).length}/{currentGroup.signs.length}</span>
+              <span className={`text-[10px] ${text.muted}`}>Step {signPage + 1} of {totalSignPages}</span>
             </div>
 
             <div className="space-y-1">
@@ -1031,20 +1032,20 @@ export function PediatricTriageForm() {
                 const isChecked = !!checkedSigns[sign.id];
                 const isCritical = CRITICAL_SIGN_IDS.includes(sign.id) && isChecked;
                 return (
-                  <div key={sign.id} className={`rounded-lg px-3 py-2 flex items-center gap-2.5 transition-all ${isCritical ? 'bg-red-50/80 border border-red-200/60' : isChecked ? 'bg-cyan-50/60 border border-cyan-200/40' : 'hover:bg-white/60 border border-transparent'}`}>
+                  <div key={sign.id} className={`rounded-lg px-3 py-2 flex items-center gap-2.5 transition-all ${isCritical ? 'bg-red-500/10 border border-red-500/30' : isChecked ? 'bg-cyan-500/10 border border-cyan-500/30' : 'hover:bg-white/5 border border-transparent'}`}>
                     <input type="checkbox" checked={isChecked} onChange={() => toggleSign(sign.id)} className={`w-3.5 h-3.5 rounded border-slate-300 ${isCritical ? 'text-red-600 focus:ring-red-500' : 'text-cyan-600 focus:ring-cyan-500/30'}`} />
-                    <span className={`text-xs flex-1 ${isCritical ? 'font-semibold text-red-800' : 'text-slate-700'}`}>{sign.label}</span>
+                    <span className={`text-xs flex-1 ${isCritical ? 'font-semibold text-red-500' : text.body}`}>{sign.label}</span>
                     {sign.hasField && (
                       <div className="flex-shrink-0 w-28">
                         {sign.fieldType === 'select' ? (
-                          <select value={fieldValues[sign.id] || ''} onChange={(e) => setFieldValueHandler(sign.id, e.target.value)} className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-[11px] focus:outline-none focus:ring-1 focus:ring-cyan-500/20 appearance-none">
+                          <select value={fieldValues[sign.id] || ''} onChange={(e) => setFieldValueHandler(sign.id, e.target.value)} className={`w-full px-2 py-1 rounded-md text-[11px] focus:outline-none focus:ring-1 focus:ring-cyan-500/20 appearance-none ${isDark ? 'bg-white/5 border border-white/10 text-slate-200' : 'bg-white border border-slate-200 text-slate-700'}`}>
                             <option value="">Select\u2026</option>
                             {sign.selectOptions?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
                           </select>
                         ) : (
                           <div className="relative">
-                            <input type={sign.fieldType} value={fieldValues[sign.id] || ''} onChange={(e) => setFieldValueHandler(sign.id, e.target.value)} placeholder={sign.fieldLabel} className={`w-full px-2 py-1 border border-slate-200 rounded-md text-[11px] focus:outline-none focus:ring-1 focus:ring-cyan-500/20 ${sign.fieldType === 'number' ? getVitalBg(sign.id === 'respiratory_rate' ? 'respiratoryRate' : sign.id === 'heart_rate' ? 'heartRate' : sign.id === 'oxygen_saturation' ? 'spo2' : sign.id === 'blood_glucose' ? 'glucose' : '', fieldValues[sign.id] || '') : 'bg-white'}`} />
-                            {sign.fieldUnit && <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400">{sign.fieldUnit}</span>}
+                            <input type={sign.fieldType} value={fieldValues[sign.id] || ''} onChange={(e) => setFieldValueHandler(sign.id, e.target.value)} placeholder={sign.fieldLabel} className={`w-full px-2 py-1 rounded-md text-[11px] focus:outline-none focus:ring-1 focus:ring-cyan-500/20 ${sign.fieldType === 'number' ? getVitalBg(sign.id === 'respiratory_rate' ? 'respiratoryRate' : sign.id === 'heart_rate' ? 'heartRate' : sign.id === 'oxygen_saturation' ? 'spo2' : sign.id === 'blood_glucose' ? 'glucose' : '', fieldValues[sign.id] || '') : (isDark ? 'bg-white/5 border border-white/10 text-slate-200' : 'bg-white border border-slate-200 text-slate-700')}`} />
+                            {sign.fieldUnit && <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] ${text.muted}`}>{sign.fieldUnit}</span>}
                           </div>
                         )}
                       </div>
@@ -1054,11 +1055,11 @@ export function PediatricTriageForm() {
               })}
             </div>
 
-            <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-200/40">
-              <button onClick={() => setSignPage((p) => Math.max(0, p - 1))} disabled={signPage === 0} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-white/80 border border-slate-200/60 text-slate-600 hover:bg-white hover:shadow-sm">
+            <div className="flex items-center justify-between mt-4 pt-3" style={{ borderTop: borderStyle }}>
+              <button onClick={() => setSignPage((p) => Math.max(0, p - 1))} disabled={signPage === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10' : 'bg-white/80 border border-slate-200/60 text-slate-600 hover:bg-white hover:shadow-sm'}`}>
                 <ChevronLeft className="w-3.5 h-3.5" /> Previous
               </button>
-              <span className="text-[10px] text-slate-500 font-medium">{signPage + 1} / {totalSignPages}</span>
+              <span className={`text-[10px] font-medium ${text.body}`}>{signPage + 1} / {totalSignPages}</span>
               <button onClick={() => setSignPage((p) => Math.min(totalSignPages - 1, p + 1))} disabled={signPage === totalSignPages - 1} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-cyan-600 text-white hover:bg-cyan-500 shadow-sm">
                 Next <ChevronRight className="w-3.5 h-3.5" />
               </button>
@@ -1068,12 +1069,12 @@ export function PediatricTriageForm() {
 
         {/* TEWS SCORING TABLE (6 parameters, no SBP) */}
         <div className="rounded-2xl overflow-hidden" style={glassCard}>
-          <div className="px-4 py-3 border-b border-white/40 flex items-center justify-between">
+          <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: borderStyle }}>
             <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-cyan-100 flex items-center justify-center"><Activity className="w-4 h-4 text-cyan-600" /></div>
+              <div className="w-7 h-7 rounded-lg bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center"><Activity className="w-4 h-4 text-cyan-400" /></div>
               <div>
-                <h2 className="text-sm font-bold text-slate-800">TEWS — Triage Early Warning Score</h2>
-                <p className="text-[10px] text-slate-500">Pediatric scoring — 6 parameters. Score calculates automatically.</p>
+                <h2 className={`text-sm font-bold ${text.heading}`}>TEWS — Triage Early Warning Score</h2>
+                <p className={`text-[10px] ${text.muted}`}>Pediatric scoring — 6 parameters. Score calculates automatically.</p>
               </div>
             </div>
             <div className={`flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl border-2 ${categoryBorder[categoryResult.category]} ${categoryBg[categoryResult.category]}`}>
@@ -1092,15 +1093,15 @@ export function PediatricTriageForm() {
           {/* V54 — Triage-zone monitor picker + Pull button (pediatric) */}
           {triageMonitors.length > 0 && patient?.id && (
             <div className="px-4 py-2.5 border-b border-white/30 flex items-center gap-2.5 flex-wrap" style={{ background: isDark ? 'rgba(12,74,110,0.35)' : 'rgba(236,254,255,0.6)' }}>
-              <Activity className="w-3.5 h-3.5 text-cyan-600" />
-              <span className="text-[10px] font-bold text-cyan-700 uppercase tracking-wider">Triage monitor</span>
+              <Activity className="w-3.5 h-3.5 text-cyan-400" />
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${text.accent}`}>Triage monitor</span>
               {triageMonitors.length === 1 ? (
-                <span className="text-[11px] font-bold text-slate-700">{triageMonitors[0].deviceName}</span>
+                <span className={`text-[11px] font-bold ${text.label}`}>{triageMonitors[0].deviceName}</span>
               ) : (
                 <select
                   value={pickedMonitorId ?? ''}
                   onChange={(e) => setPickedMonitorId(e.target.value || null)}
-                  className="text-[11px] font-bold px-2 py-1 rounded-lg border border-cyan-200 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
+                  className={`text-[11px] font-bold px-2 py-1 rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500/40 ${isDark ? 'bg-white/5 border border-white/10 text-slate-200' : 'bg-white border border-cyan-200 text-slate-700'}`}
                 >
                   <option value="">— pick monitor —</option>
                   {triageMonitors.map(d => (
@@ -1118,7 +1119,7 @@ export function PediatricTriageForm() {
                 <Activity className="w-3.5 h-3.5" /> Pull from Monitor
               </button>
               {lastPullAt && lastPullDeviceName && (
-                <span className="text-[10px] text-slate-500 w-full">
+                <span className={`text-[10px] w-full ${text.muted}`}>
                   Last pull from {lastPullDeviceName} at {lastPullAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               )}
@@ -1140,11 +1141,11 @@ export function PediatricTriageForm() {
             <table className="w-full text-[11px] border-collapse">
               <thead>
                 <tr>
-                  <th className="text-left py-1.5 px-2 bg-slate-100/80 rounded-tl-lg font-semibold text-slate-600 w-20">Parameter</th>
+                  <th className={`text-left py-1.5 px-2 rounded-tl-lg font-semibold w-20 ${isDark ? 'bg-white/5 text-slate-300' : 'bg-slate-100/80 text-slate-600'}`}>Parameter</th>
                   {TEWS_COLUMNS.map((score, i) => (
                     <th key={i} className={`py-1.5 px-1.5 text-center font-bold ${i === 3 ? 'bg-green-100 text-green-800' : i < 3 ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'} ${i === 6 ? 'rounded-tr-lg' : ''}`}>{score}</th>
                   ))}
-                  <th className="py-1.5 px-2 bg-slate-100/80 rounded-tr-lg font-semibold text-slate-600 w-12 text-center">Score</th>
+                  <th className={`py-1.5 px-2 rounded-tr-lg font-semibold w-12 text-center ${isDark ? 'bg-white/5 text-slate-300' : 'bg-slate-100/80 text-slate-600'}`}>Score</th>
                 </tr>
               </thead>
               <tbody>
@@ -1153,15 +1154,15 @@ export function PediatricTriageForm() {
                   const highlightIdx = columnToTableIndex(colVal);
                   const rowScore = row.key === 'mobility' ? tewsScoring.mobilityScore : row.key === 'rr' ? tewsScoring.respiratoryRateScore : row.key === 'hr' ? tewsScoring.heartRateScore : row.key === 'temp' ? tewsScoring.temperatureScore : row.key === 'avpu' ? tewsScoring.avpuScore : tewsScoring.traumaScore;
                   return (
-                    <tr key={row.key} className={ri % 2 === 0 ? 'bg-white/40' : 'bg-slate-50/30'}>
-                      <td className="py-2 px-2 font-semibold text-slate-700 border-r border-slate-200/40">{row.label}</td>
+                    <tr key={row.key} className={ri % 2 === 0 ? (isDark ? 'bg-white/[0.03]' : 'bg-white/40') : (isDark ? 'bg-white/[0.06]' : 'bg-slate-50/30')}>
+                      <td className={`py-2 px-2 font-semibold border-r ${text.label} ${isDark ? 'border-white/10' : 'border-slate-200/40'}`}>{row.label}</td>
                       {row.cells.map((cell, ci) => {
                         const isHighlighted = cell !== null && ci === highlightIdx;
                         return (
-                          <td key={ci} className={`py-2 px-1.5 text-center border-r border-slate-100/40 transition-all ${cell === null ? 'bg-slate-100/40 text-slate-300' : isHighlighted ? 'bg-cyan-600 text-white font-bold rounded-md shadow-sm' : 'text-slate-600'}`}>{cell ?? '–'}</td>
+                          <td key={ci} className={`py-2 px-1.5 text-center border-r transition-all ${isDark ? 'border-white/5' : 'border-slate-100/40'} ${cell === null ? (isDark ? 'bg-white/[0.02] text-slate-600' : 'bg-slate-100/40 text-slate-300') : isHighlighted ? 'bg-cyan-600 text-white font-bold rounded-md shadow-sm' : text.body}`}>{cell ?? '–'}</td>
                         );
                       })}
-                      <td className={`py-2 px-2 text-center font-bold ${rowScore > 0 ? 'text-red-600' : 'text-slate-400'}`}>{rowScore}</td>
+                      <td className={`py-2 px-2 text-center font-bold ${rowScore > 0 ? 'text-red-500' : text.muted}`}>{rowScore}</td>
                     </tr>
                   );
                 })}
@@ -1178,19 +1179,19 @@ export function PediatricTriageForm() {
 
         {/* MODULE 3: VITAL VALIDATION + TEWS TREND (Pediatric) */}
         {(vitalWarnings.length > 0 || (tewsTrend && tewsHistoryCount >= 2)) && (
-          <div className="rounded-2xl overflow-hidden border border-pink-200/60" style={glassCard}>
-            <div className="px-4 py-3 border-b border-white/40">
+          <div className="rounded-2xl overflow-hidden" style={glassCard}>
+            <div className="px-4 py-3" style={{ borderBottom: borderStyle }}>
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-pink-100 flex items-center justify-center"><Shield className="w-4 h-4 text-pink-600" /></div>
+                <div className="w-7 h-7 rounded-lg bg-pink-500/20 border border-pink-500/30 flex items-center justify-center"><Shield className="w-4 h-4 text-pink-400" /></div>
                 <div>
-                  <h2 className="text-sm font-bold text-slate-800">Input Validation & Score Trend</h2>
-                  <p className="text-[10px] text-slate-500">Age-adjusted physiologic range checks (pediatric)</p>
+                  <h2 className={`text-sm font-bold ${text.heading}`}>Input Validation & Score Trend</h2>
+                  <p className={`text-[10px] ${text.muted}`}>Age-adjusted physiologic range checks (pediatric)</p>
                 </div>
               </div>
             </div>
             <div className="p-4 space-y-3">
               {/* Score breakdown */}
-              <div className="p-2.5 bg-pink-50/80 rounded-xl text-xs text-gray-600 text-center font-medium">
+              <div className={`p-2.5 rounded-xl text-xs text-center font-medium ${text.body}`} style={glassInner}>
                 {getScoreBreakdownText({
                   mobilityScore: tewsScoring.mobilityScore,
                   temperatureScore: tewsScoring.temperatureScore,
@@ -1245,22 +1246,22 @@ export function PediatricTriageForm() {
         {/* mSAT STEP 3: PEDIATRIC DISCRIMINATOR ASSESSMENT */}
         {discriminatorNeeded && (
           <div className="rounded-2xl overflow-hidden" style={glassCard}>
-            <div className="px-4 py-3 border-b border-white/40 flex items-center justify-between">
+            <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: borderStyle }}>
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-pink-100 flex items-center justify-center"><AlertCircle className="w-4 h-4 text-pink-600" /></div>
+                <div className="w-7 h-7 rounded-lg bg-pink-500/20 border border-pink-500/30 flex items-center justify-center"><AlertCircle className="w-4 h-4 text-pink-400" /></div>
                 <div>
-                  <h2 className="text-sm font-bold text-slate-800">Pediatric Discriminator Assessment</h2>
-                  <p className="text-[10px] text-slate-500">TEWS 0-4 — Check pediatric-specific symptoms</p>
+                  <h2 className={`text-sm font-bold ${text.heading}`}>Pediatric Discriminator Assessment</h2>
+                  <p className={`text-[10px] ${text.muted}`}>TEWS 0-4 — Check pediatric-specific symptoms</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {hasVeryUrgentSigns && <span className="text-[10px] font-bold bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">Very Urgent</span>}
-                {hasUrgentSigns && !hasVeryUrgentSigns && <span className="text-[10px] font-bold bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">Urgent</span>}
-                {!hasVeryUrgentSigns && !hasUrgentSigns && <span className="text-[10px] font-medium bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Routine</span>}
+                {hasVeryUrgentSigns && <span className="text-[10px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/30 px-2 py-0.5 rounded-full">Very Urgent</span>}
+                {hasUrgentSigns && !hasVeryUrgentSigns && <span className="text-[10px] font-bold bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 px-2 py-0.5 rounded-full">Urgent</span>}
+                {!hasVeryUrgentSigns && !hasUrgentSigns && <span className="text-[10px] font-medium bg-green-500/20 text-green-300 border border-green-500/30 px-2 py-0.5 rounded-full">Routine</span>}
                 {!discriminatorReviewed ? (
                   <button onClick={handleDiscriminatorReviewed} className="px-3 py-1.5 bg-pink-600 text-white text-[10px] font-semibold rounded-lg hover:bg-pink-500 transition-all shadow-sm">Mark Reviewed</button>
                 ) : (
-                  <span className="flex items-center gap-1 text-[10px] font-semibold text-green-700 bg-green-50 px-2 py-1 rounded-full"><CheckCircle className="w-3 h-3" /> Reviewed</span>
+                  <span className="flex items-center gap-1 text-[10px] font-semibold text-green-300 bg-green-500/20 border border-green-500/30 px-2 py-1 rounded-full"><CheckCircle className="w-3 h-3" /> Reviewed</span>
                 )}
               </div>
             </div>

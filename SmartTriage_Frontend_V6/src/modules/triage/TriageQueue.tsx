@@ -14,18 +14,18 @@ import { PlacePatientDialog } from '@/modules/beds/PlacePatientDialog';
 
 /* ─── Config ─── */
 const categoryConfig: Record<TriageCategory, { label: string; bg: string; text: string; border: string; dot: string; gradient: string }> = {
-  RED: { label: 'Emergency', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-500', gradient: 'from-red-500 to-red-600' },
-  ORANGE: { label: 'Very Urgent', bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', dot: 'bg-orange-500', gradient: 'from-orange-500 to-orange-600' },
-  YELLOW: { label: 'Urgent', bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', dot: 'bg-yellow-500', gradient: 'from-yellow-500 to-amber-600' },
-  GREEN: { label: 'Standard', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500', gradient: 'from-emerald-500 to-emerald-600' },
-  BLUE: { label: 'Non-Urgent', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500', gradient: 'from-blue-500 to-blue-600' },
+  RED: { label: 'Emergency', bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30', dot: 'bg-red-500', gradient: 'from-red-500 to-red-600' },
+  ORANGE: { label: 'Very Urgent', bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30', dot: 'bg-orange-500', gradient: 'from-orange-500 to-orange-600' },
+  YELLOW: { label: 'Urgent', bg: 'bg-yellow-500/20', text: 'text-yellow-300', border: 'border-yellow-500/30', dot: 'bg-yellow-500', gradient: 'from-yellow-500 to-amber-600' },
+  GREEN: { label: 'Standard', bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30', dot: 'bg-emerald-500', gradient: 'from-emerald-500 to-emerald-600' },
+  BLUE: { label: 'Non-Urgent', bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30', dot: 'bg-blue-500', gradient: 'from-blue-500 to-blue-600' },
 };
 
 const statusConfig: Record<string, { label: string; bg: string; text: string; border: string }> = {
-  WAITING: { label: 'Waiting', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
-  IN_TRIAGE: { label: 'In Triage', bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200' },
-  TRIAGED: { label: 'Triaged', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
-  IN_TREATMENT: { label: 'In Treatment', bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
+  WAITING: { label: 'Waiting', bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
+  IN_TRIAGE: { label: 'In Triage', bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
+  TRIAGED: { label: 'Triaged', bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  IN_TREATMENT: { label: 'In Treatment', bg: 'bg-indigo-500/20', text: 'text-indigo-300', border: 'border-indigo-500/30' },
 };
 
 const categoryGradients: Record<string, [string, string]> = {
@@ -136,7 +136,7 @@ function timeAgo(date: Date): string {
 
 /* ─── Animated Triage Showcase Component ─── */
 function TriageShowcase({ allPatients, onNavigate }: { allPatients: Patient[]; onNavigate: (id: string) => void }) {
-  const { glassCard, glassInner, isDark } = useTheme();
+  const { glassCard, glassInner, isDark, text } = useTheme();
   const [activeIdx, setActiveIdx] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
@@ -182,8 +182,8 @@ function TriageShowcase({ allPatients, onNavigate }: { allPatients: Patient[]; o
           {/* Left: Category selector pills */}
           <div className="lg:w-52 flex lg:flex-col gap-1.5 p-3 lg:py-4 overflow-x-auto lg:overflow-x-visible flex-shrink-0" style={{ borderRight: isDark ? '1px solid rgba(2,132,199,0.18)' : '1px solid rgba(203,213,225,0.2)' }}>
             <div className="hidden lg:flex flex-col gap-1 px-2 pb-3 mb-1" style={{ borderBottom: isDark ? '1px solid rgba(2,132,199,0.15)' : '1px solid rgba(203,213,225,0.15)' }}>
-              <span className="text-2xl font-bold text-slate-800">{total}</span>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Patients</span>
+              <span className={`text-2xl font-bold ${text.heading}`}>{total}</span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Total Patients</span>
               <div className="flex items-center gap-1.5 mt-1">
                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
                 <span className="text-[10px] text-amber-600 font-semibold">{waiting} waiting</span>
@@ -207,11 +207,11 @@ function TriageShowcase({ allPatients, onNavigate }: { allPatients: Patient[]; o
                   } : {}}
                 >
                   <div className={`w-2.5 h-2.5 rounded-full ${cat.dotColor} flex-shrink-0 ${isActive ? 'animate-pulse' : ''}`} />
-                  <span className={`text-xs font-bold flex-1 text-left ${isActive ? cat.textColor : 'text-slate-500'}`}>
+                  <span className={`text-xs font-bold flex-1 text-left ${isActive ? cat.textColor : text.body}`}>
                     {cat.label}
                   </span>
                   <span className={`text-xs font-bold min-w-[20px] text-center px-1.5 py-0.5 rounded-md ${
-                    isActive ? `${cat.badgeBg} ${cat.textColor} border ${cat.badgeBorder}` : 'text-slate-400'
+                    isActive ? `${cat.badgeBg} ${cat.textColor} border ${cat.badgeBorder}` : text.muted
                   }`}>
                     {count}
                   </span>
@@ -234,14 +234,14 @@ function TriageShowcase({ allPatients, onNavigate }: { allPatients: Patient[]; o
                       {activePatients.length} patient{activePatients.length !== 1 ? 's' : ''}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400 font-medium mt-0.5">{active.sublabel}</p>
+                  <p className={`text-[11px] ${text.muted} font-medium mt-0.5`}>{active.sublabel}</p>
                 </div>
               </div>
 
               {activePatients.length === 0 ? (
                 <div className="py-8 text-center rounded-xl" style={glassInner}>
                   <ActiveIcon className="w-8 h-8 mx-auto mb-2" style={{ color: active.accentColor, opacity: 0.3 }} />
-                  <p className="text-xs text-slate-400 font-medium">No patients in this category</p>
+                  <p className={`text-xs ${text.muted} font-medium`}>No patients in this category</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
@@ -262,29 +262,29 @@ function TriageShowcase({ allPatients, onNavigate }: { allPatients: Patient[]; o
                         {patient.fullName.split(' ').map(n => n[0]).join('').slice(0, 2)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-slate-700 truncate group-hover:text-cyan-600 transition-colors">
+                        <p className={`text-sm font-semibold ${text.body} truncate group-hover:text-cyan-600 transition-colors`}>
                           {patient.fullName}
                         </p>
-                        <p className="text-[10px] text-slate-400 font-medium truncate">
+                        <p className={`text-[10px] ${text.muted} font-medium truncate`}>
                           {patient.age}y · {patient.chiefComplaint} · {timeAgo(patient.arrivalTimestamp)}
                         </p>
                       </div>
                       {patient.tewsScore !== undefined && (
                         <div className={`w-7 h-7 rounded-md flex items-center justify-center text-[11px] font-bold flex-shrink-0 ${
                           patient.tewsScore >= 7
-                            ? 'bg-red-50 text-red-600 border border-red-200'
+                            ? 'bg-red-500/20 text-red-300 border border-red-500/30'
                             : patient.tewsScore >= 4
-                              ? 'bg-amber-50 text-amber-600 border border-amber-200'
-                              : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                         }`}>
                           {patient.tewsScore}
                         </div>
                       )}
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-cyan-500 transition-colors flex-shrink-0" />
+                      <ChevronRight className={`w-3.5 h-3.5 ${text.muted} group-hover:text-cyan-500 transition-colors flex-shrink-0`} />
                     </button>
                   ))}
                   {activePatients.length > 4 && (
-                    <div className="flex items-center justify-center px-3 py-2 rounded-xl text-[11px] font-semibold text-slate-400" style={glassInner}>
+                    <div className={`flex items-center justify-center px-3 py-2 rounded-xl text-[11px] font-semibold ${text.muted}`} style={glassInner}>
                       +{activePatients.length - 4} more patient{activePatients.length - 4 > 1 ? 's' : ''}
                     </div>
                   )}
@@ -299,7 +299,7 @@ function TriageShowcase({ allPatients, onNavigate }: { allPatients: Patient[]; o
                     className={`rounded-full transition-all duration-300 ${
                       idx === activeIdx
                         ? `w-6 h-2 ${cat.dotColor}`
-                        : 'w-2 h-2 bg-slate-300 hover:bg-slate-400'
+                        : isDark ? 'w-2 h-2 bg-white/20 hover:bg-white/30' : 'w-2 h-2 bg-slate-300 hover:bg-slate-400'
                     }`}
                   />
                 ))}
@@ -325,7 +325,7 @@ type Tab = 'all' | 'adult' | 'pediatric';
 type StatusFilter = 'all' | 'WAITING' | 'IN_TRIAGE' | 'TRIAGED';
 
 export function TriageQueue() {
-  const { glassCard, glassInner, isDark } = useTheme();
+  const { glassCard, glassInner, isDark, text } = useTheme();
   const navigate = useNavigate();
   const storePatients = usePatientStore((s) => s.patients);
   const fetchActiveVisits = usePatientStore((s) => s.fetchActiveVisits);
@@ -472,10 +472,10 @@ export function TriageQueue() {
               <Stethoscope className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-slate-800 tracking-tight leading-tight">
+              <h1 className={`text-xl font-bold ${text.heading} tracking-tight leading-tight`}>
                 Triage Queue
               </h1>
-              <p className="text-sm text-slate-400 mt-0.5 font-medium">
+              <p className={`text-sm ${text.muted} mt-0.5 font-medium`}>
                 {stats.waiting} patient{stats.waiting !== 1 ? 's' : ''} waiting for triage
               </p>
             </div>
@@ -520,7 +520,7 @@ export function TriageQueue() {
                 <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
                   activeTab === tab.key
                     ? 'bg-white/25 text-white'
-                    : 'bg-slate-100 text-slate-400'
+                    : isDark ? 'bg-white/10 text-slate-400' : 'bg-slate-100 text-slate-400'
                 }`}>
                   {tab.count}
                 </span>
@@ -537,7 +537,7 @@ export function TriageQueue() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by name, complaint, or ID..."
-                className="w-full pl-11 pr-4 py-2.5 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                className={`w-full pl-11 pr-4 py-2.5 rounded-xl text-sm ${text.body} placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all`}
                 style={glassInner}
               />
             </div>
@@ -551,7 +551,7 @@ export function TriageQueue() {
                   className={`px-3 py-2 rounded-xl text-[11px] font-bold transition-all duration-300 ${
                     statusFilter === f
                       ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 text-white shadow-md shadow-cyan-500/20'
-                      : 'text-slate-500 hover:text-slate-700'
+                      : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'
                   }`}
                   style={statusFilter !== f ? glassInner : {}}
                 >
@@ -567,8 +567,8 @@ export function TriageQueue() {
           {/* Header */}
           <div className="px-5 py-3.5 flex items-center justify-between" style={{ borderBottom: isDark ? '1px solid rgba(2,132,199,0.18)' : '1px solid rgba(203,213,225,0.3)' }}>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Triage Queue</span>
-              <span className="text-[10px] font-bold bg-cyan-50 text-cyan-600 border border-cyan-200 px-2 py-0.5 rounded-md">{triageQueue.length}</span>
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${text.muted}`}>Triage Queue</span>
+              <span className="text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-md">{triageQueue.length}</span>
             </div>
             <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
               <Timer className="w-3 h-3" />
@@ -578,27 +578,27 @@ export function TriageQueue() {
 
           {triageQueue.length === 0 ? (
             <div className="px-6 py-16 text-center">
-              <Stethoscope className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <Stethoscope className={`w-12 h-12 ${text.muted} mx-auto mb-3`} />
               {/* RBAC fix — explain WHY the queue is empty instead of
                   showing a silent "no patients" with no next action. */}
               {user?.isOnShift === false ? (
                 <>
-                  <p className="text-sm font-semibold text-slate-400">You're not on shift</p>
-                  <p className="text-xs text-slate-400 mt-1">Ask the Charge Nurse to add you to today's triage shift.</p>
+                  <p className={`text-sm font-semibold ${text.muted}`}>You're not on shift</p>
+                  <p className={`text-xs ${text.muted} mt-1`}>Ask the Charge Nurse to add you to today's triage shift.</p>
                 </>
               ) : user?.currentShiftFunction && user.currentShiftFunction !== 'TRIAGE_NURSE'
                   && user.currentShiftFunction !== 'CHARGE_NURSE' && !user.isShiftLead ? (
                 <>
-                  <p className="text-sm font-semibold text-slate-400">Not the Triage Nurse today</p>
-                  <p className="text-xs text-slate-400 mt-1">
+                  <p className={`text-sm font-semibold ${text.muted}`}>Not the Triage Nurse today</p>
+                  <p className={`text-xs ${text.muted} mt-1`}>
                     Your shift function is <span className="font-mono">{user.currentShiftFunction}</span>.
                     Only the Triage Nurse (or Charge Nurse override) sees this queue.
                   </p>
                 </>
               ) : (
                 <>
-                  <p className="text-sm font-semibold text-slate-400">No patients waiting</p>
-                  <p className="text-xs text-slate-400 mt-1">Newly registered patients will appear here for triage.</p>
+                  <p className={`text-sm font-semibold ${text.muted}`}>No patients waiting</p>
+                  <p className={`text-xs ${text.muted} mt-1`}>Newly registered patients will appear here for triage.</p>
                 </>
               )}
             </div>
@@ -647,20 +647,20 @@ export function TriageQueue() {
                     {/* Patient info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-slate-700 truncate">
+                        <p className={`text-sm font-semibold ${text.body} truncate`}>
                           {patient.fullName}
                         </p>
                         {patient.isPediatric && (
-                          <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded-md bg-violet-50 text-violet-600 border border-violet-200 flex-shrink-0">
+                          <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30 flex-shrink-0">
                             <Baby className="w-2.5 h-2.5" />
                             PEDS
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5 mt-0.5">
+                      <p className={`text-[11px] ${text.muted} font-medium flex items-center gap-1.5 mt-0.5`}>
                         <span>{patient.age < 1 ? `${Math.round(patient.age * 12)}mo` : `${patient.age}y`} · {patient.gender === 'MALE' ? 'M' : 'F'}</span>
                         {patient.weight && <span>· {patient.weight}kg</span>}
-                        <span className="text-slate-300">·</span>
+                        <span className={text.muted}>·</span>
                         <span className="truncate">{patient.chiefComplaint}</span>
                       </p>
                     </div>
@@ -697,10 +697,10 @@ export function TriageQueue() {
                       {patient.tewsScore !== undefined && (
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                           patient.tewsScore >= 7
-                            ? 'bg-red-50 text-red-600 border border-red-200'
+                            ? 'bg-red-500/20 text-red-300 border border-red-500/30'
                             : patient.tewsScore >= 4
-                              ? 'bg-amber-50 text-amber-600 border border-amber-200'
-                              : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                         }`}>
                           {patient.tewsScore}
                         </div>
@@ -712,7 +712,7 @@ export function TriageQueue() {
                       {patient.triageStatus === 'TRIAGED' && (
                         <button
                           onClick={(e) => { e.stopPropagation(); handlePlaceInBed(patient); }}
-                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-all duration-300"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition-all duration-300"
                           title="Assign this patient to a bed"
                         >
                           <BedDouble className="w-3.5 h-3.5" />
@@ -725,7 +725,7 @@ export function TriageQueue() {
                           isWaiting
                             ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 text-white shadow-md shadow-cyan-500/20 hover:shadow-lg hover:-translate-y-0.5'
                             : isInTriage
-                              ? 'bg-cyan-50 text-cyan-700 border border-cyan-200 hover:bg-cyan-100'
+                              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30'
                               : isDark ? 'text-slate-400 hover:text-slate-200 hover:bg-white/10' : 'text-slate-400 hover:text-slate-600 hover:bg-white/60'
                         }`}
                         style={!isWaiting && !isInTriage ? glassInner : {}}
@@ -755,7 +755,7 @@ export function TriageQueue() {
           )}
 
           {/* Footer */}
-          <div className="px-5 py-3 flex items-center justify-between text-xs text-slate-400 font-medium" style={{ borderTop: isDark ? '1px solid rgba(2,132,199,0.18)' : '1px solid rgba(203,213,225,0.2)' }}>
+          <div className={`px-5 py-3 flex items-center justify-between text-xs ${text.muted} font-medium`} style={{ borderTop: isDark ? '1px solid rgba(2,132,199,0.18)' : '1px solid rgba(203,213,225,0.2)' }}>
             <span>
               {triageQueue.length} patient{triageQueue.length !== 1 ? 's' : ''} in queue
               {activeTab !== 'all' && ` (${activeTab === 'adult' ? 'adults only' : 'pediatric only'})`}

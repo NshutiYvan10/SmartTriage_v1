@@ -73,7 +73,8 @@ const ORDER: ReadonlyArray<VitalKey> = [
 ];
 
 export default function StabilizeAndPullModal({ visitId, device, onClose, onUse, skipVitals }: Props) {
-  const { isDark } = useTheme();
+  const { isDark, glassCard, glassInner, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const user = useAuthStore(s => s.user);
   const [readings, setReadings] = useState<VitalStreamResponse[]>([]);
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -220,13 +221,13 @@ export default function StabilizeAndPullModal({ visitId, device, onClose, onUse,
   // ── Render ───────────────────────────────────────────────────────
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in"
+      style={{ background: 'rgba(2,11,20,0.55)' }}
       onClick={onClose}
     >
       <div
-        className={`w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden mx-4 animate-fade-up ${
-          isDark ? 'bg-slate-900 text-white' : 'bg-white text-slate-800'
-        }`}
+        style={glassCard}
+        className={`w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-scale-in ${text.heading}`}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -264,18 +265,18 @@ export default function StabilizeAndPullModal({ visitId, device, onClose, onUse,
           )}
 
           {!sessionStarted && !sessionError && (
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
+            <div style={glassInner} className="flex items-center gap-2 px-3 py-2 rounded-xl">
               <Loader2 className="w-4 h-4 animate-spin text-cyan-500" />
-              <p className={`text-[11px] ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+              <p className={`text-[11px] ${text.body}`}>
                 Connecting to monitor…
               </p>
             </div>
           )}
 
           {sessionStarted && readings.length === 0 && (
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
+            <div style={glassInner} className="flex items-center gap-2 px-3 py-2 rounded-xl">
               <Loader2 className="w-4 h-4 animate-spin text-cyan-500" />
-              <p className={`text-[11px] ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+              <p className={`text-[11px] ${text.body}`}>
                 Waiting for first reading from {device.deviceName}…
               </p>
             </div>
@@ -292,13 +293,13 @@ export default function StabilizeAndPullModal({ visitId, device, onClose, onUse,
                 ? <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                 : <Loader2 className="w-4 h-4 text-cyan-500 animate-spin flex-shrink-0" />}
               <div className="flex-1 min-w-0">
-                <p className={`text-xs font-bold ${allActiveStable ? 'text-emerald-600' : 'text-cyan-700'}`}>
+                <p className={`text-xs font-bold ${allActiveStable ? (isDark ? 'text-emerald-300' : 'text-emerald-600') : (isDark ? 'text-cyan-300' : 'text-cyan-700')}`}>
                   {allActiveStable
                     ? `All ${activeCount} vital${activeCount === 1 ? '' : 's'} stable — ready to capture`
                     : `${stableCount} of ${activeCount} vitals stable — waiting for the rest`}
                 </p>
                 {!allActiveStable && (
-                  <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  <p className={`text-[10px] mt-0.5 ${text.muted}`}>
                     {secondsWaiting >= 5 ? `Watching for ${secondsWaiting}s` : 'Watching the monitor…'}
                   </p>
                 )}
@@ -315,7 +316,7 @@ export default function StabilizeAndPullModal({ visitId, device, onClose, onUse,
             />
           ))}
 
-          <p className={`text-[10px] mt-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+          <p className={`text-[10px] mt-2 ${text.muted}`}>
             🟢 stable · 🟡 stabilizing · 🔴 poor signal · ⚪ not connected. The capture
             button activates once all reporting vitals are stable.
             Manual entry stays available for anything you skip.
@@ -323,22 +324,23 @@ export default function StabilizeAndPullModal({ visitId, device, onClose, onUse,
         </div>
 
         {/* Footer */}
-        <div className={`px-6 py-4 flex items-center justify-end gap-2 ${isDark ? 'bg-white/5' : 'bg-slate-50'}`}>
+        <div
+          className="px-6 py-4 flex items-center justify-end gap-2"
+          style={{ borderTop: borderStyle }}
+        >
           <button
             onClick={() => setReadings([])}
             disabled={readings.length === 0}
-            className={`px-3 py-2 text-[11px] font-bold rounded-xl transition-colors flex items-center gap-1.5 disabled:opacity-40 ${
-              isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-            }`}
+            style={glassInner}
+            className={`px-3 py-2 text-[11px] font-bold rounded-xl transition-colors flex items-center gap-1.5 disabled:opacity-40 hover:bg-white/5 ${text.body}`}
             title="Discard the current window and restart stability detection"
           >
             <RefreshCcw className="w-3.5 h-3.5" /> Reset
           </button>
           <button
             onClick={onClose}
-            className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors ${
-              isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-            }`}
+            style={glassInner}
+            className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors hover:bg-white/5 ${text.body}`}
           >
             Cancel
           </button>
@@ -349,9 +351,7 @@ export default function StabilizeAndPullModal({ visitId, device, onClose, onUse,
           {showFallback && (
             <button
               onClick={() => handleUse('partial')}
-              className={`px-3 py-2 text-[11px] font-bold rounded-xl transition-colors flex items-center gap-1.5 ${
-                isDark ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-              }`}
+              className="px-3 py-2 text-[11px] font-bold rounded-xl transition-colors flex items-center gap-1.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30"
               title={`Use the ${stableCount} stable vital${stableCount === 1 ? '' : 's'} now; type the rest manually`}
             >
               <Zap className="w-3.5 h-3.5" /> Use stable {stableCount} now
