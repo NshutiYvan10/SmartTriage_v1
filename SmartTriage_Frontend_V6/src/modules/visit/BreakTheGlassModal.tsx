@@ -36,8 +36,8 @@ export function BreakTheGlassModal({ patientLabel, onConfirm, onClose }: Props) 
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-      style={{ background: 'rgba(2,11,20,0.55)' }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+      style={{ background: 'rgba(2,6,23,0.65)' }}
     >
       <div style={glassCard} className="w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl animate-scale-in">
         <div className="bg-red-600 px-5 py-3 flex items-center justify-between text-white">
@@ -77,12 +77,12 @@ export function BreakTheGlassModal({ patientLabel, onConfirm, onClose }: Props) 
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-3" style={{ borderTop: borderStyle }}>
-          <button onClick={onClose} disabled={submitting} className={`px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-white/5 ${text.body}`}>
+          <button onClick={onClose} disabled={submitting} className={`px-4 py-1.5 rounded-xl text-xs font-bold hover:bg-white/5 ${text.body}`}>
             Cancel
           </button>
           <button
             onClick={confirm} disabled={!ok || submitting}
-            className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold text-white ${
+            className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold text-white ${
               ok && !submitting ? 'bg-red-600 hover:bg-red-500' : 'bg-slate-400 cursor-not-allowed'}`}
           >
             {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldAlert className="w-3.5 h-3.5" />}

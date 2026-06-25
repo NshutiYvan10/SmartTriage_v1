@@ -242,7 +242,10 @@ export function SepsisDashboard() {
               </div>
               <div className="flex items-center gap-3">
                 {qsofaHighCount > 0 && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/20 border border-red-500/30">
+                  <div
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-red-600"
+                    style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                  >
                     <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                     <span className="text-red-400 text-xs font-bold">{qsofaHighCount} qSOFA &ge; 2</span>
                   </div>
@@ -274,18 +277,24 @@ export function SepsisDashboard() {
               <button
                 key={key}
                 onClick={() => setFilter(key)}
-                className={`px-4 py-2 text-[11px] font-bold rounded-lg transition-all border ${
+                className={`px-4 py-2 text-[11px] font-bold rounded-xl transition-all border ${
                   filter === key
-                    ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                    ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md border-transparent'
                     : `${text.body} hover:bg-white/5 border-transparent`
                 }`}
               >
                 {label}
                 {key === 'qsofa_high' && qsofaHighCount > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 text-[9px] rounded-full bg-red-500/20 text-red-400">{qsofaHighCount}</span>
+                  <span
+                    className="ml-1.5 px-1.5 py-0.5 text-[9px] rounded-lg text-red-600 font-bold"
+                    style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                  >{qsofaHighCount}</span>
                 )}
                 {key === 'bundle_in_progress' && bundleInProgressCount > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 text-[9px] rounded-full bg-amber-500/20 text-amber-400">{bundleInProgressCount}</span>
+                  <span
+                    className="ml-1.5 px-1.5 py-0.5 text-[9px] rounded-lg text-amber-600 font-bold"
+                    style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+                  >{bundleInProgressCount}</span>
                 )}
               </button>
             ))}
@@ -339,14 +348,22 @@ export function SepsisDashboard() {
                               {screening.sepsisStatus.replace(/_/g, ' ')}
                             </span>
                             {/* SIRS badge */}
-                            <span className={`text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-500/20 ${text.body}`}>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-1 rounded-lg ${text.body}`}
+                              style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}
+                            >
                               SIRS: {screening.sirsScore}/4
                             </span>
                             {/* Bundle progress */}
                             {screening.bundleStartedAt && (
-                              <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${
-                                progress === 6 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-cyan-500/10 text-cyan-400'
-                              }`}>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-1 rounded-lg ${
+                                  progress === 6 ? 'text-emerald-600' : 'text-cyan-600'
+                                }`}
+                                style={progress === 6
+                                  ? { background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }
+                                  : { background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}
+                              >
                                 Bundle: {progress}/6
                               </span>
                             )}

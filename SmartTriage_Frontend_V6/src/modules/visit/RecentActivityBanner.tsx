@@ -134,17 +134,22 @@ export function RecentActivityBanner({
       {totalEvents > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2 text-[12px]">
           <Pill_ icon={<Activity className="w-3.5 h-3.5" />} label="Vitals"
-                count={counts.vitals} accent="text-cyan-300 bg-cyan-500/20 border-cyan-500/30" />
+                count={counts.vitals} accent="text-cyan-600"
+                accentStyle={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }} />
           <Pill_ icon={<Stethoscope className="w-3.5 h-3.5" />} label="Triage"
-                count={counts.triage} accent="text-rose-300 bg-rose-500/20 border-rose-500/30" />
+                count={counts.triage} accent="text-rose-600"
+                accentStyle={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' }} />
           <Pill_ icon={<FileText className="w-3.5 h-3.5" />} label="Notes"
-                count={counts.notes} accent="text-indigo-300 bg-indigo-500/20 border-indigo-500/30" />
+                count={counts.notes} accent="text-indigo-600"
+                accentStyle={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }} />
           <Pill_ icon={<ClipboardList className="w-3.5 h-3.5" />} label="Diagnoses"
-                count={counts.diagnoses} accent="text-amber-300 bg-amber-500/20 border-amber-500/30" />
+                count={counts.diagnoses} accent="text-amber-600"
+                accentStyle={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }} />
           <Pill_ icon={<FlaskConical className="w-3.5 h-3.5" />}
                 label="Lab orders / results"
                 count={counts.investigationsOrdered + counts.investigationsResulted}
-                accent="text-emerald-300 bg-emerald-500/20 border-emerald-500/30"
+                accent="text-emerald-600"
+                accentStyle={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}
                 subtext={
                   counts.investigationsResulted > 0
                     ? `${counts.investigationsResulted} result${counts.investigationsResulted === 1 ? '' : 's'} back`
@@ -153,14 +158,16 @@ export function RecentActivityBanner({
           <Pill_ icon={<Pill className="w-3.5 h-3.5" />}
                 label="Meds"
                 count={counts.medsPrescribed + counts.medsAdministered}
-                accent="text-violet-300 bg-violet-500/20 border-violet-500/30"
+                accent="text-violet-600"
+                accentStyle={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}
                 subtext={
                   counts.medsAdministered > 0
                     ? `${counts.medsAdministered} given`
                     : undefined
                 } />
           <Pill_ icon={<AlertTriangle className="w-3.5 h-3.5" />} label="Alerts"
-                count={counts.alerts} accent="text-red-300 bg-red-500/20 border-red-500/30" />
+                count={counts.alerts} accent="text-red-600"
+                accentStyle={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }} />
         </div>
       )}
     </section>
@@ -168,17 +175,18 @@ export function RecentActivityBanner({
 }
 
 function Pill_({
-  icon, label, count, accent, subtext,
+  icon, label, count, accent, accentStyle, subtext,
 }: {
   icon: React.ReactNode;
   label: string;
   count: number;
   accent: string;
+  accentStyle: React.CSSProperties;
   subtext?: string;
 }) {
   if (count === 0) return null;
   return (
-    <div className={`px-2 py-1.5 rounded-lg border inline-flex items-center gap-2 ${accent}`}>
+    <div style={accentStyle} className={`px-2 py-1.5 rounded-lg inline-flex items-center gap-2 ${accent}`}>
       <span className="opacity-80">{icon}</span>
       <div className="leading-tight">
         <div className="font-bold">

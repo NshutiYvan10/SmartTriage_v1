@@ -146,7 +146,7 @@ export function ClinicalSignsTab({ visitId, glassCard, glassInner, isDark, text,
           </button>
           <button
             onClick={() => setShowRecord(!showRecord)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all"
           >
             <Plus className="w-3.5 h-3.5" /> Record Update
           </button>
@@ -186,9 +186,9 @@ export function ClinicalSignsTab({ visitId, glassCard, glassInner, isDark, text,
       <div className="flex items-center gap-2">
         <button
           onClick={() => setView('current')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors border ${
             view === 'current'
-              ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+              ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md border-transparent'
               : `${text.body} hover:bg-white/5 border-transparent`
           }`}
         >
@@ -196,9 +196,9 @@ export function ClinicalSignsTab({ visitId, glassCard, glassInner, isDark, text,
         </button>
         <button
           onClick={() => setView('timeline')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors border ${
             view === 'timeline'
-              ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+              ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md border-transparent'
               : `${text.body} hover:bg-white/5 border-transparent`
           }`}
         >
@@ -322,17 +322,17 @@ function CurrentStateView({
                             {statusTone.label}
                           </span>
                           {e.isBaseline && tl.length === 1 && (
-                            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${isDark ? 'bg-slate-500/15 text-slate-400' : 'bg-slate-200/60 text-slate-600'}`}>
+                            <span className="inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-lg text-slate-600" style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>
                               Baseline only
                             </span>
                           )}
                           {tl.length >= 2 && (
-                            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">
+                            <span className="inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-lg text-cyan-600" style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}>
                               {tl.length} events
                             </span>
                           )}
                           {e.numericValue != null && (
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                            <span className="inline-flex items-center text-[10px] font-mono px-1.5 py-0.5 rounded-lg text-amber-600" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
                               {def?.numericLabel?.replace(/\(.+\)/, '').trim() || 'value'}: {e.numericValue}
                             </span>
                           )}
@@ -411,12 +411,12 @@ function TimelineView({
                 <span className={`text-[10px] ${text.muted}`}>by {c.recordedByName}</span>
               )}
               {isBaselineCluster && (
-                <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${isDark ? 'bg-slate-500/15 text-slate-400' : 'bg-slate-200/60 text-slate-600'}`}>
+                <span className="inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-lg text-slate-600" style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>
                   Baseline at triage
                 </span>
               )}
               {isFirst && !isBaselineCluster && (
-                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">
+                <span className="inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-lg text-cyan-600" style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}>
                   Latest
                 </span>
               )}
@@ -434,7 +434,7 @@ function TimelineView({
                       {statusTone.label}
                     </span>
                     {e.numericValue != null && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                      <span className="inline-flex items-center text-[10px] font-mono px-1.5 py-0.5 rounded-lg text-amber-600" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
                         {e.numericValue}
                       </span>
                     )}
@@ -575,7 +575,7 @@ function RecordPanel({
           type="button"
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
           Save {entries.length > 1 ? `${entries.length} updates` : 'update'}
@@ -656,7 +656,7 @@ function SignEntryRow({
                   {CATEGORY_LABEL[def.category]}
                 </span>
                 {knownSignCodes.includes(def.code) && (
-                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">
+                  <span className="inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-lg text-cyan-600" style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}>
                     On record
                   </span>
                 )}
@@ -705,7 +705,7 @@ function SignEntryRow({
                       <span className={`text-xs font-semibold ${text.heading}`}>{sd.label}</span>
                       <div className="flex items-center gap-1.5">
                         {isOnRecord && (
-                          <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-300">On record</span>
+                          <span className="inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-lg text-cyan-600" style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}>On record</span>
                         )}
                         <span className={`text-[9px] font-bold uppercase ${CATEGORY_TONE[sd.category].text}`}>
                           {sd.category.replace(/_/g, ' ')}

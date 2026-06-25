@@ -260,7 +260,7 @@ export function HypoglycemiaView() {
                             {evt.patientName || 'Patient'}
                             {evt.visitNumber && <span className={`ml-2 text-[10px] font-mono font-normal ${text.muted}`}>{evt.visitNumber}</span>}
                             {evt.currentZone && <span className={`ml-2 text-[10px] font-normal ${text.muted}`}>· {evt.currentZone.replace(/_/g, ' ')}</span>}
-                            {evt.neonatal && <span className="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded bg-fuchsia-500/15 text-fuchsia-400">NEONATAL</span>}
+                            {evt.neonatal && <span className="ml-2 inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-fuchsia-600" style={{ background: 'rgba(217,70,239,0.08)', border: '1px solid rgba(217,70,239,0.2)' }}>NEONATAL</span>}
                           </p>
                         )}
                         {/* Badges row */}

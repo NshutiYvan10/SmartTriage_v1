@@ -364,7 +364,7 @@ export function ClinicalDocumentation() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setShowCreateForm(!showCreateForm)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all"
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   New Document
@@ -495,7 +495,7 @@ export function ClinicalDocumentation() {
                 <button
                   onClick={handleCreate}
                   disabled={creating || !createForm.title || !createForm.content}
-                  className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
                 >
                   {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                   Create Document
@@ -513,7 +513,7 @@ export function ClinicalDocumentation() {
                 <button
                   key={t}
                   onClick={() => setActiveTab(t)}
-                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-[11px] font-bold rounded-lg transition-all ${
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-[11px] font-bold rounded-xl transition-all ${
                     activeTab === t
                       ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
                       : isDark ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
@@ -745,7 +745,7 @@ export function ClinicalDocumentation() {
                         {!doc.isSigned && (
                           <button
                             onClick={() => openSignDialog('sign', doc.id)}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl transition-all bg-gradient-to-r from-emerald-600 to-emerald-500 text-white hover:shadow-lg"
+                            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl transition-all bg-cyan-600 hover:bg-cyan-700 text-white hover:shadow-lg"
                           >
                             <CheckCircle className="w-3.5 h-3.5" /> Sign Document
                           </button>
@@ -806,9 +806,9 @@ export function ClinicalDocumentation() {
 
         {/* ── Sign / Co-sign / Amend Dialog ── */}
         {signDialogOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSignDialogOpen(false)} />
-            <div className="relative w-full max-w-lg rounded-2xl overflow-hidden animate-fade-up" style={glassCard}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+            <div className="absolute inset-0" onClick={() => setSignDialogOpen(false)} />
+            <div className="relative w-full max-w-lg rounded-2xl overflow-hidden animate-scale-in shadow-2xl" style={glassCard}>
               <div className="px-5 py-4 border-b border-white/10">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
@@ -895,13 +895,7 @@ export function ClinicalDocumentation() {
                   <button
                     onClick={handleSignSubmit}
                     disabled={signing}
-                    className={`inline-flex items-center gap-1.5 px-5 py-2.5 text-xs font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50 ${
-                      signDialogMode === 'sign'
-                        ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white'
-                        : signDialogMode === 'cosign'
-                        ? 'bg-gradient-to-r from-violet-600 to-violet-500 text-white'
-                        : 'bg-gradient-to-r from-blue-600 to-blue-500 text-white'
-                    }`}
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 text-xs font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50 bg-cyan-600 hover:bg-cyan-700 text-white"
                   >
                     {signing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                     {signDialogMode === 'sign' && 'Sign'}

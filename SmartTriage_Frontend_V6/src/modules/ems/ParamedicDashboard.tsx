@@ -31,11 +31,11 @@ const STATUS_LABEL: Record<EmsRunStatus, string> = {
   HANDED_OFF: 'Handed off', CANCELLED: 'Cancelled',
 };
 const STATUS_CHIP: Record<EmsRunStatus, string> = {
-  DISPATCHED: 'bg-slate-500/20 text-slate-300 border border-slate-500/30',
-  EN_ROUTE: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
-  ARRIVED: 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30',
-  HANDED_OFF: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
-  CANCELLED: 'bg-slate-500/20 text-slate-400 border border-slate-500/30',
+  DISPATCHED: 'bg-[rgba(100,116,139,0.08)] text-slate-600 border border-[rgba(100,116,139,0.2)]',
+  EN_ROUTE: 'bg-[rgba(245,158,11,0.08)] text-amber-600 border border-[rgba(245,158,11,0.2)]',
+  ARRIVED: 'bg-[rgba(99,102,241,0.08)] text-indigo-600 border border-[rgba(99,102,241,0.2)]',
+  HANDED_OFF: 'bg-[rgba(16,185,129,0.08)] text-emerald-600 border border-[rgba(16,185,129,0.2)]',
+  CANCELLED: 'bg-[rgba(100,116,139,0.08)] text-slate-600 border border-[rgba(100,116,139,0.2)]',
 };
 function triageColor(c: FieldTriageCategory | null): string {
   switch (c) {
@@ -265,7 +265,8 @@ function RunCard({ run, glassCard, glassInner, text, isDark, onOpen, onPreregist
             </span>
           )}
           {run.preArrivalAckedAt && (
-            <span className="text-xs font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 inline-flex items-center gap-1">
+            <span className="text-xs font-bold uppercase tracking-wider px-2 py-1 rounded-lg text-emerald-600 inline-flex items-center gap-1"
+              style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
               <CheckCircle2 className="w-3.5 h-3.5" /> ED acknowledged
             </span>
           )}
@@ -296,36 +297,36 @@ function RunCard({ run, glassCard, glassInner, text, isDark, onOpen, onPreregist
 
       <div className="flex flex-wrap gap-2">
         <button onClick={onOpen}
-          className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-bold ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+          className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
           <ClipboardList className="w-4 h-4" /> Open / edit
         </button>
         {(stat === 'DISPATCHED' || stat === 'EN_ROUTE') && (
           <button onClick={onToggleLights}
-            className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-bold ${run.lightsActive ? 'bg-rose-500 text-white hover:bg-rose-600' : isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+            className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold ${run.lightsActive ? 'bg-rose-500 text-white hover:bg-rose-600' : isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
             <Siren className="w-4 h-4" /> {run.lightsActive ? 'Lights off' : 'Lights'}
           </button>
         )}
         {stat === 'DISPATCHED' && (
           <button onClick={onPreregister}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-bold bg-amber-500 text-white hover:bg-amber-600">
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-amber-500 text-white hover:bg-amber-600">
             <Send className="w-4 h-4" /> Send to ED
           </button>
         )}
         {stat === 'EN_ROUTE' && (
           <button onClick={onConfirmArrival}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-bold bg-indigo-500 text-white hover:bg-indigo-600">
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-cyan-600 text-white hover:bg-cyan-700">
             <CheckCircle2 className="w-4 h-4" /> At ED
           </button>
         )}
         {run.visitId && (
           <button onClick={() => setShowHistory((v: boolean) => !v)}
-            className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-bold ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+            className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
             <HeartPulse className="w-4 h-4" /> History {showHistory ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
         )}
         {/* PCR PDF — a permanent run artifact, available for any status. */}
         <button onClick={downloadPcr} disabled={downloadingPcr}
-          className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-bold disabled:opacity-50 ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+          className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
           {downloadingPcr ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} PCR
         </button>
       </div>

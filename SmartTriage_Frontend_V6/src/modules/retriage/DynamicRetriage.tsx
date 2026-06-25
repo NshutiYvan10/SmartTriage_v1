@@ -232,8 +232,8 @@ export function DynamicRetriage() {
                 <button
                   key={cat}
                   onClick={() => setFilterCategory(cat)}
-                  className={`px-3 py-2 text-[11px] font-bold rounded-lg transition-all duration-300 border ${filterCategory === cat
-                    ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                  className={`px-3 py-2 text-[11px] font-bold rounded-xl transition-all duration-300 border ${filterCategory === cat
+                    ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md border-transparent'
                     : `${text.body} hover:bg-white/5 border-transparent`
                   }`}
                 >
@@ -306,7 +306,10 @@ export function DynamicRetriage() {
                           <div className="flex items-center gap-2">
                             <p className={`text-[13px] font-bold ${text.heading} truncate`}>{patient.fullName}</p>
                             {patient.isPediatric && (
-                              <span className="text-[9px] font-bold bg-pink-500/20 text-pink-300 border border-pink-500/30 px-1.5 py-0.5 rounded-md">PED</span>
+                              <span
+                                className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-pink-600"
+                                style={{ background: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.2)' }}
+                              >PED</span>
                             )}
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
@@ -325,19 +328,19 @@ export function DynamicRetriage() {
                         {/* Direction Badge */}
                         <div className="flex-shrink-0">
                           {isEscalate && (
-                            <div className="flex items-center gap-1 px-2.5 py-1.5 bg-red-500/20 border border-red-500/30 rounded-lg">
+                            <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
                               <ArrowUpCircle className="w-3.5 h-3.5 text-red-400" />
-                              <span className="text-[10px] font-bold text-red-300">ESCALATE</span>
+                              <span className="text-[10px] font-bold text-red-600">ESCALATE</span>
                             </div>
                           )}
                           {isDeEscalate && (
-                            <div className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-500/20 border border-emerald-500/30 rounded-lg">
+                            <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
                               <ArrowDownCircle className="w-3.5 h-3.5 text-emerald-400" />
-                              <span className="text-[10px] font-bold text-emerald-300">DE-ESCALATE</span>
+                              <span className="text-[10px] font-bold text-emerald-600">DE-ESCALATE</span>
                             </div>
                           )}
                           {analysis.direction === 'STABLE' && (
-                            <div className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-500/20 border border-slate-500/30 rounded-lg">
+                            <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg" style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>
                               <Minus className={`w-3.5 h-3.5 ${text.muted}`} />
                               <span className={`text-[10px] font-bold ${text.body}`}>STABLE</span>
                             </div>
@@ -386,7 +389,10 @@ export function DynamicRetriage() {
                           <span className={`text-[11px] ${text.muted}`}>|</span>
                           <span className={`text-[11px] ${text.muted}`}>Age: {selectedAnalysis.patient.age}</span>
                           {selectedAnalysis.patient.isPediatric && (
-                            <span className="text-[9px] font-bold bg-pink-500/20 text-pink-300 border border-pink-500/30 px-1.5 py-0.5 rounded-md">Pediatric</span>
+                            <span
+                              className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg text-pink-600"
+                              style={{ background: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.2)' }}
+                            >Pediatric</span>
                           )}
                         </div>
                       </div>

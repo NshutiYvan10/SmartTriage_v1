@@ -33,18 +33,18 @@ const TYPE_LABEL: Record<FastTrackType, string> = {
 };
 
 /* ── Status config — covers ALL 10 backend FastTrackStatus values ── */
-const STATUS_FALLBACK = { color: 'text-slate-400', bg: 'bg-slate-500/10', border: 'border-slate-500/20' };
-const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string }> = {
-  ACTIVATED:               { color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
-  ECG_ORDERED:             { color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
-  CT_ORDERED:              { color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
-  ECG_COMPLETED:           { color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20' },
-  CT_COMPLETED:            { color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20' },
-  THROMBOLYSIS_CONSIDERED: { color: 'text-indigo-400', bg: 'bg-indigo-500/10', border: 'border-indigo-500/20' },
-  INTERVENTION_STARTED:    { color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
-  TRANSFERRED_FOR_PCI:     { color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
-  COMPLETED:               { color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
-  CANCELLED:               { color: 'text-slate-400', bg: 'bg-slate-500/10', border: 'border-slate-500/20' },
+const STATUS_FALLBACK = { color: 'text-slate-600', rgb: '100,116,139' };
+const STATUS_CONFIG: Record<string, { color: string; rgb: string }> = {
+  ACTIVATED:               { color: 'text-orange-600', rgb: '249,115,22' },
+  ECG_ORDERED:             { color: 'text-amber-600', rgb: '245,158,11' },
+  CT_ORDERED:              { color: 'text-amber-600', rgb: '245,158,11' },
+  ECG_COMPLETED:           { color: 'text-cyan-600', rgb: '6,182,212' },
+  CT_COMPLETED:            { color: 'text-cyan-600', rgb: '6,182,212' },
+  THROMBOLYSIS_CONSIDERED: { color: 'text-indigo-600', rgb: '99,102,241' },
+  INTERVENTION_STARTED:    { color: 'text-blue-600', rgb: '59,130,246' },
+  TRANSFERRED_FOR_PCI:     { color: 'text-blue-600', rgb: '59,130,246' },
+  COMPLETED:               { color: 'text-emerald-600', rgb: '16,185,129' },
+  CANCELLED:               { color: 'text-slate-600', rgb: '100,116,139' },
 };
 
 function elapsedMinutes(startIso: string): number {
@@ -260,18 +260,19 @@ export function FastTrackDashboard() {
               <button
                 key={key}
                 onClick={() => setTab(key)}
-                className={`flex items-center gap-2 px-5 py-2.5 text-[11px] font-bold rounded-lg transition-all border ${
+                className={`flex items-center gap-2 px-5 py-2.5 text-[11px] font-bold rounded-xl transition-all border ${
                   tab === key
-                    ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                    ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md border-transparent'
                     : `${text.body} hover:bg-white/5 border-transparent`
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
                 {label}
                 {count > 0 && (
-                  <span className={`ml-1 px-1.5 py-0.5 text-[9px] rounded-full ${
-                    tab === key ? 'bg-cyan-500/20 text-cyan-400' : 'bg-cyan-500/15 text-cyan-400'
-                  }`}>
+                  <span
+                    className="ml-1 inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg text-cyan-600"
+                    style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}
+                  >
                     {count}
                   </span>
                 )}
@@ -314,26 +315,41 @@ export function FastTrackDashboard() {
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg border ${statusCfg.bg} ${statusCfg.color} ${statusCfg.border}`}>
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${statusCfg.color}`}
+                              style={{ background: `rgba(${statusCfg.rgb},0.08)`, border: `1px solid rgba(${statusCfg.rgb},0.2)` }}
+                            >
                               {activation.status.replace(/_/g, ' ')}
                             </span>
-                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg ${
-                              isStroke ? 'bg-purple-500/10 text-purple-400' : 'bg-red-500/10 text-red-400'
-                            }`}>
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${isStroke ? 'text-purple-600' : 'text-red-600'}`}
+                              style={isStroke
+                                ? { background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)' }
+                                : { background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                            >
                               {TYPE_LABEL[activation.fastTrackType]}
                             </span>
                             {isStroke && activation.isHemorrhagic === true && (
-                              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-red-500/15 text-red-500 border border-red-500/20">
+                              <span
+                                className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-red-600"
+                                style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                              >
                                 <AlertTriangle className="w-3 h-3 inline mr-1" />Hemorrhagic
                               </span>
                             )}
                             {!isStroke && activation.stElevation === true && (
-                              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-red-500/15 text-red-500 border border-red-500/20">
+                              <span
+                                className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-red-600"
+                                style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                              >
                                 <AlertTriangle className="w-3 h-3 inline mr-1" />ST Elevation
                               </span>
                             )}
                             {activation.acknowledgedAt && (
-                              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400">
+                              <span
+                                className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-emerald-600"
+                                style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}
+                              >
                                 <UserCheck className="w-3 h-3 inline mr-1" />Acknowledged
                               </span>
                             )}
@@ -550,7 +566,7 @@ export function FastTrackDashboard() {
 
         {/* ── ECG Dialog ── */}
         {ecgDialog && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
             <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-center justify-between">
                 <h2 className="text-sm font-bold text-white flex items-center gap-2">
@@ -594,7 +610,7 @@ export function FastTrackDashboard() {
 
         {/* ── CT Dialog ── */}
         {ctDialog && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
             <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-center justify-between">
                 <h2 className="text-sm font-bold text-white flex items-center gap-2">

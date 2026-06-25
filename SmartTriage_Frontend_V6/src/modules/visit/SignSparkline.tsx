@@ -65,9 +65,8 @@ export function SignSparkline({ events, isDark }: Props) {
     <div className="flex items-center gap-1.5" role="img" aria-label={`${events.length} clinical sign event${events.length === 1 ? '' : 's'}`}>
       {truncated > 0 && (
         <span
-          className={`text-[9px] font-bold px-1 py-0.5 rounded ${
-            isDark ? 'bg-slate-500/15 text-slate-400' : 'bg-slate-200/60 text-slate-600'
-          }`}
+          className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg text-slate-600"
+          style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}
           title={`${truncated} earlier event${truncated === 1 ? '' : 's'} not shown`}
         >
           +{truncated}

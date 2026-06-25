@@ -184,9 +184,9 @@ export function ConsentReferralView() {
             <div className="flex gap-2">
               {([['consent', 'Consent', FileSignature], ['referral', 'Referrals', Stethoscope]] as const).map(([id, lbl, Icon]) => (
                 <button key={id} onClick={() => setTab(id)}
-                  className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl border transition-all ${tab === id ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : `${text.body} hover:bg-white/5 border-transparent`}`}>
+                  className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl border transition-all ${tab === id ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md border-transparent' : `${text.body} hover:bg-white/5 border-transparent`}`}>
                   <Icon className="w-3.5 h-3.5" /> {lbl}
-                  <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-md bg-white/10">{id === 'consent' ? consents.length : referrals.length}</span>
+                  <span className="ml-1 inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-lg bg-white/10">{id === 'consent' ? consents.length : referrals.length}</span>
                 </button>
               ))}
             </div>
@@ -194,7 +194,7 @@ export function ConsentReferralView() {
             {tab === 'consent' && (
               <div className="space-y-3">
                 <button onClick={() => setShowConsentForm(!showConsentForm)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white text-xs font-bold rounded-xl">
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl">
                   <Plus className="w-3.5 h-3.5" /> Record Consent</button>
 
                 {showConsentForm && (
@@ -232,7 +232,7 @@ export function ConsentReferralView() {
                     </label>
                     <div className="flex justify-end gap-2">
                       <button onClick={() => setShowConsentForm(false)} className={`px-4 py-2 text-xs font-bold rounded-xl ${text.muted}`}>Cancel</button>
-                      <button onClick={submitConsent} disabled={busy || !cf.procedureName.trim()} className="inline-flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white text-xs font-bold rounded-xl disabled:opacity-50">
+                      <button onClick={submitConsent} disabled={busy || !cf.procedureName.trim()} className="inline-flex items-center gap-1.5 px-5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl disabled:opacity-50">
                         {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />} Save</button>
                     </div>
                   </div>
@@ -245,7 +245,7 @@ export function ConsentReferralView() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md" style={glassInner}>{label(c.consentType)}</span>
+                          <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-slate-600" style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>{label(c.consentType)}</span>
                           <span className={`text-[10px] font-bold uppercase ${STATUS_COLOR[c.status]}`}>{label(c.status)}</span>
                         </div>
                         <p className={`text-sm font-bold mt-1 ${text.heading}`}>{c.procedureName}</p>
@@ -264,7 +264,7 @@ export function ConsentReferralView() {
             {tab === 'referral' && (
               <div className="space-y-3">
                 <button onClick={() => setShowReferralForm(!showReferralForm)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white text-xs font-bold rounded-xl">
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl">
                   <Plus className="w-3.5 h-3.5" /> Raise Referral / Consult</button>
 
                 {showReferralForm && (
@@ -291,7 +291,7 @@ export function ConsentReferralView() {
                     )}
                     <div className="flex justify-end gap-2">
                       <button onClick={() => setShowReferralForm(false)} className={`px-4 py-2 text-xs font-bold rounded-xl ${text.muted}`}>Cancel</button>
-                      <button onClick={submitReferral} disabled={busy || !rf.specialty.trim() || !rf.reasonForReferral.trim()} className="inline-flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white text-xs font-bold rounded-xl disabled:opacity-50">
+                      <button onClick={submitReferral} disabled={busy || !rf.specialty.trim() || !rf.reasonForReferral.trim()} className="inline-flex items-center gap-1.5 px-5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl disabled:opacity-50">
                         {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Send</button>
                     </div>
                   </div>
@@ -304,7 +304,7 @@ export function ConsentReferralView() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md" style={glassInner}>{label(r.referralType)}</span>
+                          <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-slate-600" style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>{label(r.referralType)}</span>
                           <span className={`text-[10px] font-bold uppercase ${STATUS_COLOR[r.status]}`}>{label(r.status)}</span>
                           <span className="text-[10px] font-bold uppercase text-amber-400">{label(r.urgency)}</span>
                         </div>

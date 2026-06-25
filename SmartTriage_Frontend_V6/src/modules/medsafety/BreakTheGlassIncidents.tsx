@@ -111,8 +111,8 @@ export function BreakTheGlassIncidents({ hospitalId }: Props) {
             <button
               key={r}
               onClick={() => setRange(r)}
-              className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-colors ${
-                range === r ? 'bg-white/20 text-white' : 'text-white/50 hover:text-white hover:bg-white/10'}`}
+              className={`px-3 py-1 rounded-xl text-[11px] font-bold transition-colors ${
+                range === r ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md' : 'text-white/50 hover:text-white hover:bg-white/10'}`}
             >
               {RANGE_LABEL[r]}
             </button>
@@ -151,7 +151,7 @@ export function BreakTheGlassIncidents({ hospitalId }: Props) {
                       </span>
                       <span className="text-white/40">· patient {e.maskedNationalId ?? '—'}</span>
                       {e.priorConsentState && e.priorConsentState !== 'NONE' && (
-                        <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-semibold">
+                        <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg text-amber-600" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
                           overrode {e.priorConsentState}
                         </span>
                       )}
@@ -172,7 +172,7 @@ export function BreakTheGlassIncidents({ hospitalId }: Props) {
                     <button
                       onClick={() => acknowledge(e.id)}
                       disabled={ackingId === e.id}
-                      className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                      className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50"
                     >
                       {ackingId === e.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                       Acknowledge

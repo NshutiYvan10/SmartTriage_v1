@@ -388,12 +388,12 @@ function MedRow({
             <span className={`text-sm font-bold ${text.heading}`}>{med.drugName}</span>
             {med.dose && <span className={`text-sm ${text.body}`}>— {med.dose}</span>}
             {med.route && (
-              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/10 border border-current">
+              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-lg bg-white/10 border border-current">
                 {med.route}
               </span>
             )}
             {med.priority && med.priority !== 'ROUTINE' && (
-              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/10 border border-current">
+              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-lg bg-white/10 border border-current">
                 {meta.label}
               </span>
             )}
@@ -421,7 +421,7 @@ function MedRow({
             <div className="text-[10px] mt-1 opacity-90 inline-flex items-center gap-1.5 flex-wrap">
               <ShieldAlert className="w-3 h-3" />
               {overrideBadges.map((b) => (
-                <span key={b!} className="px-1 py-0.5 rounded bg-white/10 border border-current">
+                <span key={b!} className="px-1 py-0.5 rounded-lg bg-white/10 border border-current">
                   {b}
                 </span>
               ))}
@@ -453,7 +453,7 @@ function MedRow({
           onClick={() => onAction(med.id, 'administer')}
           disabled={isOwnPrescription}
           title={isOwnPrescription ? 'Separation of duties — a different clinician must administer' : 'Record administration'}
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-cyan-600 hover:bg-cyan-700 text-white disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <CheckCircle2 className="w-3 h-3" /> Administer
         </button>
@@ -464,7 +464,7 @@ function MedRow({
             const reason = window.prompt('Hold reason (e.g. NPO before procedure, awaiting labs)');
             if (reason && reason.trim().length >= 3) onAction(med.id, 'hold', reason.trim());
           }}
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30"
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30"
         >
           <Pause className="w-3 h-3" /> Hold
         </button>
@@ -475,7 +475,7 @@ function MedRow({
             const reason = window.prompt('Refusal reason (patient declined / unable to take)');
             if (reason && reason.trim().length >= 3) onAction(med.id, 'refuse', reason.trim());
           }}
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30"
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30"
         >
           <XCircle className="w-3 h-3" /> Refuse
         </button>

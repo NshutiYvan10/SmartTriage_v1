@@ -764,7 +764,7 @@ export function VisitDetailPage() {
               {patient?.isUnidentified && (
                 <button
                   onClick={() => setShowIdentityModal(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-500 text-white text-xs font-bold hover:bg-cyan-400 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-600 text-white text-xs font-bold hover:bg-cyan-700 transition-colors"
                   title="Set this patient's real identity"
                 >
                   <UserCheck className="w-4 h-4" /> Set identity
@@ -785,7 +785,7 @@ export function VisitDetailPage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-3.5 py-2 text-[11px] font-bold rounded-lg transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3.5 py-2 text-[11px] font-bold rounded-xl transition-all whitespace-nowrap ${
                     isActive
                       ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
                       : isDark
@@ -1234,7 +1234,10 @@ function TriageTab({ visit, triageHistory, latestTriage, glassCard, glassInner, 
                   <span className={`text-base font-extrabold ${catColor?.text || text.heading}`}>{latestTriage.triageCategory}</span>
                   <span className={`text-2xl font-black ${text.accent}`}>TEWS {latestTriage.tewsScore}</span>
                   {latestTriage.isSystemTriggered && (
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-1 rounded-md bg-amber-500/15 text-amber-700 border border-amber-500/40 inline-flex items-center gap-1">
+                    <span
+                      className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-amber-600"
+                      style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+                    >
                       <Sparkles className="w-3 h-3" />
                       System triggered
                     </span>
@@ -1289,7 +1292,10 @@ function TriageTab({ visit, triageHistory, latestTriage, glassCard, glassInner, 
                         <span className={`text-xs font-bold ${text.heading}`}>{t.triageCategory} — TEWS {t.tewsScore}</span>
                         {t.triagedByName && <span className={`text-[10px] ${text.muted}`}>by {t.triagedByName}</span>}
                         {t.isSystemTriggered && (
-                          <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 inline-flex items-center gap-1">
+                          <span
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-amber-600"
+                            style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+                          >
                             <Sparkles className="w-2.5 h-2.5" />
                             System
                           </span>
@@ -1354,7 +1360,7 @@ function NotesTab({ notes, showForm, setShowForm, onSubmit, formLoading, glassCa
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className={`text-base font-extrabold tracking-tight ${text.heading}`}>Clinical Notes ({notes.length})</h3>
-        <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all">
+        <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
           <Plus className="w-3.5 h-3.5" /> Add Note
         </button>
       </div>
@@ -1476,7 +1482,7 @@ function DiagnosesTab({ diagnoses, showForm, setShowForm, onSubmit, formLoading,
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className={`text-base font-extrabold tracking-tight ${text.heading}`}>Diagnoses ({diagnoses.length})</h3>
-        <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all">
+        <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
           <Plus className="w-3.5 h-3.5" /> Add Diagnosis
         </button>
       </div>
@@ -1543,7 +1549,7 @@ function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, on
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className={`text-base font-extrabold tracking-tight ${text.heading}`}>Investigations ({investigations.length})</h3>
-        <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all">
+        <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
           <Plus className="w-3.5 h-3.5" /> Order Investigation
         </button>
       </div>
@@ -1707,7 +1713,7 @@ function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className={`text-base font-extrabold tracking-tight ${text.heading}`}>Medications ({medications.length})</h3>
-        <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all">
+        <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
           <Plus className="w-3.5 h-3.5" /> Prescribe Medication
         </button>
       </div>
@@ -2686,7 +2692,7 @@ function DispositionTab({ visit, onDisposition, formLoading, glassCard, glassInn
             <button
               onClick={() => setConfirmOpen(true)}
               disabled={!selectedType || formLoading}
-              className="w-full py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 disabled:opacity-40 transition-all"
+              className="w-full py-3 rounded-xl font-bold text-sm text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-40 transition-all"
             >
               Record Disposition
             </button>

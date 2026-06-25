@@ -17,11 +17,11 @@ import { useTheme } from '@/hooks/useTheme';
 
 // ── Check result styling ──
 function getOverallStyle(check: MedicationSafetyCheck) {
-  if (check.overriddenBy) return { bg: 'rgba(139,92,246,0.08)', text: 'text-violet-300', border: '1px solid rgba(139,92,246,0.2)', label: 'Overridden' };
-  if (check.overallSafe) return { bg: 'rgba(34,197,94,0.08)', text: 'text-emerald-300', border: '1px solid rgba(34,197,94,0.2)', label: 'Safe' };
+  if (check.overriddenBy) return { bg: 'rgba(139,92,246,0.08)', text: 'text-violet-600', border: '1px solid rgba(139,92,246,0.2)', label: 'Overridden' };
+  if (check.overallSafe) return { bg: 'rgba(16,185,129,0.08)', text: 'text-emerald-600', border: '1px solid rgba(16,185,129,0.2)', label: 'Safe' };
   const hasBlock = !check.allergyCheckPassed || !check.doseCheckPassed;
-  if (hasBlock) return { bg: 'rgba(239,68,68,0.08)', text: 'text-red-300', border: '1px solid rgba(239,68,68,0.2)', label: 'Blocked' };
-  return { bg: 'rgba(245,158,11,0.08)', text: 'text-amber-300', border: '1px solid rgba(245,158,11,0.2)', label: 'Warning' };
+  if (hasBlock) return { bg: 'rgba(239,68,68,0.08)', text: 'text-red-600', border: '1px solid rgba(239,68,68,0.2)', label: 'Blocked' };
+  return { bg: 'rgba(245,158,11,0.08)', text: 'text-amber-600', border: '1px solid rgba(245,158,11,0.2)', label: 'Warning' };
 }
 
 function getCheckIcon(passed: boolean) {
@@ -290,7 +290,7 @@ export function MedicationSafetyView() {
                   {activeVisitId && (
                     <button
                       onClick={() => setShowValidateForm(!showValidateForm)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all"
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       Validate Rx
@@ -383,7 +383,7 @@ export function MedicationSafetyView() {
                     <button
                       onClick={handleValidate}
                       disabled={validating || !validateForm.drugName || !validateForm.doseMg}
-                      className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
                     >
                       {validating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
                       Run Safety Check
@@ -497,12 +497,12 @@ export function MedicationSafetyView() {
                                 ].map((c) => (
                                   <span
                                     key={c.label}
-                                    className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded-md ${
-                                      c.passed ? 'text-emerald-300' : 'text-red-300'
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded-lg ${
+                                      c.passed ? 'text-emerald-600' : 'text-red-600'
                                     }`}
                                     style={{
-                                      background: c.passed ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)',
-                                      border: c.passed ? '1px solid rgba(34,197,94,0.15)' : '1px solid rgba(239,68,68,0.15)',
+                                      background: c.passed ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)',
+                                      border: c.passed ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(239,68,68,0.2)',
                                     }}
                                   >
                                     {c.passed ? <CheckCircle className="w-2.5 h-2.5" /> : <XCircle className="w-2.5 h-2.5" />}
@@ -641,7 +641,7 @@ export function MedicationSafetyView() {
                   </button>
                   <button
                     onClick={() => setShowAddDrug(!showAddDrug)}
-                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all"
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Add Entry
@@ -807,7 +807,7 @@ export function MedicationSafetyView() {
                     <button
                       onClick={handleAddDrug}
                       disabled={addingDrug || !addDrugForm.genericName || !addDrugForm.drugClass}
-                      className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
                     >
                       {addingDrug ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                       Add to Formulary
@@ -891,7 +891,7 @@ export function MedicationSafetyView() {
                               {/* High alert badge */}
                               {drug.isHighAlert && (
                                 <span
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg text-red-300"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg text-red-600"
                                   style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
                                 >
                                   <AlertTriangle className="w-2.5 h-2.5" /> HIGH ALERT
@@ -899,7 +899,7 @@ export function MedicationSafetyView() {
                               )}
                               {drug.requiresDoubleCheck && (
                                 <span
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg text-amber-300"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg text-amber-600"
                                   style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
                                 >
                                   <Eye className="w-2.5 h-2.5" /> Double Check
@@ -907,7 +907,10 @@ export function MedicationSafetyView() {
                               )}
                               {/* REML category */}
                               {drug.remlCategory && (
-                                <span className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded-lg ${isDark ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>
+                                <span
+                                  className="ml-auto inline-flex items-center px-2.5 py-0.5 text-[10px] font-bold rounded-lg text-indigo-600"
+                                  style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}
+                                >
                                   {drug.remlCategory}
                                 </span>
                               )}
@@ -1018,7 +1021,7 @@ export function MedicationSafetyView() {
 
         {/* ── Override Dialog ── */}
         {overrideDialogOpen && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
             <div className="absolute inset-0" onClick={() => setOverrideDialogOpen(false)} />
             <div className="relative w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="px-5 py-4 border-b border-white/10">
@@ -1068,7 +1071,7 @@ export function MedicationSafetyView() {
                   <button
                     onClick={handleOverride}
                     disabled={overriding || !overrideReason.trim()}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
                   >
                     {overriding && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                     Confirm Override

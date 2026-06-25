@@ -280,7 +280,10 @@ export function IsolationDashboard() {
                             </span>
                           )}
                           {isNotifiable && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg border bg-red-500/15 text-red-400 border-red-500/30 animate-pulse">
+                            <span
+                              className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-red-600 animate-pulse"
+                              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                            >
                               NOTIFIABLE
                             </span>
                           )}

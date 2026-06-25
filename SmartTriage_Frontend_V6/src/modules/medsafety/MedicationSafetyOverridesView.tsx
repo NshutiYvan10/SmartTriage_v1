@@ -71,19 +71,21 @@ interface ClassMeta {
   bg: string;          // chip background
   ring: string;        // chip border
   bar: string;         // distribution bar fill
+  badgeColor: string;  // badge text colour (text-COLOR-600)
+  badgeRgb: string;    // badge translucent hue "R,G,B"
 }
 
 const CLASS_META: Record<OverrideClass, ClassMeta> = {
-  allergy:     { label: 'Allergy',     Icon: AlertTriangle, color: 'text-red-300',     bg: 'bg-red-500/10',     ring: 'border-red-500/30',     bar: 'bg-red-500' },
-  pregnancy:   { label: 'Pregnancy',   Icon: Baby,          color: 'text-pink-300',    bg: 'bg-pink-500/10',    ring: 'border-pink-500/30',    bar: 'bg-pink-500' },
-  overdose:    { label: 'Overdose',    Icon: Scale,         color: 'text-rose-300',    bg: 'bg-rose-500/10',    ring: 'border-rose-500/30',    bar: 'bg-rose-500' },
-  underdose:   { label: 'Underdose',   Icon: Scale,         color: 'text-blue-300',    bg: 'bg-blue-500/10',    ring: 'border-blue-500/30',    bar: 'bg-blue-500' },
-  interaction: { label: 'Interaction', Icon: Activity,      color: 'text-orange-300',  bg: 'bg-orange-500/10',  ring: 'border-orange-500/30',  bar: 'bg-orange-500' },
-  renal:       { label: 'Renal',       Icon: Droplet,       color: 'text-violet-300',  bg: 'bg-violet-500/10',  ring: 'border-violet-500/30',  bar: 'bg-violet-500' },
-  duplicate:   { label: 'Duplicate',   Icon: Layers,        color: 'text-amber-300',   bg: 'bg-amber-500/10',   ring: 'border-amber-500/30',   bar: 'bg-amber-500' },
-  geriatric:   { label: 'Geriatric',   Icon: UserMinus,     color: 'text-fuchsia-300', bg: 'bg-fuchsia-500/10', ring: 'border-fuchsia-500/30', bar: 'bg-fuchsia-500' },
-  emergency:   { label: 'Emergency / administration', Icon: Zap, color: 'text-red-200', bg: 'bg-red-600/15', ring: 'border-red-600/40', bar: 'bg-red-600' },
-  other:       { label: 'Other',       Icon: ShieldAlert,   color: 'text-slate-300',   bg: 'bg-slate-500/10',   ring: 'border-slate-500/30',   bar: 'bg-slate-500' },
+  allergy:     { label: 'Allergy',     Icon: AlertTriangle, color: 'text-red-300',     bg: 'bg-red-500/10',     ring: 'border-red-500/30',     bar: 'bg-red-500',     badgeColor: 'text-red-600',     badgeRgb: '239,68,68' },
+  pregnancy:   { label: 'Pregnancy',   Icon: Baby,          color: 'text-pink-300',    bg: 'bg-pink-500/10',    ring: 'border-pink-500/30',    bar: 'bg-pink-500',    badgeColor: 'text-pink-600',    badgeRgb: '236,72,153' },
+  overdose:    { label: 'Overdose',    Icon: Scale,         color: 'text-rose-300',    bg: 'bg-rose-500/10',    ring: 'border-rose-500/30',    bar: 'bg-rose-500',    badgeColor: 'text-rose-600',    badgeRgb: '244,63,94' },
+  underdose:   { label: 'Underdose',   Icon: Scale,         color: 'text-blue-300',    bg: 'bg-blue-500/10',    ring: 'border-blue-500/30',    bar: 'bg-blue-500',    badgeColor: 'text-blue-600',    badgeRgb: '59,130,246' },
+  interaction: { label: 'Interaction', Icon: Activity,      color: 'text-orange-300',  bg: 'bg-orange-500/10',  ring: 'border-orange-500/30',  bar: 'bg-orange-500',  badgeColor: 'text-orange-600',  badgeRgb: '249,115,22' },
+  renal:       { label: 'Renal',       Icon: Droplet,       color: 'text-violet-300',  bg: 'bg-violet-500/10',  ring: 'border-violet-500/30',  bar: 'bg-violet-500',  badgeColor: 'text-violet-600',  badgeRgb: '139,92,246' },
+  duplicate:   { label: 'Duplicate',   Icon: Layers,        color: 'text-amber-300',   bg: 'bg-amber-500/10',   ring: 'border-amber-500/30',   bar: 'bg-amber-500',   badgeColor: 'text-amber-600',   badgeRgb: '245,158,11' },
+  geriatric:   { label: 'Geriatric',   Icon: UserMinus,     color: 'text-fuchsia-300', bg: 'bg-fuchsia-500/10', ring: 'border-fuchsia-500/30', bar: 'bg-fuchsia-500', badgeColor: 'text-fuchsia-600', badgeRgb: '217,70,239' },
+  emergency:   { label: 'Emergency / administration', Icon: Zap, color: 'text-red-200', bg: 'bg-red-600/15', ring: 'border-red-600/40', bar: 'bg-red-600', badgeColor: 'text-red-600', badgeRgb: '239,68,68' },
+  other:       { label: 'Other',       Icon: ShieldAlert,   color: 'text-slate-300',   bg: 'bg-slate-500/10',   ring: 'border-slate-500/30',   bar: 'bg-slate-500',   badgeColor: 'text-slate-600',   badgeRgb: '100,116,139' },
 };
 
 const CLASS_ORDER: OverrideClass[] = [
@@ -172,13 +174,13 @@ const RANGE_LABEL: Record<TimeRange, string> = {
 
 /* ── Severity badge ───────────────────────────────────────────── */
 
-function severityStyle(s: AlertSeverity) {
+function severityStyle(s: AlertSeverity): { color: string; badgeStyle: { background: string; border: string } } {
   switch (s) {
-    case 'CRITICAL': return { bg: 'bg-red-500/15',     ring: 'border-red-500/30',     color: 'text-red-300' };
-    case 'HIGH':     return { bg: 'bg-orange-500/15',  ring: 'border-orange-500/30',  color: 'text-orange-300' };
-    case 'MEDIUM':   return { bg: 'bg-amber-500/15',   ring: 'border-amber-500/30',   color: 'text-amber-300' };
-    case 'LOW':      return { bg: 'bg-blue-500/15',    ring: 'border-blue-500/30',    color: 'text-blue-300' };
-    default:         return { bg: 'bg-slate-500/15',   ring: 'border-slate-500/30',   color: 'text-slate-300' };
+    case 'CRITICAL': return { color: 'text-red-600',    badgeStyle: { background: 'rgba(239,68,68,0.08)',  border: '1px solid rgba(239,68,68,0.2)' } };
+    case 'HIGH':     return { color: 'text-orange-600', badgeStyle: { background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.2)' } };
+    case 'MEDIUM':   return { color: 'text-amber-600',  badgeStyle: { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' } };
+    case 'LOW':      return { color: 'text-blue-600',   badgeStyle: { background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' } };
+    default:         return { color: 'text-slate-600',  badgeStyle: { background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' } };
   }
 }
 
@@ -452,9 +454,9 @@ export function MedicationSafetyOverridesView() {
               <button
                 key={r}
                 onClick={() => setRange(r)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                   range === r
-                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                    ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
                     : `${text.muted} hover:bg-white/5 border border-transparent`
                 }`}
               >
@@ -624,10 +626,16 @@ export function MedicationSafetyOverridesView() {
                               <span className={`text-xs font-bold ${text.heading}`}>
                                 {a.title || 'Override'}
                               </span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${sev.bg} border ${sev.ring} ${sev.color} font-bold tracking-wide`}>
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${sev.color}`}
+                                style={sev.badgeStyle}
+                              >
                                 {a.severity}
                               </span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${meta.bg} border ${meta.ring} ${meta.color} font-semibold`}>
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${meta.badgeColor}`}
+                                style={{ background: `rgba(${meta.badgeRgb},0.08)`, border: `1px solid rgba(${meta.badgeRgb},0.2)` }}
+                              >
                                 {meta.label}
                               </span>
                               {a.visitNumber && (

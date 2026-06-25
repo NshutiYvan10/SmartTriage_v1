@@ -362,7 +362,10 @@ export function IcuEscalationView() {
                             </span>
                             {/* Automatic flag */}
                             {esc.isAutomatic && (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-cyan-500/10 text-cyan-400 flex items-center gap-1">
+                              <span
+                                className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-cyan-600"
+                                style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}
+                              >
                                 <Zap className="w-3 h-3" /> Auto
                               </span>
                             )}
@@ -547,7 +550,7 @@ export function IcuEscalationView() {
 
         {/* ── Record Response Dialog ── */}
         {responseDialogId && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
             <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4">
                 <div className="flex items-center justify-between">
@@ -607,14 +610,14 @@ export function IcuEscalationView() {
                 <div className="flex justify-end gap-2">
                   <button
                     onClick={() => setResponseDialogId(null)}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold ${isDark ? 'bg-white/5 text-slate-300 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} transition-colors`}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold ${isDark ? 'bg-white/5 text-slate-300 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} transition-colors`}
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleRecordResponse}
                     disabled={!responseAccepted && !responseDeclineReason.trim()}
-                    className="px-4 py-2 rounded-lg text-xs font-bold bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 transition-colors disabled:opacity-50"
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-700 text-white transition-colors disabled:opacity-50"
                   >
                     {actionLoading === responseDialogId ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Submit'}
                   </button>
@@ -626,7 +629,7 @@ export function IcuEscalationView() {
 
         {/* ── Assign Bed Dialog ── */}
         {bedDialogId && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
             <div className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4">
                 <div className="flex items-center justify-between">
@@ -651,14 +654,14 @@ export function IcuEscalationView() {
                 <div className="flex justify-end gap-2">
                   <button
                     onClick={() => setBedDialogId(null)}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold ${isDark ? 'bg-white/5 text-slate-300 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} transition-colors`}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold ${isDark ? 'bg-white/5 text-slate-300 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} transition-colors`}
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleAssignBed}
                     disabled={!bedNumber.trim()}
-                    className="px-4 py-2 rounded-lg text-xs font-bold bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors disabled:opacity-50"
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-700 text-white transition-colors disabled:opacity-50"
                   >
                     {actionLoading === bedDialogId ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Assign'}
                   </button>
@@ -670,7 +673,7 @@ export function IcuEscalationView() {
 
         {/* ── Cancel Dialog ── */}
         {cancelDialogId && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
             <div className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4">
                 <div className="flex items-center justify-between">
@@ -695,14 +698,14 @@ export function IcuEscalationView() {
                 <div className="flex justify-end gap-2">
                   <button
                     onClick={() => setCancelDialogId(null)}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold ${isDark ? 'bg-white/5 text-slate-300 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} transition-colors`}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold ${isDark ? 'bg-white/5 text-slate-300 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} transition-colors`}
                   >
                     Back
                   </button>
                   <button
                     onClick={handleCancel}
                     disabled={!cancelReason.trim()}
-                    className="px-4 py-2 rounded-lg text-xs font-bold bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-50"
                   >
                     {actionLoading === cancelDialogId ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirm Cancel'}
                   </button>

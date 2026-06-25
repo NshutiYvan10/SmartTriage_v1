@@ -80,7 +80,10 @@ export function PrehospitalTab({ visitId, edTriageCategory }: Props) {
             </span>
           )}
           {run.fieldTewsScore != null && (
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${triageChip(null)}`}>
+            <span
+              className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-slate-600"
+              style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}
+            >
               TEWS {run.fieldTewsScore}{run.fieldTriageIsChild ? ' · peds' : ''}
             </span>
           )}

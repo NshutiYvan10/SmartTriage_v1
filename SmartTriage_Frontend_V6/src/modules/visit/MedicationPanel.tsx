@@ -320,18 +320,18 @@ export function MedicationPanel({
                   <span className={`text-[10px] ${text.muted}`}>({selected.brandNames})</span>
                 )}
                 {selected.isOnReml && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">REML</span>
+                  <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-emerald-600" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>REML</span>
                 )}
                 {selected.isHighAlert && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 inline-flex items-center gap-1">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-red-600" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
                     <ShieldAlert className="w-3 h-3" /> High alert
                   </span>
                 )}
                 {selected.requiresDoubleCheck && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Double-check</span>
+                  <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-amber-600" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>Double-check</span>
                 )}
                 {selected.pregnancyCategory && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-purple-600" style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)' }}>
                     Preg {selected.pregnancyCategory}
                   </span>
                 )}
@@ -385,8 +385,8 @@ export function MedicationPanel({
                     <div className="flex items-center justify-between gap-2">
                       <span className={`text-sm font-bold ${text.heading}`}>{r.genericName}</span>
                       <div className="flex items-center gap-1">
-                        {r.isOnReml && <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">REML</span>}
-                        {r.isHighAlert && <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">HA</span>}
+                        {r.isOnReml && <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-emerald-600" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>REML</span>}
+                        {r.isHighAlert && <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-red-600" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>HA</span>}
                       </div>
                     </div>
                     <div className={`text-[10px] ${text.muted}`}>
@@ -437,7 +437,7 @@ export function MedicationPanel({
               <button
                 type="button"
                 onClick={handleApplyRecommended}
-                className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-600 text-white hover:bg-emerald-700"
+                className="px-2.5 py-1 rounded-xl text-[10px] font-bold bg-cyan-600 text-white hover:bg-cyan-700"
               >
                 Apply
               </button>
@@ -497,7 +497,7 @@ export function MedicationPanel({
                 title={t.description}
                 className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border text-left ${
                   active
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
                     : `${text.body} border-transparent hover:bg-white/5`
                 }`}
               >
@@ -752,7 +752,7 @@ export function MedicationPanel({
           type="button"
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {formLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
           Prescribe

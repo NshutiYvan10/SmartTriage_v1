@@ -100,7 +100,7 @@ export function HandoverPanel({ visitId }: { visitId: string }) {
             <button
               onClick={generate}
               disabled={busy === 'generate'}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white text-xs font-bold rounded-xl disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl disabled:opacity-50"
             >
               {busy === 'generate' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
               Generate Handover
@@ -122,7 +122,7 @@ export function HandoverPanel({ visitId }: { visitId: string }) {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md" style={glassInner}>
+                <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-slate-600" style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>
                   {(r.reportType || '').replace(/_/g, ' ')}
                 </span>
                 {r.isAcknowledged ? (
@@ -143,7 +143,7 @@ export function HandoverPanel({ visitId }: { visitId: string }) {
               <button
                 onClick={() => download(r.id)}
                 disabled={busy === r.id}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg ${isDark ? 'bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-xl ${isDark ? 'bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}
               >
                 {busy === r.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                 PDF

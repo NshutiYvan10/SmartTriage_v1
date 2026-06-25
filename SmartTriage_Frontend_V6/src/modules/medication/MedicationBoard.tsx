@@ -374,7 +374,7 @@ export function MedicationBoard() {
                     <div className="flex-1 min-w-[220px]">
                       <div className={`text-sm font-bold ${text.heading}`}>
                         {o.drugName} {fmtOrderDose(o)} {o.route}
-                        <span className="ml-2 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">High alert</span>
+                        <span className="ml-2 inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-red-600" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>High alert</span>
                       </div>
                       <div className={`text-[11px] ${text.muted}`}>
                         {o.prescriptionType?.replace('_', '-')} · prescribed by {o.prescribedByName}
@@ -384,7 +384,7 @@ export function MedicationBoard() {
                     <button
                       type="button"
                       onClick={() => openModal({ kind: 'approve', order: o })}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 inline-flex items-center gap-1.5"
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-cyan-600 text-white hover:bg-cyan-700 inline-flex items-center gap-1.5"
                     >
                       <ShieldCheck className="w-3.5 h-3.5" /> Approve
                     </button>
@@ -459,14 +459,14 @@ export function MedicationBoard() {
                           <span className={`text-sm font-bold ${text.heading}`}>
                             {o.drugName} {fmtOrderDose(o)} {o.route}
                           </span>
-                          <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30">PRN {o.prnIndication}</span>
+                          <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-violet-600" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>PRN {o.prnIndication}</span>
                           {o.gateParameter && (
-                            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                            <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-blue-600" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}>
                               Gate: {o.gateParameter} {o.gateComparator === 'GTE' ? '≥' : '≤'} {o.gateThreshold}
                             </span>
                           )}
                           {o.requiresWitness && (
-                            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Witness</span>
+                            <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-amber-600" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>Witness</span>
                           )}
                         </div>
                         <div className={`text-[11px] mt-1 ${text.muted}`}>
@@ -478,7 +478,7 @@ export function MedicationBoard() {
                           <button
                             type="button"
                             onClick={() => openModal({ kind: 'prn', entry })}
-                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-violet-600 text-white hover:bg-violet-700"
+                            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-cyan-600 text-white hover:bg-cyan-700"
                           >
                             Give PRN dose
                           </button>
@@ -517,15 +517,17 @@ export function MedicationBoard() {
                           <span className={`text-sm font-bold ${text.heading}`}>
                             {o.drugName}{o.productDetail ? ` (${o.productDetail})` : ''}
                           </span>
-                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${running
-                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                            : 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${running ? 'text-emerald-600' : 'text-slate-600'}`}
+                            style={running
+                              ? { background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }
+                              : { background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>
                             {running
                               ? `Running @ ${last?.rateValue ?? o.rateValue} ${last?.rateUnit ?? o.rateUnit}`
                               : last ? 'Stopped' : 'Not started'}
                           </span>
                           {o.requiresWitness && (
-                            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Witness</span>
+                            <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-amber-600" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>Witness</span>
                           )}
                         </div>
                         <div className={`text-[11px] mt-1 ${text.muted}`}>
@@ -537,7 +539,7 @@ export function MedicationBoard() {
                             <button
                               type="button"
                               onClick={() => openModal({ kind: 'inf-start', entry })}
-                              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-cyan-600 text-white hover:bg-cyan-700"
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-cyan-600 text-white hover:bg-cyan-700"
                             >
                               {last ? 'Restart' : 'Start infusion'}
                             </button>
@@ -547,14 +549,14 @@ export function MedicationBoard() {
                               <button
                                 type="button"
                                 onClick={() => openModal({ kind: 'inf-rate', entry })}
-                                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-600 text-white hover:bg-sky-700"
+                                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-cyan-600 text-white hover:bg-cyan-700"
                               >
                                 Change rate
                               </button>
                               <button
                                 type="button"
                                 onClick={() => openModal({ kind: 'inf-stop', entry })}
-                                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-700"
+                                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-600 text-white hover:bg-rose-700"
                               >
                                 Stop
                               </button>
@@ -598,7 +600,7 @@ export function MedicationBoard() {
                       {' '}{d.givenAt ? formatDistanceToNow(new Date(d.givenAt), { addSuffix: true }) : ''}
                     </span>
                     {d.isOverride && (
-                      <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">Override</span>
+                      <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-red-600" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>Override</span>
                     )}
                   </div>
                 ))}
@@ -610,7 +612,7 @@ export function MedicationBoard() {
 
       {/* ── Action modal ── */}
       {modal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }} role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }} role="dialog" aria-modal="true">
           <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in max-h-[90vh] flex flex-col" style={glassCard}>
             <div className="px-5 py-4 bg-gradient-to-r from-slate-800 to-slate-700 flex items-center justify-between">
               <h3 className="text-sm font-extrabold text-white">
@@ -759,7 +761,7 @@ export function MedicationBoard() {
                   || ((modal.kind === 'delay' || modal.kind === 'refuse' || modal.kind === 'inf-stop') && !fReason.trim())
                   || (fOverride && fJustification.trim().length < 10)
                   || (witnessNeeded && !fWitness.trim())}
-                className="px-4 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-md disabled:opacity-50 inline-flex items-center gap-2"
+                className="px-4 py-2 text-xs font-bold rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white shadow-md disabled:opacity-50 inline-flex items-center gap-2"
               >
                 {actionBusy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 Confirm
@@ -821,13 +823,13 @@ function DoseLane({ title, icon, doses, tone, onAdminister, onDelay, onRefuse, n
                   <span className={`text-[10px] ${text.muted}`}>dose #{d.sequenceNumber}</span>
                 )}
                 {d.priority && d.priority !== 'ROUTINE' && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">{d.priority}</span>
+                  <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-red-600" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>{d.priority}</span>
                 )}
                 {d.requiresWitness && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Witness</span>
+                  <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-amber-600" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>Witness</span>
                 )}
                 {d.productType && d.productType !== 'DRUG' && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">{d.productType.replace('_', ' ')}</span>
+                  <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-rose-600" style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' }}>{d.productType.replace('_', ' ')}</span>
                 )}
               </div>
               <div className={`text-[11px] mt-1 ${text.muted}`}>
@@ -837,15 +839,15 @@ function DoseLane({ title, icon, doses, tone, onAdminister, onDelay, onRefuse, n
               </div>
               <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                 <button type="button" onClick={() => onAdminister(d)}
-                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 text-white hover:bg-emerald-700">
+                  className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-cyan-600 text-white hover:bg-cyan-700">
                   Administer
                 </button>
                 <button type="button" onClick={() => onDelay(d)}
-                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500 text-white hover:bg-amber-600">
+                  className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-amber-500 text-white hover:bg-amber-600">
                   Delay
                 </button>
                 <button type="button" onClick={() => onRefuse(d)}
-                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-600 text-white hover:bg-rose-700">
+                  className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-rose-600 text-white hover:bg-rose-700">
                   Refused
                 </button>
                 <button type="button" onClick={() => navigate(`/patients/${d.visitId}`)}

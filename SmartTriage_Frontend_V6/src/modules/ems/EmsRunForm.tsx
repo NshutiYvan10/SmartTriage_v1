@@ -328,8 +328,8 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm" style={{ background: 'rgba(2,11,20,0.55)' }}>
-      <div className="rounded-2xl p-4 sm:p-6 max-w-2xl w-full max-h-[96vh] overflow-y-auto animate-fade-up" style={glassCard}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+      <div className="rounded-2xl p-4 sm:p-6 max-w-2xl w-full max-h-[96vh] overflow-y-auto shadow-2xl animate-scale-in" style={glassCard}>
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -344,7 +344,7 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
             </div>
           </div>
           <button onClick={onClose} className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}>
-            <X className="w-5 h-5 text-slate-400" />
+            <X className="w-4 h-4 text-slate-400" />
           </button>
         </div>
 
@@ -391,13 +391,13 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
           </button>
           {step < 5 ? (
             <button onClick={next} disabled={submitting}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-rose-600 to-rose-500 disabled:opacity-50">
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50">
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
               Save &amp; continue <ChevronRight className="w-4 h-4" />
             </button>
           ) : (
             <button onClick={sendToEd} disabled={submitting || !current}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-amber-600 to-amber-500 disabled:opacity-50">
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50">
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               Send pre-arrival to ED
             </button>
@@ -575,7 +575,7 @@ function Step3Triage({ run, flags, setFlags, isChild, setIsChild, reason, setRea
       </div>
 
       <button onClick={onCompute} disabled={computing}
-        className="w-full inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-base font-bold text-white bg-gradient-to-r from-indigo-600 to-indigo-500 disabled:opacity-50">
+        className="w-full inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-base font-bold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50">
         {computing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Calculator className="w-5 h-5" />}
         Compute field triage
       </button>
@@ -608,7 +608,8 @@ function Step3Triage({ run, flags, setFlags, isChild, setIsChild, reason, setRea
             <span className={`w-4 h-4 rounded-full ${style.bg}`} />
             <span className={`text-lg font-extrabold ${text.heading}`}>{style.label}</span>
             {run?.fieldTewsScore != null && (
-              <span className={`ml-auto text-sm font-bold px-2.5 py-1 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-slate-100 text-slate-700'}`}>
+              <span className="ml-auto inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-slate-600"
+                style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>
                 TEWS {run.fieldTewsScore}
               </span>
             )}
@@ -732,7 +733,7 @@ function Step4Treatments({ run, text, glassInner, isDark, onChanged }: any) {
             </div>
           </div>
           <button onClick={save} disabled={busy || !staged.detail.trim()}
-            className="w-full inline-flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-rose-500 text-white text-sm font-bold hover:bg-rose-600 disabled:opacity-50">
+            className="w-full inline-flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-cyan-600 text-white text-sm font-bold hover:bg-cyan-700 disabled:opacity-50">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Save intervention
           </button>
         </div>

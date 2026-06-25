@@ -234,8 +234,8 @@ export function PrescribeSafetyDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in"
-      style={{ background: 'rgba(2,11,20,0.55)' }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+      style={{ background: 'rgba(2,6,23,0.65)' }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="safety-dialog-title"
@@ -445,15 +445,22 @@ export function PrescribeSafetyDialog({
                             {' '}— chart says: <span className="italic">"{m.evidence}"</span>
                           </span>
                           <span
-                            className={`ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+                            className={`ml-1.5 inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg ${
                               m.category === 'X'
-                                ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                                ? 'text-red-600'
                                 : m.category === 'D'
-                                  ? 'bg-pink-500/20 text-pink-300 border-pink-500/30'
+                                  ? 'text-pink-600'
                                   : m.category === 'D-late'
-                                    ? 'bg-pink-500/20 text-pink-300 border-pink-500/30'
-                                    : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                    ? 'text-pink-600'
+                                    : 'text-amber-600'
                             }`}
+                            style={
+                              m.category === 'X'
+                                ? { background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }
+                                : m.category === 'D' || m.category === 'D-late'
+                                  ? { background: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.2)' }
+                                  : { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }
+                            }
                           >
                             {m.category === 'D-late'
                               ? 'D · 3rd trimester'
@@ -564,7 +571,10 @@ export function PrescribeSafetyDialog({
                             </span>
                           </span>
                           {m.severity === 'overdose' && (m.foldOverMax ?? 0) >= 2 && (
-                            <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">
+                            <span
+                              className="ml-1.5 inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg text-red-600"
+                              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                            >
                               {formatFold(m.foldOverMax!)}× max
                             </span>
                           )}
@@ -639,7 +649,10 @@ export function PrescribeSafetyDialog({
                               </span>
                             </span>
                             {isOver && (m.foldOverMax ?? 0) >= 2 && (
-                              <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">
+                              <span
+                                className="ml-1.5 inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg text-red-600"
+                                style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                              >
                                 {formatFold(m.foldOverMax!)}× max
                               </span>
                             )}
@@ -755,9 +768,14 @@ export function PrescribeSafetyDialog({
                               mL/min (threshold {m.thresholdEgfr})
                             </span>
                             <span
-                              className={`ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
-                                isAvoid ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-violet-500/20 text-violet-300 border-violet-500/30'
+                              className={`ml-1.5 inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg ${
+                                isAvoid ? 'text-red-600' : 'text-violet-600'
                               }`}
+                              style={
+                                isAvoid
+                                  ? { background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }
+                                  : { background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }
+                              }
                             >
                               {isAvoid ? 'Avoid' : 'Caution'}
                             </span>
@@ -826,9 +844,14 @@ export function PrescribeSafetyDialog({
                               {' '}— age {m.ageYears}
                             </span>
                             <span
-                              className={`ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
-                                isAvoid ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                              className={`ml-1.5 inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg ${
+                                isAvoid ? 'text-red-600' : 'text-amber-600'
                               }`}
+                              style={
+                                isAvoid
+                                  ? { background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }
+                                  : { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }
+                              }
                             >
                               {isAvoid ? 'Avoid' : 'Caution'}
                             </span>
@@ -867,12 +890,18 @@ export function PrescribeSafetyDialog({
                             {' '}— {m.prescribedClassLabel} + {m.otherClassLabel}
                           </span>
                           {m.severity === 'contraindicated' && (
-                            <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">
+                            <span
+                              className="ml-1.5 inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg text-red-600"
+                              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                            >
                               Contraindicated
                             </span>
                           )}
                           {m.severity === 'major' && (
-                            <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                            <span
+                              className="ml-1.5 inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg text-orange-600"
+                              style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.2)' }}
+                            >
                               Major
                             </span>
                           )}

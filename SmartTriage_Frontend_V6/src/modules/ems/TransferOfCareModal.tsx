@@ -39,7 +39,7 @@ export function TransferOfCareModal({ run, receivedByName, onClose, onSaved }: P
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(2,11,20,0.55)' }}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
       <div className="rounded-2xl p-6 max-w-2xl w-full max-h-[95vh] overflow-y-auto shadow-2xl animate-scale-in" style={glassCard}>
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -130,7 +130,7 @@ export function TransferOfCareModal({ run, receivedByName, onClose, onSaved }: P
           <button
             onClick={submit}
             disabled={submitting}
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-600 to-amber-500 disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50"
           >
             {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ClipboardCheck className="w-3.5 h-3.5" />}
             Acknowledge handover

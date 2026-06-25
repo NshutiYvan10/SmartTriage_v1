@@ -79,7 +79,7 @@ export function InboundEmsBoard() {
             </div>
             <button
               onClick={() => setExpanded((e) => !e)}
-              className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-bold inline-flex items-center gap-1"
+              className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-xs font-bold inline-flex items-center gap-1"
             >
               {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
               {expanded ? 'Collapse' : 'Show'}
@@ -125,7 +125,7 @@ export function InboundEmsBoard() {
                   {run.status === 'ARRIVED' && (
                     <button
                       onClick={() => setTransferTarget(run)}
-                      className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-amber-600 hover:bg-white/90 text-[11px] font-bold"
+                      className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-amber-600 hover:bg-white/90 text-[11px] font-bold"
                     >
                       <ClipboardCheck className="w-3 h-3" /> Acknowledge
                     </button>

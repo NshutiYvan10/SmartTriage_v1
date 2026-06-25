@@ -199,11 +199,11 @@ export function InvestigationPanel({ onSubmit, onClose, formLoading, glassCard, 
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-sm font-bold ${text.heading}`}>{selected.testName}</span>
                 {selected.shortName && <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-500/15 ${text.muted}`}>{selected.shortName}</span>}
-                <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-300 border border-slate-500/30">
+                <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-slate-600" style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>
                   {selected.investigationType?.replace(/_/g, ' ')}
                 </span>
                 {selected.isCommonInRwanda && (
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Common in Rwanda</span>
+                  <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-emerald-600" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>Common in Rwanda</span>
                 )}
               </div>
               {selected.specimenType && (
@@ -252,12 +252,12 @@ export function InvestigationPanel({ onSubmit, onClose, formLoading, glassCard, 
                       {r.shortName && <span className={`text-[10px] font-mono ${text.muted}`}>{r.shortName}</span>}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-slate-500/20 text-slate-300 border border-slate-500/30">
+                      <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-slate-600" style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>
                         {r.investigationType?.replace(/_/g, ' ')}
                       </span>
                       {r.category && <span className={`text-[10px] ${text.muted}`}>{r.category}</span>}
                       {r.isCommonInRwanda && (
-                        <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Rwanda common</span>
+                        <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-emerald-600" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>Rwanda common</span>
                       )}
                     </div>
                   </button>
@@ -335,7 +335,7 @@ export function InvestigationPanel({ onSubmit, onClose, formLoading, glassCard, 
           type="button"
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {formLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
           {urgency === 'STAT' ? 'Order STAT' : 'Order'}

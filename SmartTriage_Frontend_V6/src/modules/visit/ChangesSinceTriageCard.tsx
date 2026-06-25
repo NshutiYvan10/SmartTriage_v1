@@ -214,7 +214,10 @@ function BucketBlock({
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={`text-xs font-bold ${text.heading}`}>{label}</span>
                   {c.latest.numericValue != null && (
-                    <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                    <span
+                      className="inline-flex items-center text-[10px] font-mono px-1 py-0.5 rounded-lg text-amber-600"
+                      style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+                    >
                       {c.latest.numericValue}
                     </span>
                   )}

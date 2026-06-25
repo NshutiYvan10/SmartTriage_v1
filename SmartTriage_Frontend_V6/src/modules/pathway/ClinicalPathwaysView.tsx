@@ -370,9 +370,9 @@ export function ClinicalPathwaysView() {
                   <button
                     key={tab.key}
                     onClick={() => setMainView(tab.key)}
-                    className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-bold rounded-lg transition-all border ${
+                    className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-bold rounded-xl transition-all border ${
                       mainView === tab.key
-                        ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                        ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md border-transparent'
                         : `${text.body} hover:bg-white/5 border-transparent`
                     }`}
                   >
@@ -758,7 +758,7 @@ export function ClinicalPathwaysView() {
                                 title={canComplete ? 'Complete pathway'
                                   : progressFailed ? 'Step checklist failed to load — refresh before completing'
                                   : `${summary.pendingMandatory} mandatory step(s) outstanding`}
-                                className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:shadow-lg hover:-translate-y-0.5 rounded-xl transition-all shadow-md shadow-emerald-500/15 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                                className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 hover:shadow-lg hover:-translate-y-0.5 rounded-xl transition-all shadow-md shadow-cyan-600/15 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                               >
                                 {actionLoading === activation.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Flag className="w-3.5 h-3.5" />}
                                 Complete{!canComplete && !progressFailed ? ` (${summary.pendingMandatory})` : ''}
@@ -890,7 +890,7 @@ export function ClinicalPathwaysView() {
                                         <button
                                           onClick={() => handleCompleteStep(activation.id, step.stepId)}
                                           disabled={stepLoading}
-                                          className="inline-flex items-center gap-1 px-3 py-2 text-[10px] font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-lg transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50"
+                                          className="inline-flex items-center gap-1 px-3 py-2 text-[10px] font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-xl transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50"
                                         >
                                           {stepLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3" />}
                                           Done
@@ -927,8 +927,8 @@ export function ClinicalPathwaysView() {
          ═══════════════════════════════════════════════════════════════ */}
       {activateDialogOpen && (
         <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-          style={{ background: 'rgba(2,11,20,0.55)' }}
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+          style={{ background: 'rgba(2,6,23,0.65)' }}
           onClick={() => !activateSubmitting && setActivateDialogOpen(false)}
         >
           <div
@@ -984,7 +984,7 @@ export function ClinicalPathwaysView() {
               <button
                 onClick={submitActivate}
                 disabled={activateSubmitting || !activateVisitId.trim()}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-cyan-500 to-cyan-600 shadow-cyan-500/20 hover:shadow-cyan-500/30 hover:-translate-y-0.5"
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-cyan-600 hover:bg-cyan-700 shadow-cyan-600/20 hover:shadow-cyan-600/30 hover:-translate-y-0.5"
               >
                 {activateSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
                 {activateSubmitting ? 'Activating...' : 'Activate Pathway'}
@@ -999,8 +999,8 @@ export function ClinicalPathwaysView() {
          ═══════════════════════════════════════════════════════════════ */}
       {skipDialogOpen && (
         <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-          style={{ background: 'rgba(2,11,20,0.55)' }}
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+          style={{ background: 'rgba(2,6,23,0.65)' }}
           onClick={() => !skipSubmitting && setSkipDialogOpen(false)}
         >
           <div
@@ -1071,8 +1071,8 @@ export function ClinicalPathwaysView() {
          ═══════════════════════════════════════════════════════════════ */}
       {abandonDialogOpen && (
         <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-          style={{ background: 'rgba(2,11,20,0.55)' }}
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+          style={{ background: 'rgba(2,6,23,0.65)' }}
           onClick={() => !abandonSubmitting && setAbandonDialogOpen(false)}
         >
           <div
