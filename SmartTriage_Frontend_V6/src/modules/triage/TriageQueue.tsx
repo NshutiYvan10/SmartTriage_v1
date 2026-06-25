@@ -22,10 +22,10 @@ const categoryConfig: Record<TriageCategory, { label: string; bg: string; text: 
 };
 
 const statusConfig: Record<string, { label: string; bg: string; text: string; border: string }> = {
-  WAITING: { label: 'Waiting', bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-  IN_TRIAGE: { label: 'In Triage', bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
-  TRIAGED: { label: 'Triaged', bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  IN_TREATMENT: { label: 'In Treatment', bg: 'bg-indigo-500/20', text: 'text-indigo-300', border: 'border-indigo-500/30' },
+  WAITING: { label: 'Waiting', bg: 'bg-amber-500/10', text: 'text-amber-600', border: 'border-amber-500/20' },
+  IN_TRIAGE: { label: 'In Triage', bg: 'bg-cyan-500/10', text: 'text-cyan-600', border: 'border-cyan-500/20' },
+  TRIAGED: { label: 'Triaged', bg: 'bg-emerald-500/10', text: 'text-emerald-600', border: 'border-emerald-500/20' },
+  IN_TREATMENT: { label: 'In Treatment', bg: 'bg-indigo-500/10', text: 'text-indigo-600', border: 'border-indigo-500/20' },
 };
 
 const categoryGradients: Record<string, [string, string]> = {
@@ -483,7 +483,7 @@ export function TriageQueue() {
 
           <button
             onClick={() => navigate('/entry')}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-xl text-sm font-bold transition-all duration-300 shadow-lg shadow-cyan-500/25 hover:-translate-y-1 hover:shadow-xl"
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-sm font-bold transition-all duration-300 shadow-lg shadow-cyan-500/25 hover:-translate-y-1 hover:shadow-xl"
           >
             <UserPlus className="w-4 h-4" />
             Register Patient
@@ -510,8 +510,8 @@ export function TriageQueue() {
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 ${
                   activeTab === tab.key
-                    ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 text-white shadow-lg shadow-cyan-500/25'
-                    : isDark ? 'text-slate-400 hover:text-slate-200 hover:bg-white/10' : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
+                    ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
+                    : isDark ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
                 }`}
                 style={activeTab !== tab.key ? glassInner : {}}
               >
@@ -550,8 +550,8 @@ export function TriageQueue() {
                   onClick={() => setStatusFilter(f)}
                   className={`px-3 py-2 rounded-xl text-[11px] font-bold transition-all duration-300 ${
                     statusFilter === f
-                      ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 text-white shadow-md shadow-cyan-500/20'
-                      : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'
+                      ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
+                      : isDark ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
                   }`}
                   style={statusFilter !== f ? glassInner : {}}
                 >
@@ -568,7 +568,7 @@ export function TriageQueue() {
           <div className="px-5 py-3.5 flex items-center justify-between" style={{ borderBottom: isDark ? '1px solid rgba(2,132,199,0.18)' : '1px solid rgba(203,213,225,0.3)' }}>
             <div className="flex items-center gap-2">
               <span className={`text-[11px] font-bold uppercase tracking-wider ${text.muted}`}>Triage Queue</span>
-              <span className="text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-md">{triageQueue.length}</span>
+              <span className="inline-flex items-center px-2.5 py-0.5 text-[10px] font-bold rounded-lg text-cyan-600" style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}>{triageQueue.length}</span>
             </div>
             <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
               <Timer className="w-3 h-3" />
@@ -651,7 +651,7 @@ export function TriageQueue() {
                           {patient.fullName}
                         </p>
                         {patient.isPediatric && (
-                          <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30 flex-shrink-0">
+                          <span className="inline-flex items-center gap-0.5 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-violet-600 flex-shrink-0" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
                             <Baby className="w-2.5 h-2.5" />
                             PEDS
                           </span>
@@ -723,7 +723,7 @@ export function TriageQueue() {
                         onClick={(e) => { e.stopPropagation(); handleStartTriage(patient); }}
                         className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold transition-all duration-300 ${
                           isWaiting
-                            ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 text-white shadow-md shadow-cyan-500/20 hover:shadow-lg hover:-translate-y-0.5'
+                            ? 'bg-cyan-600 hover:bg-cyan-700 text-white shadow-md shadow-cyan-500/20 hover:shadow-lg hover:-translate-y-0.5'
                             : isInTriage
                               ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30'
                               : isDark ? 'text-slate-400 hover:text-slate-200 hover:bg-white/10' : 'text-slate-400 hover:text-slate-600 hover:bg-white/60'

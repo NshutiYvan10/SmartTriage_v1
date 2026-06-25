@@ -909,7 +909,7 @@ export function AdultTriageForm() {
               <Activity className="w-4 h-4" />
               <span className="font-bold text-xs">WARNING: TEWS increased by ≥2 points within 10 min — Patient may be deteriorating</span>
             </div>
-            <button onClick={() => setShowDeteriorationWarning(false)} className="text-[10px] bg-white/20 px-2.5 py-1 rounded-lg hover:bg-white/30">Dismiss</button>
+            <button onClick={() => setShowDeteriorationWarning(false)} className="text-[10px] bg-white/20 px-2.5 py-1 rounded-xl hover:bg-white/30">Dismiss</button>
           </div>
         )}
 
@@ -948,7 +948,7 @@ export function AdultTriageForm() {
             <div className="flex items-center gap-1.5 mb-3">
               <FileText className={`w-3.5 h-3.5 ${text.muted}`} />
               <span className={`text-[10px] font-semibold ${text.body} uppercase tracking-wider`}>Patient Information</span>
-              {patient && <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${isDark ? 'bg-green-500/20 text-green-300' : 'bg-green-100 text-green-700'}`}>Pre-loaded</span>}
+              {patient && <span className="ml-auto inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-emerald-600" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>Pre-loaded</span>}
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <div><label className={labelCls}>Patient Names</label><input type="text" value={patientNames} onChange={(e) => setPatientNames(e.target.value)} className={inputCls} /></div>
@@ -1045,9 +1045,9 @@ export function AdultTriageForm() {
                 })}
               </div>
               {!signsReviewed ? (
-                <button onClick={handleReviewAllSigns} className="px-3 py-1.5 bg-cyan-600 text-white text-[10px] font-semibold rounded-lg hover:bg-cyan-500 transition-all shadow-sm">Mark Reviewed</button>
+                <button onClick={handleReviewAllSigns} className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white text-[10px] font-semibold rounded-xl transition-all shadow-sm">Mark Reviewed</button>
               ) : (
-                <span className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full ${isDark ? 'text-green-300 bg-green-500/15' : 'text-green-700 bg-green-50'}`}><CheckCircle className="w-3 h-3" /> Reviewed</span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-emerald-600" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}><CheckCircle className="w-3 h-3" /> Reviewed</span>
               )}
             </div>
           </div>
@@ -1056,7 +1056,7 @@ export function AdultTriageForm() {
             <div className={`rounded-lg px-3 py-2 flex items-center gap-2 mb-3 ${isDark ? '' : currentGroup.bgColor}`} style={isDark ? glassInner : undefined}>
               <currentGroup.icon className={`w-3.5 h-3.5 ${currentGroup.color}`} />
               <span className={`text-xs font-bold ${text.label}`}>{currentGroup.title}</span>
-              <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${isDark ? 'bg-white/10 text-slate-300' : 'bg-white/80 text-slate-500'}`}>{currentGroup.signs.filter(s => checkedSigns[s.id]).length}/{currentGroup.signs.length}</span>
+              <span className="ml-auto inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg text-slate-600" style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>{currentGroup.signs.filter(s => checkedSigns[s.id]).length}/{currentGroup.signs.length}</span>
               <span className={`text-[10px] ${text.muted}`}>Step {signPage + 1} of {totalSignPages}</span>
             </div>
 
@@ -1089,11 +1089,11 @@ export function AdultTriageForm() {
             </div>
 
             <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-200/40">
-              <button onClick={() => setSignPage((p) => Math.max(0, p - 1))} disabled={signPage === 0} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-white/80 border border-slate-200/60 text-slate-600 hover:bg-white hover:shadow-sm">
+              <button onClick={() => setSignPage((p) => Math.max(0, p - 1))} disabled={signPage === 0} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-white/80 border border-slate-200/60 text-slate-600 hover:bg-white hover:shadow-sm">
                 <ChevronLeft className="w-3.5 h-3.5" /> Previous
               </button>
               <span className="text-[10px] text-slate-500 font-medium">{signPage + 1} / {totalSignPages}</span>
-              <button onClick={() => setSignPage((p) => Math.min(totalSignPages - 1, p + 1))} disabled={signPage === totalSignPages - 1} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-cyan-600 text-white hover:bg-cyan-500 shadow-sm">
+              <button onClick={() => setSignPage((p) => Math.min(totalSignPages - 1, p + 1))} disabled={signPage === totalSignPages - 1} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm">
                 Next <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -1146,7 +1146,7 @@ export function AdultTriageForm() {
                 type="button"
                 onClick={() => setPullModalOpen(true)}
                 disabled={!pickedMonitor || pickedMonitor.status === 'OFFLINE'}
-                className="ml-auto px-3 py-1.5 text-[11px] font-bold rounded-lg bg-gradient-to-r from-cyan-600 to-cyan-500 text-white shadow-sm hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:hover:translate-y-0 flex items-center gap-1.5"
+                className="ml-auto px-3 py-1.5 text-[11px] font-bold rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:hover:translate-y-0 flex items-center gap-1.5"
                 title={!pickedMonitor ? 'Pick a monitor first' : pickedMonitor.status === 'OFFLINE' ? 'Monitor is not reporting' : 'Open the Stabilize & Pull modal'}
               >
                 <Activity className="w-3.5 h-3.5" /> Pull from Monitor
@@ -1377,13 +1377,13 @@ export function AdultTriageForm() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {hasVeryUrgentSigns && <span className="text-[10px] font-bold bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">Very Urgent</span>}
-                {hasUrgentSigns && !hasVeryUrgentSigns && <span className="text-[10px] font-bold bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">Urgent</span>}
-                {!hasVeryUrgentSigns && !hasUrgentSigns && <span className="text-[10px] font-medium bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Routine</span>}
+                {hasVeryUrgentSigns && <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-orange-600" style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.2)' }}>Very Urgent</span>}
+                {hasUrgentSigns && !hasVeryUrgentSigns && <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-yellow-600" style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)' }}>Urgent</span>}
+                {!hasVeryUrgentSigns && !hasUrgentSigns && <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-emerald-600" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>Routine</span>}
                 {!discriminatorReviewed ? (
-                  <button onClick={handleDiscriminatorReviewed} className="px-3 py-1.5 bg-amber-600 text-white text-[10px] font-semibold rounded-lg hover:bg-amber-500 transition-all shadow-sm">Mark Reviewed</button>
+                  <button onClick={handleDiscriminatorReviewed} className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white text-[10px] font-semibold rounded-xl transition-all shadow-sm">Mark Reviewed</button>
                 ) : (
-                  <span className="flex items-center gap-1 text-[10px] font-semibold text-green-700 bg-green-50 px-2 py-1 rounded-full"><CheckCircle className="w-3 h-3" /> Reviewed</span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-emerald-600" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}><CheckCircle className="w-3 h-3" /> Reviewed</span>
                 )}
               </div>
             </div>
@@ -1699,9 +1699,9 @@ export function AdultTriageForm() {
               </button>
               <div className="flex items-center gap-3">
                 {triageFinished ? (
-                  <button onClick={() => navigate('/dashboard')} className="px-5 py-2 bg-gradient-to-r from-cyan-600 to-slate-800 text-white rounded-xl text-xs font-bold hover:shadow-xl transition-all hover:-translate-y-0.5">Return to Dashboard</button>
+                  <button onClick={() => navigate('/dashboard')} className="px-5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold hover:shadow-xl transition-all hover:-translate-y-0.5">Return to Dashboard</button>
                 ) : (
-                  <button onClick={handleFinishTriage} disabled={!canFinish} className="px-5 py-2 bg-gradient-to-r from-cyan-600 to-slate-800 text-white rounded-xl text-xs font-bold hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 hover:-translate-y-0.5">
+                  <button onClick={handleFinishTriage} disabled={!canFinish} className="px-5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 hover:-translate-y-0.5">
                     <Save className="w-3.5 h-3.5" /> Finish Triage
                   </button>
                 )}

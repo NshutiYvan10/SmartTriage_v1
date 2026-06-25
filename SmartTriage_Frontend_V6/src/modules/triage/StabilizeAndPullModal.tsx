@@ -221,8 +221,8 @@ export default function StabilizeAndPullModal({ visitId, device, onClose, onUse,
   // ── Render ───────────────────────────────────────────────────────
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in"
-      style={{ background: 'rgba(2,11,20,0.55)' }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+      style={{ background: 'rgba(2,6,23,0.65)' }}
       onClick={onClose}
     >
       <div
@@ -241,7 +241,7 @@ export default function StabilizeAndPullModal({ visitId, device, onClose, onUse,
                 <h3 className="text-sm font-bold text-white">Stabilize &amp; Pull from Monitor</h3>
                 <p className="text-[10px] text-white/80 mt-0.5">
                   {device.deviceName} · <span className="font-mono">{device.serialNumber}</span>
-                  {usingPolling && <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-400/30 text-[9px]">Polling fallback</span>}
+                  {usingPolling && <span className="ml-2 inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-amber-600" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>Polling fallback</span>}
                 </p>
               </div>
             </div>
@@ -360,7 +360,7 @@ export default function StabilizeAndPullModal({ visitId, device, onClose, onUse,
           <button
             onClick={() => handleUse('all')}
             disabled={!allActiveStable}
-            className="px-4 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 text-white shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2 disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
+            className="px-4 py-2 text-xs font-bold rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2 disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
             title={allActiveStable
               ? 'All vitals stable — capture into the triage form'
               : `Waiting: ${stableCount} of ${activeCount} stable`}

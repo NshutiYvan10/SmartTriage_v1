@@ -37,8 +37,8 @@ export function BedSuggestionModal({ bed, category, placing, error, onConfirm, o
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-      style={{ background: 'rgba(2,11,20,0.55)' }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+      style={{ background: 'rgba(2,6,23,0.65)' }}
       onClick={placing ? undefined : onCancel}
     >
       <div
@@ -110,14 +110,14 @@ export function BedSuggestionModal({ bed, category, placing, error, onConfirm, o
           <button
             onClick={onCancel}
             disabled={placing}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-white/5 disabled:opacity-50 ${text.body}`}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-white/5 disabled:opacity-50 ${text.body}`}
           >
             Skip — place manually
           </button>
           <button
             onClick={onConfirm}
             disabled={placing}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-60"
           >
             {placing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BedDouble className="w-3.5 h-3.5" />}
             {placing ? 'Placing…' : `Place in ${bed.code}`}

@@ -166,7 +166,7 @@ export default function DoctorOnDutyPicker({
             type="button"
             onClick={() => { setFreeText(false); onChange('', null); }}
             style={glassInner}
-            className={`px-2 py-1.5 text-[10px] font-bold rounded-lg ${text.body} hover:bg-white/5`}
+            className={`px-2 py-1.5 text-[10px] font-bold rounded-xl ${text.body} hover:bg-white/5`}
             title="Back to on-duty doctor list"
           >
             ← List
