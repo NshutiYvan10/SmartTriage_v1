@@ -404,13 +404,7 @@ export function MedicationSafetyOverridesView() {
 
         {/* ── Header card ── */}
         <div className="rounded-3xl overflow-hidden" style={glassCard}>
-          <div
-            className="px-5 py-4"
-            style={{
-              background: 'linear-gradient(135deg, rgba(244,63,94,0.18) 0%, rgba(99,102,241,0.10) 100%)',
-              borderBottom: borderStyle,
-            }}
-          >
+          <div className="px-5 py-4 bg-gradient-to-r from-slate-800 to-slate-700">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center">
