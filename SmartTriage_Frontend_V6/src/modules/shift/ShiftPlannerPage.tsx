@@ -71,13 +71,13 @@ const SHIFT_PERIOD_META: Record<ShiftPeriod, { label: string; time: string; icon
   },
 };
 
-const FUNCTION_BADGES: Record<ShiftFunction, { color: string; bg: string }> = {
-  PRIMARY_DOCTOR:     { color: 'text-cyan-500',    bg: 'bg-cyan-500/10' },
-  SUPERVISING_DOCTOR: { color: 'text-blue-500',    bg: 'bg-blue-500/10' },
-  RESIDENT:           { color: 'text-indigo-500',  bg: 'bg-indigo-500/10' },
-  CHARGE_NURSE:       { color: 'text-amber-500',   bg: 'bg-amber-500/10' },
-  TRIAGE_NURSE:       { color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-  ZONE_NURSE:         { color: 'text-green-500',   bg: 'bg-green-500/10' },
+const FUNCTION_BADGES: Record<ShiftFunction, { color: string; style: { background: string; border: string } }> = {
+  PRIMARY_DOCTOR:     { color: 'text-cyan-600',    style: { background: 'rgba(6,182,212,0.08)',   border: '1px solid rgba(6,182,212,0.2)' } },
+  SUPERVISING_DOCTOR: { color: 'text-blue-600',    style: { background: 'rgba(59,130,246,0.08)',  border: '1px solid rgba(59,130,246,0.2)' } },
+  RESIDENT:           { color: 'text-indigo-600',  style: { background: 'rgba(99,102,241,0.08)',  border: '1px solid rgba(99,102,241,0.2)' } },
+  CHARGE_NURSE:       { color: 'text-amber-600',   style: { background: 'rgba(245,158,11,0.08)',  border: '1px solid rgba(245,158,11,0.2)' } },
+  TRIAGE_NURSE:       { color: 'text-emerald-600', style: { background: 'rgba(16,185,129,0.08)',  border: '1px solid rgba(16,185,129,0.2)' } },
+  ZONE_NURSE:         { color: 'text-green-600',   style: { background: 'rgba(16,185,129,0.08)',  border: '1px solid rgba(16,185,129,0.2)' } },
 };
 
 function isDoctorRole(role: string): boolean {
@@ -548,7 +548,10 @@ export function ShiftPlannerPage() {
                   </p>
                 </div>
                 {leadRow && (
-                  <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-500/15 text-amber-500 text-[10px] font-bold uppercase tracking-wider">
+                  <div
+                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-amber-600"
+                    style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+                  >
                     <Crown className="w-3 h-3" />
                     Lead set
                   </div>
@@ -733,7 +736,8 @@ export function ShiftPlannerPage() {
 
                             {/* Function badge */}
                             <span
-                              className={`hidden lg:inline text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${badge.bg} ${badge.color}`}
+                              className={`hidden lg:inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${badge.color}`}
+                              style={badge.style}
                             >
                               {SHIFT_FUNCTIONS.find((sf) => sf.value === a.shiftFunction)?.label}
                             </span>
@@ -800,7 +804,7 @@ export function ShiftPlannerPage() {
                   <button
                     onClick={handleDelete}
                     disabled={deleting || saving}
-                    className={`${cardClass} px-3.5 py-2 text-xs font-bold transition-all ${
+                    className={`${cardClass} rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
                       isDark
                         ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20'
                         : 'bg-red-50 hover:bg-red-100 text-red-600 border border-red-200'
@@ -816,8 +820,8 @@ export function ShiftPlannerPage() {
                   <button
                     onClick={handleSave}
                     disabled={saving || deleting}
-                    className={`${cardClass} px-4 py-2 text-sm font-bold transition-all
-                      bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500
+                    className={`rounded-xl px-4 py-2 text-sm font-bold transition-all
+                      bg-cyan-600 hover:bg-cyan-700
                       text-white shadow-lg shadow-cyan-500/20 disabled:opacity-40 disabled:shadow-none`}
                   >
                     <span className="flex items-center gap-2">

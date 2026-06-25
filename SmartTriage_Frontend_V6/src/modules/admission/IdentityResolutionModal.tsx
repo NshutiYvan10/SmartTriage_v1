@@ -114,8 +114,8 @@ export function IdentityResolutionModal({ patient, hospitalId, onClose, onResolv
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-      style={{ background: 'rgba(2,11,20,0.55)' }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+      style={{ background: 'rgba(2,6,23,0.65)' }}
       onClick={submitting ? undefined : onClose}
     >
       <div
@@ -156,9 +156,9 @@ export function IdentityResolutionModal({ patient, hospitalId, onClose, onResolv
             <button
               onClick={() => setMode('rename')}
               disabled={submitting}
-              className={`flex-1 py-2 transition-colors ${
+              className={`flex-1 py-2 rounded-xl transition-colors ${
                 mode === 'rename'
-                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                  ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
                   : `${text.body} hover:bg-white/5 border border-transparent`
               }`}
             >
@@ -167,9 +167,9 @@ export function IdentityResolutionModal({ patient, hospitalId, onClose, onResolv
             <button
               onClick={() => setMode('merge')}
               disabled={submitting}
-              className={`flex-1 py-2 transition-colors flex items-center justify-center gap-1 ${
+              className={`flex-1 py-2 rounded-xl transition-colors flex items-center justify-center gap-1 ${
                 mode === 'merge'
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
                   : `${text.body} hover:bg-white/5 border border-transparent`
               }`}
             >
@@ -216,16 +216,16 @@ export function IdentityResolutionModal({ patient, hospitalId, onClose, onResolv
           <button
             onClick={onClose}
             disabled={submitting}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-white/5 disabled:opacity-50 ${text.body}`}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-white/5 disabled:opacity-50 ${text.body}`}
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold text-white
+            className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold text-white
               ${canSubmit
-                ? 'bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500'
+                ? 'bg-cyan-600 hover:bg-cyan-700'
                 : 'bg-slate-400 cursor-not-allowed'}
             `}
           >
@@ -377,7 +377,7 @@ function MergeSearch(p: MergeSearchProps) {
             type="button"
             onClick={p.onRunSearch}
             disabled={p.searching || p.searchQuery.trim().length < 2}
-            className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+            className="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50"
           >
             {p.searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
             Search

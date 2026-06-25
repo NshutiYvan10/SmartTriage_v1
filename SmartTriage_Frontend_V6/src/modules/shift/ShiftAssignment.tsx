@@ -60,13 +60,13 @@ const SHIFT_PERIOD_STYLES: Record<ShiftPeriod, { gradient: string; border: strin
   NIGHT:     { gradient: 'from-indigo-500/20 via-violet-500/10 to-purple-500/20', border: 'border-indigo-500/30', glow: 'shadow-indigo-500/10' },
 };
 
-const FUNCTION_BADGES: Record<ShiftFunction, { color: string; bg: string }> = {
-  PRIMARY_DOCTOR:     { color: 'text-cyan-500',    bg: 'bg-cyan-500/10' },
-  SUPERVISING_DOCTOR: { color: 'text-blue-500',    bg: 'bg-blue-500/10' },
-  RESIDENT:           { color: 'text-indigo-500',  bg: 'bg-indigo-500/10' },
-  CHARGE_NURSE:       { color: 'text-amber-500',   bg: 'bg-amber-500/10' },
-  TRIAGE_NURSE:       { color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-  ZONE_NURSE:         { color: 'text-green-500',   bg: 'bg-green-500/10' },
+const FUNCTION_BADGES: Record<ShiftFunction, { color: string; rgb: string }> = {
+  PRIMARY_DOCTOR:     { color: 'text-cyan-600',    rgb: '6,182,212' },
+  SUPERVISING_DOCTOR: { color: 'text-blue-600',    rgb: '59,130,246' },
+  RESIDENT:           { color: 'text-indigo-600',  rgb: '99,102,241' },
+  CHARGE_NURSE:       { color: 'text-amber-600',   rgb: '245,158,11' },
+  TRIAGE_NURSE:       { color: 'text-emerald-600', rgb: '16,185,129' },
+  ZONE_NURSE:         { color: 'text-green-600',   rgb: '16,185,129' },
 };
 
 function isDoctorFunction(fn: ShiftFunction): boolean {
@@ -433,8 +433,8 @@ export function ShiftAssignment() {
               <button
                 onClick={handleAssign}
                 disabled={!selectedUser}
-                className={`w-full ${cardClass} px-4 py-2.5 text-sm font-bold transition-all
-                  bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500
+                className={`w-full rounded-xl px-4 py-2.5 text-sm font-bold transition-all
+                  bg-cyan-600 hover:bg-cyan-700
                   text-white shadow-lg shadow-cyan-500/20 disabled:opacity-40 disabled:shadow-none`}
               >
                 <span className="flex items-center justify-center gap-2">
@@ -612,11 +612,17 @@ export function ShiftAssignment() {
                                         </span>
                                       )}
                                       <span className={`text-sm font-semibold ${text.heading}`}>Dr. {a.userName}</span>
-                                      <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${fb.bg} ${fb.color}`}>
+                                      <span
+                                        className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${fb.color}`}
+                                        style={{ background: `rgba(${fb.rgb},0.08)`, border: `1px solid rgba(${fb.rgb},0.2)` }}
+                                      >
                                         {SHIFT_FUNCTIONS.find(sf => sf.value === a.shiftFunction)?.label}
                                       </span>
                                       {isLead && (
-                                        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-500">
+                                        <span
+                                          className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-amber-600"
+                                          style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+                                        >
                                           Shift Lead
                                         </span>
                                       )}
@@ -703,11 +709,17 @@ export function ShiftAssignment() {
                                         </span>
                                       )}
                                       <span className={`text-sm font-medium ${text.heading}`}>{a.userName}</span>
-                                      <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${fb.bg} ${fb.color}`}>
+                                      <span
+                                        className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${fb.color}`}
+                                        style={{ background: `rgba(${fb.rgb},0.08)`, border: `1px solid rgba(${fb.rgb},0.2)` }}
+                                      >
                                         {SHIFT_FUNCTIONS.find(sf => sf.value === a.shiftFunction)?.label}
                                       </span>
                                       {isLead && (
-                                        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-500">
+                                        <span
+                                          className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-amber-600"
+                                          style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+                                        >
                                           Shift Lead
                                         </span>
                                       )}

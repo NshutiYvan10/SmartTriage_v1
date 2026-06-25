@@ -132,7 +132,10 @@ export function PatientChronicConditionsPanel({
           <HeartPulse className="w-3.5 h-3.5 text-amber-600" />
           Structured chronic conditions
           {rows.length > 0 && (
-            <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-800">
+            <span
+              className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 text-[10px] font-bold rounded-lg text-amber-600"
+              style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+            >
               {rows.length}
             </span>
           )}
@@ -141,7 +144,7 @@ export function PatientChronicConditionsPanel({
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold hover:bg-emerald-100 transition-colors"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-[10px] font-bold transition-colors"
             aria-label="Add chronic condition"
           >
             <Plus className="w-3 h-3" /> Add
@@ -245,7 +248,7 @@ export function PatientChronicConditionsPanel({
                       type="button"
                       disabled={resolveReason.trim().length < 5 || resolveSubmitting}
                       onClick={() => handleResolve(c.id)}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-xl text-[10px] font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {resolveSubmitting && <Loader2 className="w-3 h-3 animate-spin" />}
                       Confirm resolve
@@ -473,7 +476,7 @@ function AddConditionForm({
           type="button"
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-[11px] font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[11px] font-bold bg-cyan-600 hover:bg-cyan-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
           Save condition

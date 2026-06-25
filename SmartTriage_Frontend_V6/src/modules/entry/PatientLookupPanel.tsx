@@ -60,16 +60,16 @@ const STRATEGY_HINTS: Record<LookupStrategy, string> = {
   demographic:      'Last resort. First + last name + DOB exact match.',
 };
 
-const MATCH_BADGE: Record<MatchType, { label: string; cls: string }> = {
-  NATIONAL_ID:          { label: 'NID',                cls: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' },
-  PASSPORT:             { label: 'Passport',           cls: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' },
-  BIRTH_CERTIFICATE:    { label: 'Birth certificate',  cls: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' },
-  MRN:                  { label: 'MRN',                cls: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' },
-  PHONE_AND_DOB:        { label: 'Phone + DOB',        cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
-  PHONE:                { label: 'Phone',              cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
-  GUARDIAN_NATIONAL_ID: { label: 'Guardian NID',       cls: 'bg-purple-500/20 text-purple-300 border border-purple-500/30' },
-  GUARDIAN_PHONE:       { label: 'Guardian phone',     cls: 'bg-purple-500/20 text-purple-300 border border-purple-500/30' },
-  DEMOGRAPHIC:          { label: 'Name + DOB',         cls: 'bg-slate-500/20 text-slate-300 border border-slate-500/30' },
+const MATCH_BADGE: Record<MatchType, { label: string; cls: string; style: React.CSSProperties }> = {
+  NATIONAL_ID:          { label: 'NID',                cls: 'text-emerald-600', style: { background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' } },
+  PASSPORT:             { label: 'Passport',           cls: 'text-emerald-600', style: { background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' } },
+  BIRTH_CERTIFICATE:    { label: 'Birth certificate',  cls: 'text-emerald-600', style: { background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' } },
+  MRN:                  { label: 'MRN',                cls: 'text-cyan-600',    style: { background: 'rgba(6,182,212,0.08)',  border: '1px solid rgba(6,182,212,0.2)' } },
+  PHONE_AND_DOB:        { label: 'Phone + DOB',        cls: 'text-amber-600',   style: { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' } },
+  PHONE:                { label: 'Phone',              cls: 'text-amber-600',   style: { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' } },
+  GUARDIAN_NATIONAL_ID: { label: 'Guardian NID',       cls: 'text-purple-600',  style: { background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)' } },
+  GUARDIAN_PHONE:       { label: 'Guardian phone',     cls: 'text-purple-600',  style: { background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)' } },
+  DEMOGRAPHIC:          { label: 'Name + DOB',         cls: 'text-slate-600',   style: { background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' } },
 };
 
 function formatLastVisit(iso: string | null): string {
@@ -232,12 +232,12 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
                 key={key}
                 type="button"
                 onClick={() => handleStrategyChange(key)}
-                className={`text-[11px] px-2 py-1.5 rounded-xl border transition-colors ${
+                className={`text-[11px] px-2 py-1.5 rounded-xl transition-colors ${
                   active
-                    ? 'bg-cyan-600 border-cyan-600 text-white'
+                    ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md'
                     : isDark
-                      ? 'border-white/10 text-slate-300 hover:bg-white/[0.03]'
-                      : 'border-slate-200/60 text-slate-700 hover:bg-white/[0.03]'
+                      ? 'text-slate-400 hover:text-white hover:bg-white/5'
+                      : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
                 }`}
               >
                 {STRATEGY_LABELS[key]}
@@ -353,18 +353,28 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
                           <span className={`text-sm font-semibold ${headerTextCls}`}>
                             {c.firstName} {c.lastName}
                           </span>
-                          <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.cls}`}>
+                          <span style={badge.style} className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${badge.cls}`}>
                             {badge.label}
                           </span>
-                          <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
-                            c.confidence >= 0.95 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                              : c.confidence >= 0.80 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                              : 'bg-slate-500/20 text-slate-300 border-slate-500/30'
-                          }`}>
+                          <span
+                            style={
+                              c.confidence >= 0.95 ? { background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }
+                                : c.confidence >= 0.80 ? { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }
+                                : { background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }
+                            }
+                            className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${
+                              c.confidence >= 0.95 ? 'text-emerald-600'
+                                : c.confidence >= 0.80 ? 'text-amber-600'
+                                : 'text-slate-600'
+                            }`}
+                          >
                             {Math.round(c.confidence * 100)}%
                           </span>
                           {c.isPediatric && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-pink-500/20 text-pink-300 border-pink-500/30 inline-flex items-center gap-1">
+                            <span
+                              style={{ background: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.2)' }}
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-pink-600"
+                            >
                               <Baby className="w-3 h-3" />
                               Pediatric
                             </span>
@@ -388,7 +398,7 @@ export function PatientLookupPanel({ hospitalId, onCandidatePicked, onRegisterNe
                         className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-xl whitespace-nowrap ${
                           picking
                             ? 'bg-slate-500/20 text-slate-400 cursor-not-allowed'
-                            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                            : 'bg-cyan-600 hover:bg-cyan-700 text-white'
                         }`}
                       >
                         {picking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}

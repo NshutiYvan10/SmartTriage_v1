@@ -32,11 +32,11 @@ import type {
 
 const ZONES: EdZone[] = ['RESUS', 'ACUTE', 'GENERAL', 'TRIAGE', 'OBSERVATION', 'ISOLATION', 'PEDIATRIC', 'NEONATAL', 'AMBULATORY'];
 
-const STATUS_STYLES: Record<BedStatus, { color: string; bg: string; label: string }> = {
-  AVAILABLE:      { color: 'text-emerald-600', bg: 'bg-emerald-500/10', label: 'Available' },
-  OCCUPIED:       { color: 'text-slate-600',   bg: 'bg-slate-500/10',   label: 'Occupied' },
-  CLEANING:       { color: 'text-amber-600',   bg: 'bg-amber-500/10',   label: 'Cleaning' },
-  OUT_OF_SERVICE: { color: 'text-rose-600',    bg: 'bg-rose-500/10',    label: 'Out of service' },
+const STATUS_STYLES: Record<BedStatus, { color: string; rgb: string; label: string }> = {
+  AVAILABLE:      { color: 'text-emerald-600', rgb: '16,185,129',  label: 'Available' },
+  OCCUPIED:       { color: 'text-slate-600',   rgb: '100,116,139', label: 'Occupied' },
+  CLEANING:       { color: 'text-amber-600',   rgb: '245,158,11',  label: 'Cleaning' },
+  OUT_OF_SERVICE: { color: 'text-rose-600',    rgb: '244,63,94',   label: 'Out of service' },
 };
 
 type ToastState = { type: 'success' | 'error'; message: string } | null;
@@ -417,7 +417,10 @@ export function BedManagement() {
 
                   {/* Status */}
                   <div className="col-span-6 sm:col-span-2">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${styles.bg} ${styles.color}`}>
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${styles.color}`}
+                      style={{ background: `rgba(${styles.rgb},0.08)`, border: `1px solid rgba(${styles.rgb},0.2)` }}
+                    >
                       {styles.label}
                     </span>
                     {b.currentPatientName && (
@@ -569,7 +572,7 @@ function BedFormModal({
   const labelClass = `block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }} onClick={onClose}>
       <div
         className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
         style={glassCard}
@@ -677,7 +680,7 @@ function BedFormModal({
           <button
             onClick={onClose}
             disabled={submitting}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold ${text.body} ${isDark ? 'hover:bg-white/5' : 'hover:bg-slate-100'}`}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold ${text.body} ${isDark ? 'hover:bg-white/5' : 'hover:bg-slate-100'}`}
           >
             Cancel
           </button>
@@ -739,7 +742,7 @@ function BedDeviceAssignmentModal({
   }, [devices]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }} onClick={onClose}>
       <div
         className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
         style={glassCard}

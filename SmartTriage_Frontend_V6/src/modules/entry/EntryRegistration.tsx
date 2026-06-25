@@ -1670,7 +1670,7 @@ export function EntryRegistration() {
               <button
                 type="button"
                 onClick={goNext}
-                className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-xl text-sm font-bold transition-all duration-300 shadow-lg shadow-cyan-500/25 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/30"
+                className="inline-flex items-center gap-2 px-8 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-sm font-bold transition-all duration-300 shadow-lg shadow-cyan-500/25 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/30"
               >
                 Continue
                 <ChevronRight className="w-4 h-4" />
@@ -1682,7 +1682,7 @@ export function EntryRegistration() {
                 disabled={!formData.assignedNurseId || isSubmitting || showSuccess}
                 className={`inline-flex items-center gap-2 px-10 py-3 rounded-xl text-sm font-bold transition-all duration-300 shadow-lg ${
                   formData.assignedNurseId && !isSubmitting && !showSuccess
-                    ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white shadow-cyan-500/25 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/30'
+                    ? 'bg-cyan-600 hover:bg-cyan-700 text-white shadow-cyan-500/25 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/30'
                     : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed shadow-none'
                 }`}
               >

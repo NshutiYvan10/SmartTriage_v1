@@ -111,7 +111,10 @@ export function DelegationsPage() {
                 <div className="text-white/50 text-xs font-bold uppercase tracking-wide">Charge Nurse</div>
                 <h1 className="text-lg font-bold text-white tracking-tight">Delegations</h1>
               </div>
-              <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-bold">
+              <span
+                className="ml-2 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider text-cyan-600"
+                style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}
+              >
                 <UserCheck className="w-3 h-3" />
                 {active.length} active
               </span>
@@ -291,10 +294,10 @@ function DelegationRow({
         </div>
 
         <div className="shrink-0 flex flex-col items-end gap-1.5">
-          <span className={[
-            'px-2 py-0.5 rounded-full text-[10px] font-bold border',
-            status.classes,
-          ].join(' ')}>
+          <span
+            className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${status.textClass}`}
+            style={status.style}
+          >
             {status.label}
           </span>
           {!readOnly && active && delegation.currentlyActive && !delegation.revokedAt && (
@@ -318,19 +321,21 @@ function DelegationRow({
   );
 }
 
-interface StatusInfo { label: string; classes: string; }
+interface StatusInfo { label: string; textClass: string; style: React.CSSProperties; }
 
 function describeStatus(d: ChargeNurseDelegationResponse): StatusInfo {
   if (d.revokedAt) {
     return {
       label: 'Revoked',
-      classes: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+      textClass: 'text-rose-600',
+      style: { background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' },
     };
   }
   if (d.currentlyActive) {
     return {
       label: 'Active',
-      classes: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+      textClass: 'text-emerald-600',
+      style: { background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' },
     };
   }
   // Not active and not revoked → either future-dated or already
@@ -341,18 +346,21 @@ function describeStatus(d: ChargeNurseDelegationResponse): StatusInfo {
   if (start > now) {
     return {
       label: 'Scheduled',
-      classes: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+      textClass: 'text-cyan-600',
+      style: { background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' },
     };
   }
   if (end !== null && end < now) {
     return {
       label: 'Expired',
-      classes: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
+      textClass: 'text-slate-600',
+      style: { background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' },
     };
   }
   return {
     label: 'Inactive',
-    classes: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
+    textClass: 'text-slate-600',
+    style: { background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' },
   };
 }
 
@@ -477,7 +485,10 @@ function IssueDelegationModal({
   const selected = users.find((u) => u.id === delegateUserId);
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+      style={{ background: 'rgba(2,6,23,0.65)' }}
+    >
       <div
         className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in w-full max-w-2xl max-h-[90vh] flex flex-col"
         style={glassCard}

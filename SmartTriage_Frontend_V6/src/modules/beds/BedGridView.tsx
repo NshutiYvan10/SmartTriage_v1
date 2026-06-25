@@ -111,7 +111,7 @@ export function BedGridView({ initialZone = 'RESUS' }: BedGridViewProps) {
                 onClick={() => setZone(z.key)}
                 className={`rounded-xl px-3 py-1.5 text-sm font-medium transition border ${
                   active
-                    ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                    ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-md border-transparent'
                     : `border-transparent ${text.body} hover:bg-white/5`
                 }`}
                 title={z.hint}

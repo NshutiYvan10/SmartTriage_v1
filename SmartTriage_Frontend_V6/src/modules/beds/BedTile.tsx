@@ -83,7 +83,10 @@ export function BedTile({ bed, onClick, selected }: BedTileProps) {
           )}
         </span>
         {bed.activeSessionId && (
-          <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-100 text-emerald-800'}`}>
+          <span
+            className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-emerald-600"
+            style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}
+          >
             LIVE
           </span>
         )}
@@ -93,15 +96,18 @@ export function BedTile({ bed, onClick, selected }: BedTileProps) {
 }
 
 function StatusPill({ status, isDark }: { status: BedResponse['status']; isDark: boolean }) {
-  const map: Record<BedResponse['status'], { dark: string; light: string; label: string }> = {
-    AVAILABLE: { dark: 'bg-emerald-500/20 text-emerald-300', light: 'bg-emerald-100 text-emerald-800', label: 'Available' },
-    OCCUPIED: { dark: 'bg-slate-500/20 text-slate-200', light: 'bg-slate-200 text-slate-800', label: 'Occupied' },
-    CLEANING: { dark: 'bg-amber-500/20 text-amber-200', light: 'bg-amber-100 text-amber-800', label: 'Cleaning' },
-    OUT_OF_SERVICE: { dark: 'bg-rose-500/20 text-rose-200', light: 'bg-rose-100 text-rose-800', label: 'OOS' },
+  const map: Record<BedResponse['status'], { text: string; rgb: string; label: string }> = {
+    AVAILABLE: { text: 'text-emerald-600', rgb: '16,185,129', label: 'Available' },
+    OCCUPIED: { text: 'text-slate-600', rgb: '100,116,139', label: 'Occupied' },
+    CLEANING: { text: 'text-amber-600', rgb: '245,158,11', label: 'Cleaning' },
+    OUT_OF_SERVICE: { text: 'text-rose-600', rgb: '244,63,94', label: 'OOS' },
   };
   const m = map[status];
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isDark ? m.dark : m.light}`}>
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${m.text}`}
+      style={{ background: `rgba(${m.rgb},0.08)`, border: `1px solid rgba(${m.rgb},0.2)` }}
+    >
       {m.label}
     </span>
   );

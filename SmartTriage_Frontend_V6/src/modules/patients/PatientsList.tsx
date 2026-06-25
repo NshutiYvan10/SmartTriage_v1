@@ -318,7 +318,12 @@ export function PatientsList() {
           <div className="px-5 py-3.5 flex items-center justify-between" style={{ borderBottom: borderStyle }}>
             <div className="flex items-center gap-2">
               <span className={`text-[11px] font-bold uppercase tracking-wider ${text.muted}`}>Patient Records</span>
-              <span className="text-[10px] font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-md">{filtered.length}</span>
+              <span
+                className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg text-cyan-600"
+                style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}
+              >
+                {filtered.length}
+              </span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -365,7 +370,10 @@ export function PatientsList() {
                             {patient.fullName}
                           </p>
                           {peds && (
-                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30 flex-shrink-0">
+                            <span
+                              className="inline-flex items-center gap-0.5 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-violet-600 flex-shrink-0"
+                              style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}
+                            >
                               <Baby className="w-2.5 h-2.5" />
                               PEDS
                             </span>
@@ -376,23 +384,18 @@ export function PatientsList() {
                         </p>
                       </div>
 
-                      {/* Arrival badge — arrivalModeConfig colors branched dark-aware at point of use */}
+                      {/* Arrival badge — Pathways translucent style, semantic hue per arrival mode */}
                       <span
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold flex-shrink-0 border"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[10px] font-bold flex-shrink-0"
                         style={(() => {
                           const mode = patient.arrivalMode;
-                          const dark = {
-                            WALK_IN: { bg: 'rgba(100,116,139,0.2)', color: '#cbd5e1', border: 'rgba(100,116,139,0.3)' },
-                            AMBULANCE: { bg: 'rgba(239,68,68,0.2)', color: '#fca5a5', border: 'rgba(239,68,68,0.3)' },
-                            REFERRAL: { bg: 'rgba(99,102,241,0.2)', color: '#a5b4fc', border: 'rgba(99,102,241,0.3)' },
+                          const palettes = {
+                            WALK_IN: { bg: 'rgba(100,116,139,0.08)', color: '#475569', border: 'rgba(100,116,139,0.2)' },
+                            AMBULANCE: { bg: 'rgba(239,68,68,0.08)', color: '#dc2626', border: 'rgba(239,68,68,0.2)' },
+                            REFERRAL: { bg: 'rgba(59,130,246,0.08)', color: '#2563eb', border: 'rgba(59,130,246,0.2)' },
                           } as const;
-                          const light = {
-                            WALK_IN: { bg: '#f8fafc', color: '#475569', border: '#e2e8f0' },
-                            AMBULANCE: { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' },
-                            REFERRAL: { bg: '#eef2ff', color: '#4f46e5', border: '#c7d2fe' },
-                          } as const;
-                          const palette = (isDark ? dark : light)[mode as keyof typeof dark] ?? (isDark ? dark.WALK_IN : light.WALK_IN);
-                          return { background: palette.bg, color: palette.color, borderColor: palette.border };
+                          const palette = palettes[mode as keyof typeof palettes] ?? palettes.WALK_IN;
+                          return { background: palette.bg, color: palette.color, border: `1px solid ${palette.border}` };
                         })()}
                       >
                         <span>{arrivalMode.icon}</span>
@@ -452,7 +455,10 @@ export function PatientsList() {
 
                       {/* Referring facility */}
                       {patient.referringFacility && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                        <span
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[9px] font-bold text-blue-600"
+                          style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}
+                        >
                           From: {patient.referringFacility}
                         </span>
                       )}

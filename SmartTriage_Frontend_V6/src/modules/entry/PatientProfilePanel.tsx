@@ -87,7 +87,7 @@ function EditableMedicalRow({
       <button
         type="button"
         onClick={() => { setDraft(value ?? ''); setEditing(true); setError(null); }}
-        className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${accentColorClass} hover:bg-white/10 transition-colors`}
+        className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-xl ${accentColorClass} hover:bg-white/10 transition-colors`}
         aria-label={`Edit ${label}`}
       >
         <Pencil className="w-3 h-3" /> Edit
@@ -130,7 +130,7 @@ function EditableMedicalRow({
               setSaving(false);
             }
           }}
-          className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+          className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-xl bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50"
         >
           {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save
         </button>
@@ -138,7 +138,7 @@ function EditableMedicalRow({
           type="button"
           disabled={saving}
           onClick={() => { setEditing(false); setError(null); setDraft(value ?? ''); }}
-          className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-md ${
+          className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-xl ${
             isDark ? 'bg-white/10 text-white' : 'bg-slate-100 text-slate-700'
           } hover:opacity-80`}
         >
@@ -269,12 +269,18 @@ export function PatientProfilePanel({ patientId, patient: patientProp, editable 
         </h3>
         <div className="flex items-center gap-1.5 flex-wrap">
           {patient.medicalRecordNumber && (
-            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+            <span
+              className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-blue-600"
+              style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}
+            >
               MRN {patient.medicalRecordNumber}
             </span>
           )}
           {patient.isPediatric && (
-            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30 inline-flex items-center gap-1">
+            <span
+              className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-pink-600"
+              style={{ background: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.2)' }}
+            >
               <Baby className="w-3 h-3" />
               Pediatric
             </span>

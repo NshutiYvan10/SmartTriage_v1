@@ -469,17 +469,20 @@ function isTerminal(s: SwapStatus) {
 }
 
 function SwapStatusPill({ status }: { status: SwapStatus }) {
-  const cfg: Record<SwapStatus, { label: string; cls: string }> = {
-    REQUESTED: { label: 'Requested', cls: 'bg-slate-500/20 text-slate-300 border-slate-500/30' },
-    PENDING_PARTNER_ACCEPT: { label: 'Awaits partner', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
-    PENDING_CHARGE_APPROVAL: { label: 'Awaits CN', cls: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' },
-    APPROVED: { label: 'Approved', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
-    REJECTED: { label: 'Rejected', cls: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
-    CANCELLED: { label: 'Cancelled', cls: 'bg-slate-500/20 text-slate-400 border-slate-500/30' },
+  const cfg: Record<SwapStatus, { label: string; cls: string; bg: string; border: string }> = {
+    REQUESTED: { label: 'Requested', cls: 'text-slate-600', bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' },
+    PENDING_PARTNER_ACCEPT: { label: 'Awaits partner', cls: 'text-amber-600', bg: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' },
+    PENDING_CHARGE_APPROVAL: { label: 'Awaits CN', cls: 'text-cyan-600', bg: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' },
+    APPROVED: { label: 'Approved', cls: 'text-emerald-600', bg: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' },
+    REJECTED: { label: 'Rejected', cls: 'text-rose-600', bg: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' },
+    CANCELLED: { label: 'Cancelled', cls: 'text-slate-600', bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' },
   };
   const c = cfg[status];
   return (
-    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${c.cls}`}>
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${c.cls}`}
+      style={{ background: c.bg, border: c.border }}
+    >
       {c.label}
     </span>
   );
@@ -582,15 +585,18 @@ function LeaveRow({
 }
 
 function LeaveStatusPill({ status }: { status: LeaveStatus }) {
-  const cfg: Record<LeaveStatus, { label: string; cls: string }> = {
-    REQUESTED: { label: 'Pending', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
-    APPROVED: { label: 'Approved', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
-    REJECTED: { label: 'Rejected', cls: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
-    CANCELLED: { label: 'Cancelled', cls: 'bg-slate-500/20 text-slate-400 border-slate-500/30' },
+  const cfg: Record<LeaveStatus, { label: string; cls: string; bg: string; border: string }> = {
+    REQUESTED: { label: 'Pending', cls: 'text-amber-600', bg: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' },
+    APPROVED: { label: 'Approved', cls: 'text-emerald-600', bg: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' },
+    REJECTED: { label: 'Rejected', cls: 'text-rose-600', bg: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' },
+    CANCELLED: { label: 'Cancelled', cls: 'text-slate-600', bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' },
   };
   const c = cfg[status];
   return (
-    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${c.cls}`}>
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${c.cls}`}
+      style={{ background: c.bg, border: c.border }}
+    >
       {c.label}
     </span>
   );
@@ -646,7 +652,7 @@ function RequestLeaveModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
       <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in w-full max-w-md p-5 space-y-4" style={glassCard}>
         <div className="flex items-center gap-2">
           <UserMinus className={`w-4 h-4 ${text.muted}`} />
@@ -707,7 +713,7 @@ function RequestLeaveModal({
         <div className="flex justify-end gap-2 pt-2" style={{ borderTop: borderStyle }}>
           <button
             onClick={onClose}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/15 ${text.body}`}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/15 ${text.body}`}
             disabled={submitting}
           >
             Cancel
@@ -715,7 +721,7 @@ function RequestLeaveModal({
           <button
             onClick={submit}
             disabled={submitting}
-            className="px-3 py-1.5 rounded-lg bg-cyan-600 text-white text-xs font-bold hover:bg-cyan-700 inline-flex items-center gap-1.5 disabled:opacity-50"
+            className="px-3 py-1.5 rounded-xl bg-cyan-600 text-white text-xs font-bold hover:bg-cyan-700 inline-flex items-center gap-1.5 disabled:opacity-50"
           >
             {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
             Submit request
@@ -748,7 +754,7 @@ function ActionButton({
   onClick: () => void | Promise<void>;
 }) {
   const cls = variant === 'primary'
-    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+    ? 'bg-cyan-600 text-white hover:bg-cyan-700'
     : variant === 'danger'
     ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/30'
     : 'bg-white/10 text-slate-300 border border-white/10 hover:bg-white/15';

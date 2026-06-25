@@ -444,20 +444,29 @@ function deriveCoverage(roster: ShiftAssignmentResponse[]): CoverageLevel {
 function CoveragePill({ level }: { level: CoverageLevel }) {
   if (level === 'GOOD') {
     return (
-      <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
+      <span
+        className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-emerald-600"
+        style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}
+      >
         GOOD
       </span>
     );
   }
   if (level === 'THIN') {
     return (
-      <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
+      <span
+        className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-amber-600"
+        style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+      >
         THIN
       </span>
     );
   }
   return (
-    <span className="px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[10px] font-bold border border-rose-500/30 inline-flex items-center gap-0.5">
+    <span
+      className="inline-flex items-center gap-0.5 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-rose-600"
+      style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' }}
+    >
       <AlertTriangle className="w-2.5 h-2.5" />
       GAP
     </span>
@@ -651,7 +660,10 @@ function ShiftSection({ title, icon, rows, editable, onAdd, onRemove, onEdit }: 
                   </span>
                   <span>{r.userName}</span>
                   {r.isShiftLead && (
-                    <span className="text-[10px] font-bold text-violet-300 bg-violet-500/20 border border-violet-500/30 px-1.5 py-0.5 rounded">
+                    <span
+                      className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-violet-600"
+                      style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}
+                    >
                       Shift Lead
                     </span>
                   )}
@@ -689,7 +701,7 @@ function AddStaffButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30"
+      className="text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white"
     >
       <Plus className="w-3 h-3" />
       Add staff
@@ -762,7 +774,10 @@ function LeaveSection({ leaves }: { leaves: StaffLeaveResponse[] }) {
       <ul className="space-y-0.5 text-[12px]">
         {leaves.map((l) => (
           <li key={l.id} className={`flex items-baseline gap-2 ${text.body}`}>
-            <span className="text-[10px] uppercase font-bold text-amber-300 bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded w-24 text-center">
+            <span
+              className="inline-flex items-center justify-center text-[10px] font-bold text-amber-600 px-2.5 py-0.5 rounded-lg w-24 text-center"
+              style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+            >
               {prettyLeaveType(l.leaveType)}
             </span>
             <span>{l.userName}</span>
@@ -882,7 +897,7 @@ function QuickAssignDrawer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
       <div className="w-full sm:max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-5 space-y-4" style={glassCard}>
         <div className="flex items-center justify-between">
           <div>
@@ -961,14 +976,14 @@ function QuickAssignDrawer({
         <div className="flex justify-end gap-2 pt-1">
           <button
             onClick={onClose}
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-white/10 ${text.body}`}
+            className={`px-3 py-1.5 rounded-xl text-sm font-semibold hover:bg-white/10 ${text.body}`}
           >
             Cancel
           </button>
           <button
             onClick={submit}
             disabled={submitting || !userId}
-            className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 inline-flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-xl text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 inline-flex items-center gap-1.5"
           >
             {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             Assign
@@ -1033,7 +1048,7 @@ function EditAssignmentDrawer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
       <div className="w-full sm:max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-5 space-y-4" style={glassCard}>
         <div className="flex items-center justify-between">
           <div>
@@ -1090,14 +1105,14 @@ function EditAssignmentDrawer({
         <div className="flex justify-end gap-2 pt-1">
           <button
             onClick={onClose}
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-white/10 ${text.body}`}
+            className={`px-3 py-1.5 rounded-xl text-sm font-semibold hover:bg-white/10 ${text.body}`}
           >
             Cancel
           </button>
           <button
             onClick={submit}
             disabled={submitting}
-            className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 inline-flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-xl text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 inline-flex items-center gap-1.5"
           >
             {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             Save changes
@@ -1382,7 +1397,7 @@ function ModalShell({
 }: { title: string; subtitle?: string; children: React.ReactNode; onClose: () => void }) {
   const { glassCard, text } = useTheme();
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
       <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-5 space-y-4" style={glassCard}>
         <div className="flex items-start justify-between">
           <div>
@@ -1413,14 +1428,14 @@ function ModalActions({
     <div className="flex justify-end gap-2 pt-1">
       <button
         onClick={onCancel}
-        className={`px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-white/10 ${text.body}`}
+        className={`px-3 py-1.5 rounded-xl text-sm font-semibold hover:bg-white/10 ${text.body}`}
       >
         Cancel
       </button>
       <button
         onClick={onSubmit}
         disabled={submitting || disabled}
-        className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 inline-flex items-center gap-1.5"
+        className="px-3 py-1.5 rounded-xl text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 inline-flex items-center gap-1.5"
       >
         {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
         {submitLabel}

@@ -89,14 +89,17 @@ export function DataSharingConsentModal({ nationalId, patientName, onClose }: Pr
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden bg-white">
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+      style={{ background: 'rgba(2,6,23,0.65)' }}
+    >
+      <div className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden bg-white animate-scale-in">
         <div className="bg-gradient-to-r from-cyan-700 to-emerald-700 px-5 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2 text-white">
             <FileSignature className="w-5 h-5" />
             <h3 className="text-sm font-bold">Cross-hospital data-sharing consent</h3>
           </div>
-          <button onClick={onClose} className="text-white/80 hover:text-white"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-white/80 hover:text-white"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-5 space-y-4">
@@ -124,7 +127,7 @@ export function DataSharingConsentModal({ nationalId, patientName, onClose }: Pr
               <button
                 type="button" disabled={submitting}
                 onClick={() => withdraw(effective.id)}
-                className="text-xs font-semibold text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50 disabled:opacity-50"
+                className="text-xs font-semibold text-red-600 hover:text-red-800 px-2 py-1 rounded-xl hover:bg-red-50 disabled:opacity-50"
               >
                 Withdraw
               </button>
@@ -141,7 +144,7 @@ export function DataSharingConsentModal({ nationalId, patientName, onClose }: Pr
               {(['GRANTED', 'DENIED'] as DataSharingConsentStatus[]).map((s) => (
                 <button
                   key={s} type="button" onClick={() => setStatus(s)}
-                  className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
+                  className={`flex-1 px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${
                     status === s
                       ? (s === 'GRANTED' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-red-600 text-white border-red-600')
                       : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
@@ -189,12 +192,12 @@ export function DataSharingConsentModal({ nationalId, patientName, onClose }: Pr
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-100">
-          <button onClick={onClose} disabled={submitting} className="px-4 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100">
+          <button onClick={onClose} disabled={submitting} className="px-4 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">
             Close
           </button>
           <button
             onClick={submit} disabled={submitting}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50"
           >
             {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
             Record {status === 'GRANTED' ? 'consent' : 'refusal'}

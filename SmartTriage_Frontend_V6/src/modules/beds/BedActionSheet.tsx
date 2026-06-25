@@ -11,6 +11,7 @@
  * Admins additionally get an "Edit bed" entry that jumps to the admin page.
  */
 import { useState } from 'react';
+import { X } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useBedStore } from '@/store/bedStore';
 import type { BedResponse } from '@/api/types';
@@ -26,7 +27,7 @@ interface BedActionSheetProps {
 }
 
 export function BedActionSheet({ bed, onClose, onActionComplete }: BedActionSheetProps) {
-  const { isDark } = useTheme();
+  const { isDark, glassCard } = useTheme();
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === 'HOSPITAL_ADMIN' || user?.role === 'SUPER_ADMIN';
 
@@ -52,11 +53,13 @@ export function BedActionSheet({ bed, onClose, onActionComplete }: BedActionShee
 
   return (
     <>
-      <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+        style={{ background: 'rgba(2,6,23,0.65)' }}
+      >
         <div
-          className={`w-full max-w-md rounded-xl border shadow-2xl ${
-            isDark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white'
-          }`}
+          className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in"
+          style={glassCard}
         >
           {/* Header */}
           <div className={`flex items-start justify-between border-b px-5 py-3 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
@@ -73,10 +76,10 @@ export function BedActionSheet({ bed, onClose, onActionComplete }: BedActionShee
             </div>
             <button
               onClick={onClose}
-              className={`text-xl leading-none ${isDark ? 'text-slate-400 hover:text-slate-100' : 'text-slate-500 hover:text-slate-900'}`}
+              className={`leading-none ${isDark ? 'text-slate-400 hover:text-slate-100' : 'text-slate-500 hover:text-slate-900'}`}
               aria-label="Close"
             >
-              ×
+              <X className="w-4 h-4" />
             </button>
           </div>
 
@@ -124,13 +127,22 @@ export function BedActionSheet({ bed, onClose, onActionComplete }: BedActionShee
                     {bed.assignedDeviceName}
                   </span>
                   {bed.assignedDeviceStatus && (
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                      bed.assignedDeviceStatus === 'MONITORING'
-                        ? isDark ? 'bg-emerald-900/40 text-emerald-300' : 'bg-emerald-100 text-emerald-800'
-                        : bed.assignedDeviceStatus === 'ONLINE'
-                          ? isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-200 text-slate-700'
-                          : isDark ? 'bg-rose-900/40 text-rose-300' : 'bg-rose-100 text-rose-800'
-                    }`}>
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${
+                        bed.assignedDeviceStatus === 'MONITORING'
+                          ? 'text-emerald-600'
+                          : bed.assignedDeviceStatus === 'ONLINE'
+                            ? 'text-slate-600'
+                            : 'text-rose-600'
+                      }`}
+                      style={
+                        bed.assignedDeviceStatus === 'MONITORING'
+                          ? { background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }
+                          : bed.assignedDeviceStatus === 'ONLINE'
+                            ? { background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }
+                            : { background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' }
+                      }
+                    >
                       {bed.assignedDeviceStatus}
                     </span>
                   )}
@@ -184,7 +196,7 @@ export function BedActionSheet({ bed, onClose, onActionComplete }: BedActionShee
               {isAdmin && (
                 <a
                   href="/admin/beds"
-                  className={`rounded-md border px-3 py-1.5 text-center text-sm font-medium ${isDark ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                  className={`rounded-xl border px-3 py-1.5 text-center text-sm font-medium ${isDark ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
                 >
                   Manage bed configuration →
                 </a>
@@ -235,10 +247,10 @@ function PrimaryButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-md px-3 py-2 text-sm font-semibold text-white transition ${
+      className={`rounded-xl px-3 py-2 text-sm font-semibold text-white transition ${
         disabled
           ? 'cursor-not-allowed bg-slate-400'
-          : isDark ? 'bg-cyan-500 hover:bg-cyan-400' : 'bg-cyan-600 hover:bg-cyan-500'
+          : 'bg-cyan-600 hover:bg-cyan-700'
       }`}
     >
       {children}
@@ -262,7 +274,7 @@ function DangerButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
+      className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
         disabled
           ? 'cursor-not-allowed opacity-50'
           : isDark ? 'border-rose-700 text-rose-300 hover:bg-rose-900/30' : 'border-rose-300 text-rose-700 hover:bg-rose-50'

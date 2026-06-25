@@ -141,7 +141,10 @@ export function ProposeSwapModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+      style={{ background: 'rgba(2,6,23,0.65)' }}
+    >
       <div
         style={glassCard}
         className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in w-full max-w-2xl max-h-[90vh] flex flex-col"
@@ -246,7 +249,10 @@ export function ProposeSwapModal({
                             <span className={text.muted}>·</span>
                             <span>{c.shiftFunction.replace(/_/g, ' ')}</span>
                             {c.isShiftLead && (
-                              <span className="ml-1 text-[9px] font-bold text-violet-300 bg-violet-500/20 border border-violet-500/30 px-1 py-0.5 rounded">
+                              <span
+                                className="ml-1 inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-violet-600"
+                                style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}
+                              >
                                 LEAD
                               </span>
                             )}
@@ -402,7 +408,10 @@ function ShiftLine({
         <span className={text.muted}>·</span>
         <span>{assignment.shiftFunction.replace(/_/g, ' ')}</span>
         {assignment.isShiftLead && (
-          <span className="ml-1 text-[9px] font-bold text-violet-300 bg-violet-500/20 border border-violet-500/30 px-1 py-0.5 rounded">
+          <span
+            className="ml-1 inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-violet-600"
+            style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}
+          >
             LEAD
           </span>
         )}

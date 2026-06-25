@@ -89,7 +89,7 @@ export function VerifyResultModal({ order, verifiedByName, onClose, onSaved }: V
       <ModalActions onClose={onClose} submitting={submitting} text={text} disabled={false}
         submitLabel="Verify & release"
         submitIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
-        submitClass="bg-gradient-to-r from-emerald-600 to-emerald-500"
+        submitClass="bg-cyan-600 hover:bg-cyan-700"
         onSubmit={submit}
       />
     </ModalShell>
@@ -267,8 +267,8 @@ function ModalShell({ onClose, icon, iconBg, title, subtitle, text, glassCard, i
   children: React.ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto animate-fade-up" style={glassCard}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+      <div className="rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto overflow-hidden animate-scale-in shadow-2xl" style={glassCard}>
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>{icon}</div>

@@ -88,8 +88,8 @@ export function DirectResusModal({
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-      style={{ background: 'rgba(2,11,20,0.55)' }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+      style={{ background: 'rgba(2,6,23,0.65)' }}
       onClick={submitting ? undefined : onClose}
     >
       <div
@@ -269,14 +269,14 @@ export function DirectResusModal({
           <button
             onClick={onClose}
             disabled={submitting}
-            className={`px-3 py-2 rounded-lg text-xs font-bold ${text.body} hover:bg-white/5 disabled:opacity-50`}
+            className={`px-3 py-2 rounded-xl text-xs font-bold ${text.body} hover:bg-white/5 disabled:opacity-50`}
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white shadow-md
+            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white shadow-md
               ${canSubmit ? 'bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600' : 'bg-slate-400 cursor-not-allowed'}
             `}
           >

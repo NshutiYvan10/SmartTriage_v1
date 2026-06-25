@@ -141,7 +141,10 @@ export function PatientAllergiesPanel({ patientId, editable = false, onCountChan
           <ShieldAlert className="w-3.5 h-3.5 text-red-600" />
           Structured allergies
           {allergies.length > 0 && (
-            <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 text-[10px] font-bold rounded-full bg-red-100 text-red-800">
+            <span
+              className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 text-[10px] font-bold rounded-lg text-red-600"
+              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+            >
               {allergies.length}
             </span>
           )}
@@ -205,7 +208,10 @@ export function PatientAllergiesPanel({ patientId, editable = false, onCountChan
                       {meta.label}
                     </span>
                     {a.verificationStatus === 'CONFIRMED' && (
-                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 inline-flex items-center gap-0.5">
+                      <span
+                        className="text-[9px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg text-emerald-600 inline-flex items-center gap-0.5"
+                        style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}
+                      >
                         <CheckCircle2 className="w-2.5 h-2.5" /> Confirmed
                       </span>
                     )}
@@ -261,7 +267,7 @@ export function PatientAllergiesPanel({ patientId, editable = false, onCountChan
                       type="button"
                       disabled={refuteReason.trim().length < 5 || refuteSubmitting}
                       onClick={() => handleRefute(a.id)}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-xl text-[10px] font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {refuteSubmitting && <Loader2 className="w-3 h-3 animate-spin" />}
                       Confirm refute
@@ -387,7 +393,10 @@ function AddAllergyForm({
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-xs font-bold">{selected.genericName}</span>
                 {selected.drugClass && (
-                  <span className="text-[9px] font-bold uppercase tracking-wider px-1 py-0.5 rounded bg-slate-200 text-slate-700">
+                  <span
+                    className="text-[9px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg text-slate-600"
+                    style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}
+                  >
                     {selected.drugClass}
                   </span>
                 )}
@@ -511,7 +520,7 @@ function AddAllergyForm({
           type="button"
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-[11px] font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[11px] font-bold bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
           Save allergy

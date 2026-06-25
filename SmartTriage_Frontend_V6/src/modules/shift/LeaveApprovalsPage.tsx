@@ -90,7 +90,10 @@ export function LeaveApprovalsPage() {
                 <div className="text-[11px] font-bold uppercase text-white/50">Charge Nurse</div>
                 <h1 className="text-lg font-bold text-white tracking-tight">Leave approvals</h1>
               </div>
-              <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold">
+              <span
+                className="ml-2 inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-amber-600"
+                style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+              >
                 <Inbox className="w-3 h-3" />
                 {queue.length} pending
               </span>
@@ -188,10 +191,10 @@ function LeaveApprovalRow({
             </div>
           </div>
         </div>
-        <span className={[
-          'shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold border',
-          severityClasses(leave.leaveType),
-        ].join(' ')}>
+        <span
+          className={`shrink-0 inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${severityClasses(leave.leaveType).className}`}
+          style={severityClasses(leave.leaveType).style}
+        >
           {prettyType(leave.leaveType)}
         </span>
       </div>
@@ -288,21 +291,21 @@ function inclusiveDayCount(startIso: string, endIso: string): number {
   return Math.round((end - start) / 86_400_000) + 1;
 }
 
-function severityClasses(t: LeaveType): string {
+function severityClasses(t: LeaveType): { className: string; style: { background: string; border: string } } {
   switch (t) {
     case 'SICK':
     case 'BEREAVEMENT':
-      return 'bg-rose-500/20 text-rose-300 border-rose-500/30';
+      return { className: 'text-rose-600', style: { background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' } };
     case 'MATERNITY':
     case 'COMPASSIONATE':
-      return 'bg-violet-500/20 text-violet-300 border-violet-500/30';
+      return { className: 'text-violet-600', style: { background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' } };
     case 'STUDY':
-      return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
+      return { className: 'text-cyan-600', style: { background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' } };
     case 'ANNUAL':
-      return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+      return { className: 'text-emerald-600', style: { background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' } };
     case 'OTHER':
     default:
-      return 'bg-slate-500/20 text-slate-300 border-slate-500/30';
+      return { className: 'text-slate-600', style: { background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' } };
   }
 }
 

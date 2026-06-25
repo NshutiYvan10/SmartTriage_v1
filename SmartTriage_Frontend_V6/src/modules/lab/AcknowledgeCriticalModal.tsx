@@ -55,8 +55,8 @@ export function AcknowledgeCriticalModal({ order, acknowledgedByName, onClose, o
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto animate-fade-up" style={glassCard}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+      <div className="rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-rose-500/15 flex items-center justify-center">
@@ -140,7 +140,7 @@ export function AcknowledgeCriticalModal({ order, acknowledgedByName, onClose, o
           <button
             onClick={submit}
             disabled={submitting}
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-rose-600 to-rose-500 disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50"
           >
             {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />}
             Confirm acknowledgement

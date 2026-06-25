@@ -210,7 +210,10 @@ export function PatientDetailView() {
                   )}
                 </div>
                 {patient.isPediatric && (
-                  <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded-md bg-violet-500 text-white text-[10px] font-bold shadow">
+                  <span
+                    className="absolute -top-1.5 -right-1.5 inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-violet-600 shadow"
+                    style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}
+                  >
                     PEDS
                   </span>
                 )}
@@ -242,11 +245,17 @@ export function PatientDetailView() {
                   <Badge category={patient.category} size="sm" />
                 )}
                 {patient.tewsScore != null && (
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                  <span
+                    className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-blue-600"
+                    style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}
+                  >
                     TEWS {patient.tewsScore}
                   </span>
                 )}
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-500/20 text-slate-300 border border-slate-500/30">
+                <span
+                  className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-slate-600"
+                  style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}
+                >
                   {statusLabel[patient.triageStatus] || patient.triageStatus}
                 </span>
               </div>
@@ -274,7 +283,7 @@ export function PatientDetailView() {
                   {canManageCard && realPatientId && (
                     <button
                       onClick={() => setShowReplaceCard(true)}
-                      className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 px-2 py-0.5 rounded-md hover:bg-cyan-500/20 transition-colors"
+                      className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 px-2 py-0.5 rounded-xl hover:bg-cyan-500/20 transition-colors"
                     >
                       {patient.rfidCardId ? 'Replace' : 'Assign'}
                     </button>
@@ -356,7 +365,11 @@ export function PatientDetailView() {
                 <span className={`text-sm font-medium block mb-1.5 ${text.muted}`}>Allergies</span>
                 <div className="flex flex-wrap gap-1.5">
                   {patient.allergies.map((a: string) => (
-                    <span key={a} className="px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-300 text-xs font-semibold border border-red-500/30">
+                    <span
+                      key={a}
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold text-red-600"
+                      style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                    >
                       {a}
                     </span>
                   ))}
@@ -372,7 +385,11 @@ export function PatientDetailView() {
                 <span className={`text-sm font-medium block mb-1.5 ${text.muted}`}>Existing Conditions</span>
                 <div className="flex flex-wrap gap-1.5">
                   {patient.existingConditions.map((c: string) => (
-                    <span key={c} className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-xs font-semibold border border-amber-500/30">
+                    <span
+                      key={c}
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold text-amber-600"
+                      style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+                    >
                       {c}
                     </span>
                   ))}

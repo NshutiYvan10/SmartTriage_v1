@@ -102,7 +102,10 @@ export function SwapApprovalsPage() {
                 <div className="text-white/50 text-xs font-bold uppercase">Charge Nurse</div>
                 <h1 className="text-lg font-bold text-white tracking-tight">Swap approvals</h1>
               </div>
-              <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-bold">
+              <span
+                className="ml-2 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider text-cyan-600"
+                style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}
+              >
                 <Inbox className="w-3 h-3" />
                 {queue.length} pending
               </span>
@@ -189,7 +192,10 @@ function SwapApprovalRow({
             </>
           )}
         </div>
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/20 text-amber-300 border-amber-500/30">
+        <span
+          className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-amber-600"
+          style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+        >
           Awaits CN
         </span>
       </div>
@@ -248,7 +254,7 @@ function SwapApprovalRow({
             <button
               onClick={approve}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50"
             >
               {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
               Approve swap

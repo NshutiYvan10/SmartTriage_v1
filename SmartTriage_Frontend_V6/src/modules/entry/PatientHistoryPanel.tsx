@@ -49,25 +49,25 @@ const TRIAGE_PILL: Record<TriageCategory, { label: string; cls: string }> = {
  * transfer/death).
  */
 const DISPOSITION_PILL: Record<DispositionType, { label: string; cls: string }> = {
-  DISCHARGED_HOME:               { label: 'Discharged',         cls: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' },
-  ADMITTED_TO_WARD:              { label: 'Admitted',           cls: 'bg-blue-500/20 text-blue-300 border border-blue-500/30' },
-  ICU_ADMISSION:                 { label: 'ICU',                cls: 'bg-red-500/20 text-red-300 border border-red-500/30' },
-  TRANSFERRED:                   { label: 'Transferred',        cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
-  LEFT_AGAINST_MEDICAL_ADVICE:   { label: 'LAMA',               cls: 'bg-rose-500/20 text-rose-300 border border-rose-500/30' },
-  LEFT_WITHOUT_BEING_SEEN:       { label: 'LWBS',               cls: 'bg-slate-500/20 text-slate-300 border border-slate-500/30' },
-  DECEASED:                      { label: 'Deceased',           cls: 'bg-slate-800 text-white border border-white/20' },
+  DISCHARGED_HOME:               { label: 'Discharged',         cls: 'bg-[rgba(16,185,129,0.08)] text-emerald-600 border border-[rgba(16,185,129,0.2)]' },
+  ADMITTED_TO_WARD:              { label: 'Admitted',           cls: 'bg-[rgba(59,130,246,0.08)] text-blue-600 border border-[rgba(59,130,246,0.2)]' },
+  ICU_ADMISSION:                 { label: 'ICU',                cls: 'bg-[rgba(239,68,68,0.08)] text-red-600 border border-[rgba(239,68,68,0.2)]' },
+  TRANSFERRED:                   { label: 'Transferred',        cls: 'bg-[rgba(245,158,11,0.08)] text-amber-600 border border-[rgba(245,158,11,0.2)]' },
+  LEFT_AGAINST_MEDICAL_ADVICE:   { label: 'LAMA',               cls: 'bg-[rgba(244,63,94,0.08)] text-rose-600 border border-[rgba(244,63,94,0.2)]' },
+  LEFT_WITHOUT_BEING_SEEN:       { label: 'LWBS',               cls: 'bg-[rgba(100,116,139,0.08)] text-slate-600 border border-[rgba(100,116,139,0.2)]' },
+  DECEASED:                      { label: 'Deceased',           cls: 'bg-[rgba(100,116,139,0.08)] text-slate-600 border border-[rgba(100,116,139,0.2)]' },
 };
 
 /** Status pill for visits that are still in-flight (no disposition yet). */
 const STATUS_PILL: Partial<Record<VisitStatus, { label: string; cls: string }>> = {
-  REGISTERED:           { label: 'Registered',          cls: 'bg-slate-500/20 text-slate-300 border border-slate-500/30' },
-  AWAITING_TRIAGE:      { label: 'Awaiting triage',     cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
-  TRIAGED:              { label: 'Triaged',             cls: 'bg-blue-500/20 text-blue-300 border border-blue-500/30' },
-  AWAITING_ASSESSMENT:  { label: 'Awaiting MD',         cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
-  UNDER_ASSESSMENT:     { label: 'Under assessment',    cls: 'bg-violet-500/20 text-violet-300 border border-violet-500/30' },
-  UNDER_TREATMENT:      { label: 'Under treatment',     cls: 'bg-violet-500/20 text-violet-300 border border-violet-500/30' },
-  UNDER_OBSERVATION:    { label: 'Under observation',   cls: 'bg-violet-500/20 text-violet-300 border border-violet-500/30' },
-  PENDING_DISPOSITION:  { label: 'Pending disposition', cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
+  REGISTERED:           { label: 'Registered',          cls: 'bg-[rgba(100,116,139,0.08)] text-slate-600 border border-[rgba(100,116,139,0.2)]' },
+  AWAITING_TRIAGE:      { label: 'Awaiting triage',     cls: 'bg-[rgba(245,158,11,0.08)] text-amber-600 border border-[rgba(245,158,11,0.2)]' },
+  TRIAGED:              { label: 'Triaged',             cls: 'bg-[rgba(59,130,246,0.08)] text-blue-600 border border-[rgba(59,130,246,0.2)]' },
+  AWAITING_ASSESSMENT:  { label: 'Awaiting MD',         cls: 'bg-[rgba(245,158,11,0.08)] text-amber-600 border border-[rgba(245,158,11,0.2)]' },
+  UNDER_ASSESSMENT:     { label: 'Under assessment',    cls: 'bg-[rgba(139,92,246,0.08)] text-violet-600 border border-[rgba(139,92,246,0.2)]' },
+  UNDER_TREATMENT:      { label: 'Under treatment',     cls: 'bg-[rgba(139,92,246,0.08)] text-violet-600 border border-[rgba(139,92,246,0.2)]' },
+  UNDER_OBSERVATION:    { label: 'Under observation',   cls: 'bg-[rgba(139,92,246,0.08)] text-violet-600 border border-[rgba(139,92,246,0.2)]' },
+  PENDING_DISPOSITION:  { label: 'Pending disposition', cls: 'bg-[rgba(245,158,11,0.08)] text-amber-600 border border-[rgba(245,158,11,0.2)]' },
 };
 
 /**
@@ -252,17 +252,17 @@ export function PatientHistoryPanel({ patientId, excludeVisitId, emptyMessage }:
                   </span>
                 )}
                 {dispoPill && (
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${dispoPill.cls}`}>
+                  <span className={`inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-lg ${dispoPill.cls}`}>
                     {dispoPill.label}
                   </span>
                 )}
                 {statusPill && (
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${statusPill.cls}`}>
+                  <span className={`inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-lg ${statusPill.cls}`}>
                     {statusPill.label}
                   </span>
                 )}
                 {v.retriageCount > 0 && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  <span className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-lg bg-[rgba(245,158,11,0.08)] text-amber-600 border border-[rgba(245,158,11,0.2)]">
                     Retriaged ×{v.retriageCount}
                   </span>
                 )}

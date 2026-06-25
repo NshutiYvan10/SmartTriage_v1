@@ -21,6 +21,7 @@ import type {
 } from '@/api/types';
 import { Badge } from '@/components/ui/Badge';
 import { useTheme } from '@/hooks/useTheme';
+import { X } from 'lucide-react';
 
 type Mode =
   | { kind: 'bed-first'; bed: BedResponse }
@@ -164,14 +165,14 @@ export function PlacePatientDialog({ open, onClose, onPlaced, mode }: PlacePatie
 
       <div className="mt-4 flex justify-end gap-2">
         <button
-          className={`rounded-md px-3 py-1.5 text-sm font-medium ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+          className={`rounded-xl px-3 py-1.5 text-sm font-medium ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
           onClick={onClose}
           disabled={submitting}
         >
           Cancel
         </button>
         <button
-          className={`rounded-md px-3 py-1.5 text-sm font-semibold text-white ${canSubmit ? 'bg-cyan-600 hover:bg-cyan-500' : 'cursor-not-allowed bg-slate-400'}`}
+          className={`rounded-xl px-3 py-1.5 text-sm font-semibold text-white ${canSubmit ? 'bg-cyan-600 hover:bg-cyan-700' : 'cursor-not-allowed bg-slate-400'}`}
           onClick={handleSubmit}
           disabled={!canSubmit}
         >
@@ -330,10 +331,15 @@ function DialogShell({
   subtitle?: string;
   children: React.ReactNode;
 }) {
+  const { glassCard } = useTheme();
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+      style={{ background: 'rgba(2,6,23,0.65)' }}
+    >
       <div
-        className={`w-full max-w-lg rounded-xl border shadow-2xl ${isDark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white'}`}
+        className="w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl animate-scale-in"
+        style={glassCard}
       >
         <div className={`flex items-start justify-between border-b px-5 py-3 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
           <div>
@@ -346,10 +352,10 @@ function DialogShell({
           </div>
           <button
             onClick={onClose}
-            className={`text-xl leading-none ${isDark ? 'text-slate-400 hover:text-slate-100' : 'text-slate-500 hover:text-slate-900'}`}
+            className={`leading-none ${isDark ? 'text-slate-400 hover:text-slate-100' : 'text-slate-500 hover:text-slate-900'}`}
             aria-label="Close"
           >
-            ×
+            <X className="w-4 h-4" />
           </button>
         </div>
         <div className="px-5 py-4">{children}</div>
