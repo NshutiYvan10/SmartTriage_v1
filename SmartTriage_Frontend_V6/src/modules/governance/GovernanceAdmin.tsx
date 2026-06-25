@@ -799,7 +799,7 @@ export function GovernanceAdmin() {
 
         {/* -- Approve Modal ---------------------------------------- */}
         {approveTarget && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-md" style={glassCard}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
@@ -851,7 +851,7 @@ export function GovernanceAdmin() {
 
         {/* -- Suspend Modal ---------------------------------------- */}
         {suspendTarget && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-md" style={glassCard}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
@@ -900,7 +900,7 @@ export function GovernanceAdmin() {
 
         {/* -- Version History Modal -------------------------------- */}
         {historyTarget && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" style={glassCard}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">

@@ -601,7 +601,7 @@ export function SafetyIncidentView() {
          Report New Incident Dialog
          ═══════════════════════════════════════════════════════════════ */}
       {showForm && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
           <div className="absolute inset-0" onClick={() => !formSubmitting && setShowForm(false)} />
           <div className="relative w-full max-w-lg mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in max-h-[85vh] overflow-y-auto" style={glassCard}>
             {/* Header */}
@@ -761,7 +761,7 @@ export function SafetyIncidentView() {
          Action Dialog — Investigate / Complete / Close
          ═══════════════════════════════════════════════════════════════ */}
       {actionDialog && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
           <div className="absolute inset-0" onClick={() => !actionSubmitting && setActionDialog(null)} />
           <div className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in" style={glassCard}>
             {/* Header */}

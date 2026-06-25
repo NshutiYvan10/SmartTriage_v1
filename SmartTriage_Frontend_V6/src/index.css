@@ -16,6 +16,11 @@
   color: #1a1a1a;
   background-color: #fafbfd;
 
+  /* Modal/popup backdrop — light frosted-glass scrim: the page stays visible
+     behind, blurred + whitened, with the dialog floating on top. Overridden to a
+     dark frost under html.dark so popups read in both themes. */
+  --modal-backdrop: rgba(255, 255, 255, 0.55);
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -106,6 +111,9 @@ html.dark {
   color-scheme: dark;
   color: #e2e8f0;
   background-color: #020b14;
+
+  /* Dark-mode frost for the modal backdrop (light frost would glare on a dark UI). */
+  --modal-backdrop: rgba(2, 6, 23, 0.6);
 
   /* Surface Colors */
   --surface-primary: #0a1929;
@@ -1409,4 +1417,21 @@ textarea:focus-visible {
 html.dark .hover\:bg-gray-400:hover {
   background-color: rgba(6, 182, 212, 0.25) !important;
   box-shadow: 0 2px 8px rgba(6, 182, 212, 0.12);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   PRINT / Save-as-PDF — strip the app chrome so a report prints clean on
+   white paper (no sidebar, no floating buttons, no dark theme). Triggered by
+   the report "Save as PDF" button → window.print() → destination "Save as PDF".
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+@page { margin: 14mm; }
+@media print {
+  /* Force a light, paper-friendly canvas regardless of the live theme. */
+  html, html.dark, body { background: #ffffff !important; color: #0f172a !important; }
+  /* Hide navigation + transient/floating chrome. */
+  aside, .no-print { display: none !important; }
+  /* Flatten elevated surfaces — shadows render as muddy grey on paper. */
+  * { box-shadow: none !important; }
+  /* Let the content flow across pages instead of being clipped to one screen. */
+  .min-h-full, .min-h-screen { min-height: 0 !important; }
 }

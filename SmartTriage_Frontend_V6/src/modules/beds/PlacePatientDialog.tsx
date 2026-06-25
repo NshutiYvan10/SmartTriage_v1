@@ -335,7 +335,7 @@ function DialogShell({
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
-      style={{ background: 'rgba(2,6,23,0.65)' }}
+      style={{ background: 'var(--modal-backdrop)' }}
     >
       <div
         className="w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl animate-scale-in"

@@ -91,7 +91,7 @@ export function DataSharingConsentModal({ nationalId, patientName, onClose }: Pr
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
-      style={{ background: 'rgba(2,6,23,0.65)' }}
+      style={{ background: 'var(--modal-backdrop)' }}
     >
       <div className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden bg-white animate-scale-in">
         <div className="bg-gradient-to-r from-cyan-700 to-emerald-700 px-5 py-3 flex items-center justify-between">

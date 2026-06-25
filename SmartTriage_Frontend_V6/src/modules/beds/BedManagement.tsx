@@ -572,7 +572,7 @@ function BedFormModal({
   const labelClass = `block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }} onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }} onClick={onClose}>
       <div
         className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
         style={glassCard}
@@ -742,7 +742,7 @@ function BedDeviceAssignmentModal({
   }, [devices]);
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }} onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }} onClick={onClose}>
       <div
         className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
         style={glassCard}

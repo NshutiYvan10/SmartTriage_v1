@@ -498,7 +498,7 @@ export function HandoverView() {
          Generate Handover Dialog
          ═══════════════════════════════════════════════════════════════ */}
       {showGenerateForm && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
           <div className="absolute inset-0" onClick={() => !generating && setShowGenerateForm(false)} />
           <div className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in overflow-hidden" style={glassCard}>
             {/* Header */}
@@ -589,7 +589,7 @@ export function HandoverView() {
          Acknowledge Dialog
          ═══════════════════════════════════════════════════════════════ */}
       {ackDialog && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
           <div className="absolute inset-0" onClick={() => !ackSubmitting && setAckDialog(null)} />
           <div className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in overflow-hidden" style={glassCard}>
             {/* Header */}

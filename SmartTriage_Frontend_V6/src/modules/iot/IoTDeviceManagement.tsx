@@ -826,7 +826,7 @@ export function IoTDeviceManagement() {
 
         {/* ── Patient Selection Dialog (modal overlay) ── */}
         {assignDevice && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }} onClick={() => { setAssignDevice(null); setAssignError(''); }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }} onClick={() => { setAssignDevice(null); setAssignError(''); }}>
             <div
               className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
               style={glassCard}
@@ -1005,7 +1005,7 @@ export function IoTDeviceManagement() {
           return (
             <div
               className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
-              style={{ background: 'rgba(2,6,23,0.65)' }}
+              style={{ background: 'var(--modal-backdrop)' }}
               onClick={() => { setBedAssignDevice(null); setBedAssignError(''); }}
             >
               <div
@@ -1135,7 +1135,7 @@ export function IoTDeviceManagement() {
 
         {/* ─── API Key Modal (shown once after registration) ─── */}
         {registeredDevice && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="w-full max-w-md rounded-2xl p-6 overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
@@ -1192,7 +1192,7 @@ export function IoTDeviceManagement() {
         {outOfServiceTarget && (
           <div
             className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
-            style={{ background: 'rgba(2,6,23,0.65)' }}
+            style={{ background: 'var(--modal-backdrop)' }}
             onClick={() => { if (serviceLoadingId !== outOfServiceTarget.id) setOutOfServiceTarget(null); }}
           >
             <div

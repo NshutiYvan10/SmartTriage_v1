@@ -1021,7 +1021,7 @@ export function MedicationSafetyView() {
 
         {/* ── Override Dialog ── */}
         {overrideDialogOpen && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="absolute inset-0" onClick={() => setOverrideDialogOpen(false)} />
             <div className="relative w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="px-5 py-4 border-b border-white/10">

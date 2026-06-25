@@ -606,7 +606,7 @@ export function MohReportView() {
 
         {/* -- Reject Modal ----------------------------------------- */}
         {rejectTarget && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-md" style={glassCard}>
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/20 border border-red-500/30">

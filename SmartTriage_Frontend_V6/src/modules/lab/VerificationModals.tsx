@@ -267,7 +267,7 @@ function ModalShell({ onClose, icon, iconBg, title, subtitle, text, glassCard, i
   children: React.ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
       <div className="rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto overflow-hidden animate-scale-in shadow-2xl" style={glassCard}>
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">

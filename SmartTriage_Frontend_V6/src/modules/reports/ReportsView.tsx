@@ -105,9 +105,10 @@ export function ReportsView() {
               </div>
               <button
                 onClick={() => window.print()}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-slate-800 bg-white hover:bg-gray-50 rounded-xl transition-all shadow-lg hover:-translate-y-0.5"
+                title="Opens the print dialog — choose 'Save as PDF' as the destination for a clean report."
+                className="no-print inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-slate-800 bg-white hover:bg-gray-50 rounded-xl transition-all shadow-lg hover:-translate-y-0.5"
               >
-                <Printer className="w-3.5 h-3.5" /> Print this page
+                <Printer className="w-3.5 h-3.5" /> Save as PDF
               </button>
             </div>
           </div>

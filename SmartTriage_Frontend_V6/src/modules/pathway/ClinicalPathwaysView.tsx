@@ -928,7 +928,7 @@ export function ClinicalPathwaysView() {
       {activateDialogOpen && (
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
-          style={{ background: 'rgba(2,6,23,0.65)' }}
+          style={{ background: 'var(--modal-backdrop)' }}
           onClick={() => !activateSubmitting && setActivateDialogOpen(false)}
         >
           <div
@@ -1000,7 +1000,7 @@ export function ClinicalPathwaysView() {
       {skipDialogOpen && (
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
-          style={{ background: 'rgba(2,6,23,0.65)' }}
+          style={{ background: 'var(--modal-backdrop)' }}
           onClick={() => !skipSubmitting && setSkipDialogOpen(false)}
         >
           <div
@@ -1072,7 +1072,7 @@ export function ClinicalPathwaysView() {
       {abandonDialogOpen && (
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
-          style={{ background: 'rgba(2,6,23,0.65)' }}
+          style={{ background: 'var(--modal-backdrop)' }}
           onClick={() => !abandonSubmitting && setAbandonDialogOpen(false)}
         >
           <div

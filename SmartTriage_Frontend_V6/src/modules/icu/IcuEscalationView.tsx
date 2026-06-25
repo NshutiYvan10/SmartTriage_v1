@@ -550,7 +550,7 @@ export function IcuEscalationView() {
 
         {/* ── Record Response Dialog ── */}
         {responseDialogId && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4">
                 <div className="flex items-center justify-between">
@@ -629,7 +629,7 @@ export function IcuEscalationView() {
 
         {/* ── Assign Bed Dialog ── */}
         {bedDialogId && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4">
                 <div className="flex items-center justify-between">
@@ -673,7 +673,7 @@ export function IcuEscalationView() {
 
         {/* ── Cancel Dialog ── */}
         {cancelDialogId && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4">
                 <div className="flex items-center justify-between">

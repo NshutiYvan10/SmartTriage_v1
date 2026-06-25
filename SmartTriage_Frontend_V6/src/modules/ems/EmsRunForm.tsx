@@ -328,7 +328,7 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'rgba(2,6,23,0.65)' }}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
       <div className="rounded-2xl p-4 sm:p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-2xl animate-scale-in" style={glassCard}>
         {/* Header */}
         <div className="flex items-start justify-between mb-4">

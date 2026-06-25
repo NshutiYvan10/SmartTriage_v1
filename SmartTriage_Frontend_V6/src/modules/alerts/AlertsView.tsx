@@ -549,7 +549,7 @@ export function AlertsView() {
       {dialogOpen && (
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
-          style={{ background: 'rgba(2,6,23,0.65)' }}
+          style={{ background: 'var(--modal-backdrop)' }}
         >
           {/* Backdrop */}
           <div

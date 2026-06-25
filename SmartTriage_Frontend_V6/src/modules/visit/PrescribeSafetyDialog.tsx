@@ -235,7 +235,7 @@ export function PrescribeSafetyDialog({
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
-      style={{ background: 'rgba(2,6,23,0.65)' }}
+      style={{ background: 'var(--modal-backdrop)' }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="safety-dialog-title"
