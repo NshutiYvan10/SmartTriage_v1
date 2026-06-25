@@ -44,7 +44,11 @@ public class ClinicalAlertService {
     }
 
     public Page<ClinicalAlert> getAllAlerts(UUID hospitalId, Pageable pageable) {
-        return clinicalAlertRepository.findAllAlertsByHospital(hospitalId, pageable);
+        Page<ClinicalAlert> page = clinicalAlertRepository.findAllAlertsByHospital(hospitalId, pageable);
+        // TEMP DIAGNOSTIC (Alert Center "empty for doctor" investigation) — remove once confirmed.
+        log.info("[alert-feed] getAllAlerts hospital={} -> {} returned / {} total",
+                hospitalId, page.getNumberOfElements(), page.getTotalElements());
+        return page;
     }
 
     public Page<ClinicalAlert> getUnacknowledgedAlerts(UUID hospitalId, Pageable pageable) {

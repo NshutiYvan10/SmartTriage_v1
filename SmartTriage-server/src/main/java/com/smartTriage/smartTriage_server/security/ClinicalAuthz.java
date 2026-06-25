@@ -298,19 +298,24 @@ public class ClinicalAuthz {
             if (user == null) {
                 return false;
             }
+            boolean decision;
             if (user.getRole() == Role.HOSPITAL_ADMIN) {
-                return false;
+                decision = false;
+            } else if (user.getRole() == Role.DOCTOR) {
+                // Doctors are not zone-bound the way nurses are — they roam the
+                // whole floor, so the operational alert feed is theirs to read,
+                // scoped to their own hospital.
+                decision = belongsToHospital(user, hospitalId);
+            } else {
+                decision = canSeeAllZonesAtHospital(authentication, hospitalId);
             }
-            // Doctors are not zone-bound the way nurses are — they roam the whole
-            // floor, so the operational alert feed is theirs to read, scoped to
-            // their own hospital. (A regular zone nurse still goes through the
-            // cross-zone authority below; when denied the hospital-wide list the
-            // Alert Center surfaces an honest "no access" state rather than a
-            // falsely-reassuring "all clear".)
-            if (user.getRole() == Role.DOCTOR) {
-                return belongsToHospital(user, hospitalId);
-            }
-            return canSeeAllZonesAtHospital(authentication, hospitalId);
+            // TEMP DIAGNOSTIC (Alert Center "empty for doctor" investigation) —
+            // remove once confirmed. Shows whether the new build is running and why.
+            log.info("[alert-authz] canReadHospitalAlerts role={} userHospital={} reqHospital={} -> {}",
+                    user.getRole(),
+                    userRepository.findHospitalIdByUserId(user.getId()).orElse(null),
+                    hospitalId, decision);
+            return decision;
         } catch (Exception e) {
             log.error("canReadHospitalAlerts error for hospital {}: {}",
                     hospitalId, e.getMessage(), e);
