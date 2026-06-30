@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.security;
 
+import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -142,6 +143,28 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             return self != null && self.equals(target);
         }
 
+        // Alert topics are role/zone-SCOPED (mirrors AlertScopeResolver, the REST half):
+        //   /topic/alerts/{hospitalId}        → hospital-wide firehose, OVERSIGHT roles only
+        //                                       (Charge Nurse / shift lead / Super-Admin /
+        //                                       Read-Only). A zone-bound nurse's SUBSCRIBE here
+        //                                       is silently dropped — that is how the General
+        //                                       nurse stops seeing Acute / inbound alerts live.
+        //   /topic/alerts/{hospitalId}/{ZONE} → caller must currently cover that zone (or be
+        //                                       oversight).
+        // No missed alerts: publishHospitalAlert fans every zoned alert out to its zone topic,
+        // so zone-bound staff (subscribed to their zone) still receive everything for their zone.
+        if ("alerts".equals(family)) {
+            UUID hospitalId = seg.length >= 2 ? parseUuid(seg[1]) : null;
+            if (hospitalId == null) {
+                return false;
+            }
+            if (seg.length == 2) {
+                return clinicalAuthz.canSeeAllZonesAtHospital(auth, hospitalId);
+            }
+            EdZone zone = parseZone(seg[2]);
+            return zone != null && clinicalAuthz.canReceiveZoneAlerts(auth, hospitalId, zone);
+        }
+
         // Visit-scoped: /topic/{vitals|trend|triage}/{visitId} and /topic/visit/{visitId}/notes.
         if (VISIT_FAMILIES.contains(family)) {
             UUID visitId = seg.length >= 2 ? parseUuid(seg[1]) : null;
@@ -166,6 +189,14 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private static UUID parseUuid(String s) {
         try {
             return s == null ? null : UUID.fromString(s);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private static EdZone parseZone(String s) {
+        try {
+            return s == null ? null : EdZone.valueOf(s);
         } catch (IllegalArgumentException e) {
             return null;
         }

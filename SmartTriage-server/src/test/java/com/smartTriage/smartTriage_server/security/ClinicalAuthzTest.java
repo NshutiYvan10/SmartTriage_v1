@@ -216,6 +216,36 @@ class ClinicalAuthzTest {
                 authFor(user(Role.SUPER_ADMIN, null, null)), hospitalId));
     }
 
+    // ── canReceiveZoneAlerts (WebSocket zone-topic SUBSCRIBE scoping) ──
+
+    @Test
+    void canReceiveZoneAlerts_allowsNurseAssignedToThatZone_deniesOtherZone() {
+        User nurse = user(Role.NURSE, null, hospitalId);
+        // Regular nurse, not a shift lead → canSeeAllZonesAtHospital is false.
+        when(shiftAssignmentService.isUserCurrentShiftLead(nurse.getId(), hospitalId)).thenReturn(false);
+        com.smartTriage.smartTriage_server.module.shift.dto.ShiftAssignmentResponse sa =
+                mock(com.smartTriage.smartTriage_server.module.shift.dto.ShiftAssignmentResponse.class);
+        when(sa.getHospitalId()).thenReturn(hospitalId);
+        when(sa.getZone()).thenReturn(com.smartTriage.smartTriage_server.common.enums.EdZone.GENERAL);
+        when(sa.getAdditionalZones()).thenReturn(null);
+        when(shiftAssignmentService.getCurrentShiftForUser(nurse.getId()))
+                .thenReturn(java.util.Optional.of(sa));
+
+        assertTrue(authz.canReceiveZoneAlerts(authFor(nurse), hospitalId,
+                com.smartTriage.smartTriage_server.common.enums.EdZone.GENERAL));
+        // The crux: a General-zone nurse may NOT receive ACUTE alerts.
+        assertFalse(authz.canReceiveZoneAlerts(authFor(nurse), hospitalId,
+                com.smartTriage.smartTriage_server.common.enums.EdZone.ACUTE));
+    }
+
+    @Test
+    void canReceiveZoneAlerts_allowsOversightForAnyZone() {
+        // Charge Nurse (NURSE + CHARGE_NURSE designation) → canSeeAllZonesAtHospital true.
+        User chargeNurse = user(Role.NURSE, Designation.CHARGE_NURSE, hospitalId);
+        assertTrue(authz.canReceiveZoneAlerts(authFor(chargeNurse), hospitalId,
+                com.smartTriage.smartTriage_server.common.enums.EdZone.ACUTE));
+    }
+
     // ── canAccessMedicationSafetyCheck (scopes the medication-safety OVERRIDE endpoint) ──
 
     @Test

@@ -60,8 +60,33 @@ public class RealTimeEventPublisher {
      * Frontend can parse this directly as ClinicalAlertResponse.
      */
     public void publishHospitalAlert(UUID hospitalId, ClinicalAlertResponse alertResponse) {
+        // Hospital-wide firehose — only oversight roles (canSeeAllZones: charge
+        // nurse, shift lead, super-admin, read-only) may SUBSCRIBE here
+        // (StompAuthChannelInterceptor). Zone-bound staff are cut off this topic.
         messagingTemplate.convertAndSend("/topic/alerts/" + hospitalId, (Object) alertResponse);
         log.debug("Published typed alert to /topic/alerts/{}", hospitalId);
+
+        // ALSO fan out to the patient's current zone AND the alert's target zone, so
+        // a zone-scoped nurse/doctor (subscribed only to their zone topic) reliably
+        // receives every alert for a patient in their zone — regardless of which of
+        // the ~18 alert-raising call sites published it, and even when that caller
+        // passed a null explicit zone. This is what makes cutting zone staff off the
+        // hospital-wide firehose SAFE (no missed alerts). Client dedups overlapping
+        // hospital/zone deliveries by alert id.
+        if (alertResponse != null) {
+            java.util.Set<EdZone> zones = new java.util.LinkedHashSet<>();
+            if (alertResponse.getCurrentZone() != null) zones.add(alertResponse.getCurrentZone());
+            if (alertResponse.getTargetZone() != null) zones.add(alertResponse.getTargetZone());
+            for (EdZone z : zones) {
+                try {
+                    messagingTemplate.convertAndSend(
+                            "/topic/alerts/" + hospitalId + "/" + z.name(), (Object) alertResponse);
+                } catch (Exception e) {
+                    log.warn("Zone fan-out of alert {} to zone {} failed: {}",
+                            alertResponse.getId(), z, e.getMessage());
+                }
+            }
+        }
     }
 
     /**

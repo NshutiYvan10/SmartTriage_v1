@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.security;
 
+import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import org.junit.jupiter.api.Test;
@@ -70,16 +71,26 @@ class StompAuthChannelInterceptorTest {
     // ── Hospital-scoped ──
 
     @Test
-    void allowsOwnHospitalAlertTopic() {
-        Authentication a = auth(user(Role.DOCTOR, MY_ID));
-        when(clinicalAuthz.canAccessHospital(eq(a), eq(MY_HOSPITAL))).thenReturn(true);
+    void allowsHospitalWideAlertFirehoseForOversightOnly() {
+        // The hospital-wide alerts topic is now oversight-only (canSeeAllZones).
+        Authentication a = auth(user(Role.NURSE, MY_ID));
+        when(clinicalAuthz.canSeeAllZonesAtHospital(eq(a), eq(MY_HOSPITAL))).thenReturn(true);
         assertThat(allowed("/topic/alerts/" + MY_HOSPITAL, a)).isTrue();
+    }
+
+    @Test
+    void deniesHospitalWideAlertFirehoseForZoneBoundUser() {
+        // The crux of the scoping fix: a zone-bound nurse may NOT subscribe to the
+        // hospital-wide firehose (their SUBSCRIBE is silently dropped).
+        Authentication a = auth(user(Role.NURSE, MY_ID));
+        when(clinicalAuthz.canSeeAllZonesAtHospital(eq(a), eq(MY_HOSPITAL))).thenReturn(false);
+        assertThat(allowed("/topic/alerts/" + MY_HOSPITAL, a)).isFalse();
     }
 
     @Test
     void deniesOtherHospitalAlertTopic() {
         Authentication a = auth(user(Role.DOCTOR, MY_ID));
-        when(clinicalAuthz.canAccessHospital(eq(a), eq(OTHER_HOSPITAL))).thenReturn(false);
+        when(clinicalAuthz.canSeeAllZonesAtHospital(eq(a), eq(OTHER_HOSPITAL))).thenReturn(false);
         assertThat(allowed("/topic/alerts/" + OTHER_HOSPITAL, a)).isFalse();
     }
 
@@ -91,10 +102,18 @@ class StompAuthChannelInterceptorTest {
     }
 
     @Test
-    void allowsOwnHospitalZoneAlertTopic() {
+    void allowsZoneAlertTopicWhenCallerCoversThatZone() {
         Authentication a = auth(user(Role.DOCTOR, MY_ID));
-        when(clinicalAuthz.canAccessHospital(eq(a), eq(MY_HOSPITAL))).thenReturn(true);
+        when(clinicalAuthz.canReceiveZoneAlerts(eq(a), eq(MY_HOSPITAL), eq(EdZone.RESUS))).thenReturn(true);
         assertThat(allowed("/topic/alerts/" + MY_HOSPITAL + "/RESUS", a)).isTrue();
+    }
+
+    @Test
+    void deniesZoneAlertTopicWhenCallerDoesNotCoverThatZone() {
+        // A General-zone nurse subscribing to the RESUS zone topic is denied.
+        Authentication a = auth(user(Role.NURSE, MY_ID));
+        when(clinicalAuthz.canReceiveZoneAlerts(eq(a), eq(MY_HOSPITAL), eq(EdZone.RESUS))).thenReturn(false);
+        assertThat(allowed("/topic/alerts/" + MY_HOSPITAL + "/RESUS", a)).isFalse();
     }
 
     // ── User-targeted ──

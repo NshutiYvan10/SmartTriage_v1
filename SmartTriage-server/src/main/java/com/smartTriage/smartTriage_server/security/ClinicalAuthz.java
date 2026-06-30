@@ -316,6 +316,42 @@ public class ClinicalAuthz {
     }
 
     /**
+     * WebSocket SUBSCRIBE gate for a ZONE alert topic
+     * {@code /topic/alerts/{hospitalId}/{zone}}. Allowed for cross-zone/oversight
+     * roles (Charge Nurse, shift lead, Super-Admin, Read-Only) and for any clinician
+     * currently assigned to that zone (primary or additional coverage). This is the
+     * live-pop-up half of the alert-scoping policy and mirrors {@link AlertScopeResolver}
+     * (the REST half): a General-zone nurse can subscribe to GENERAL alerts but not
+     * ACUTE, and the hospital-wide firehose is gated separately by
+     * {@link #canSeeAllZonesAtHospital}.
+     */
+    @Transactional(readOnly = true)
+    public boolean canReceiveZoneAlerts(Authentication authentication, UUID hospitalId, EdZone zone) {
+        try {
+            if (zone == null || hospitalId == null) {
+                return false;
+            }
+            if (canSeeAllZonesAtHospital(authentication, hospitalId)) {
+                return true;
+            }
+            User user = currentUser(authentication);
+            if (user == null || !belongsToHospital(user, hospitalId)) {
+                return false;
+            }
+            return shiftAssignmentService.getCurrentShiftForUser(user.getId())
+                    .map(sa -> hospitalId.equals(sa.getHospitalId())
+                            && (zone.equals(sa.getZone())
+                                || (sa.getAdditionalZones() != null
+                                    && sa.getAdditionalZones().contains(zone))))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canReceiveZoneAlerts error for hospital {} zone {}: {}",
+                    hospitalId, zone, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
      * Reporting/analytics read gate — for hospital-wide aggregate reports (Quality
      * KPIs, MoH statistics, operational analytics). Restricted to the governance /
      * management / audit readers: SUPER_ADMIN, and the HOSPITAL_ADMIN or READ_ONLY
