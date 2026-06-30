@@ -28,7 +28,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import com.smartTriage.smartTriage_server.security.ClinicalAuthz;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -39,7 +41,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -66,6 +70,7 @@ public class LabOrderService {
     private final ShiftAssignmentService shiftAssignmentService;
     private final LabPanelComponentRepository labPanelComponentRepository;
     private final LabResultComponentRepository labResultComponentRepository;
+    private final ClinicalAuthz clinicalAuthz;
     private final LabReportPdfService labReportPdfService;
 
     private static final java.time.ZoneId KIGALI = java.time.ZoneId.of("Africa/Kigali");
@@ -1100,11 +1105,48 @@ public class LabOrderService {
                 .map(LabOrderService::maskPreVerificationResult);
     }
 
+    @Transactional(readOnly = true)
     public List<CriticalValueResponse> getCriticalResults(UUID hospitalId) {
-        return labOrderRepository.findUnacknowledgedCriticalResults(hospitalId)
+        List<CriticalValueResponse> all = labOrderRepository.findUnacknowledgedCriticalResults(hospitalId)
                 .stream()
                 .map(LabOrderMapper::toCriticalValueResponse)
                 .collect(Collectors.toList());
+
+        // Scope like the alerts / inbound board: a critical lab is for a patient who
+        // is IN a zone. Lab Technicians own the result (cross-zone) and oversight
+        // (charge nurse / shift lead / super-admin) coordinate the whole floor, so
+        // both see every critical. A zone nurse / doctor sees only criticals for
+        // patients in a zone they currently cover — so a General nurse no longer sees
+        // an Acute patient's critical lab. Enforced server-side, not a UI filter.
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        User caller = (auth != null && auth.getPrincipal() instanceof User u) ? u : null;
+        if (caller == null) {
+            return List.of();
+        }
+        if (caller.getRole() == Role.LAB_TECHNICIAN
+                || clinicalAuthz.canSeeAllZonesAtHospital(auth, hospitalId)) {
+            return all;
+        }
+        Set<EdZone> covered = currentCoveredZones(caller.getId(), hospitalId);
+        return all.stream()
+                .filter(c -> c.getCurrentZone() != null && covered.contains(c.getCurrentZone()))
+                .collect(Collectors.toList());
+    }
+
+    /** The caller's currently-covered zones (active shift's primary ∪ additional). */
+    private Set<EdZone> currentCoveredZones(UUID userId, UUID hospitalId) {
+        Set<EdZone> zones = new HashSet<>();
+        shiftAssignmentService.getCurrentShiftForUser(userId).ifPresent(sa -> {
+            if (sa.getHospitalId() == null || sa.getHospitalId().equals(hospitalId)) {
+                if (sa.getZone() != null) {
+                    zones.add(sa.getZone());
+                }
+                if (sa.getAdditionalZones() != null) {
+                    zones.addAll(sa.getAdditionalZones());
+                }
+            }
+        });
+        return zones;
     }
 
     public List<LabOrderResponse> getStatOrders(UUID hospitalId) {
