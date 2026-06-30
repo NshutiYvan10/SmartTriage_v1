@@ -267,13 +267,16 @@ public class ShiftAssignmentService {
      */
     @Transactional
     public void clearShiftLeadForShift(UUID hospitalId, LocalDate shiftDate, ShiftPeriod shiftPeriod) {
-        shiftAssignmentRepository.findShiftLead(hospitalId, shiftDate, shiftPeriod)
-                .ifPresent(prev -> {
-                    prev.setShiftLead(false);
-                    shiftAssignmentRepository.save(prev);
-                    log.info("Cleared previous shift-lead badge from {} on {} {}",
-                            prev.getUser().getEmail(), shiftDate, shiftPeriod);
-                });
+        // Clear EVERY active lead for the shift, not just one — this self-heals a
+        // pre-existing two-leads state on the next grant/clear. saveAndFlush so the
+        // clears hit the DB BEFORE a caller sets a new lead (the partial unique index
+        // would otherwise reject a transient second TRUE row mid-transaction).
+        for (ShiftAssignment prev : shiftAssignmentRepository.findAllShiftLeads(hospitalId, shiftDate, shiftPeriod)) {
+            prev.setShiftLead(false);
+            shiftAssignmentRepository.saveAndFlush(prev);
+            log.info("Cleared shift-lead badge from {} on {} {}",
+                    prev.getUser() != null ? prev.getUser().getEmail() : prev.getId(), shiftDate, shiftPeriod);
+        }
     }
 
     /**
@@ -543,6 +546,26 @@ public class ShiftAssignmentService {
             assignment.getAdditionalZones().remove(request.getZone());
         }
 
+        // Shift-lead badge — HONOUR the edit form's checkbox. This was previously
+        // ignored, so a Charge Nurse could neither grant NOR REMOVE the badge from
+        // the per-assignment edit (the reported "unchecked shift-lead, saved, nothing
+        // happened" bug — which also left a zone nurse stuck with all-zones alert
+        // scope). Enforces single-lead-per-shift: granting clears any other lead for
+        // the same (hospital, date, period) first; clearing simply drops this badge.
+        if (request.getIsShiftLead() != null) {
+            if (request.getIsShiftLead()) {
+                clearShiftLeadForShift(assignment.getHospital().getId(),
+                        assignment.getShiftDate(), assignment.getShiftPeriod());
+                assignment.setShiftLead(true);
+                log.info("Shift-lead badge GRANTED to assignment {} ({})",
+                        assignmentId, assignment.getUser() != null ? assignment.getUser().getEmail() : "?");
+            } else if (assignment.isShiftLead()) {
+                assignment.setShiftLead(false);
+                log.info("Shift-lead badge REMOVED from assignment {} ({})",
+                        assignmentId, assignment.getUser() != null ? assignment.getUser().getEmail() : "?");
+            }
+        }
+
         assignment = shiftAssignmentRepository.save(assignment);
         log.info("Shift assignment updated: {} → primary {}{}, function {}",
                 assignmentId, assignment.getZone(),
@@ -580,20 +603,24 @@ public class ShiftAssignmentService {
     public Optional<ShiftAssignmentResponse> getCurrentShiftLead(UUID hospitalId) {
         LocalDate shiftDate = getCurrentShiftDate();
         ShiftPeriod shiftPeriod = getCurrentShiftPeriod();
-        return shiftAssignmentRepository.findShiftLead(hospitalId, shiftDate, shiftPeriod)
+        // Robust to a duplicate-lead state (won't throw NonUniqueResult): take the
+        // most-recent badge holder.
+        return shiftAssignmentRepository.findAllShiftLeads(hospitalId, shiftDate, shiftPeriod)
+                .stream().findFirst()
                 .map(ShiftAssignmentMapper::toResponse);
     }
 
     /**
      * Does the given user currently hold the shift-lead badge at this
-     * hospital? Used by the permission evaluator.
+     * hospital? Used by the permission evaluator (drives all-zones alert scope).
      */
     public boolean isUserCurrentShiftLead(UUID userId, UUID hospitalId) {
         LocalDate shiftDate = getCurrentShiftDate();
         ShiftPeriod shiftPeriod = getCurrentShiftPeriod();
-        return shiftAssignmentRepository.findShiftLead(hospitalId, shiftDate, shiftPeriod)
-                .map(sa -> sa.getUser().getId().equals(userId))
-                .orElse(false);
+        // List-based + anyMatch so a (legacy) duplicate-lead state never throws.
+        return shiftAssignmentRepository.findAllShiftLeads(hospitalId, shiftDate, shiftPeriod)
+                .stream()
+                .anyMatch(sa -> sa.getUser() != null && userId.equals(sa.getUser().getId()));
     }
 
     /**

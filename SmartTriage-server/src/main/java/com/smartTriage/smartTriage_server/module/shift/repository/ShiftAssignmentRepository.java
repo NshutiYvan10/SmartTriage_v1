@@ -135,6 +135,20 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
             @Param("shiftPeriod") ShiftPeriod shiftPeriod);
 
     /**
+     * ALL active shift-lead rows for a shift, newest first. The partial unique
+     * index should keep this to one, but reading a List (instead of a single
+     * Optional) is robust to a pre-existing duplicate-lead state — it lets the
+     * service clear every stale badge and never throws NonUniqueResultException.
+     */
+    @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.hospital.id = :hospitalId " +
+            "AND sa.shiftDate = :shiftDate AND sa.shiftPeriod = :shiftPeriod " +
+            "AND sa.isShiftLead = true AND sa.isActive = true ORDER BY sa.startedAt DESC")
+    List<ShiftAssignment> findAllShiftLeads(
+            @Param("hospitalId") UUID hospitalId,
+            @Param("shiftDate") LocalDate shiftDate,
+            @Param("shiftPeriod") ShiftPeriod shiftPeriod);
+
+    /**
      * All shift-lead rows carried by a user (active or ended) — used for the
      * "previous lead has 30-min grace" fallback: we grab the latest, check
      * {@code endedAt}, and accept if recent.
