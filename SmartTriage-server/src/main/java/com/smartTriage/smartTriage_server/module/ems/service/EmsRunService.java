@@ -31,6 +31,8 @@ import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
 import com.smartTriage.smartTriage_server.module.vital.entity.VitalSigns;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.common.enums.VisitStatus;
+import com.smartTriage.smartTriage_server.common.enums.TriageCategory;
+import com.smartTriage.smartTriage_server.module.visit.service.ZoneRoutingService;
 import com.smartTriage.smartTriage_server.module.visit.repository.VisitRepository;
 import com.smartTriage.smartTriage_server.module.visit.service.VisitService;
 import com.smartTriage.smartTriage_server.security.ClinicalAuthz;
@@ -95,6 +97,7 @@ public class EmsRunService {
     private final RwandaTriageDecisionEngine decisionEngine;
     private final RwandaPediatricTriageDecisionEngine pediatricDecisionEngine;
     private final EmsPcrPdfService emsPcrPdfService;
+    private final ZoneRoutingService zoneRoutingService;
 
     /** Patients younger than this use the KFH pediatric form/engine. */
     private static final int PEDIATRIC_AGE_CEILING_YEARS = 13;
@@ -537,6 +540,24 @@ public class EmsRunService {
         if (v.getStatus() == VisitStatus.REGISTERED) {
             v.setStatus(VisitStatus.AWAITING_TRIAGE);
         }
+        // Provisional placement from the paramedic's field triage so an arriving
+        // ambulance patient lands in the clinically-correct zone IMMEDIATELY
+        // (RED→Resus, ORANGE→Acute, YELLOW→Observation, GREEN→Ambulatory, BLUE→General)
+        // instead of sitting in AWAITING_TRIAGE with no zone. This is ADVISORY:
+        // the visit deliberately STAYS AWAITING_TRIAGE and the ED re-triage clock
+        // still forces a formal triage — which overwrites both fields via
+        // TriageService.performTriage (the nurse can re-triage/override). Routing
+        // goes through the SAME ZoneRoutingService the ED uses, so the placement
+        // policy is identical regardless of how the category was set. Guarded so an
+        // already-triaged visit is never re-placed from the (older) field category.
+        TriageCategory fieldCat = parseFieldCategory(run.getFieldTriageCategory());
+        if (fieldCat != null && v.getCurrentTriageCategory() == null) {
+            v.setCurrentTriageCategory(fieldCat);
+            v.setCurrentEdZone(zoneRoutingService.routeFor(v, fieldCat));
+            log.info("[ems] Run {} provisional placement from field triage {} → zone {} "
+                    + "(visit {} stays AWAITING_TRIAGE for formal ED triage)",
+                    runId, fieldCat, v.getCurrentEdZone(), v.getId());
+        }
         visitRepository.save(v);
 
         run = emsRunRepository.save(run);
@@ -917,6 +938,25 @@ public class EmsRunService {
 
     private static boolean isRedField(String fieldTriageCategory) {
         return "RED".equalsIgnoreCase(fieldTriageCategory);
+    }
+
+    /**
+     * Parse the persisted field-triage category String (RED/ORANGE/YELLOW/GREEN/
+     * BLUE) into the hospital {@link TriageCategory} enum used for zone placement.
+     * Returns null (no provisional placement) for a blank or unrecognised value
+     * rather than throwing — a placement step must never block an arrival.
+     */
+    private static TriageCategory parseFieldCategory(String fieldTriageCategory) {
+        if (fieldTriageCategory == null || fieldTriageCategory.isBlank()) {
+            return null;
+        }
+        try {
+            return TriageCategory.valueOf(fieldTriageCategory.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            log.warn("[ems] Unrecognised field triage category '{}' — skipping provisional placement",
+                    fieldTriageCategory);
+            return null;
+        }
     }
 
     private static String code(Hospital h) {

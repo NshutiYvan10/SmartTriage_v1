@@ -66,9 +66,26 @@ export function PrehospitalTab({ visitId, edTriageCategory }: Props) {
           {run.sceneLeftAt     && <Step label="Left scene"        at={run.sceneLeftAt}     text={text} />}
           {run.edArrivedAt     && <Step label="Arrived at ED"     at={run.edArrivedAt}     text={text} />}
           {run.handedOffAt     && <Step label="Handed off"        at={run.handedOffAt}     text={text} extra={run.handedOffToName} />}
-          {run.cancelledAt     && <Step label="Cancelled"         at={run.cancelledAt}     text={text} />}
+          {run.cancelledAt     && <Step label="Cancelled"         at={run.cancelledAt}     text={text} extra={run.cancelReason} />}
         </ol>
       </div>
+
+      {/* Incident — mechanism of injury / chief complaint + where it happened.
+          These are persisted on the run but were previously only visible in the
+          handover / PCR PDF; surfaced here so the chart tab tells the full story. */}
+      {(run.mechanism || run.incidentLocation) && (
+        <div className="rounded-2xl p-4" style={glassCard}>
+          <div className={`text-[10px] uppercase font-bold mb-2 ${text.label}`}>Incident</div>
+          {run.mechanism && (
+            <p className={`text-xs ${text.body}`}><b>Mechanism / complaint:</b> {run.mechanism}</p>
+          )}
+          {run.incidentLocation && (
+            <p className={`text-xs ${text.body} mt-1.5 flex items-center gap-1.5`}>
+              <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" /> {run.incidentLocation}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Field triage + discordance */}
       <div className="rounded-2xl p-4" style={glassCard}>

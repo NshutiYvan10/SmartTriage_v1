@@ -61,6 +61,7 @@ class EmsRunServiceFieldTriageTest {
 
     private EmsRunRepository emsRunRepository;
     private RealTimeEventPublisher realTimeEventPublisher;
+    private com.smartTriage.smartTriage_server.module.visit.service.ZoneRoutingService zoneRoutingService;
     private EmsRunService service;
 
     private EmsRun run;
@@ -81,6 +82,7 @@ class EmsRunServiceFieldTriageTest {
         ClinicalAuthz clinicalAuthz = mock(ClinicalAuthz.class);
         HospitalRepository hospitalRepository = mock(HospitalRepository.class);
         ShiftAssignmentService shiftAssignmentService = mock(ShiftAssignmentService.class);
+        zoneRoutingService = mock(com.smartTriage.smartTriage_server.module.visit.service.ZoneRoutingService.class);
 
         // REAL engines — this is the whole point of the test.
         TewsCalculator tewsCalculator = new TewsCalculator();
@@ -94,7 +96,8 @@ class EmsRunServiceFieldTriageTest {
                 clinicalAlertRepository, realTimeEventPublisher, clinicalAuthz,
                 hospitalRepository, shiftAssignmentService,
                 tewsCalculator, pediatricTewsCalculator, decisionEngine, pediatricDecisionEngine,
-                mock(EmsPcrPdfService.class));
+                mock(EmsPcrPdfService.class),
+                zoneRoutingService);
 
         Hospital hospital = new Hospital();
         run = EmsRun.builder()
@@ -240,5 +243,53 @@ class EmsRunServiceFieldTriageTest {
         EmsRunResponse off = service.setLights(RUN_ID, false);
         assertTrue(!off.isLightsActive());
         assertNull(off.getLightsActivatedAt());
+    }
+
+    // ── confirmArrival provisional zone placement from the field triage ──
+
+    @Test
+    void confirmArrival_seedsProvisionalPlacementFromFieldCategory() {
+        com.smartTriage.smartTriage_server.module.visit.entity.Visit visit =
+                new com.smartTriage.smartTriage_server.module.visit.entity.Visit();
+        visit.setStatus(com.smartTriage.smartTriage_server.common.enums.VisitStatus.REGISTERED);
+        run.setVisit(visit);
+        run.setStatus(EmsRunStatus.EN_ROUTE);
+        run.setFieldTriageCategory("RED");
+        when(zoneRoutingService.routeFor(visit,
+                com.smartTriage.smartTriage_server.common.enums.TriageCategory.RED))
+                .thenReturn(com.smartTriage.smartTriage_server.common.enums.EdZone.RESUS);
+
+        service.confirmArrival(RUN_ID);
+
+        // Field category seeds a PROVISIONAL hospital category + zone via the same
+        // ZoneRoutingService the ED uses…
+        assertEquals(com.smartTriage.smartTriage_server.common.enums.TriageCategory.RED,
+                visit.getCurrentTriageCategory());
+        assertEquals(com.smartTriage.smartTriage_server.common.enums.EdZone.RESUS,
+                visit.getCurrentEdZone());
+        // …but the visit deliberately STAYS AWAITING_TRIAGE so formal ED triage is
+        // still required (and can override).
+        assertEquals(com.smartTriage.smartTriage_server.common.enums.VisitStatus.AWAITING_TRIAGE,
+                visit.getStatus());
+    }
+
+    @Test
+    void confirmArrival_doesNotOverwriteExistingTriageCategory() {
+        com.smartTriage.smartTriage_server.module.visit.entity.Visit visit =
+                new com.smartTriage.smartTriage_server.module.visit.entity.Visit();
+        visit.setStatus(com.smartTriage.smartTriage_server.common.enums.VisitStatus.AWAITING_TRIAGE);
+        visit.setCurrentTriageCategory(
+                com.smartTriage.smartTriage_server.common.enums.TriageCategory.YELLOW);
+        run.setVisit(visit);
+        run.setStatus(EmsRunStatus.EN_ROUTE);
+        run.setFieldTriageCategory("RED");
+
+        service.confirmArrival(RUN_ID);
+
+        // Guard: an already-triaged visit is never re-placed from the (older)
+        // field category — the existing category is preserved and routing is skipped.
+        assertEquals(com.smartTriage.smartTriage_server.common.enums.TriageCategory.YELLOW,
+                visit.getCurrentTriageCategory());
+        assertNull(visit.getCurrentEdZone());
     }
 }
