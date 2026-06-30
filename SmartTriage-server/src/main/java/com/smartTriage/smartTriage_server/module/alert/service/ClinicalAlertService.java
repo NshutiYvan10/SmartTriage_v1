@@ -78,12 +78,44 @@ public class ClinicalAlertService {
     }
 
     public Page<ClinicalAlertResponse> getUnacknowledgedAlerts(UUID hospitalId, Pageable pageable) {
-        return toResponses(clinicalAlertRepository.findUnacknowledgedAlerts(hospitalId, pageable), pageable);
+        // SAME scoping as getAllAlerts — the in-memory alert STORE seeds itself from
+        // this endpoint and the dashboard + Alert Center render the store, so an
+        // unscoped feed here leaks every alert to every role regardless of zone.
+        AlertScopeResolver.AlertScope scope = alertScopeResolver.resolve(
+                SecurityContextHolder.getContext().getAuthentication(), hospitalId);
+        return toResponses(scopedUnacknowledged(scope, hospitalId, pageable), pageable);
     }
 
     public Page<ClinicalAlertResponse> getCriticalAlerts(UUID hospitalId, Pageable pageable) {
-        return toResponses(clinicalAlertRepository.findUnacknowledgedAlertsBySeverity(
-                hospitalId, AlertSeverity.CRITICAL, pageable), pageable);
+        AlertScopeResolver.AlertScope scope = alertScopeResolver.resolve(
+                SecurityContextHolder.getContext().getAuthentication(), hospitalId);
+        if (scope.kind() == AlertScopeResolver.Kind.ALL) {
+            // Oversight (e.g. the charge-nurse shift summary) → exact paginated query.
+            return toResponses(clinicalAlertRepository.findUnacknowledgedAlertsBySeverity(
+                    hospitalId, AlertSeverity.CRITICAL, pageable), pageable);
+        }
+        // Scoped roles → take the caller's unacknowledged scope, keep only CRITICALs.
+        // Criticals are a small subset and the caller requests a large page.
+        List<ClinicalAlert> criticals = scopedUnacknowledged(scope, hospitalId, pageable)
+                .getContent().stream()
+                .filter(a -> a.getSeverity() == AlertSeverity.CRITICAL)
+                .toList();
+        return new PageImpl<>(toResponses(criticals), pageable, criticals.size());
+    }
+
+    /** The caller's UNACKNOWLEDGED alerts, scoped by role/zone (see AlertScopeResolver). */
+    private Page<ClinicalAlert> scopedUnacknowledged(AlertScopeResolver.AlertScope scope,
+            UUID hospitalId, Pageable pageable) {
+        return switch (scope.kind()) {
+            case ALL -> clinicalAlertRepository.findUnacknowledgedAlerts(hospitalId, pageable);
+            case ZONE -> scope.zones().isEmpty()
+                    ? clinicalAlertRepository.findPersonalScopedUnacknowledged(hospitalId, scope.userId(), pageable)
+                    : clinicalAlertRepository.findZoneScopedUnacknowledged(
+                            hospitalId, scope.zones(), scope.userId(), pageable);
+            case CATEGORY -> clinicalAlertRepository.findScopedUnacknowledgedByTypes(
+                    hospitalId, scope.alertTypes(), pageable);
+            case NONE -> Page.<ClinicalAlert>empty(pageable);
+        };
     }
 
     /**

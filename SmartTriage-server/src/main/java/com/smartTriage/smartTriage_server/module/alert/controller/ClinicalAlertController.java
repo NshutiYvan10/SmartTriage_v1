@@ -131,8 +131,10 @@ public class ClinicalAlertController {
      * URL-tampering — the same trap the hospital-wide endpoint had.
      */
     @GetMapping("/hospital/{hospitalId}/zone/{zone}")
-    @PreAuthorize("@clinicalAuthz.canReadHospitalAlerts(authentication, #hospitalId) "
-            + "or @visitService.callerIsAssignedToZone(authentication, #hospitalId, #zone)")
+    // Zone alert feed: oversight (canSeeAllZones) OR the caller currently covers this
+    // zone. canReadHospitalAlerts (= canAccessHospital) was too broad — it let any
+    // hospital member (incl. a paramedic) pull any zone's alerts by URL.
+    @PreAuthorize("@clinicalAuthz.canReceiveZoneAlerts(authentication, #hospitalId, #zone)")
     public ResponseEntity<ApiResponse<List<ClinicalAlertResponse>>> getZoneAlerts(
             @PathVariable UUID hospitalId,
             @PathVariable EdZone zone) {

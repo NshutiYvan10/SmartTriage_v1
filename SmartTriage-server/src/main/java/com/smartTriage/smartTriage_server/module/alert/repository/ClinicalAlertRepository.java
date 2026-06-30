@@ -114,6 +114,41 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
                         @Param("types") Collection<AlertType> types,
                         Pageable pageable);
 
+        // ── Scoped UNACKNOWLEDGED feeds (same scoping, isAcknowledged = false) ──
+        // The alert STORE seeds itself from getUnacknowledged and the Alert Center
+        // MERGES the store, so these must be scoped exactly like the /all feed or a
+        // Zone Nurse / Paramedic sees every unacknowledged alert hospital-wide.
+        @Query("SELECT a FROM ClinicalAlert a JOIN FETCH a.visit v JOIN FETCH v.patient " +
+                        "LEFT JOIN FETCH v.currentBed " +
+                        "LEFT JOIN FETCH a.targetDoctor LEFT JOIN FETCH a.acknowledgedBy " +
+                        "WHERE v.hospital.id = :hospitalId AND a.isActive = true AND a.isAcknowledged = false AND (" +
+                        "  a.targetZone IN :zones OR v.currentEdZone IN :zones " +
+                        "  OR a.targetDoctor.id = :userId OR a.acknowledgedBy.id = :userId" +
+                        ") ORDER BY a.createdAt DESC")
+        Page<ClinicalAlert> findZoneScopedUnacknowledged(@Param("hospitalId") UUID hospitalId,
+                        @Param("zones") Collection<EdZone> zones,
+                        @Param("userId") UUID userId,
+                        Pageable pageable);
+
+        @Query("SELECT a FROM ClinicalAlert a JOIN FETCH a.visit v JOIN FETCH v.patient " +
+                        "LEFT JOIN FETCH v.currentBed " +
+                        "LEFT JOIN FETCH a.targetDoctor LEFT JOIN FETCH a.acknowledgedBy " +
+                        "WHERE v.hospital.id = :hospitalId AND a.isActive = true AND a.isAcknowledged = false AND (" +
+                        "  a.targetDoctor.id = :userId OR a.acknowledgedBy.id = :userId" +
+                        ") ORDER BY a.createdAt DESC")
+        Page<ClinicalAlert> findPersonalScopedUnacknowledged(@Param("hospitalId") UUID hospitalId,
+                        @Param("userId") UUID userId,
+                        Pageable pageable);
+
+        @Query("SELECT a FROM ClinicalAlert a JOIN FETCH a.visit v JOIN FETCH v.patient " +
+                        "LEFT JOIN FETCH v.currentBed " +
+                        "LEFT JOIN FETCH a.targetDoctor LEFT JOIN FETCH a.acknowledgedBy " +
+                        "WHERE v.hospital.id = :hospitalId AND a.isActive = true AND a.isAcknowledged = false " +
+                        "AND a.alertType IN :types ORDER BY a.createdAt DESC")
+        Page<ClinicalAlert> findScopedUnacknowledgedByTypes(@Param("hospitalId") UUID hospitalId,
+                        @Param("types") Collection<AlertType> types,
+                        Pageable pageable);
+
         /**
          * Unacknowledged alerts for a hospital — the critical alert queue.
          */

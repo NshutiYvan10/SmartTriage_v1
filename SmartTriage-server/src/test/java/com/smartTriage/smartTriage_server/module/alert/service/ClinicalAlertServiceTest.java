@@ -119,4 +119,37 @@ class ClinicalAlertServiceTest {
         assertEquals("Greg House", r.getTargetDoctorName());
         assertNotNull(r.getAcknowledgedByName());
     }
+
+    @Test
+    void getUnacknowledged_noneScope_returnsEmpty_andNeverQueriesUnscoped() {
+        // Paramedic / Registrar → scope NONE. The alert STORE seeds from this
+        // endpoint, so it MUST return empty and must NOT touch the hospital-wide
+        // unscoped query (the leak that showed a paramedic all 36 alerts).
+        when(scopeResolver.resolve(any(), any())).thenReturn(
+                new AlertScopeResolver.AlertScope(
+                        AlertScopeResolver.Kind.NONE, Set.of(), null, Set.of()));
+
+        Page<ClinicalAlertResponse> result = service.getUnacknowledgedAlerts(hospitalId, pageable);
+
+        assertEquals(0, result.getContent().size());
+        org.mockito.Mockito.verify(repo, org.mockito.Mockito.never())
+                .findUnacknowledgedAlerts(any(), any());
+    }
+
+    @Test
+    void getUnacknowledged_zoneScope_usesZoneScopedQuery_notHospitalWide() {
+        when(scopeResolver.resolve(any(), any())).thenReturn(
+                new AlertScopeResolver.AlertScope(
+                        AlertScopeResolver.Kind.ZONE,
+                        Set.of(com.smartTriage.smartTriage_server.common.enums.EdZone.GENERAL),
+                        UUID.randomUUID(), Set.of()));
+        when(repo.findZoneScopedUnacknowledged(any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        service.getUnacknowledgedAlerts(hospitalId, pageable);
+
+        org.mockito.Mockito.verify(repo).findZoneScopedUnacknowledged(any(), any(), any(), any());
+        org.mockito.Mockito.verify(repo, org.mockito.Mockito.never())
+                .findUnacknowledgedAlerts(any(), any());
+    }
 }
