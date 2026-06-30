@@ -25,6 +25,15 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
         Optional<Visit> findByVisitNumberAndIsActiveTrue(String visitNumber);
 
         /**
+         * Existence check across ALL visits (active or soft-deleted) for a given
+         * visit number. The {@code visits.visit_number} unique constraint is on
+         * the raw column, so a soft-deleted visit still occupies its number — the
+         * collision-proof number generator must check both. Used only as a
+         * defensive guard while the DB sequence climbs past any legacy numbers.
+         */
+        boolean existsByVisitNumber(String visitNumber);
+
+        /**
          * Lightweight projection used by ClinicalAuthz to verify a visit
          * belongs to a given hospital without hydrating the entity. Returns
          * empty when no visit with that id exists.

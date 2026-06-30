@@ -30,7 +30,6 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
@@ -48,6 +47,8 @@ import java.util.stream.Collectors;
 public class VisitService {
 
     private final VisitRepository visitRepository;
+    /** Restart-proof, DB-backed per-(hospital,day) visit-number sequence (replaces the old in-memory counter). */
+    private final com.smartTriage.smartTriage_server.module.visit.repository.VisitSequenceCounterRepository visitSequenceCounterRepository;
     private final PatientService patientService;
     private final HospitalService hospitalService;
     private final DeviceSessionRepository deviceSessionRepository;
@@ -64,7 +65,9 @@ public class VisitService {
      *  disposition is recorded (no cycle: this is the repository, not the service). */
     private final com.smartTriage.smartTriage_server.module.documentation.repository.ClinicalDocumentRepository clinicalDocumentRepository;
 
-    private static final AtomicLong visitCounter = new AtomicLong(0);
+    /** Defensive cap on the collision-skip loop in {@link #nextVisitNumber} — far above
+     *  any realistic same-day visit count; prevents a pathological infinite loop. */
+    private static final int VISIT_NUMBER_MAX_ATTEMPTS = 10_000;
 
     @Transactional
     public VisitResponse createVisit(CreateVisitRequest request) {
@@ -439,9 +442,30 @@ public class VisitService {
      * directly while still drawing a unique visit number from the
      * shared in-memory counter.
      */
+    @Transactional
     public String nextVisitNumber(String hospitalCode) {
-        String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        long sequence = visitCounter.incrementAndGet();
-        return String.format("V-%s-%s-%05d", hospitalCode, date, sequence);
+        LocalDate today = LocalDate.now();
+        String date = today.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        // Draw the next sequence from the DURABLE, atomic per-(hospital,day) DB
+        // counter — survives restarts and serialises concurrent registrations, so
+        // it cannot re-issue an existing number the way the old in-memory AtomicLong
+        // did (the post-restart 409 "conflicts with existing data"). The defensive
+        // loop only fires if a legacy/leftover number already sits where the counter
+        // lands (e.g. the very first generation after this fix deploys); it claims
+        // again — the counter is monotonic, so it converges in at most a handful of
+        // tries and never collides thereafter.
+        for (int attempt = 0; attempt < VISIT_NUMBER_MAX_ATTEMPTS; attempt++) {
+            long sequence = visitSequenceCounterRepository.claimNext(hospitalCode, today);
+            String candidate = String.format("V-%s-%s-%05d", hospitalCode, date, sequence);
+            if (!visitRepository.existsByVisitNumber(candidate)) {
+                return candidate;
+            }
+            log.warn("[visit] Visit number {} already exists — advancing the sequence (attempt {}).",
+                    candidate, attempt + 1);
+        }
+        // Unreachable in practice; fail loud rather than silently mint a dup.
+        throw new IllegalStateException(
+                "Could not allocate a unique visit number for hospital " + hospitalCode
+                        + " after " + VISIT_NUMBER_MAX_ATTEMPTS + " attempts.");
     }
 }

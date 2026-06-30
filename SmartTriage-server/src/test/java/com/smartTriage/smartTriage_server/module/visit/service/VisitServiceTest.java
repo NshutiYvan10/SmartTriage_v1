@@ -35,12 +35,15 @@ import static org.mockito.Mockito.when;
 class VisitServiceTest {
 
     private final VisitRepository visitRepository = mock(VisitRepository.class);
+    private final com.smartTriage.smartTriage_server.module.visit.repository.VisitSequenceCounterRepository visitSequenceCounterRepository =
+            mock(com.smartTriage.smartTriage_server.module.visit.repository.VisitSequenceCounterRepository.class);
     private final DeviceSessionRepository deviceSessionRepository = mock(DeviceSessionRepository.class);
     private final BedService bedService = mock(BedService.class);
     private final ClinicalDocumentRepository clinicalDocumentRepository = mock(ClinicalDocumentRepository.class);
 
     private final VisitService service = new VisitService(
             visitRepository,
+            visitSequenceCounterRepository,
             mock(PatientService.class),
             mock(HospitalService.class),
             deviceSessionRepository,
@@ -138,5 +141,33 @@ class VisitServiceTest {
                 .dispositionType(DispositionType.DISCHARGED_HOME).build());
 
         verify(visitRepository).save(any(Visit.class));
+    }
+
+    // ── Collision-proof visit-number generation (EMS-4) ──
+
+    @Test
+    void nextVisitNumber_drawsFromDbCounter_andFormats() {
+        when(visitSequenceCounterRepository.claimNext(eq("KFH"), any())).thenReturn(7L);
+        when(visitRepository.existsByVisitNumber(any())).thenReturn(false);
+
+        String number = service.nextVisitNumber("KFH");
+
+        // Sequence comes from the durable DB counter (NOT a restart-resettable in-memory
+        // value) and is zero-padded into the canonical format.
+        assertThat(number).matches("V-KFH-\\d{8}-00007");
+    }
+
+    @Test
+    void nextVisitNumber_skipsAnAlreadyTakenNumber() {
+        // The first sequence the counter hands back already exists (e.g. a leftover number
+        // from before this fix deployed); the generator must advance, not mint a duplicate.
+        when(visitSequenceCounterRepository.claimNext(eq("KFH"), any())).thenReturn(1L, 2L);
+        when(visitRepository.existsByVisitNumber(org.mockito.ArgumentMatchers.endsWith("-00001"))).thenReturn(true);
+        when(visitRepository.existsByVisitNumber(org.mockito.ArgumentMatchers.endsWith("-00002"))).thenReturn(false);
+
+        String number = service.nextVisitNumber("KFH");
+
+        assertThat(number).endsWith("-00002");
+        verify(visitSequenceCounterRepository, org.mockito.Mockito.times(2)).claimNext(eq("KFH"), any());
     }
 }
