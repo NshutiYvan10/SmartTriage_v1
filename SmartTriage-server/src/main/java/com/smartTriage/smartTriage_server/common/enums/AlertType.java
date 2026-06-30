@@ -121,6 +121,7 @@ public enum AlertType {
 
     // EMS / paramedic workflow
     EMS_PRE_ARRIVAL(AlertCategory.CLINICAL, false),                       // Ambulance is en route — bay prep (own short-fuse loop)
+    EMS_ARRIVED(AlertCategory.CLINICAL, false),                           // Patient is physically AT THE DOOR — receiving team ping (CRITICAL→audible for RED/lights)
     EMS_HANDOVER_PENDING(AlertCategory.CLINICAL, false),                  // Patient at door, no ED ack yet
     FIELD_TRIAGED_AWAITING_REVIEW(AlertCategory.CLINICAL, false),         // 15 min elapsed, ED nurse hasn't re-triaged
 

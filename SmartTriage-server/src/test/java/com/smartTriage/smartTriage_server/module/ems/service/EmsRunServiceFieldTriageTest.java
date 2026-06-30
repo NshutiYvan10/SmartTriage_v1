@@ -62,6 +62,8 @@ class EmsRunServiceFieldTriageTest {
     private EmsRunRepository emsRunRepository;
     private RealTimeEventPublisher realTimeEventPublisher;
     private com.smartTriage.smartTriage_server.module.visit.service.ZoneRoutingService zoneRoutingService;
+    private ClinicalAlertRepository clinicalAlertRepository;
+    private ShiftAssignmentService shiftAssignmentService;
     private EmsRunService service;
 
     private EmsRun run;
@@ -77,11 +79,13 @@ class EmsRunServiceFieldTriageTest {
         PatientRepository patientRepository = mock(PatientRepository.class);
         UnidentifiedPatientNameService nameService = mock(UnidentifiedPatientNameService.class);
         UserRepository userRepository = mock(UserRepository.class);
-        ClinicalAlertRepository clinicalAlertRepository = mock(ClinicalAlertRepository.class);
+        clinicalAlertRepository = mock(ClinicalAlertRepository.class);
+        when(clinicalAlertRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         realTimeEventPublisher = mock(RealTimeEventPublisher.class);
         ClinicalAuthz clinicalAuthz = mock(ClinicalAuthz.class);
         HospitalRepository hospitalRepository = mock(HospitalRepository.class);
-        ShiftAssignmentService shiftAssignmentService = mock(ShiftAssignmentService.class);
+        shiftAssignmentService = mock(ShiftAssignmentService.class);
+        when(shiftAssignmentService.getChargeNurse(any())).thenReturn(java.util.List.of());
         zoneRoutingService = mock(com.smartTriage.smartTriage_server.module.visit.service.ZoneRoutingService.class);
 
         // REAL engines — this is the whole point of the test.
@@ -291,5 +295,28 @@ class EmsRunServiceFieldTriageTest {
         assertEquals(com.smartTriage.smartTriage_server.common.enums.TriageCategory.YELLOW,
                 visit.getCurrentTriageCategory());
         assertNull(visit.getCurrentEdZone());
+    }
+
+    @Test
+    void confirmArrival_raisesEmsArrivedAlert() {
+        com.smartTriage.smartTriage_server.module.visit.entity.Visit visit =
+                new com.smartTriage.smartTriage_server.module.visit.entity.Visit();
+        visit.setStatus(com.smartTriage.smartTriage_server.common.enums.VisitStatus.REGISTERED);
+        run.setVisit(visit);
+        run.setStatus(EmsRunStatus.EN_ROUTE);
+        run.setFieldTriageCategory("RED");
+
+        service.confirmArrival(RUN_ID);
+
+        // Arrival now raises an attention-grabbing owned alert (not just the silent
+        // board card-flip). RED → CRITICAL so the client beeps.
+        org.mockito.ArgumentCaptor<com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert> cap =
+                org.mockito.ArgumentCaptor.forClass(
+                        com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert.class);
+        org.mockito.Mockito.verify(clinicalAlertRepository).save(cap.capture());
+        assertEquals(com.smartTriage.smartTriage_server.common.enums.AlertType.EMS_ARRIVED,
+                cap.getValue().getAlertType());
+        assertEquals(com.smartTriage.smartTriage_server.common.enums.AlertSeverity.CRITICAL,
+                cap.getValue().getSeverity());
     }
 }
