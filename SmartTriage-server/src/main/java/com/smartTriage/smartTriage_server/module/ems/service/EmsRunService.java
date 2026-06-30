@@ -51,8 +51,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -798,9 +800,60 @@ public class EmsRunService {
                 emsPcrPdfService.render(run, ivs), emsPcrPdfService.filename(run));
     }
 
+    @Transactional(readOnly = true)
     public List<EmsRunResponse> getInbound(UUID hospitalId) {
-        return emsRunRepository.findInbound(hospitalId)
-                .stream().map(EmsRunMapper::toResponse).collect(Collectors.toList());
+        List<EmsRun> runs = emsRunRepository.findInbound(hospitalId);
+        // Scope the inbound board like the alerts: oversight (charge nurse / shift
+        // lead / super-admin) coordinate the whole floor and see EVERY inbound
+        // ambulance; a zone-bound nurse/doctor sees only ambulances headed to a zone
+        // they currently cover, so a General nurse no longer sees a Resus-bound
+        // critical's "at door" card. An undifferentiated inbound (no destination zone
+        // yet) stays a charge-nurse concern until it's categorised.
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (!clinicalAuthz.canSeeAllZonesAtHospital(auth, hospitalId)) {
+            Set<EdZone> covered = currentCoveredZones(hospitalId);
+            runs = runs.stream()
+                    .filter(r -> {
+                        EdZone dest = inboundDestinationZone(r);
+                        return dest != null && covered.contains(dest);
+                    })
+                    .collect(Collectors.toList());
+        }
+        return runs.stream().map(EmsRunMapper::toResponse).collect(Collectors.toList());
+    }
+
+    /**
+     * The ED zone an inbound run is destined for, for board-scoping: the visit's
+     * provisional placement once ARRIVED, otherwise the pre-arrival target zone
+     * (RESUS for RED/lights, the field-category zone otherwise, null if undifferentiated).
+     */
+    private EdZone inboundDestinationZone(EmsRun run) {
+        Visit v = run.getVisit();
+        if (v != null && v.getCurrentEdZone() != null) {
+            return v.getCurrentEdZone();
+        }
+        boolean critical = isRedField(run.getFieldTriageCategory()) || run.isLightsActive();
+        return preArrivalTargetZone(run, critical);
+    }
+
+    /** The caller's currently-covered zones (active shift's primary ∪ additional). */
+    private Set<EdZone> currentCoveredZones(UUID hospitalId) {
+        User caller = currentUser().orElse(null);
+        if (caller == null) {
+            return Set.of();
+        }
+        Set<EdZone> zones = new HashSet<>();
+        shiftAssignmentService.getCurrentShiftForUser(caller.getId()).ifPresent(sa -> {
+            if (sa.getHospitalId() == null || sa.getHospitalId().equals(hospitalId)) {
+                if (sa.getZone() != null) {
+                    zones.add(sa.getZone());
+                }
+                if (sa.getAdditionalZones() != null) {
+                    zones.addAll(sa.getAdditionalZones());
+                }
+            }
+        });
+        return zones;
     }
 
     public List<EmsRunResponse> getMyRuns() {
