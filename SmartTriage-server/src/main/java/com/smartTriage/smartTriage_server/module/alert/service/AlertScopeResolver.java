@@ -77,6 +77,22 @@ public class AlertScopeResolver {
 
     @Transactional(readOnly = true)
     public AlertScope resolve(Authentication auth, UUID hospitalId) {
+        AlertScope scope = doResolve(auth, hospitalId);
+        // PERMANENT visibility (the monitoring asked for): every Alert Center load
+        // prints the resolved scope, so it is immediately obvious in the running
+        // server whether scoping is active and what a given role/zone resolves to.
+        // If this line never appears, the build is not deployed; if a "Zone Nurse"
+        // shows kind=ALL, they are being treated as oversight (charge nurse / shift
+        // lead) — the legitimate reason a zone user would see every alert.
+        User u = (auth != null && auth.getPrincipal() instanceof User x) ? x : null;
+        log.info("[alert-scope] user={} role={} hospital={} -> kind={} zones={}",
+                u != null ? u.getId() : null,
+                u != null ? u.getRole() : null,
+                hospitalId, scope.kind(), scope.zones());
+        return scope;
+    }
+
+    private AlertScope doResolve(Authentication auth, UUID hospitalId) {
         User user = (auth != null && auth.getPrincipal() instanceof User u) ? u : null;
         if (user == null || hospitalId == null) {
             return AlertScope.none();
