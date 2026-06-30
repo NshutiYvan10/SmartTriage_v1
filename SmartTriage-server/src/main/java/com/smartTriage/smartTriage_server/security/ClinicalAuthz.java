@@ -283,13 +283,19 @@ public class ClinicalAuthz {
     }
 
     /**
-     * Alert-center read gate. Identical cross-zone visibility to
-     * {@link #canSeeAllZonesAtHospital(Authentication, UUID)} EXCEPT that
-     * HOSPITAL_ADMIN is denied: the clinical alert queue is a clinician
-     * surface and product policy keeps hospital administrators out of it.
-     * The UI already hides the Alerts page from HA; this closes the
-     * matching API hole (a HA token could otherwise GET the hospital-wide
-     * alert endpoints directly and read every clinical alert).
+     * Alert-center read gate. Kept in PARITY with the live alert stream:
+     * {@code /topic/alerts/{hospitalId}} is gated by
+     * {@link #canAccessHospital(Authentication, UUID)} in
+     * {@code StompAuthChannelInterceptor}, so every clinical staff member at the
+     * hospital already RECEIVES these alerts in real time. Gating the historical
+     * REST read more strictly (formerly doctor / charge-nurse / shift-lead only)
+     * left regular nurses, lab techs, registrars and paramedics denied here while
+     * still getting the same alerts live — so the Alert Center flipped between
+     * showing live pushes and a false "feed unavailable" whenever the live buffer
+     * happened to be empty (visibility tracked recent pushes, not actual state).
+     * Anyone who can receive the alerts live can read their history. The ONE
+     * exception is HOSPITAL_ADMIN, who stays denied: the clinical alert queue is
+     * a clinician surface and product policy (S6) keeps administrators out of it.
      */
     @Transactional(readOnly = true)
     public boolean canReadHospitalAlerts(Authentication authentication, UUID hospitalId) {
@@ -298,24 +304,10 @@ public class ClinicalAuthz {
             if (user == null) {
                 return false;
             }
-            boolean decision;
             if (user.getRole() == Role.HOSPITAL_ADMIN) {
-                decision = false;
-            } else if (user.getRole() == Role.DOCTOR) {
-                // Doctors are not zone-bound the way nurses are — they roam the
-                // whole floor, so the operational alert feed is theirs to read,
-                // scoped to their own hospital.
-                decision = belongsToHospital(user, hospitalId);
-            } else {
-                decision = canSeeAllZonesAtHospital(authentication, hospitalId);
+                return false;
             }
-            // TEMP DIAGNOSTIC (Alert Center "empty for doctor" investigation) —
-            // remove once confirmed. Shows whether the new build is running and why.
-            log.info("[alert-authz] canReadHospitalAlerts role={} userHospital={} reqHospital={} -> {}",
-                    user.getRole(),
-                    userRepository.findHospitalIdByUserId(user.getId()).orElse(null),
-                    hospitalId, decision);
-            return decision;
+            return canAccessHospital(authentication, hospitalId);
         } catch (Exception e) {
             log.error("canReadHospitalAlerts error for hospital {}: {}",
                     hospitalId, e.getMessage(), e);

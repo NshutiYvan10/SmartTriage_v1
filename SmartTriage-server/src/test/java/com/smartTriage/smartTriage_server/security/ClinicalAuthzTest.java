@@ -186,6 +186,36 @@ class ClinicalAuthzTest {
                 authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), hospitalId));
     }
 
+    @Test
+    void canReadHospitalAlerts_allowsRegularNurseAtOwnHospital() {
+        // Parity fix: a regular (non-charge) nurse ALREADY receives these alerts
+        // live over /topic/alerts/{hospitalId} (gated by canAccessHospital), so
+        // denying the historical REST read here made the Alert Center flip between
+        // showing live pushes and a false "feed unavailable". The read now matches
+        // the live gate.
+        assertTrue(authz.canReadHospitalAlerts(
+                authFor(user(Role.NURSE, null, hospitalId)), hospitalId));
+    }
+
+    @Test
+    void canReadHospitalAlerts_allowsLabTechAtOwnHospital() {
+        assertTrue(authz.canReadHospitalAlerts(
+                authFor(user(Role.LAB_TECHNICIAN, null, hospitalId)), hospitalId));
+    }
+
+    @Test
+    void canReadHospitalAlerts_deniesNurseAtOtherHospital() {
+        // Cross-hospital read stays denied — parity does not mean cross-tenant.
+        assertFalse(authz.canReadHospitalAlerts(
+                authFor(user(Role.NURSE, null, UUID.randomUUID())), hospitalId));
+    }
+
+    @Test
+    void canReadHospitalAlerts_allowsSuperAdminAnyHospital() {
+        assertTrue(authz.canReadHospitalAlerts(
+                authFor(user(Role.SUPER_ADMIN, null, null)), hospitalId));
+    }
+
     // ── canAccessMedicationSafetyCheck (scopes the medication-safety OVERRIDE endpoint) ──
 
     @Test
