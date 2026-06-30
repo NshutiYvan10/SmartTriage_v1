@@ -1027,6 +1027,19 @@ export function ConstantMonitoring() {
                             </span>
                             <span className={`text-[11px] ${text.muted} truncate font-medium min-w-0`}>{patient.chiefComplaint}</span>
                           </div>
+                          {/* Zone + bed — where to physically find the
+                              patient. Self-hides pre-placement. The name is
+                              already shown above; we render a compact
+                              location-only line so the row never duplicates
+                              the patient name. */}
+                          {(patient.currentEdZone || patient.currentBedLabel) && (
+                            <div className={`flex items-center gap-1.5 text-[11px] ${text.muted} mt-1`}>
+                              <span className="font-semibold">
+                                {patient.currentEdZone || 'Zone —'}
+                                {patient.currentBedLabel ? ` · Bed ${patient.currentBedLabel}` : ''}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Monitoring state pill + inline Start button.

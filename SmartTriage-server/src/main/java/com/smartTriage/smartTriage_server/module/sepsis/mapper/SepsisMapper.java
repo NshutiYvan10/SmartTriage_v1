@@ -77,6 +77,10 @@ public final class SepsisMapper {
         if (screening.getVisit() != null) {
             builder.visitId(screening.getVisit().getId());
             builder.visitNumber(screening.getVisit().getVisitNumber());
+            builder.currentZone(screening.getVisit().getCurrentEdZone());
+            if (screening.getVisit().getCurrentBed() != null) {
+                builder.currentBedLabel(screening.getVisit().getCurrentBed().getCode());
+            }
             if (screening.getVisit().getPatient() != null) {
                 builder.patientName(
                         screening.getVisit().getPatient().getFirstName() + " " +

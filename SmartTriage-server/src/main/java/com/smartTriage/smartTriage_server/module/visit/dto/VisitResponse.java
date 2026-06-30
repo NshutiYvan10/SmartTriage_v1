@@ -54,6 +54,14 @@ public class VisitResponse {
     private int retriageCount;
     /** Phase 1 zone routing — canonical zone the patient is currently in. */
     private EdZone currentEdZone;
+    /**
+     * Human bed label (Bed.code, e.g. "A-12") of the patient's current
+     * bed; NULL when no bed is assigned. Denormalised onto the list
+     * payload — alongside {@link #currentEdZone} — so every patient row
+     * (triage queue, patients list, monitoring grid, doctor workspace)
+     * can show WHERE the patient is without an N+1 fetch per row.
+     */
+    private String currentBedLabel;
     /** Doctor of record (soft binding); null until first clinical action. */
     private UUID primaryClinicianId;
     private String primaryClinicianName;

@@ -21,6 +21,17 @@ export type CriticalContactMethod = 'PHONE' | 'IN_PERSON' | 'IN_APP';
 export interface LabOrder {
   id: string;
   visitId: string;
+  // ── Denormalised patient context (worklist card + critical banner) ──
+  // Backend now denormalises these onto LabOrderResponse and
+  // CriticalValueResponse so a lab card / critical result NAMES the
+  // patient and where they are, without a second fetch. Optional so the
+  // critical-shaped payload (cast to LabOrder) and any legacy response
+  // stay type-safe.
+  patientId?: string | null;
+  patientName?: string | null;
+  visitNumber?: string | null;
+  currentZone?: string | null;
+  currentBedLabel?: string | null;
   orderNumber: string;
   testName: string;
   testCode: string | null;

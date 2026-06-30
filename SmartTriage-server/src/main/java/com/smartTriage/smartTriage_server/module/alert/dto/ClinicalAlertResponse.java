@@ -34,6 +34,12 @@ public class ClinicalAlertResponse {
 
     // Zone-aware escalation
     private EdZone targetZone;
+    /** The patient's CURRENT physical location (distinct from targetZone,
+     *  which is a routing hint). Lets an alert row say WHERE the patient
+     *  actually is — denormalised from visit.currentEdZone / currentBed so
+     *  the Alert Center row shows who+where without a second fetch. */
+    private EdZone currentZone;
+    private String currentBedLabel;
     private int escalationTier;
     private Instant escalatedAt;
     private UUID targetDoctorId;

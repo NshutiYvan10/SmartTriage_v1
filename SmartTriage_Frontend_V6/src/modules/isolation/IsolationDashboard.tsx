@@ -4,15 +4,18 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ShieldAlert, RefreshCw, Loader2, CheckCircle2, Clock,
   AlertTriangle, Building2, Phone, DoorOpen,
-  Shield, Eye, Hand, Shirt, Footprints,
+  Shield, Eye, Hand, Shirt, Footprints, ChevronRight,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useScopedView } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
 import { isolationApi } from '@/api/isolation';
+import { PatientContextLine } from '@/components/PatientContextLine';
+import { chartPath } from '@/lib/chartNav';
 import { subscribeToIsolation } from '@/api/websocket';
 import { useWebSocketGeneration } from '@/hooks/useWebSocket';
 import { ApiError } from '@/api/client';
@@ -44,6 +47,7 @@ const ISOLATION_TYPE_CONFIG: Record<string, { color: string; bg: string; border:
 
 export function IsolationDashboard() {
   const { glassCard, glassInner, text } = useTheme();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const scope = useScopedView();
@@ -266,6 +270,27 @@ export function IsolationDashboard() {
                       </div>
 
                       <div className="flex-1 min-w-0">
+                        {/* Identity FIRST — who + where, before the clinical payload.
+                            Clickable through to the patient chart (singular /visit route). */}
+                        <button
+                          type="button"
+                          onClick={() => iso.visitId && navigate(chartPath(iso.visitId))}
+                          disabled={!iso.visitId}
+                          title={iso.visitId ? 'Open patient chart' : undefined}
+                          className="group/chart flex items-center gap-1.5 mb-1.5 text-left disabled:cursor-default"
+                        >
+                          <PatientContextLine
+                            patientName={iso.patientName}
+                            zone={iso.currentZone}
+                            bedLabel={iso.currentBedLabel}
+                            visitNumber={iso.visitNumber}
+                            className={`text-[12px] ${text.heading}`}
+                          />
+                          {iso.visitId && (
+                            <ChevronRight className={`w-3.5 h-3.5 ${text.muted} opacity-0 group-hover/chart:opacity-100 transition-opacity`} />
+                          )}
+                        </button>
+
                         {/* Top row — condition & badges */}
                         <div className="flex flex-wrap items-center gap-2 mb-1.5">
                           <span className={`text-sm font-bold ${text.heading}`}>

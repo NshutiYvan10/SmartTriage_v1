@@ -67,7 +67,8 @@ public interface MedicationAdministrationRepository extends JpaRepository<Medica
      * (NULL-typed) and typed ONE_TIME orders keep appearing here.
      */
     @Query("SELECT m FROM MedicationAdministration m " +
-           "WHERE m.visit.hospital.id = :hospitalId AND m.isActive = true " +
+           "JOIN FETCH m.visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
+           "WHERE v.hospital.id = :hospitalId AND m.isActive = true " +
            "AND m.status = com.smartTriage.smartTriage_server.common.enums.MedicationStatus.PRESCRIBED " +
            "AND m.administeredAt IS NULL " +
            "AND (m.prescriptionType IS NULL " +
@@ -91,7 +92,7 @@ public interface MedicationAdministrationRepository extends JpaRepository<Medica
      * honoured live).
      */
     @Query("SELECT m FROM MedicationAdministration m " +
-           "JOIN FETCH m.visit v JOIN FETCH v.patient " +
+           "JOIN FETCH m.visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
            "WHERE v.hospital.id = :hospitalId AND m.isActive = true " +
            "AND m.status = :status " +
            "AND m.prescriptionType = :type " +
@@ -106,7 +107,7 @@ public interface MedicationAdministrationRepository extends JpaRepository<Medica
      * — drives the board's pending-approval lane.
      */
     @Query("SELECT m FROM MedicationAdministration m " +
-           "JOIN FETCH m.visit v JOIN FETCH v.patient " +
+           "JOIN FETCH m.visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
            "WHERE v.hospital.id = :hospitalId AND m.isActive = true " +
            "AND m.status = :status AND m.prescriptionType IS NOT NULL " +
            "ORDER BY m.prescribedAt ASC")

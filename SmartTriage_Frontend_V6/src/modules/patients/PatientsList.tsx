@@ -20,6 +20,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
 import type { Patient } from '@/types';
 import { HandoffPriorityBadges } from '@/components/HandoffPriorityBadges';
+import { chartPath } from '@/lib/chartNav';
 
 /* ─── Arrival mode config ─── */
 const arrivalModeConfig: Record<string, { label: string; icon: string; bg: string; text: string; border: string }> = {
@@ -348,7 +349,7 @@ export function PatientsList() {
                   <div
                     key={patient.id}
                     className="px-5 py-4 transition-all duration-300 group cursor-pointer hover:bg-white/[0.03] hover:-translate-y-0.5"
-                    onClick={() => navigate(`/patients/${patient.id}`)}
+                    onClick={() => navigate(chartPath(patient.id))}
                   >
                     {/* Top row: Avatar + Name + Age + Arrival + Arrow */}
                     <div className="flex items-center gap-3">
@@ -415,6 +416,20 @@ export function PatientsList() {
 
                     {/* Bottom row: Detail pills — responsive wrap */}
                     <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2 ml-[52px]">
+                      {/* Current ED location — zone + bed — so staff know
+                          where to physically find the patient. Only render
+                          when a location is known (the name is already shown
+                          above, so this row is purely the "where"). */}
+                      {(patient.currentEdZone || patient.currentBedLabel) && (
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className={`w-3 h-3 ${text.muted} opacity-70 flex-shrink-0`} />
+                          <span className={`text-[11px] ${text.body}`}>
+                            {patient.currentEdZone || 'Zone —'}
+                            {patient.currentBedLabel ? ` · Bed ${patient.currentBedLabel}` : ''}
+                          </span>
+                        </div>
+                      )}
+
                       {/* National ID — hidden from list view for privacy; visible on detail page */}
                       {patient.nationalId && (
                         <div className="flex items-center gap-1.5" title="National ID on file">

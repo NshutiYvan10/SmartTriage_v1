@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.medication.dto;
 
+import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.MedicationPriority;
 import com.smartTriage.smartTriage_server.common.enums.MedicationProductType;
 import com.smartTriage.smartTriage_server.common.enums.MedicationRoute;
@@ -27,6 +28,16 @@ public class MedicationResponse {
 
     private UUID id;
     private UUID visitId;
+
+    // ── Denormalised patient context (board / queue display) ──
+    // Every patient-scoped medication row MUST be able to show WHO the
+    // order is for and WHERE that patient is, without a second fetch.
+    // Populated from visit → patient / currentEdZone / currentBed.
+    private UUID patientId;
+    private String patientName;
+    private String visitNumber;
+    private EdZone zone;
+    private String bedLabel;
 
     // Drug details
     private String drugName;

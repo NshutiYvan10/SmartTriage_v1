@@ -6,6 +6,7 @@ import com.smartTriage.smartTriage_server.module.clinical.dto.InvestigationRespo
 import com.smartTriage.smartTriage_server.module.clinical.entity.ClinicalNote;
 import com.smartTriage.smartTriage_server.module.clinical.entity.Diagnosis;
 import com.smartTriage.smartTriage_server.module.clinical.entity.Investigation;
+import com.smartTriage.smartTriage_server.common.enums.EdZone;
 
 /**
  * Maps clinical entities to response DTOs.
@@ -37,8 +38,17 @@ public final class ClinicalMapper {
         // shouldn't be null in practice but never NPE the mapper.
         String visitNumber = null;
         String patientName = null;
+        EdZone currentZone = null;
+        String currentBedLabel = null;
         if (investigation.getVisit() != null) {
             visitNumber = investigation.getVisit().getVisitNumber();
+            // WHERE the patient/specimen is now — denormalised so the
+            // doctor's aggregate "My Investigations" row can show location
+            // without a second fetch. currentBed is nullable (unplaced).
+            currentZone = investigation.getVisit().getCurrentEdZone();
+            if (investigation.getVisit().getCurrentBed() != null) {
+                currentBedLabel = investigation.getVisit().getCurrentBed().getCode();
+            }
             if (investigation.getVisit().getPatient() != null) {
                 String fn = investigation.getVisit().getPatient().getFirstName();
                 String ln = investigation.getVisit().getPatient().getLastName();
@@ -51,6 +61,8 @@ public final class ClinicalMapper {
                 .visitId(investigation.getVisit().getId())
                 .visitNumber(visitNumber)
                 .patientName(patientName)
+                .currentZone(currentZone)
+                .currentBedLabel(currentBedLabel)
                 .investigationType(investigation.getInvestigationType())
                 .labRouted(investigation.getInvestigationType() != null
                         && investigation.getInvestigationType().isLabRoutable())

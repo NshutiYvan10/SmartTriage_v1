@@ -23,7 +23,8 @@ public interface FastTrackActivationRepository extends JpaRepository<FastTrackAc
     /**
      * Active fast-tracks for a hospital — not yet completed or cancelled.
      */
-    @Query("SELECT f FROM FastTrackActivation f JOIN f.visit v WHERE v.hospital.id = :hospitalId " +
+    @Query("SELECT f FROM FastTrackActivation f JOIN FETCH f.visit v JOIN FETCH v.patient " +
+            "LEFT JOIN FETCH v.currentBed WHERE v.hospital.id = :hospitalId " +
             "AND f.isActive = true AND f.status NOT IN ('COMPLETED', 'CANCELLED') " +
             "ORDER BY f.activatedAt DESC")
     List<FastTrackActivation> findActiveFastTracksByHospital(@Param("hospitalId") UUID hospitalId);

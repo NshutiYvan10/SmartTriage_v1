@@ -4,12 +4,15 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Thermometer, RefreshCw, Loader2, CheckCircle2, Circle,
   Clock, Activity, Play, ClipboardCheck,
-  Droplets, Syringe, Pill, FlaskConical, RotateCcw,
+  Droplets, Syringe, Pill, FlaskConical, RotateCcw, ChevronRight,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { PatientContextLine } from '@/components/PatientContextLine';
+import { chartPath } from '@/lib/chartNav';
 import { useScopedView } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
 import { sepsisApi } from '@/api/sepsis';
@@ -68,6 +71,7 @@ function formatElapsed(startIso: string): string {
 
 export function SepsisDashboard() {
   const { glassCard, isDark, text } = useTheme();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const scope = useScopedView();
@@ -369,15 +373,29 @@ export function SepsisDashboard() {
                             )}
                           </div>
 
-                          {/* Patient identity — so a multi-patient board shows WHICH patient each card is */}
-                          {(screening.patientName || screening.visitNumber) && (
-                            <p className={`text-sm font-bold ${text.heading} mb-1`}>
-                              {screening.patientName || 'Patient'}
-                              {screening.visitNumber && (
-                                <span className={`ml-2 text-[10px] font-mono font-normal ${text.muted}`}>{screening.visitNumber}</span>
-                              )}
-                            </p>
-                          )}
+                          {/* Patient identity + location — always rendered so a
+                              multi-patient board shows WHO + WHERE each card is.
+                              Click-through to the chart for action. */}
+                          <button
+                            type="button"
+                            onClick={() => screening.visitId && navigate(chartPath(screening.visitId))}
+                            disabled={!screening.visitId}
+                            className={`group flex items-center gap-1.5 mb-1 text-left ${
+                              screening.visitId ? 'cursor-pointer hover:opacity-80' : 'cursor-default'
+                            }`}
+                            title={screening.visitId ? 'Open patient chart' : undefined}
+                          >
+                            <PatientContextLine
+                              patientName={screening.patientName}
+                              zone={screening.currentZone}
+                              bedLabel={screening.currentBedLabel}
+                              visitNumber={screening.visitNumber}
+                              className={`text-sm font-bold ${text.heading}`}
+                            />
+                            {screening.visitId && (
+                              <ChevronRight className={`w-3.5 h-3.5 ${text.muted} group-hover:translate-x-0.5 transition-transform`} />
+                            )}
+                          </button>
 
                           {/* Screened info */}
                           <div className="flex items-center gap-3 flex-wrap">

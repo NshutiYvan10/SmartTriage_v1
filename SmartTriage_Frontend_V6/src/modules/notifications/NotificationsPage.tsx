@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Bell, AlertTriangle, AlertCircle, CheckCircle, Info,
   Search, Clock, Trash2, CheckCheck, Eye,
@@ -7,6 +8,8 @@ import {
 import { useAlertStore } from '@/store/alertStore';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
+import { PatientContextLine } from '@/components/PatientContextLine';
+import { chartPath } from '@/lib/chartNav';
 
 type NotificationType = 'critical' | 'warning' | 'info' | 'success';
 type NotificationCategory = 'all' | 'triage' | 'vitals' | 'system' | 'patient';
@@ -20,7 +23,12 @@ interface Notification {
   timestamp: Date;
   read: boolean;
   patientName?: string;
-  patientId?: string;
+  /** Visit UUID — used for chart navigation (NOT a patient id). */
+  visitId?: string;
+  /** Human visit number for display (e.g. "VN-1024"). */
+  visitNumber?: string;
+  /** Target ED zone, when the alert is zone-scoped. */
+  targetZone?: string;
 }
 
 function formatTimeAgo(date: Date): string {
@@ -53,8 +61,10 @@ const categoryConfig: Record<NotificationCategory, { icon: any; label: string }>
 
 export function NotificationsPage() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const navigate = useNavigate();
   const storeAlerts = useAlertStore((s) => s.alerts);
   const fetchAllAlerts = useAlertStore((s) => s.fetchAllAlerts);
+  const acknowledgeAlertApi = useAlertStore((s) => s.acknowledgeAlertApi);
   const user = useAuthStore((s) => s.user);
 
   const mappedNotifications: Notification[] = storeAlerts.map((a) => ({
@@ -66,7 +76,11 @@ export function NotificationsPage() {
     timestamp: a.timestamp instanceof Date ? a.timestamp : new Date(a.timestamp),
     read: a.acknowledged,
     patientName: a.patientName || undefined,
-    patientId: a.patientId || undefined,
+    // a.patientId is the raw VISIT UUID (alertStore sets patientId = visitId);
+    // keep it as visitId for chart nav, never render it as a patient id.
+    visitId: a.patientId || undefined,
+    visitNumber: a.visitNumber || undefined,
+    targetZone: a.targetZone || undefined,
   }));
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -105,20 +119,34 @@ export function NotificationsPage() {
     return true;
   });
 
+  // Persist acknowledgement to the backend (alertStore.acknowledgeAlertApi)
+  // BEFORE reflecting it locally — a local-only "read" was an illusory ack
+  // (the alert stays live for everyone else / on reload), a safety hazard.
   const markAllRead = () => {
+    notifications.filter((n) => !n.read).forEach((n) => acknowledgeAlertApi(n.id));
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
   const markAsRead = (id: string) => {
+    acknowledgeAlertApi(id);
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
   };
 
   const deleteNotification = (id: string) => {
+    // Removing an unacknowledged alert from the list implies acting on it —
+    // persist the ack so it does not silently reappear unhandled.
+    const target = notifications.find((n) => n.id === id);
+    if (target && !target.read) acknowledgeAlertApi(id);
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
   const clearAll = () => {
+    notifications.filter((n) => !n.read).forEach((n) => acknowledgeAlertApi(n.id));
     setNotifications([]);
+  };
+
+  const openChart = (n: Notification) => {
+    if (n.visitId) navigate(chartPath(n.visitId));
   };
 
   return (
@@ -281,7 +309,19 @@ export function NotificationsPage() {
                 return (
                   <div
                     key={n.id}
-                    className={`rounded-2xl p-4 hover:-translate-y-0.5 transition-all duration-500 cursor-pointer flex items-start gap-4 group animate-fade-up ${
+                    onClick={() => openChart(n)}
+                    role={n.visitId ? 'button' : undefined}
+                    tabIndex={n.visitId ? 0 : undefined}
+                    onKeyDown={(e) => {
+                      if (n.visitId && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                        openChart(n);
+                      }
+                    }}
+                    title={n.visitId ? 'Open patient chart' : undefined}
+                    className={`rounded-2xl p-4 hover:-translate-y-0.5 transition-all duration-500 ${
+                      n.visitId ? 'cursor-pointer' : ''
+                    } flex items-start gap-4 group animate-fade-up ${
                       !n.read ? 'animate-critical-border' : ''
                     }`}
                     style={{ ...glassInner, animationDelay: `${0.35 + idx * 0.04}s` }}
@@ -304,6 +344,15 @@ export function NotificationsPage() {
                           </span>
                         )}
                       </div>
+                      {/* Who + where — identity FIRST, before the clinical payload.
+                          Visit number is shown as a human "#<visitNumber>" by
+                          PatientContextLine, never the raw visit UUID. */}
+                      <PatientContextLine
+                        patientName={n.patientName}
+                        zone={n.targetZone}
+                        visitNumber={n.visitNumber}
+                        className={`text-[11px] mb-2 ${text.body}`}
+                      />
                       <p className={`text-xs leading-relaxed mb-3 ${text.body}`}>{n.message}</p>
                       <div className="flex items-center gap-3 flex-wrap">
                         <span
@@ -312,15 +361,6 @@ export function NotificationsPage() {
                         >
                           {config.label}
                         </span>
-                        {n.patientName && (
-                          <span className={`text-[11px] flex items-center gap-1 font-semibold ${text.body}`}>
-                            <UserCheck className="w-3 h-3" />
-                            {n.patientName}
-                            {n.patientId && (
-                              <span className={`font-medium ${text.muted}`}>({n.patientId})</span>
-                            )}
-                          </span>
-                        )}
                         <span className={`text-[11px] flex items-center gap-1 font-medium ${text.muted}`}>
                           <Clock className="w-3 h-3" />
                           {formatTimeAgo(n.timestamp)}

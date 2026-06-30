@@ -15,7 +15,7 @@
    step so a partially filled run isn't lost.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   X, ChevronLeft, ChevronRight, Loader2, Send, AlertOctagon,
   Check, Plus, Siren, Activity, Calculator, MapPin,
@@ -134,6 +134,10 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [current, setCurrent] = useState<EmsRun | null>(run);
   const [destinations, setDestinations] = useState<DestinationHospital[]>([]);
+  // A failed destinations fetch must NOT masquerade as "only my hospital" — that
+  // silently strips reroute. Track the failure so the select can offer a Retry.
+  const [destinationsError, setDestinationsError] = useState(false);
+  const [loadingDestinations, setLoadingDestinations] = useState(true);
 
   const [draft, setDraft] = useState({
     destinationHospitalId: run?.hospitalId ?? hospitalId,
@@ -176,9 +180,15 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
   useEffect(() => { setCurrent(run); }, [run]);
 
   // Destination list (paramedic-accessible).
-  useEffect(() => {
-    emsApi.destinations().then(setDestinations).catch(() => setDestinations([]));
+  const loadDestinations = useCallback(() => {
+    setLoadingDestinations(true);
+    setDestinationsError(false);
+    emsApi.destinations()
+      .then((d) => { setDestinations(d || []); })
+      .catch(() => { setDestinationsError(true); })
+      .finally(() => { setLoadingDestinations(false); });
   }, []);
+  useEffect(() => { loadDestinations(); }, [loadDestinations]);
 
   // Keep the child-form default in step with the entered age (until the
   // paramedic overrides it manually on the triage step).
@@ -189,7 +199,14 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
     }
   }, [draft.patientAgeYears, run?.fieldTriageIsChild]);
 
-  const num = (v: any) => (v === '' || v === null || v === undefined ? undefined : Number(v));
+  const num = (v: any) => {
+    if (v === '' || v === null || v === undefined) return undefined;
+    const n = Number(v);
+    // Guard NaN (e.g. a stray char) — JSON.stringify turns NaN into null, which
+    // would silently DROP a vital the crew actually typed (and a dropped SpO2/HR
+    // can suppress the RED override). Treat unparseable as "not entered".
+    return Number.isNaN(n) ? undefined : n;
+  };
 
   async function saveStep1() {
     if (!current) {
@@ -206,11 +223,10 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
       setCurrent(created);
       return;
     }
-    // Destination changed on an existing run → reroute.
-    if (draft.destinationHospitalId && draft.destinationHospitalId !== current.hospitalId) {
-      const rerouted = await emsApi.reroute(current.id, { hospitalId: draft.destinationHospitalId });
-      setCurrent(rerouted);
-    }
+    // Persist the field edits FIRST and unconditionally — a reroute that the
+    // backend rejects (e.g. an already-identified, pre-registered patient) must
+    // never silently discard the unit/age/sex/location/mechanism/history the
+    // crew just typed.
     const updated = await emsApi.update(current.id, {
       unitCallsign: draft.unitCallsign || undefined,
       patientAgeYears: num(draft.patientAgeYears),
@@ -220,6 +236,23 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
       historySummary: draft.historySummary || undefined,
     });
     setCurrent(updated);
+
+    // Destination changed on an existing run → attempt reroute in its OWN guard.
+    // On failure, revert the destination select to the true server state (the
+    // field edits above are already saved) and surface why, instead of leaving
+    // the UI showing a destination the server never accepted.
+    if (draft.destinationHospitalId && draft.destinationHospitalId !== updated.hospitalId) {
+      try {
+        const rerouted = await emsApi.reroute(current.id, { hospitalId: draft.destinationHospitalId });
+        setCurrent(rerouted);
+      } catch (e: any) {
+        setDraft((d) => ({ ...d, destinationHospitalId: updated.hospitalId }));
+        throw new Error(
+          (e?.message || 'This run could not be rerouted to the selected hospital.')
+          + ' Destination reverted — your other changes were saved.',
+        );
+      }
+    }
   }
 
   async function saveStep2() {
@@ -261,6 +294,19 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
   /** Step 3 — run the shared triage engine. `ack` re-confirms a downgrade. */
   async function computeTriage(ack = false) {
     if (!current) return;
+    // Min-data guard — without any assessment input the engine returns an
+    // all-null GREEN, which would be persisted and shown to the ED as the field
+    // call. Require at least one vital, discriminator, or AVPU/mobility/trauma.
+    const hasVital = [
+      draft.fieldRespRate, draft.fieldHr, draft.fieldSbp, draft.fieldDbp,
+      draft.fieldSpo2, draft.fieldTemp, draft.fieldGlucose, draft.fieldGcs,
+    ].some((v) => v !== '' && v !== null && v !== undefined);
+    const hasDiscriminator = Object.values(flags).some(Boolean) || !!avpu || !!mobility || !!trauma;
+    if (!hasVital && !hasDiscriminator) {
+      setError('No assessment data entered — record at least one vital, a discriminator, '
+        + 'or an AVPU / mobility before computing field triage.');
+      return;
+    }
     setComputing(true);
     setError(null);
     try {
@@ -327,6 +373,17 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
     }
   }
 
+  // Closing the modal (X) must not silently discard Step-5 ETA + handover notes
+  // — those were only persisted inside sendToEd(). Best-effort save them first.
+  async function handleClose() {
+    if (current && ((draft.notes && draft.notes.trim()) || (draft.etaMinutes !== '' && draft.etaMinutes != null))) {
+      try {
+        await emsApi.update(current.id, { notes: draft.notes || undefined, etaMinutes: num(draft.etaMinutes) });
+      } catch { /* best-effort — close regardless */ }
+    }
+    onClose();
+  }
+
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
       <div className="rounded-2xl p-4 sm:p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-2xl animate-scale-in" style={glassCard}>
@@ -343,7 +400,7 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
               <p className={`text-sm ${text.muted}`}>Step {step} of 5</p>
             </div>
           </div>
-          <button onClick={onClose} className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}>
+          <button onClick={handleClose} className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}>
             <X className="w-4 h-4 text-slate-400" />
           </button>
         </div>
@@ -356,7 +413,7 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
         </div>
 
         {step === 1 && (
-          <Step1Patient draft={draft} setDraft={setDraft} destinations={destinations} text={text} glassInner={glassInner} isDark={isDark} />
+          <Step1Patient draft={draft} setDraft={setDraft} destinations={destinations} destinationsError={destinationsError} loadingDestinations={loadingDestinations} reloadDestinations={loadDestinations} text={text} glassInner={glassInner} isDark={isDark} />
         )}
         {step === 2 && (
           <Step2Vitals draft={draft} setDraft={setDraft} mobility={mobility} setMobility={setMobility}
@@ -412,7 +469,7 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
 // Step 1 — patient, incident & destination
 // ─────────────────────────────────────────────────────────────────
 
-function Step1Patient({ draft, setDraft, destinations, text, glassInner, isDark }: any) {
+function Step1Patient({ draft, setDraft, destinations, destinationsError, loadingDestinations, reloadDestinations, text, glassInner, isDark }: any) {
   const inputClass = `w-full px-3 py-3 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
   return (
     <div className="space-y-4">
@@ -421,11 +478,28 @@ function Step1Patient({ draft, setDraft, destinations, text, glassInner, isDark 
       <div>
         <Label text={text}><MapPin className="w-3.5 h-3.5 inline mr-1" /> Destination hospital</Label>
         <select value={draft.destinationHospitalId} onChange={(e) => setDraft({ ...draft, destinationHospitalId: e.target.value })} className={inputClass} style={glassInner}>
-          {destinations.length === 0 && <option value={draft.destinationHospitalId}>My hospital</option>}
+          {destinations.length === 0 && (
+            <option value={draft.destinationHospitalId}>
+              {loadingDestinations ? 'Loading hospitals…' : destinationsError ? 'My hospital (list unavailable)' : 'My hospital'}
+            </option>
+          )}
           {destinations.map((h: DestinationHospital) => (
             <option key={h.id} value={h.id}>{h.name ?? h.hospitalCode ?? h.id.slice(0, 8)}{h.city ? ` — ${h.city}` : ''}</option>
           ))}
         </select>
+        {/* A failed fetch must not silently disable reroute — say so + offer Retry. */}
+        {destinationsError && (
+          <div className="mt-1.5 flex items-center gap-2 text-[11px] text-amber-600">
+            <span className="flex-1">Could not load the hospital list — reroute is limited to your hospital until this loads.</span>
+            <button
+              type="button"
+              onClick={() => reloadDestinations?.()}
+              className="px-2.5 py-1 rounded-lg bg-amber-500 text-white font-bold hover:bg-amber-600"
+            >
+              Retry
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -556,7 +630,20 @@ function Step3Triage({ run, flags, setFlags, isChild, setIsChild, reason, setRea
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h4 className={`text-base font-bold ${text.heading}`}>Field triage</h4>
         <label className={`flex items-center gap-2 text-sm font-semibold ${text.body} cursor-pointer`}>
-          <input type="checkbox" checked={isChild} onChange={() => setIsChild(!isChild)} className="w-5 h-5 accent-rose-500" />
+          <input type="checkbox" checked={isChild} onChange={() => {
+            const next = !isChild;
+            setIsChild(next);
+            // Turning Pediatric OFF must drop any peds-only signs already ticked,
+            // otherwise a stale `true` is hidden from view but still persisted —
+            // a contradictory record (peds sign on a non-pediatric assessment).
+            if (!next) {
+              setFlags((f: Record<string, boolean>) => {
+                const cleaned = { ...f };
+                for (const s of EMERGENCY_SIGNS) if (s.peds) delete cleaned[s.key as string];
+                return cleaned;
+              });
+            }
+          }} className="w-5 h-5 accent-rose-500" />
           Pediatric (KFH form, &lt; 13y)
         </label>
       </div>

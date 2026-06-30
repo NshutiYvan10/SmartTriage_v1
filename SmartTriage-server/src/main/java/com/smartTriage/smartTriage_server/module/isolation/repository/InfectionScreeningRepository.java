@@ -41,8 +41,13 @@ public interface InfectionScreeningRepository extends JpaRepository<InfectionScr
 
     /**
      * Active isolations for a hospital — isolation started but not ended.
+     *
+     * <p>JOIN FETCH visit + patient + (LEFT) currentBed so the dashboard mapper can
+     * denormalise WHO/WHERE (patientName / zone / bed) without a LazyInitializationException
+     * — the controller maps these rows AFTER the @Transactional service returns.
      */
-    @Query("SELECT s FROM InfectionScreening s JOIN s.visit v WHERE v.hospital.id = :hospitalId " +
+    @Query("SELECT s FROM InfectionScreening s JOIN FETCH s.visit v JOIN FETCH v.patient " +
+            "LEFT JOIN FETCH v.currentBed WHERE v.hospital.id = :hospitalId " +
             "AND s.isActive = true AND s.isolationType IS NOT NULL " +
             "AND s.isolationStartedAt IS NOT NULL AND s.isolationEndedAt IS NULL " +
             "ORDER BY s.screenedAt DESC")
@@ -50,8 +55,12 @@ public interface InfectionScreeningRepository extends JpaRepository<InfectionScr
 
     /**
      * Notifiable disease cases for a hospital — for public health dashboard.
+     *
+     * <p>JOIN FETCH visit + patient + (LEFT) currentBed — same reason as
+     * {@link #findActiveIsolationsByHospital} (mapping runs post-transaction).
      */
-    @Query("SELECT s FROM InfectionScreening s JOIN s.visit v WHERE v.hospital.id = :hospitalId " +
+    @Query("SELECT s FROM InfectionScreening s JOIN FETCH s.visit v JOIN FETCH v.patient " +
+            "LEFT JOIN FETCH v.currentBed WHERE v.hospital.id = :hospitalId " +
             "AND s.isActive = true AND s.notifiableDisease IS NOT NULL " +
             "ORDER BY s.screenedAt DESC")
     List<InfectionScreening> findNotifiableDiseasesByHospital(@Param("hospitalId") UUID hospitalId);

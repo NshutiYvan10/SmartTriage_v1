@@ -11,7 +11,9 @@
  * Admins additionally get an "Edit bed" entry that jumps to the admin page.
  */
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, Stethoscope } from 'lucide-react';
+import { chartPath } from '@/lib/chartNav';
 import { useAuthStore } from '@/store/authStore';
 import { useBedStore } from '@/store/bedStore';
 import type { BedResponse } from '@/api/types';
@@ -28,6 +30,7 @@ interface BedActionSheetProps {
 
 export function BedActionSheet({ bed, onClose, onActionComplete }: BedActionSheetProps) {
   const { isDark, glassCard } = useTheme();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === 'HOSPITAL_ADMIN' || user?.role === 'SUPER_ADMIN';
 
@@ -164,6 +167,16 @@ export function BedActionSheet({ bed, onClose, onActionComplete }: BedActionShee
 
               {bed.status === 'OCCUPIED' && (
                 <>
+                  {bed.currentVisitId && (
+                    <button
+                      type="button"
+                      onClick={() => navigate(chartPath(bed.currentVisitId!))}
+                      className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold transition ${isDark ? 'border-slate-600 text-slate-200 hover:bg-slate-800' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}
+                    >
+                      <Stethoscope className="w-4 h-4" />
+                      Open patient chart
+                    </button>
+                  )}
                   <PrimaryButton isDark={isDark} onClick={() => setShowTransfer(true)} disabled={busy}>
                     Transfer patient
                   </PrimaryButton>

@@ -25,6 +25,7 @@ public class FastTrackResponse {
     private String patientName;
     private UUID hospitalId;
     private String currentZone;
+    private String currentBedLabel;
 
     private FastTrackType fastTrackType;
     private FastTrackStatus status;

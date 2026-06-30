@@ -4,14 +4,17 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Route, CheckCircle, Clock, AlertTriangle, Search,
   Loader2, RefreshCw, ChevronRight, ChevronDown,
   X, MessageSquare, BookOpen, ListChecks, Play,
   SkipForward, Flag, XCircle, Stethoscope, Zap, Baby,
-  Bug, Wind, Brain, Droplets, Heart, Siren,
+  Bug, Wind, Brain, Droplets, Heart, Siren, FileText,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { PatientContextLine } from '@/components/PatientContextLine';
+import { chartPath } from '@/lib/chartNav';
 import { pathwayApi } from '@/api/pathway';
 import type {
   ClinicalPathway, PathwayStep, PathwayActivation, PathwayProgress, PathwayRecommendation,
@@ -70,6 +73,7 @@ type MainView = 'library' | 'active';
 
 export function ClinicalPathwaysView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
 
@@ -700,6 +704,29 @@ export function ClinicalPathwaysView() {
                               )}
                             </div>
 
+                            {/* WHO + WHERE — identity / zone / bed always present so the
+                                activation row is actionable without leaving the list. Click
+                                opens the patient chart. */}
+                            <button
+                              type="button"
+                              onClick={() => activation.visitId && navigate(chartPath(activation.visitId))}
+                              disabled={!activation.visitId}
+                              title={activation.visitId ? 'Open patient chart' : undefined}
+                              className={`mb-2 -ml-0.5 inline-flex max-w-full text-left rounded-lg px-1 py-0.5 transition-colors ${
+                                activation.visitId
+                                  ? `${isDark ? 'hover:bg-white/5' : 'hover:bg-slate-100/70'} cursor-pointer`
+                                  : 'cursor-default'
+                              }`}
+                            >
+                              <PatientContextLine
+                                patientName={activation.patientName}
+                                zone={activation.currentZone}
+                                bedLabel={activation.currentBedLabel}
+                                visitNumber={activation.visitNumber}
+                                className={`text-[11px] ${text.body}`}
+                              />
+                            </button>
+
                             {/* Meta */}
                             <div className="flex items-center gap-3 flex-wrap mb-3">
                               <span className={`text-[11px] font-medium ${text.muted}`}>
@@ -742,6 +769,17 @@ export function ClinicalPathwaysView() {
 
                           {/* Actions */}
                           <div className="flex-shrink-0 flex flex-col gap-2 pt-1">
+                            {activation.visitId && (
+                              <button
+                                onClick={() => navigate(chartPath(activation.visitId))}
+                                title="Open patient chart"
+                                className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold rounded-xl transition-all ${
+                                  isDark ? 'text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20' : 'text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200/60'
+                                }`}
+                              >
+                                <FileText className="w-3.5 h-3.5" /> Chart
+                              </button>
+                            )}
                             <button
                               onClick={() => setExpandedActivationId(isExpanded ? null : activation.id)}
                               className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold rounded-xl transition-all ${

@@ -41,6 +41,7 @@ import { medicationApi } from '@/api/medications';
 import { subscribeToMedications } from '@/api/websocket';
 import type { MedicationPriority, MedicationResponse } from '@/api/types';
 import { MEDICATION_PRIORITIES } from '@/api/types';
+import { PatientContextLine } from '@/components/PatientContextLine';
 import { useTheme } from '@/hooks/useTheme';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -284,7 +285,7 @@ export function NurseMedicationQueue({ embedded = false }: { embedded?: boolean 
             rows={stat}
             onAction={callAction}
             onRequestReason={onRequestReason}
-            onOpenVisit={(visitId) => navigate(`/visits/${visitId}`)}
+            onOpenVisit={(visitId) => navigate(`/visit/${visitId}`)}
             currentUserId={userId}
           />
         )}
@@ -296,7 +297,7 @@ export function NurseMedicationQueue({ embedded = false }: { embedded?: boolean 
             rows={urgent}
             onAction={callAction}
             onRequestReason={onRequestReason}
-            onOpenVisit={(visitId) => navigate(`/visits/${visitId}`)}
+            onOpenVisit={(visitId) => navigate(`/visit/${visitId}`)}
             currentUserId={userId}
           />
         )}
@@ -308,7 +309,7 @@ export function NurseMedicationQueue({ embedded = false }: { embedded?: boolean 
             rows={routine}
             onAction={callAction}
             onRequestReason={onRequestReason}
-            onOpenVisit={(visitId) => navigate(`/visits/${visitId}`)}
+            onOpenVisit={(visitId) => navigate(`/visit/${visitId}`)}
             currentUserId={userId}
           />
         )}
@@ -469,7 +470,23 @@ function MedRow({
       style={{ ...glassInner, borderLeft: `4px solid rgba(${barRgb},0.75)` }}
     >
       <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
+        <div
+          className="flex-1 min-w-0 cursor-pointer"
+          role="button"
+          tabIndex={0}
+          onClick={() => onOpenVisit(med.visitId)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenVisit(med.visitId); } }}
+          title="Open patient chart"
+        >
+          {/* WHO + WHERE first — a nurse must know the patient and location
+              before the drug, so the row is actionable without leaving it. */}
+          <PatientContextLine
+            patientName={med.patientName}
+            zone={med.zone}
+            bedLabel={med.bedLabel}
+            visitNumber={med.visitNumber}
+            className={`text-[11px] ${text.heading} mb-1`}
+          />
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-sm font-bold ${text.heading}`}>{med.drugName}</span>
             {med.dose && <span className={`text-sm ${text.body}`}>— {med.dose}</span>}

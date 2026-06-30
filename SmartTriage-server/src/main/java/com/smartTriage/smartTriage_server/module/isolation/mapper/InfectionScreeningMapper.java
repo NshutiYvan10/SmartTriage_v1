@@ -63,12 +63,21 @@ public final class InfectionScreeningMapper {
                 .createdAt(screening.getCreatedAt());
 
         if (screening.getVisit() != null) {
-            builder.visitId(screening.getVisit().getId());
-            builder.visitNumber(screening.getVisit().getVisitNumber());
-            if (screening.getVisit().getPatient() != null) {
+            var visit = screening.getVisit();
+            builder.visitId(visit.getId());
+            builder.visitNumber(visit.getVisitNumber());
+            if (visit.getPatient() != null) {
                 builder.patientName(
-                        screening.getVisit().getPatient().getFirstName() + " " +
-                                screening.getVisit().getPatient().getLastName());
+                        visit.getPatient().getFirstName() + " " +
+                                visit.getPatient().getLastName());
+            }
+            // Denormalise WHERE the patient is so the isolation dashboard row shows
+            // zone + bed without a second fetch (was declared-but-never-set → always null).
+            if (visit.getCurrentEdZone() != null) {
+                builder.currentZone(visit.getCurrentEdZone().name());
+            }
+            if (visit.getCurrentBed() != null) {
+                builder.currentBedLabel(visit.getCurrentBed().getCode());
             }
         }
 

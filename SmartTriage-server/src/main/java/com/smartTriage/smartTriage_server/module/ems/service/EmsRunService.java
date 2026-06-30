@@ -235,7 +235,12 @@ public class EmsRunService {
                 .hasUncontrolledHaemorrhage(req.isHasUncontrolledHaemorrhage())
                 .hasStabGunWoundNeckChest(req.isHasStabGunWoundNeckChest())
                 .hasConvulsions(req.isHasConvulsions())
-                .hasComa(req.isHasComa())
+                // A recorded field GCS was persisted but never reached the engine
+                // (PerformTriageRequest has no GCS field), so a GCS of 6 without a
+                // separately-ticked Coma box was silently under-triaged. GCS <= 8 is
+                // the established coma / intubation threshold — feed it into the coma
+                // emergency sign so a low GCS alone forces RED.
+                .hasComa(req.isHasComa() || (req.getGcs() != null && req.getGcs() <= 8))
                 .hasHypoglycaemia(req.isHasHypoglycaemia())
                 .hasBurnFaceInhalation(req.isHasBurnFaceInhalation())
                 // Pediatric-only emergency signs (defensive: only when child)
@@ -333,6 +338,10 @@ public class EmsRunService {
         log.info("[ems] Run {} field triage computed: {} (TEWS {}, {} engine) — {}",
                 runId, category, tews, isChild ? "KFH peds" : "adult", decisionPath);
 
+        // A recompute that upgrades an already-pinged inbound run to RED must
+        // re-escalate the ED pre-arrival to CRITICAL/RESUS (no-op otherwise).
+        escalatePreArrivalIfNowCritical(run, "field re-triage to " + category.name());
+
         return broadcastAndMap(run, false);
     }
 
@@ -349,6 +358,9 @@ public class EmsRunService {
         run.setLightsActivatedAt(active ? Instant.now() : null);
         run = emsRunRepository.save(run);
         log.info("[ems] Run {} lights {}", runId, active ? "ACTIVATED" : "cleared");
+        // Lights switched on AFTER the pre-arrival ping must re-escalate the ED
+        // alert to CRITICAL/RESUS (never-downgrade: clearing lights does not).
+        if (active) escalatePreArrivalIfNowCritical(run, "blue lights activated");
         return broadcastAndMap(run, false);
     }
 
@@ -494,9 +506,14 @@ public class EmsRunService {
     @Transactional
     public EmsRunResponse confirmArrival(UUID runId) {
         EmsRun run = findOrThrow(runId);
-        if (run.getStatus() != EmsRunStatus.EN_ROUTE && run.getStatus() != EmsRunStatus.DISPATCHED) {
+        // Only an EN_ROUTE run may be marked ARRIVED. A DISPATCHED run has no
+        // linked visit yet, so allowing it here only produced a confusing
+        // "no linked visit" error — reject it cleanly with the real next step.
+        if (run.getStatus() != EmsRunStatus.EN_ROUTE) {
             throw new ClinicalBusinessException(
-                    "Cannot confirm arrival for run " + runId + " from status " + run.getStatus());
+                    run.getStatus() == EmsRunStatus.DISPATCHED
+                            ? "Send the pre-arrival to the ED first (run " + runId + " is still DISPATCHED)."
+                            : "Cannot confirm arrival for run " + runId + " from status " + run.getStatus());
         }
         if (run.getVisit() == null) {
             throw new ClinicalBusinessException(
@@ -677,8 +694,15 @@ public class EmsRunService {
 
     public Optional<EmsRunResponse> getByVisitId(UUID visitId) {
         return emsRunRepository.findByVisitIdAndIsActiveTrue(visitId)
-                .map(r -> EmsRunMapper.toResponse(r,
-                        interventionRepository.findByEmsRunIdAndIsActiveTrueOrderByGivenAtAsc(r.getId())));
+                .map(r -> {
+                    // Same tenant guard as the by-id path: a paramedic may read only
+                    // their OWN run, others only runs destined for their hospital —
+                    // closes the by-visit IDOR (a paramedic reading any same-hospital
+                    // run via visitId, bypassing own-run-only).
+                    assertCallerMayAccess(r);
+                    return EmsRunMapper.toResponse(r,
+                            interventionRepository.findByEmsRunIdAndIsActiveTrueOrderByGivenAtAsc(r.getId()));
+                });
     }
 
     /**
@@ -796,6 +820,49 @@ public class EmsRunService {
      * recipient for an inbound, identified the same way the alert-escalation
      * service does.
      */
+    /**
+     * Re-escalate the inbound pre-arrival to CRITICAL / RESUS when a run that
+     * was ALREADY pre-registered (EN_ROUTE, visit linked) becomes critical
+     * after the first ping — blue lights switched on, or a field re-triage
+     * upgraded the category to RED. {@link #preregister} fixes criticality
+     * exactly once; without this a deterioration after the ping never reaches
+     * the RESUS board and the ED keeps prepping for a routine arrival.
+     *
+     * No-op unless the run is inbound, now critical, and no CRITICAL
+     * pre-arrival is already live for the visit (so toggling lights on/off or
+     * recomputing repeatedly never spams the resus team).
+     */
+    private void escalatePreArrivalIfNowCritical(EmsRun run, String trigger) {
+        if (run.getVisit() == null) return;                       // not pre-registered yet — preregister handles it
+        if (run.getStatus() != EmsRunStatus.EN_ROUTE) return;     // only while genuinely inbound
+        boolean critical = isRedField(run.getFieldTriageCategory()) || run.isLightsActive();
+        if (!critical) return;
+        UUID visitId = run.getVisit().getId();
+        boolean alreadyCritical = clinicalAlertRepository
+                .existsByVisitIdAndAlertTypeAndSeverityAndIsActiveTrue(
+                        visitId, AlertType.EMS_PRE_ARRIVAL, AlertSeverity.CRITICAL);
+        if (alreadyCritical) return;                              // ED already has the CRITICAL inbound
+        ClinicalAlert alert = ClinicalAlert.builder()
+                .visit(run.getVisit())
+                .alertType(AlertType.EMS_PRE_ARRIVAL)
+                .severity(AlertSeverity.CRITICAL)
+                .title("INCOMING CRITICAL — " + safe(run.getMechanism(), "patient"))
+                .message(String.format(
+                        "Pre-arrival UPGRADED to CRITICAL (%s). Field triage %s%s. %s",
+                        trigger,
+                        run.getFieldTriageCategory() != null ? run.getFieldTriageCategory() : "?",
+                        run.isLightsActive() ? ", lights / priority transport active" : "",
+                        safe(run.getMechanism(), "EMS patient en route")))
+                .targetZone(EdZone.RESUS)
+                .escalationTier(2)
+                .autoGenerated(true)
+                .build();
+        alert = clinicalAlertRepository.save(alert);
+        routePreArrivalAlert(run, alert, true);
+        log.warn("[ems] Pre-arrival re-escalated to CRITICAL for visit {} (run {}) — {}",
+                visitId, run.getId(), trigger);
+    }
+
     private void routePreArrivalAlert(EmsRun run, ClinicalAlert alert, boolean critical) {
         UUID hospitalId = run.getHospital().getId();
         try {
@@ -862,7 +929,9 @@ public class EmsRunService {
                 : null;
         EmsRunResponse response = EmsRunMapper.toResponse(run, ivs);
         try {
-            realTimeEventPublisher.publishEmsRun(run.getHospital().getId(), response);
+            // After-commit so a rolled-back mutation never pushes a phantom run
+            // to the inbound board (matches the visit/alert publish discipline).
+            realTimeEventPublisher.publishEmsRunAfterCommit(run.getHospital().getId(), response);
         } catch (Exception e) {
             log.warn("[ems] Broadcast failed for run {}: {}", run.getId(), e.getMessage());
         }

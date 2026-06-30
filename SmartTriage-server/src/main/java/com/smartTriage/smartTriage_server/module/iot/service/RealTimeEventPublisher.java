@@ -275,6 +275,32 @@ public class RealTimeEventPublisher {
         log.debug("Published EMS run event to {}", topic);
     }
 
+    /**
+     * After-commit variant — publishes the EMS run only once the surrounding
+     * transaction commits, so a later rollback never leaves a phantom inbound
+     * card on the board (and a reload-on-event subscriber always reads the
+     * committed row). Falls back to an immediate publish when no transaction is
+     * active. Best-effort: a STOMP failure never propagates into the caller's tx.
+     */
+    public void publishEmsRunAfterCommit(UUID hospitalId, Object emsRunResponse) {
+        Runnable fire = () -> {
+            try {
+                publishEmsRun(hospitalId, emsRunResponse);
+            } catch (Exception e) {
+                log.warn("Failed to publish EMS run event for hospital {}: {}",
+                        hospitalId, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override public void afterCommit() { fire.run(); }
+                    });
+        } else {
+            fire.run();
+        }
+    }
+
     // ====================================================================
     // VISIT / ADMISSION TOPICS (B4)
     // ====================================================================

@@ -28,6 +28,8 @@ import { ShiftStartBanner } from '@/components/ShiftStartBanner';
 import { CriticalLabBanner } from '@/modules/lab/CriticalLabBanner';
 import { InboundEmsBoard } from '@/modules/ems/InboundEmsBoard';
 import { subscribeToVisits } from '@/api/websocket';
+import { PatientContextLine } from '@/components/PatientContextLine';
+import { chartPath } from '@/lib/chartNav';
 
 export function Dashboard() {
   const { glassCard, glassInner, isDark, text } = useTheme();
@@ -116,7 +118,7 @@ export function Dashboard() {
 
   // Zone-aware filter: DOCTOR/NURSE see only their zone's patients;
   // SUPER_ADMIN/HOSPITAL_ADMIN see all patients.
-  const displayPatients = useMemo(() => {
+  const zonePatients = useMemo(() => {
     if (!myZone || user?.role === 'SUPER_ADMIN' || user?.role === 'HOSPITAL_ADMIN') return patients;
     return patients.filter(p => {
       if (!p.category) {
@@ -126,6 +128,33 @@ export function Dashboard() {
       return getZoneForCategory(p.category) === myZone;
     });
   }, [patients, myZone, user?.role]);
+
+  // Apply the header search + filter-bar controls on top of the zone scope.
+  // These used to be inert (state set, never read) so every dashboard metric
+  // and chart ignored them — now they drive the displayed population.
+  const displayPatients = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const now = Date.now();
+    const timeWindowMs =
+      timeFilter === 'today' ? 24 * 3_600_000 :
+      timeFilter === 'week' ? 7 * 24 * 3_600_000 :
+      timeFilter === 'month' ? 30 * 24 * 3_600_000 :
+      Infinity;
+    return zonePatients.filter((p) => {
+      if (statusFilter !== 'all' && p.triageStatus !== statusFilter) return false;
+      if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
+      if (arrivalFilter !== 'all' && p.arrivalMode !== arrivalFilter) return false;
+      if (timeWindowMs !== Infinity) {
+        const t = p.arrivalTimestamp ? new Date(p.arrivalTimestamp).getTime() : NaN;
+        if (Number.isNaN(t) || now - t > timeWindowMs) return false;
+      }
+      if (q) {
+        const hay = `${p.fullName ?? ''} ${p.chiefComplaint ?? ''} ${p.visitNumber ?? ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [zonePatients, searchQuery, statusFilter, categoryFilter, arrivalFilter, timeFilter]);
 
   // Zone-aware alerts: filter to current zone if assigned
   const zoneAlerts = useMemo(() => {
@@ -158,6 +187,11 @@ export function Dashboard() {
   };
 
   const unreadAlerts = zoneAlerts.filter((a) => !a.acknowledgedAt).length;
+
+  // True when any filter-bar control is narrowing the population (drives the Clear button).
+  const filtersActive =
+    searchQuery.trim() !== '' || statusFilter !== 'all' || categoryFilter !== 'all' ||
+    arrivalFilter !== 'all' || timeFilter !== 'today';
 
   // Real arrivals-by-hour over the last 12 hours, from each patient's arrival timestamp.
   const arrivalsByHour = useMemo(() => {
@@ -286,8 +320,10 @@ export function Dashboard() {
                         return (
                           <div
                             key={a.id}
+                            role="button"
+                            tabIndex={0}
                             className={`px-5 py-3.5 border-b ${isDark ? 'border-white/5 hover:bg-white/5' : 'border-gray-100/80 hover:bg-gray-50/80'} cursor-pointer transition-all duration-200`}
-                            onClick={() => { if (a.patientId) navigate(`/visit/${a.patientId}`); setShowNotifications(false); }}
+                            onClick={() => { if (a.patientId) navigate(chartPath(a.patientId)); setShowNotifications(false); }}
                           >
                             <div className="flex items-start gap-3">
                               <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${isCrit ? (isDark ? 'bg-red-500/20' : 'bg-red-50') : (isDark ? 'bg-amber-500/20' : 'bg-amber-50')}`}>
@@ -305,8 +341,14 @@ export function Dashboard() {
                                     >TIER {a.escalationTier}</span>
                                   )}
                                 </div>
+                                {/* Identity + location first so the responder knows WHO and WHERE before the payload. */}
+                                <PatientContextLine
+                                  patientName={a.patientName}
+                                  zone={a.targetZone}
+                                  visitNumber={a.visitNumber}
+                                  className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-300' : 'text-gray-600'}`}
+                                />
                                 <p className={`text-xs ${isDark ? 'text-slate-300' : 'text-gray-600'} mt-0.5 leading-relaxed line-clamp-2`}>
-                                  {a.patientName && <span className="font-semibold">{a.patientName} — </span>}
                                   {a.message}
                                 </p>
                                 <div className="flex items-center gap-3 mt-1.5">
@@ -318,12 +360,6 @@ export function Dashboard() {
                                       <Clock className="w-3 h-3 text-orange-500" />
                                       <SatsCountdown createdAt={a.timestamp} satsMinutes={a.satsTargetMinutes} />
                                     </span>
-                                  )}
-                                  {a.targetZone && (
-                                    <span
-                                      className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-cyan-600"
-                                      style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}
-                                    >{a.targetZone}</span>
                                   )}
                                 </div>
                               </div>
@@ -511,10 +547,24 @@ export function Dashboard() {
 
             <div className="flex-1" />
 
-            {/* Compact Apply Button */}
-            <button className="w-8 h-8 flex items-center justify-center rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
-              <Search className="w-3.5 h-3.5" />
-            </button>
+            {/* Live result count — confirms the filters above are actually applied. */}
+            <span className="text-[11px] font-semibold text-slate-400 tabular-nums">
+              {stats.total} shown
+            </span>
+
+            {/* Clear-filters reset — only when something is filtering, so the control
+                is never dead: filters already apply live, this resets them. */}
+            {filtersActive && (
+              <button
+                onClick={() => {
+                  setSearchQuery(''); setStatusFilter('all'); setCategoryFilter('all');
+                  setArrivalFilter('all'); setTimeFilter('today');
+                }}
+                className="inline-flex items-center gap-1 px-2.5 h-8 rounded-xl text-[11px] font-semibold text-cyan-700 hover:text-white hover:bg-cyan-600 bg-cyan-50 transition-all duration-300"
+              >
+                <X className="w-3.5 h-3.5" /> Clear
+              </button>
+            )}
           </div>
         </div>
 
@@ -772,13 +822,15 @@ export function Dashboard() {
                 {zoneAlerts.slice(0, 4).map((alert) => (
                   <div
                     key={alert.id}
+                    role="button"
+                    tabIndex={0}
                     className="p-3 rounded-xl border-l-[3px] hover:-translate-y-1 transition-all duration-400 cursor-pointer group"
                     style={{
                       ...glassInnerItem,
                       borderLeftColor: alert.severity === 'CRITICAL' ? '#ef4444' : alert.severity === 'HIGH' ? '#f97316' : '#eab308',
                       borderLeftWidth: '3px',
                     }}
-                    onClick={() => alert.patientId && navigate(`/visit/${alert.patientId}`)}
+                    onClick={() => alert.patientId && navigate(chartPath(alert.patientId))}
                   >
                     <div className="flex items-start gap-2.5">
                       {alert.severity === 'CRITICAL' ? (
@@ -800,9 +852,13 @@ export function Dashboard() {
                             >T{alert.escalationTier}</span>
                           )}
                         </div>
-                        {alert.patientName && (
-                          <p className="text-[11px] text-slate-500 mt-0.5 truncate">{alert.patientName} {alert.visitNumber ? `— ${alert.visitNumber}` : ''}</p>
-                        )}
+                        {/* Who + where, first — so the row is actionable without leaving it. */}
+                        <PatientContextLine
+                          patientName={alert.patientName}
+                          zone={alert.targetZone}
+                          visitNumber={alert.visitNumber}
+                          className="text-[11px] text-slate-500 mt-0.5"
+                        />
                         <div className="flex items-center gap-2 mt-1">
                           <p className="text-[11px] text-slate-400">{safeFormatDistanceToNow(alert.timestamp, { addSuffix: true })}</p>
                           {/* SATS Countdown Timer */}

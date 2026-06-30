@@ -23,6 +23,7 @@ public class HypoglycemiaEventResponse {
     private String patientName;
 
     private String currentZone;
+    private String currentBedLabel;
 
     private Instant detectedAt;
     private Double glucoseLevel;

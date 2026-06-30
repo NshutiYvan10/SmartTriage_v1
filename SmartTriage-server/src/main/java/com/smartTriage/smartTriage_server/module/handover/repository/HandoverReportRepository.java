@@ -19,9 +19,18 @@ public interface HandoverReportRepository extends JpaRepository<HandoverReport, 
 
     Optional<HandoverReport> findByIdAndIsActiveTrue(UUID id);
 
-    List<HandoverReport> findByVisitIdAndIsActiveTrueOrderByGeneratedAtDesc(UUID visitId);
+    // Patient context (name/zone/bed) is denormalised onto the response, so the
+    // visit + patient + (nullable) current bed are JOIN-FETCHed here to feed the
+    // mapper without a LazyInit error or N+1 — mirrors the medication board repo.
+    @Query("SELECT h FROM HandoverReport h " +
+            "JOIN FETCH h.visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
+            "WHERE v.id = :visitId AND h.isActive = true " +
+            "ORDER BY h.generatedAt DESC")
+    List<HandoverReport> findByVisitIdAndIsActiveTrueOrderByGeneratedAtDesc(@Param("visitId") UUID visitId);
 
-    @Query("SELECT h FROM HandoverReport h WHERE h.hospital.id = :hospitalId " +
+    @Query("SELECT h FROM HandoverReport h " +
+            "JOIN FETCH h.visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
+            "WHERE h.hospital.id = :hospitalId " +
             "AND h.isActive = true AND h.generatedAt BETWEEN :shiftStart AND :shiftEnd " +
             "ORDER BY h.generatedAt DESC")
     List<HandoverReport> findReportsForShift(
@@ -29,7 +38,9 @@ public interface HandoverReportRepository extends JpaRepository<HandoverReport, 
             @Param("shiftStart") Instant shiftStart,
             @Param("shiftEnd") Instant shiftEnd);
 
-    @Query("SELECT h FROM HandoverReport h WHERE h.hospital.id = :hospitalId " +
+    @Query("SELECT h FROM HandoverReport h " +
+            "JOIN FETCH h.visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
+            "WHERE h.hospital.id = :hospitalId " +
             "AND h.isActive = true AND h.reportType = :reportType " +
             "ORDER BY h.generatedAt DESC")
     Page<HandoverReport> findByHospitalAndType(

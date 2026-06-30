@@ -5,6 +5,8 @@ import com.smartTriage.smartTriage_server.module.lab.dto.LabOrderResponse;
 import com.smartTriage.smartTriage_server.module.lab.dto.LabResultComponentResponse;
 import com.smartTriage.smartTriage_server.module.lab.entity.LabOrder;
 import com.smartTriage.smartTriage_server.module.lab.entity.LabResultComponent;
+import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
+import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -18,9 +20,20 @@ public final class LabOrderMapper {
     private LabOrderMapper() {}
 
     public static LabOrderResponse toResponse(LabOrder order) {
+        Visit visit = order.getVisit();
+        Patient patient = visit != null ? visit.getPatient() : null;
         return LabOrderResponse.builder()
                 .id(order.getId())
-                .visitId(order.getVisit().getId())
+                .visitId(visit != null ? visit.getId() : null)
+                .patientId(patient != null ? patient.getId() : null)
+                .patientName(patient != null
+                        ? (safe(patient.getFirstName()) + " " + safe(patient.getLastName())).trim()
+                        : null)
+                .visitNumber(visit != null ? visit.getVisitNumber() : null)
+                .currentZone(visit != null ? visit.getCurrentEdZone() : null)
+                .currentBedLabel(visit != null && visit.getCurrentBed() != null
+                        ? visit.getCurrentBed().getCode()
+                        : null)
                 .investigationId(order.getInvestigation() != null ? order.getInvestigation().getId() : null)
                 .orderNumber(order.getOrderNumber())
                 .testName(order.getTestName())
@@ -97,9 +110,20 @@ public final class LabOrderMapper {
             minutesSinceResult = Duration.between(order.getResultedAt(), Instant.now()).toMinutes();
         }
 
+        Visit visit = order.getVisit();
+        Patient patient = visit != null ? visit.getPatient() : null;
         return CriticalValueResponse.builder()
                 .labOrderId(order.getId())
-                .visitId(order.getVisit().getId())
+                .visitId(visit != null ? visit.getId() : null)
+                .patientId(patient != null ? patient.getId() : null)
+                .patientName(patient != null
+                        ? (safe(patient.getFirstName()) + " " + safe(patient.getLastName())).trim()
+                        : null)
+                .visitNumber(visit != null ? visit.getVisitNumber() : null)
+                .currentZone(visit != null ? visit.getCurrentEdZone() : null)
+                .currentBedLabel(visit != null && visit.getCurrentBed() != null
+                        ? visit.getCurrentBed().getCode()
+                        : null)
                 .orderNumber(order.getOrderNumber())
                 .testName(order.getTestName())
                 .priority(order.getPriority())
@@ -113,6 +137,10 @@ public final class LabOrderMapper {
                 .criticalValueNotifiedTo(order.getCriticalValueNotifiedTo())
                 .minutesSinceResult(minutesSinceResult)
                 .build();
+    }
+
+    private static String safe(String s) {
+        return s == null ? "" : s;
     }
 
 }

@@ -4,16 +4,19 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Pill, Search, CheckCircle, XCircle, AlertTriangle, Shield,
   ChevronDown, ChevronUp, Loader2, RefreshCw, X, Clock,
-  ShieldAlert, ShieldCheck, BookOpen, Plus, Eye, Activity,
+  ShieldAlert, ShieldCheck, BookOpen, Plus, Eye, Activity, FileText,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { medsafetyApi } from '@/api/medsafety';
 import type { MedicationSafetyCheck, DrugFormulary, ValidatePrescriptionRequest } from '@/api/medsafety';
 import { format } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
+import { PatientContextLine } from '@/components/PatientContextLine';
+import { chartPath } from '@/lib/chartNav';
 
 // ── Check result styling ──
 function getOverallStyle(check: MedicationSafetyCheck) {
@@ -34,6 +37,7 @@ type MainTab = 'checks' | 'formulary';
 
 export function MedicationSafetyView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
 
@@ -515,12 +519,20 @@ export function MedicationSafetyView() {
                                   {check.checkedAt ? format(new Date(check.checkedAt), 'MMM d, yyyy HH:mm') : '--'}
                                 </span>
                               </div>
+                              {/* Patient identity + location (who + where) — FIRST */}
+                              <PatientContextLine
+                                patientName={check.patientName}
+                                zone={check.currentZone}
+                                bedLabel={check.currentBedLabel}
+                                visitNumber={check.visitNumber}
+                                className={`text-[11px] ${text.body}`}
+                              />
                               {/* Drug name and dose */}
-                              <p className={`text-sm font-bold leading-snug ${text.heading}`}>
+                              <p className={`text-sm font-bold leading-snug mt-1 ${text.heading}`}>
                                 {check.drugName} - {check.prescribedDoseMg}mg
                               </p>
                               <p className={`text-[11px] font-medium mt-0.5 ${text.muted}`}>
-                                {check.patientWeightKg ? `Patient: ${check.patientWeightKg}kg` : 'Weight not recorded'}
+                                {check.patientWeightKg ? `Weight: ${check.patientWeightKg}kg` : 'Weight not recorded'}
                                 {check.overriddenBy && ` | Overridden by ${check.overriddenBy}`}
                               </p>
                             </div>
@@ -588,8 +600,16 @@ export function MedicationSafetyView() {
                             )}
 
                             {/* Action buttons */}
-                            {!check.overallSafe && !check.overriddenBy && (
-                              <div className="mt-4 flex items-center gap-2">
+                            <div className="mt-4 flex items-center gap-2">
+                              {check.visitId && (
+                                <button
+                                  onClick={() => navigate(chartPath(check.visitId))}
+                                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl transition-all"
+                                >
+                                  <FileText className="w-3.5 h-3.5" /> Open Chart
+                                </button>
+                              )}
+                              {!check.overallSafe && !check.overriddenBy && (
                                 <button
                                   onClick={() => openOverrideDialog(check.id)}
                                   className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl transition-all ${
@@ -598,8 +618,8 @@ export function MedicationSafetyView() {
                                 >
                                   <Shield className="w-3.5 h-3.5" /> Override
                                 </button>
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>

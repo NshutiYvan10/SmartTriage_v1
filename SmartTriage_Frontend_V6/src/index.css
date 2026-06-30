@@ -14,7 +14,7 @@
 
   color-scheme: light;
   color: #1a1a1a;
-  background-color: #fafbfd;
+  background-color: #eef3ff; /* near-white periwinkle — canvas for carved tab (light mode) */
 
   /* Modal/popup backdrop — light frosted-glass scrim: the page stays visible
      behind, blurred + whitened, with the dialog floating on top. Overridden to a
@@ -84,15 +84,18 @@
   --neutral-100: #e8e8e8;
   --neutral-50: #f5f5f5;
 
-  /* Surface Colors */
-  --surface-primary: #ffffff;
-  --surface-secondary: #f8fafc;
-  --surface-tertiary: #f1f5f9;
+  /* Surface Colors — near-white periwinkle canvas with glassmorphic white cards.
+     Canvas is one flat colour so the carved sidebar tab merges seamlessly.
+     Cards are white frosted glass that pop against the canvas. */
+  --surface-canvas: #eef3ff;   /* page + content area — single near-white background */
+  --surface-primary: #ffffff;  /* white card / solid surface */
+  --surface-secondary: #f0f4ff;
+  --surface-tertiary: #e8eeff;
 
-  /* Glass Morphism */
-  --glass-bg: rgba(255, 255, 255, 0.8);
-  --glass-border: rgba(255, 255, 255, 0.6);
-  --glass-shadow: rgba(0, 0, 0, 0.02);
+  /* Glass Morphism — white frosted glass on periwinkle canvas */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  --glass-shadow: rgba(99, 102, 241, 0.06);
 
   /* Shadows */
   --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
@@ -116,6 +119,7 @@ html.dark {
   --modal-backdrop: rgba(2, 6, 23, 0.6);
 
   /* Surface Colors */
+  --surface-canvas: #020b14;   /* dark page + content area — single background */
   --surface-primary: #0a1929;
   --surface-secondary: #0c1f35;
   --surface-tertiary: #0d2440;
@@ -138,13 +142,13 @@ body {
   margin: 0;
   min-height: 100vh;
   overflow-x: hidden;
+  /* Blue-violet gradient — provides depth so glass cards look frosted against it. */
   background: linear-gradient(
     135deg,
-    #fafbfd 0%,
-    #f3f6fb 25%,
-    #f0f4f9 50%,
-    #f5f8fc 75%,
-    #fafbfd 100%
+    #dbeafe 0%,
+    #e0e7ff 30%,
+    #ede9fe 70%,
+    #dbeafe 100%
   );
   background-attachment: fixed;
   color: var(--neutral-800);
@@ -533,7 +537,8 @@ html.dark .bg-slate-300 { background-color: rgba(2, 132, 199, 0.25) !important; 
 
   /* ── Premium Card Styles ── */
   .card {
-    @apply bg-white/95 rounded-2xl border border-primary-100/50 backdrop-blur-xl transition-all duration-500;
+    @apply rounded-2xl border border-primary-100/50 backdrop-blur-xl transition-all duration-500;
+    background-color: rgba(255, 255, 255, 0.95); /* white card on ivory (light) */
     box-shadow:
       var(--shadow-sm),
       inset 0 1px 0 rgba(255, 255, 255, 0.9);

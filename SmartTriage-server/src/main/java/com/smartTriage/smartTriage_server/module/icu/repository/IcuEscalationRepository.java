@@ -24,7 +24,15 @@ public interface IcuEscalationRepository extends JpaRepository<IcuEscalation, UU
      * Find all active escalations for a hospital that are not yet resolved.
      * Excludes TRANSFERRED_TO_ICU and CANCELLED as those are terminal states.
      */
-    @Query("SELECT e FROM IcuEscalation e JOIN e.visit v WHERE v.hospital.id = :hospitalId " +
+    // JOIN FETCH visit -> patient and LEFT JOIN FETCH visit.currentBed so the
+    // mapper's denormalised patient-context dereferences (name / currentEdZone /
+    // currentBed.code) resolve eagerly — no LazyInitializationException and no
+    // N+1 across the escalation board rows.
+    @Query("SELECT e FROM IcuEscalation e " +
+            "JOIN FETCH e.visit v " +
+            "JOIN FETCH v.patient p " +
+            "LEFT JOIN FETCH v.currentBed b " +
+            "WHERE v.hospital.id = :hospitalId " +
             "AND e.isActive = true " +
             "AND e.status NOT IN (com.smartTriage.smartTriage_server.common.enums.IcuEscalationStatus.TRANSFERRED_TO_ICU, " +
             "com.smartTriage.smartTriage_server.common.enums.IcuEscalationStatus.CANCELLED) " +

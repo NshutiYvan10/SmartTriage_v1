@@ -113,6 +113,14 @@ export interface Patient {
   registeredBy?: string; // clinician who registered
   trendStatus?: 'WORSENING' | 'STABLE' | 'IMPROVING' | 'UNKNOWN';
 
+  // Current physical location + visit number — backend sends them on the
+  // active-visits list; the patient-store mapper carries them through so
+  // every patient card (Monitoring, Triage Queue, Doctor Workspace) can
+  // show WHERE to go without opening the chart. `id` is the visit id.
+  visitNumber?: string;
+  currentEdZone?: string | null;
+  currentBedLabel?: string | null;
+
   // Shift-handoff aggregate signals — backend populates these on
   // active-visits list endpoints; the patient store mapper carries
   // them through. Drive the HandoffPriorityBadges component on

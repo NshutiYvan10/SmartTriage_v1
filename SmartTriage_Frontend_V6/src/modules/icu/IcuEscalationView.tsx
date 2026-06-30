@@ -9,11 +9,14 @@ import {
   AlertTriangle, Bell, MessageSquare, Hash, ArrowRight,
   XCircle, Zap, User, Activity, ShieldCheck, X,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
 import { useScopedView } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
 import { icuApi } from '@/api/icu';
 import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
+import { PatientContextLine } from '@/components/PatientContextLine';
+import { chartPath } from '@/lib/chartNav';
 import type { IcuEscalation, IcuCapacity } from '@/api/icu';
 import { format } from 'date-fns';
 
@@ -60,6 +63,7 @@ function formatElapsed(startIso: string): string {
 
 export function IcuEscalationView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const scope = useScopedView();
@@ -371,6 +375,17 @@ export function IcuEscalationView() {
                             )}
                           </div>
 
+                          {/* Patient CURRENT physical location — who + where RIGHT NOW
+                              (distinct from the ICU destination bed shown below). */}
+                          <PatientContextLine
+                            patientName={esc.patientName}
+                            zone={esc.currentEdZone}
+                            bedLabel={esc.currentBed}
+                            visitNumber={esc.visitNumber}
+                            hideVisitNumber
+                            className={`text-[11px] mb-2 ${text.muted}`}
+                          />
+
                           {/* Trigger & Reason */}
                           <div className="flex items-center gap-3 flex-wrap mb-2">
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${isDark ? 'bg-white/5 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
@@ -410,7 +425,7 @@ export function IcuEscalationView() {
                             {esc.icuBedNumber && (
                               <span className="text-[10px] flex items-center gap-1 text-purple-400 font-bold">
                                 <BedDouble className="w-3 h-3" />
-                                Bed {esc.icuBedNumber}
+                                ICU Bed {esc.icuBedNumber}
                               </span>
                             )}
                           </div>
@@ -447,6 +462,15 @@ export function IcuEscalationView() {
 
                     {/* ── Action Buttons ── */}
                     <div className="mt-4 flex items-center gap-2 flex-wrap">
+                      {esc.visitId && (
+                        <button
+                          onClick={() => navigate(chartPath(esc.visitId))}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-500/10 text-slate-400 hover:bg-slate-500/20 transition-colors"
+                        >
+                          <User className="w-3 h-3" />
+                          View Chart
+                        </button>
+                      )}
                       {esc.status === 'REQUESTED' && (
                         <button
                           onClick={() => handleNotifyTeam(esc.id)}

@@ -11,6 +11,7 @@ export interface InfectionScreening {
   visitNumber: string | null;
   patientName: string | null;
   currentZone: string | null;
+  currentBedLabel: string | null;
   screenedAt: string;
   screenedByName: string | null;
   riskLevel: InfectionRiskLevelValue | string;

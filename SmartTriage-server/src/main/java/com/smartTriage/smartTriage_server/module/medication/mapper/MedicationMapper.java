@@ -2,18 +2,39 @@ package com.smartTriage.smartTriage_server.module.medication.mapper;
 
 import com.smartTriage.smartTriage_server.module.medication.dto.MedicationResponse;
 import com.smartTriage.smartTriage_server.module.medication.entity.MedicationAdministration;
+import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
+import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 
 /**
  * Maps MedicationAdministration entities to response DTOs.
+ *
+ * <p>Patient context (name / visit number / zone / bed) is denormalised
+ * onto every response so a medication row on the board or nurse queue
+ * can show WHO the order is for and WHERE the patient is without a
+ * second fetch. Callers that return many rows (queue / board lanes)
+ * JOIN FETCH {@code visit}, {@code visit.patient} and (LEFT)
+ * {@code visit.currentBed}; single-order callers run inside the
+ * {@code @Transactional} service so the lazy associations resolve.
  */
 public final class MedicationMapper {
 
     private MedicationMapper() {}
 
     public static MedicationResponse toResponse(MedicationAdministration med) {
+        Visit visit = med.getVisit();
+        Patient patient = visit != null ? visit.getPatient() : null;
         return MedicationResponse.builder()
                 .id(med.getId())
-                .visitId(med.getVisit().getId())
+                .visitId(visit != null ? visit.getId() : null)
+                .patientId(patient != null ? patient.getId() : null)
+                .patientName(patient != null
+                        ? (safe(patient.getFirstName()) + " " + safe(patient.getLastName())).trim()
+                        : null)
+                .visitNumber(visit != null ? visit.getVisitNumber() : null)
+                .zone(visit != null ? visit.getCurrentEdZone() : null)
+                .bedLabel(visit != null && visit.getCurrentBed() != null
+                        ? visit.getCurrentBed().getCode()
+                        : null)
                 .drugName(med.getDrugName())
                 .dose(med.getDose())
                 .route(med.getRoute())
@@ -71,5 +92,9 @@ public final class MedicationMapper {
                 .createdAt(med.getCreatedAt())
                 .updatedAt(med.getUpdatedAt())
                 .build();
+    }
+
+    private static String safe(String s) {
+        return s == null ? "" : s;
     }
 }

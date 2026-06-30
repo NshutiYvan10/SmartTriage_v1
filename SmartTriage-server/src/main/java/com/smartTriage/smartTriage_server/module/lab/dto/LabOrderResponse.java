@@ -2,6 +2,7 @@ package com.smartTriage.smartTriage_server.module.lab.dto;
 
 import com.smartTriage.smartTriage_server.common.enums.CriticalContactMethod;
 import com.smartTriage.smartTriage_server.common.enums.CriticalValueType;
+import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.LabOrderStatus;
 import com.smartTriage.smartTriage_server.common.enums.LabPriority;
 import com.smartTriage.smartTriage_server.common.enums.SpecimenRejectionReason;
@@ -25,6 +26,17 @@ public class LabOrderResponse {
 
     private UUID id;
     private UUID visitId;
+
+    // ── Denormalised patient context (lab worklist card display) ──
+    // Every lab worklist card MUST show WHO the order is for and WHERE
+    // that patient is, without a second fetch. Populated from
+    // order.visit → patient / currentEdZone / currentBed.
+    private UUID patientId;
+    private String patientName;
+    private String visitNumber;
+    private EdZone currentZone;
+    private String currentBedLabel;
+
     private UUID investigationId;
     private String orderNumber;
     private String testName;

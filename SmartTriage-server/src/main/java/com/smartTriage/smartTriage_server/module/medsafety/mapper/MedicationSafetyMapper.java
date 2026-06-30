@@ -6,6 +6,8 @@ import com.smartTriage.smartTriage_server.module.medsafety.dto.MedicationSafetyR
 import com.smartTriage.smartTriage_server.module.medsafety.engine.MedicationSafetyResult;
 import com.smartTriage.smartTriage_server.module.medsafety.entity.DrugFormulary;
 import com.smartTriage.smartTriage_server.module.medsafety.entity.MedicationSafetyCheck;
+import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
+import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 
 /**
  * Maps medication safety entities and engine results to response DTOs.
@@ -48,10 +50,21 @@ public final class MedicationSafetyMapper {
     }
 
     public static MedicationSafetyCheckResponse toCheckResponse(MedicationSafetyCheck check) {
+        Visit visit = check.getVisit();
+        Patient patient = visit != null ? visit.getPatient() : null;
         return MedicationSafetyCheckResponse.builder()
                 .id(check.getId())
-                .visitId(check.getVisit().getId())
-                .medicationId(check.getMedication().getId())
+                .visitId(visit != null ? visit.getId() : null)
+                .medicationId(check.getMedication() != null ? check.getMedication().getId() : null)
+                // Denormalised patient context (who + where) for the list row.
+                .patientName(patient != null
+                        ? (safe(patient.getFirstName()) + " " + safe(patient.getLastName())).trim()
+                        : null)
+                .visitNumber(visit != null ? visit.getVisitNumber() : null)
+                .currentZone(visit != null ? visit.getCurrentEdZone() : null)
+                .currentBedLabel(visit != null && visit.getCurrentBed() != null
+                        ? visit.getCurrentBed().getCode()
+                        : null)
                 .checkedAt(check.getCheckedAt())
                 .drugName(check.getDrugName())
                 .prescribedDoseMg(check.getPrescribedDoseMg())
@@ -103,5 +116,9 @@ public final class MedicationSafetyMapper {
                 .createdAt(formulary.getCreatedAt())
                 .updatedAt(formulary.getUpdatedAt())
                 .build();
+    }
+
+    private static String safe(String s) {
+        return s == null ? "" : s;
     }
 }

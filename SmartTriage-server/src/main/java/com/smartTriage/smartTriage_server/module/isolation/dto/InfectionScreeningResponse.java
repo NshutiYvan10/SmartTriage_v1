@@ -26,6 +26,7 @@ public class InfectionScreeningResponse {
     private String visitNumber;
     private String patientName;
     private String currentZone;
+    private String currentBedLabel;
 
     private Instant screenedAt;
     private String screenedByName;

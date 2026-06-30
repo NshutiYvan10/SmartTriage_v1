@@ -32,7 +32,8 @@ public interface SepsisScreeningRepository extends JpaRepository<SepsisScreening
     /**
      * Find all active sepsis cases (non-NO_SEPSIS) for a hospital.
      */
-    @Query("SELECT s FROM SepsisScreening s JOIN s.visit v WHERE v.hospital.id = :hospitalId " +
+    @Query("SELECT s FROM SepsisScreening s JOIN FETCH s.visit v JOIN FETCH v.patient " +
+            "LEFT JOIN FETCH v.currentBed WHERE v.hospital.id = :hospitalId " +
             "AND s.isActive = true AND s.sepsisStatus <> 'NO_SEPSIS' " +
             "ORDER BY s.screenedAt DESC")
     List<SepsisScreening> findActiveSepsisCasesByHospital(@Param("hospitalId") UUID hospitalId);

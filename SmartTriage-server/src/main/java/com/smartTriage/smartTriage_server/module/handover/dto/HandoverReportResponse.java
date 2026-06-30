@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.handover.dto;
 
+import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.HandoverReportType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -19,6 +20,10 @@ public class HandoverReportResponse {
     private UUID visitId;
     private String visitNumber;
     private String patientName;
+    /** Patient context — current ED zone (denormalised from visit.currentEdZone). */
+    private EdZone currentZone;
+    /** Patient context — current bed code (denormalised from visit.currentBed.code, nullable). */
+    private String currentBedLabel;
     private UUID hospitalId;
     private String hospitalName;
     private HandoverReportType reportType;

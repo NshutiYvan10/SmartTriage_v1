@@ -54,7 +54,7 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
         // `visit.getPatient().getFirstName()` doesn't trigger a lazy
         // SELECT per visit (the dashboard's N+1 backend slowness). One
         // query returns visits + their patients together.
-        @Query("SELECT v FROM Visit v JOIN FETCH v.patient WHERE v.hospital.id = :hospitalId AND v.isActive = true " +
+        @Query("SELECT v FROM Visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed WHERE v.hospital.id = :hospitalId AND v.isActive = true " +
                         "AND v.status NOT IN ('DISCHARGED', 'ADMITTED', 'TRANSFERRED', 'ICU_ADMITTED', 'DECEASED', 'LEFT_WITHOUT_BEING_SEEN')")
         Page<Visit> findActiveVisits(@Param("hospitalId") UUID hospitalId, Pageable pageable);
 
@@ -131,7 +131,7 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
          */
         // JOIN FETCH the patient so the mapper doesn't lazy-load one
         // patient per visit when serializing the response.
-        @Query("SELECT v FROM Visit v JOIN FETCH v.patient WHERE v.hospital.id = :hospitalId AND v.isActive = true " +
+        @Query("SELECT v FROM Visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed WHERE v.hospital.id = :hospitalId AND v.isActive = true " +
                         "AND (v.currentEdZone IS NULL OR v.currentEdZone = 'TRIAGE') " +
                         "AND v.status NOT IN ('DISCHARGED', 'ADMITTED', 'TRANSFERRED', 'ICU_ADMITTED', 'DECEASED', 'LEFT_WITHOUT_BEING_SEEN')")
         Page<Visit> findPreTriageActiveVisits(
@@ -140,7 +140,7 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
 
         // JOIN FETCH the patient so the mapper doesn't lazy-load one
         // patient per visit when serializing the response.
-        @Query("SELECT v FROM Visit v JOIN FETCH v.patient WHERE v.hospital.id = :hospitalId AND v.isActive = true " +
+        @Query("SELECT v FROM Visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed WHERE v.hospital.id = :hospitalId AND v.isActive = true " +
                         "AND v.currentEdZone IN :zones " +
                         "AND v.status NOT IN ('DISCHARGED', 'ADMITTED', 'TRANSFERRED', 'ICU_ADMITTED', 'DECEASED', 'LEFT_WITHOUT_BEING_SEEN')")
         Page<Visit> findActiveVisitsInZones(

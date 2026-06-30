@@ -35,14 +35,25 @@ public final class ClinicalAlertMapper {
                                 ? null
                                 : ClinicalSignDefinitions.labelOrCode(alert.getTriggeringSignCode()));
 
-        // Visit info
+        // Visit info — denormalise WHO (patient name) and WHERE (current
+        // care zone + bed) onto the alert row so the Alert Center can show
+        // who+where without a second fetch. currentZone is the patient's
+        // actual location (distinct from targetZone, a routing hint);
+        // currentBed is nullable. NULL-SAFE throughout.
         if (alert.getVisit() != null) {
             builder.visitId(alert.getVisit().getId());
             builder.visitNumber(alert.getVisit().getVisitNumber());
+            builder.currentZone(alert.getVisit().getCurrentEdZone());
+            if (alert.getVisit().getCurrentBed() != null) {
+                builder.currentBedLabel(alert.getVisit().getCurrentBed().getCode());
+            }
             if (alert.getVisit().getPatient() != null) {
-                builder.patientName(
-                        alert.getVisit().getPatient().getFirstName() + " " +
-                                alert.getVisit().getPatient().getLastName());
+                // Never let a patient-scoped alert render a blank name — a
+                // missing identity must read as "Unidentified patient", not
+                // an empty row a clinician can't act on.
+                String name = ((safe(alert.getVisit().getPatient().getFirstName()) + " "
+                        + safe(alert.getVisit().getPatient().getLastName())).trim());
+                builder.patientName(name.isEmpty() ? "Unidentified patient" : name);
             }
         }
 
@@ -64,5 +75,9 @@ public final class ClinicalAlertMapper {
         }
 
         return builder.build();
+    }
+
+    private static String safe(String s) {
+        return s == null ? "" : s;
     }
 }

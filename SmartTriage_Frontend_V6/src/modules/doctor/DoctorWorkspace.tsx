@@ -20,6 +20,8 @@ import type { VisitResponse, ClinicalAlertResponse, EdZone, VisitStatus, BedResp
 import { formatDistanceToNow } from 'date-fns';
 import { PlacePatientDialog } from '@/modules/beds/PlacePatientDialog';
 import { HandoffPriorityBadges } from '@/components/HandoffPriorityBadges';
+import { PatientContextLine } from '@/components/PatientContextLine';
+import { chartPath } from '@/lib/chartNav';
 
 // ─── Category config ───
 const CATEGORY_CONFIG: Record<string, { label: string; color: string; bg: string; border: string; dot: string; urgency: string }> = {
@@ -184,7 +186,7 @@ export function DoctorWorkspace() {
   const handleAcceptPatient = async (visit: VisitResponse) => {
     try {
       await visitApi.updateStatus(visit.id, 'UNDER_ASSESSMENT' as VisitStatus);
-      navigate(`/visit/${visit.id}`);
+      navigate(chartPath(visit.id));
     } catch (err) { console.error(err); }
   };
 
@@ -192,7 +194,7 @@ export function DoctorWorkspace() {
   const handleAlertAction = async (alert: ClinicalAlertResponse) => {
     try {
       await alertApi.acknowledge(alert.id);
-      if (alert.visitId) navigate(`/visit/${alert.visitId}`);
+      if (alert.visitId) navigate(chartPath(alert.visitId));
       else loadData();
     } catch (err) { console.error(err); }
   };
@@ -294,8 +296,17 @@ export function DoctorWorkspace() {
               <div key={alert.id} className="flex items-center justify-between gap-3 rounded-xl p-2.5" style={glassInner}>
                 <div className="flex-1 min-w-0">
                   <p className={`text-xs font-bold truncate ${text.heading}`}>{alert.title || alert.message}</p>
-                  <p className={`text-[10px] ${text.muted}`}>
-                    {alert.patientName} • {alert.alertType?.replace(/_/g, ' ')}
+                  {/* Who + where the alert is about — so a doctor can act
+                      without opening the chart to find the patient/bed. */}
+                  <PatientContextLine
+                    patientName={alert.patientName}
+                    zone={alert.currentZone}
+                    bedLabel={alert.currentBedLabel}
+                    hideVisitNumber
+                    className={`text-[10px] ${text.muted}`}
+                  />
+                  <p className={`text-[10px] ${text.muted} mt-0.5`}>
+                    {alert.alertType?.replace(/_/g, ' ')}
                   </p>
                 </div>
                 <button
@@ -307,6 +318,19 @@ export function DoctorWorkspace() {
               </div>
             ))}
           </div>
+          {/* When there are more unacknowledged alerts than the 5 we
+              preview here, link to the full Alert Center so none are
+              silently hidden from the doctor. */}
+          {stats.unackAlerts > 5 && (
+            <button
+              onClick={() => navigate('/alerts')}
+              className="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] font-bold rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 transition-colors"
+            >
+              <BellRing className="w-3.5 h-3.5" />
+              View all {stats.unackAlerts} alerts
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       )}
 
@@ -366,7 +390,7 @@ export function DoctorWorkspace() {
               bed={bedByVisitId.get(visit.id)}
               onAccept={handleAcceptPatient}
               onPlaceInBed={() => setPlaceVisit(visit)}
-              onView={() => navigate(`/visit/${visit.id}`)}
+              onView={() => navigate(chartPath(visit.id))}
             />
           ))}
         </div>

@@ -58,6 +58,9 @@ public final class MedicationDoseMapper {
                         : null)
                 .visitNumber(visit != null ? visit.getVisitNumber() : null)
                 .zone(visit != null ? visit.getCurrentEdZone() : null)
+                .bedLabel(visit != null && visit.getCurrentBed() != null
+                        ? visit.getCurrentBed().getCode()
+                        : null)
                 .createdAt(dose.getCreatedAt())
                 .build();
     }

@@ -16,8 +16,11 @@ import { fasttrackApi } from '@/api/fasttrack';
 import { subscribeToFastTrack } from '@/api/websocket';
 import { useWebSocketGeneration } from '@/hooks/useWebSocket';
 import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
+import { PatientContextLine } from '@/components/PatientContextLine';
+import { chartPath } from '@/lib/chartNav';
 import type { FastTrackActivation, FastTrackType } from '@/api/fasttrack';
 import { format } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 
 /* ── Tabs map to the REAL backend enum families ── */
 type TabMode = 'STROKE' | 'MI';
@@ -65,6 +68,7 @@ function timerColor(startIso: string, targetMin: number): string {
 
 export function FastTrackDashboard() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const navigate = useNavigate();
   const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
@@ -355,17 +359,30 @@ export function FastTrackDashboard() {
                             )}
                           </div>
 
-                          {/* Patient identity */}
-                          {(activation.patientName || activation.visitNumber) && (
-                            <p className={`text-sm font-bold ${text.heading} mb-1`}>
-                              {activation.patientName || 'Patient'}
-                              {activation.visitNumber && (
-                                <span className={`ml-2 text-[10px] font-mono font-normal ${text.muted}`}>{activation.visitNumber}</span>
-                              )}
-                              {activation.currentZone && (
-                                <span className={`ml-2 text-[10px] font-normal ${text.muted}`}>· {activation.currentZone.replace(/_/g, ' ')}</span>
-                              )}
-                            </p>
+                          {/* Patient identity — who + where, always shown, click to open chart */}
+                          {activation.visitId ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate(chartPath(activation.visitId))}
+                              className="block text-left mb-1 hover:underline focus:outline-none focus:ring-2 focus:ring-cyan-500/30 rounded"
+                              title="Open patient chart"
+                            >
+                              <PatientContextLine
+                                patientName={activation.patientName}
+                                zone={activation.currentZone ? activation.currentZone.replace(/_/g, ' ') : null}
+                                bedLabel={activation.currentBedLabel}
+                                visitNumber={activation.visitNumber}
+                                className={`text-sm ${text.heading}`}
+                              />
+                            </button>
+                          ) : (
+                            <PatientContextLine
+                              patientName={activation.patientName}
+                              zone={activation.currentZone ? activation.currentZone.replace(/_/g, ' ') : null}
+                              bedLabel={activation.currentBedLabel}
+                              visitNumber={activation.visitNumber}
+                              className={`text-sm mb-1 ${text.heading}`}
+                            />
                           )}
 
                           <div className="flex items-center gap-3 flex-wrap mb-2">
@@ -502,6 +519,15 @@ export function FastTrackDashboard() {
                     className="px-5 py-3 border-t flex items-center gap-2 flex-wrap"
                     style={{ borderColor: isDark ? 'rgba(2,132,199,0.12)' : 'rgba(203,213,225,0.3)' }}
                   >
+                    {activation.visitId && (
+                      <button
+                        onClick={() => navigate(chartPath(activation.visitId))}
+                        className={`inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold rounded-xl transition-colors ${text.body} hover:bg-white/5`}
+                      >
+                        <ArrowRight className="w-3.5 h-3.5" />
+                        Open Chart
+                      </button>
+                    )}
                     {!activation.acknowledgedAt && (
                       <button
                         onClick={() => handleAcknowledge(activation.id)}

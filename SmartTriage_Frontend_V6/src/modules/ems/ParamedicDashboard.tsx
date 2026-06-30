@@ -12,18 +12,22 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Siren, Plus, RefreshCw, Loader2, CheckCircle2, AlertOctagon,
   Send, MapPin, Clock, Activity, ClipboardList, Wifi, WifiOff,
-  ShieldAlert, HeartPulse, ChevronDown, ChevronUp, Download,
+  ShieldAlert, HeartPulse, ChevronDown, ChevronUp, Download, ExternalLink,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { emsApi } from '@/api/ems';
 import { saveBlob } from '@/api/client';
+import { chartPath } from '@/lib/chartNav';
 import type { EmsRun, EmsRunStatus, FieldTriageCategory, PatientHistory } from '@/api/ems';
 import { subscribeToEmsRuns, getStompClient } from '@/api/websocket';
+import { useWebSocketGeneration } from '@/hooks/useWebSocket';
 import { formatDistanceToNow } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
+import { PatientContextLine } from '@/components/PatientContextLine';
 import { EmsRunForm } from './EmsRunForm';
 
 const STATUS_LABEL: Record<EmsRunStatus, string> = {
@@ -50,8 +54,16 @@ function triageColor(c: FieldTriageCategory | null): string {
 
 export function ParamedicDashboard() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
+  // The /ems "Sirens" page is visible to nurses + doctors too (so the ED can
+  // see inbound ambulances), but ONLY a paramedic can create/manage runs.
+  // Paramedics load their OWN runs (/runs/mine, paramedic-gated); everyone
+  // else loads the hospital INBOUND board (/hospital/{id}/inbound, the same
+  // source the dashboard board uses) read-only. Mirrors the backend
+  // @PreAuthorize on the create-run endpoint.
+  const canCreateRun = user?.role === 'PARAMEDIC' || user?.role === 'SUPER_ADMIN';
 
   const [runs, setRuns] = useState<EmsRun[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +72,13 @@ export function ParamedicDashboard() {
   const [toast, setToast] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [online, setOnline] = useState<boolean>(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
+  // True when the most recent load() rejected — so the connectivity pill
+  // degrades on a failed sync, not only on a dropped socket.
+  const [syncFailed, setSyncFailed] = useState<boolean>(false);
+  // Increments whenever the shared STOMP client reconnects — driving the
+  // /topic/ems subscription effect below to re-subscribe, so the board does
+  // not go deaf after a reconnect / covered-zone change.
+  const wsGen = useWebSocketGeneration();
 
   const flash = (type: 'ok' | 'err', t: string) => {
     setToast({ type, text: t });
@@ -69,25 +88,44 @@ export function ParamedicDashboard() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await emsApi.myRuns();
+      // Paramedic: own runs. Nurse/doctor: hospital inbound ambulances.
+      const data = canCreateRun
+        ? await emsApi.myRuns()
+        : hospitalId ? await emsApi.getInbound(hospitalId) : [];
       setRuns(data || []);
       setLastSync(new Date());
+      setSyncFailed(false);
     } catch (err) {
       console.error('[ParamedicDashboard] load failed:', err);
-      flash('err', 'Failed to load runs');
+      setSyncFailed(true);
+      flash('err', canCreateRun ? 'Failed to load runs' : 'Failed to load inbound ambulances');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canCreateRun, hospitalId]);
 
   useEffect(() => { load(); }, [load]);
 
-  // Live updates — receiving nurse acks handover etc.
+  // Live updates — receiving nurse acks handover etc. wsGen re-runs this on
+  // every reconnect so the subscription is re-established (not left dead).
   useEffect(() => {
     if (!hospitalId) return;
     const unsub = subscribeToEmsRuns(hospitalId, () => { load(); });
     return () => unsub();
-  }, [hospitalId, load]);
+  }, [hospitalId, load, wsGen]);
+
+  // Cross-facility backstop (paramedic own-runs view only). The WS subscription
+  // above is the HOME-hospital topic, but a crew transporting to a DIFFERENT
+  // hospital owns a run whose ED-ack + status updates are broadcast on the
+  // DESTINATION hospital's topic — which this dashboard does not (and may not,
+  // per SUBSCRIBE authz) listen to. getMyRuns() returns the crew's runs across
+  // all hospitals, so this 30s poll surfaces those updates. Same-hospital runs
+  // still update instantly over WS; this is purely a safety net for reroutes.
+  useEffect(() => {
+    if (!canCreateRun || !hospitalId) return;
+    const id = setInterval(() => { load(); }, 30_000);
+    return () => clearInterval(id);
+  }, [canCreateRun, hospitalId, load]);
 
   // Connectivity poll — tells the crew whether data is reaching the hospital.
   useEffect(() => {
@@ -113,22 +151,29 @@ export function ParamedicDashboard() {
                   <Siren className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-white tracking-wide">Paramedic — Runs</h1>
+                  <h1 className="text-xl font-bold text-white tracking-wide">
+                    {canCreateRun ? 'Paramedic — Runs' : 'Inbound Ambulances'}
+                  </h1>
                   <p className="text-white/70 text-sm">
-                    {user?.fullName ? `Signed in as ${user.fullName}` : 'Pre-hospital workflow'}
+                    {canCreateRun
+                      ? (user?.fullName ? `Signed in as ${user.fullName}` : 'Pre-hospital workflow')
+                      : 'Ambulances en route to or arrived at your ED'}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <ConnectivityPill online={online} lastSync={lastSync} />
+                <ConnectivityPill online={online} lastSync={lastSync} syncFailed={syncFailed} />
                 <button onClick={load} className="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center hover:bg-white/25" title="Refresh">
                   <RefreshCw className={`w-5 h-5 text-white ${loading ? 'animate-spin' : ''}`} />
                 </button>
-                <button
-                  onClick={() => { setEditing(null); setShowForm(true); }}
-                  className="inline-flex items-center gap-2 px-5 py-3 bg-white text-rose-600 rounded-xl text-sm font-bold shadow-lg hover:-translate-y-0.5 transition-all">
-                  <Plus className="w-4 h-4" /> New run
-                </button>
+                {/* Create-run is PARAMEDIC-only — nurses/doctors view inbound runs but cannot author them. */}
+                {canCreateRun && (
+                  <button
+                    onClick={() => { setEditing(null); setShowForm(true); }}
+                    className="inline-flex items-center gap-2 px-5 py-3 bg-white text-rose-600 rounded-xl text-sm font-bold shadow-lg hover:-translate-y-0.5 transition-all">
+                    <Plus className="w-4 h-4" /> New run
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -147,7 +192,7 @@ export function ParamedicDashboard() {
         <div className="space-y-3">
           <h2 className={`text-base font-bold ${text.heading}`}>
             <Activity className="w-5 h-5 inline mr-1.5 text-rose-500" />
-            Active runs ({active.length})
+            {canCreateRun ? `Active runs (${active.length})` : `Inbound ambulances (${active.length})`}
           </h2>
 
           {loading && active.length === 0 ? (
@@ -155,14 +200,22 @@ export function ParamedicDashboard() {
           ) : active.length === 0 ? (
             <div className="rounded-2xl p-6 text-center" style={glassCard}>
               <Siren className="w-9 h-9 mx-auto mb-2 text-slate-400" />
-              <p className={`text-base font-bold ${text.heading}`}>No active runs</p>
-              <p className={`text-sm ${text.muted}`}>Tap “New run” to start documenting a dispatch.</p>
+              <p className={`text-base font-bold ${text.heading}`}>
+                {canCreateRun ? 'No active runs' : 'No inbound ambulances'}
+              </p>
+              <p className={`text-sm ${text.muted}`}>
+                {canCreateRun
+                  ? 'Tap “New run” to start documenting a dispatch.'
+                  : 'Ambulances appear here the moment a paramedic sends a pre-arrival to your ED.'}
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {active.map((run) => (
                 <RunCard
                   key={run.id} run={run} glassCard={glassCard} glassInner={glassInner} text={text} isDark={isDark}
+                  canAct={canCreateRun}
+                  onOpenChart={() => { if (run.visitId) navigate(chartPath(run.visitId)); }}
                   onOpen={() => { setEditing(run); setShowForm(true); }}
                   onPreregister={async () => {
                     try { await emsApi.preregister(run.id, {}); flash('ok', 'Pre-arrival sent to ED'); load(); }
@@ -201,7 +254,7 @@ export function ParamedicDashboard() {
         )}
       </div>
 
-      {showForm && (
+      {showForm && canCreateRun && (
         <EmsRunForm
           run={editing} hospitalId={hospitalId}
           onClose={() => { setShowForm(false); setEditing(null); }}
@@ -216,13 +269,19 @@ export function ParamedicDashboard() {
 // Connectivity pill
 // ─────────────────────────────────────────────────────────────────
 
-function ConnectivityPill({ online, lastSync }: { online: boolean; lastSync: Date | null }) {
+function ConnectivityPill({ online, lastSync, syncFailed }: { online: boolean; lastSync: Date | null; syncFailed?: boolean }) {
+  // "Live" only when the socket is up AND the last data sync succeeded — a
+  // rejected sync (e.g. 403 on a covered-zone change) degrades the pill instead
+  // of falsely reassuring the crew. Show the last successful sync time on the
+  // face, not just the tooltip, so a stale feed is visible at a glance.
+  const healthy = online && !syncFailed;
+  const syncedLabel = lastSync ? lastSync.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
   return (
     <div className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold ${
-      online ? 'bg-emerald-400/20 text-white' : 'bg-amber-400/25 text-white'}`}
+      healthy ? 'bg-emerald-400/20 text-white' : 'bg-amber-400/25 text-white'}`}
       title={lastSync ? `Last synced ${lastSync.toLocaleTimeString()}` : 'Not yet synced'}>
-      {online ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4 animate-pulse" />}
-      {online ? 'Live' : 'Reconnecting'}
+      {healthy ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4 animate-pulse" />}
+      {healthy ? (syncedLabel ? `Live · ${syncedLabel}` : 'Live') : (syncFailed ? 'Sync failed' : 'Reconnecting')}
     </div>
   );
 }
@@ -231,10 +290,18 @@ function ConnectivityPill({ online, lastSync }: { online: boolean; lastSync: Dat
 // Cards
 // ─────────────────────────────────────────────────────────────────
 
-function RunCard({ run, glassCard, glassInner, text, isDark, onOpen, onPreregister, onConfirmArrival, onToggleLights }: any) {
+function RunCard({ run, glassCard, glassInner, text, isDark, canAct = true, onOpen, onOpenChart, onPreregister, onConfirmArrival, onToggleLights }: any) {
   const stat: EmsRunStatus = run.status;
   const [showHistory, setShowHistory] = useState(false);
   const [downloadingPcr, setDownloadingPcr] = useState(false);
+  // Per-card in-flight guard — an ambulance double-tap on Send-to-ED /
+  // Confirm-arrival / Lights must not fire the mutation twice.
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const guard = (key: string, fn?: () => any) => async () => {
+    if (actionBusy || !fn) return;
+    setActionBusy(key);
+    try { await fn(); } finally { setActionBusy(null); }
+  };
 
   const downloadPcr = async () => {
     setDownloadingPcr(true);
@@ -280,6 +347,12 @@ function RunCard({ run, glassCard, glassInner, text, isDark, onOpen, onPreregist
       )}
 
       <div className="mb-2">
+        {/* Who first — identity (or the pre-arrival placeholder) before the clinical payload. */}
+        <PatientContextLine
+          patientName={run.patientName}
+          visitNumber={run.visitNumber}
+          className={`text-sm mb-0.5 ${text.body}`}
+        />
         <div className={`text-base font-bold ${text.heading}`}>{run.mechanism ?? 'Patient'}</div>
         {run.incidentLocation && (
           <div className={`text-sm ${text.muted} flex items-center gap-1`}><MapPin className="w-4 h-4" /> {run.incidentLocation}</div>
@@ -296,39 +369,56 @@ function RunCard({ run, glassCard, glassInner, text, isDark, onOpen, onPreregist
       )}
 
       <div className="flex flex-wrap gap-2">
-        <button onClick={onOpen}
-          className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-          <ClipboardList className="w-4 h-4" /> Open / edit
-        </button>
-        {(stat === 'DISPATCHED' || stat === 'EN_ROUTE') && (
-          <button onClick={onToggleLights}
-            className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold ${run.lightsActive ? 'bg-rose-500 text-white hover:bg-rose-600' : isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-            <Siren className="w-4 h-4" /> {run.lightsActive ? 'Lights off' : 'Lights'}
-          </button>
+        {canAct ? (
+          <>
+            <button onClick={onOpen}
+              className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+              <ClipboardList className="w-4 h-4" /> Open / edit
+            </button>
+            {(stat === 'DISPATCHED' || stat === 'EN_ROUTE') && (
+              <button onClick={guard('lights', onToggleLights)} disabled={!!actionBusy}
+                className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 ${run.lightsActive ? 'bg-rose-500 text-white hover:bg-rose-600' : isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                <Siren className="w-4 h-4" /> {run.lightsActive ? 'Lights off' : 'Lights'}
+              </button>
+            )}
+            {stat === 'DISPATCHED' && (
+              <button onClick={guard('prereg', onPreregister)} disabled={!!actionBusy}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50">
+                <Send className="w-4 h-4" /> Send to ED
+              </button>
+            )}
+            {stat === 'EN_ROUTE' && (
+              <button onClick={guard('arrive', onConfirmArrival)} disabled={!!actionBusy}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50">
+                <CheckCircle2 className="w-4 h-4" /> At ED
+              </button>
+            )}
+            {run.visitId && (
+              <button onClick={() => setShowHistory((v: boolean) => !v)}
+                className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                <HeartPulse className="w-4 h-4" /> History {showHistory ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+            )}
+            {/* PCR PDF — a permanent run artifact, available for any status. */}
+            <button onClick={downloadPcr} disabled={downloadingPcr}
+              className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+              {downloadingPcr ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} PCR
+            </button>
+          </>
+        ) : (
+          /* Nurse/doctor read-only view: this board is for VISIBILITY of inbound
+             ambulances. The acknowledge / transfer-of-care action lives on the
+             dashboard Inbound board; here we offer the one clearly-allowed,
+             useful action — open the linked patient chart. */
+          run.visitId ? (
+            <button onClick={onOpenChart}
+              className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+              <ExternalLink className="w-4 h-4" /> Open chart
+            </button>
+          ) : (
+            <span className={`text-sm ${text.muted}`}>Pre-arrival — chart opens once registered.</span>
+          )
         )}
-        {stat === 'DISPATCHED' && (
-          <button onClick={onPreregister}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-amber-500 text-white hover:bg-amber-600">
-            <Send className="w-4 h-4" /> Send to ED
-          </button>
-        )}
-        {stat === 'EN_ROUTE' && (
-          <button onClick={onConfirmArrival}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-cyan-600 text-white hover:bg-cyan-700">
-            <CheckCircle2 className="w-4 h-4" /> At ED
-          </button>
-        )}
-        {run.visitId && (
-          <button onClick={() => setShowHistory((v: boolean) => !v)}
-            className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-            <HeartPulse className="w-4 h-4" /> History {showHistory ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          </button>
-        )}
-        {/* PCR PDF — a permanent run artifact, available for any status. */}
-        <button onClick={downloadPcr} disabled={downloadingPcr}
-          className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-          {downloadingPcr ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} PCR
-        </button>
       </div>
 
       {showHistory && <PatientHistoryPanel runId={run.id} text={text} glassInner={glassInner} />}
@@ -388,6 +478,11 @@ function HistoryCard({ run, glassCard, text }: any) {
         </div>
         <span className={`text-xs ${text.muted}`}>{formatDistanceToNow(new Date(run.dispatchedAt), { addSuffix: true })}</span>
       </div>
+      <PatientContextLine
+        patientName={run.patientName}
+        visitNumber={run.visitNumber}
+        className={`text-sm mb-0.5 ${text.body}`}
+      />
       <div className={`text-base ${text.heading}`}>{run.mechanism ?? 'Patient'}</div>
       {run.handedOffToName && (
         <div className={`text-sm mt-1 flex items-center gap-1 ${text.muted}`}>

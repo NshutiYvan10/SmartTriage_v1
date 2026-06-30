@@ -3,6 +3,14 @@ import { get, post, put, downloadBlob } from './client';
 export interface HandoverReport {
   id: string;
   visitId: string;
+  /** Visit number for disambiguation (denormalised, backend carries it). */
+  visitNumber: string | null;
+  /** Patient identity (denormalised "FirstName LastName"). */
+  patientName: string | null;
+  /** Patient location — current ED zone. */
+  currentZone: string | null;
+  /** Patient location — current bed code (nullable). */
+  currentBedLabel: string | null;
   hospitalId: string;
   reportType: string;
   generatedAt: string;

@@ -44,6 +44,11 @@ public final class IcuEscalationMapper {
             builder.visitId(escalation.getVisit().getId());
             builder.visitNumber(escalation.getVisit().getVisitNumber());
             builder.triageCategory(escalation.getVisit().getCurrentTriageCategory());
+            // Patient CURRENT physical location (distinct from ICU destination bed).
+            builder.currentEdZone(escalation.getVisit().getCurrentEdZone());
+            builder.currentBed(escalation.getVisit().getCurrentBed() != null
+                    ? escalation.getVisit().getCurrentBed().getCode()
+                    : null);
             if (escalation.getVisit().getPatient() != null) {
                 builder.patientName(
                         escalation.getVisit().getPatient().getFirstName() + " " +

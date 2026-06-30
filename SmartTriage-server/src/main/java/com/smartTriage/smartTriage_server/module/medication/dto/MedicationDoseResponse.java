@@ -69,6 +69,7 @@ public class MedicationDoseResponse {
     private String patientName;
     private String visitNumber;
     private EdZone zone;
+    private String bedLabel;
 
     private Instant createdAt;
 }

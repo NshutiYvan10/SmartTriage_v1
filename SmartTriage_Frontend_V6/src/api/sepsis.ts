@@ -5,6 +5,9 @@ export interface SepsisScreening {
   visitId: string;
   visitNumber?: string;
   patientName?: string;
+  // Patient location context (denormalised) — so a sepsis card shows WHERE.
+  currentZone?: string | null;
+  currentBedLabel?: string | null;
   screenedAt: string;
   screenedByName: string;
   sepsisStatus: string;

@@ -21,6 +21,11 @@ public class EmsRunResponse {
     private UUID id;
     private UUID hospitalId;
     private UUID visitId;
+    /** Linked patient (null for a pre-arrival run with no visit yet). */
+    private UUID patientId;
+    /** Patient display name once a visit is linked; null for an unlinked pre-arrival run. */
+    private String patientName;
+    private String visitNumber;
     private UUID paramedicUserId;
     private String paramedicName;
 

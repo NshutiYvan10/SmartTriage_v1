@@ -39,6 +39,9 @@ public final class VisitMapper {
                 .isPediatric(visit.isPediatric())
                 .retriageCount(visit.getRetriageCount())
                 .currentEdZone(visit.getCurrentEdZone())
+                .currentBedLabel(visit.getCurrentBed() != null
+                        ? visit.getCurrentBed().getCode()
+                        : null)
                 // Direct Resus Admission flags (V44)
                 .pendingResusOverflow(visit.isPendingResusOverflow())
                 .ambulancePreArrival(visit.isAmbulancePreArrival())

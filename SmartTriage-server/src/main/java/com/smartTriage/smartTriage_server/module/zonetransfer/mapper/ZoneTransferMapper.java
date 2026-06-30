@@ -32,6 +32,12 @@ public final class ZoneTransferMapper {
                 b.patientName(t.getVisit().getPatient().getFirstName() + " "
                         + t.getVisit().getPatient().getLastName());
             }
+            // Source bed: during a pending transfer the patient is still
+            // physically in their current bed. Denormalise the human label
+            // so the charge-nurse dashboard can locate them. NULL-SAFE.
+            if (t.getVisit().getCurrentBed() != null) {
+                b.fromBedCode(t.getVisit().getCurrentBed().getCode());
+            }
         }
         nameAndId(t.getInitiatedBy(), b::initiatedById, b::initiatedByName);
         nameAndId(t.getProposedClinician(), b::proposedClinicianId, b::proposedClinicianName);

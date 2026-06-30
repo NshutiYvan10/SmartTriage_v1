@@ -535,6 +535,9 @@ export interface VisitResponse {
   retriageCount: number;
   /** Phase 1 zone routing — canonical zone the patient is currently in. */
   currentEdZone: EdZone | null;
+  /** Human-readable code of the bed the visit currently occupies (null =
+   *  not placed / ambulatory). Present on V96+ responses. */
+  currentBedLabel?: string | null;
   /** Doctor of record (soft binding); null until first clinical action. */
   primaryClinicianId: string | null;
   primaryClinicianName: string | null;
@@ -1051,6 +1054,10 @@ export interface InvestigationResponse {
    *  context without a second round-trip per row. */
   visitNumber: string | null;
   patientName: string | null;
+  /** Patient's current location so the doctor's aggregate view says where
+   *  the specimen/patient is. Present on V96+ responses. */
+  currentZone?: EdZone | null;
+  currentBedLabel?: string | null;
   investigationType: InvestigationType;
   /** True when routed to the lab (linked LabOrder the lab owns). The chart hides
    *  specimen/result actions for these so the two records can't diverge. */
@@ -1171,6 +1178,7 @@ export interface MedicationDoseResponse {
   patientName: string | null;
   visitNumber: string | null;
   zone: EdZone | null;
+  bedLabel: string | null;
   createdAt: string;
 }
 
@@ -1204,6 +1212,14 @@ export interface CountersignMedicationRequest {
 export interface MedicationResponse {
   id: string;
   visitId: string;
+  /** Denormalised patient context so every med row can show WHO + WHERE
+   *  without a second fetch. Present on V96+ responses; older clients
+   *  defensively treat as optional. */
+  patientId?: string | null;
+  patientName?: string | null;
+  visitNumber?: string | null;
+  zone?: EdZone | null;
+  bedLabel?: string | null;
   drugName: string;
   dose: string;
   route: MedicationRoute;
@@ -1424,6 +1440,11 @@ export interface ClinicalAlertResponse {
   message: string;
   // Zone-aware escalation
   targetZone: EdZone | null;
+  /** The patient's CURRENT physical location (distinct from targetZone,
+   *  which is a routing hint). Lets an alert row say where to actually go.
+   *  Present on V96+ responses. */
+  currentZone?: EdZone | null;
+  currentBedLabel?: string | null;
   escalationTier: number;
   escalatedAt: string | null;
   targetDoctorId: string | null;

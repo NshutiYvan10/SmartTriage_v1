@@ -38,6 +38,9 @@ public final class HypoglycemiaEventMapper {
             builder.visitNumber(event.getVisit().getVisitNumber());
             builder.currentZone(event.getVisit().getCurrentEdZone() != null
                     ? event.getVisit().getCurrentEdZone().name() : null);
+            if (event.getVisit().getCurrentBed() != null) {
+                builder.currentBedLabel(event.getVisit().getCurrentBed().getCode());
+            }
             if (event.getVisit().getPatient() != null) {
                 builder.patientName(
                         event.getVisit().getPatient().getFirstName() + " " +

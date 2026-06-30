@@ -33,6 +33,11 @@ export interface EmsRun {
   id: string;
   hospitalId: string;
   visitId: string | null;
+  /** Linked patient (null for a pre-arrival run with no visit yet). */
+  patientId: string | null;
+  /** Patient display name once a visit is linked; null for an unlinked pre-arrival run. */
+  patientName: string | null;
+  visitNumber: string | null;
   paramedicUserId: string | null;
   paramedicName: string | null;
   service: EmsService;

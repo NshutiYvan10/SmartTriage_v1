@@ -15,13 +15,24 @@ public interface HypoglycemiaEventRepository extends JpaRepository<HypoglycemiaE
 
     Optional<HypoglycemiaEvent> findByIdAndIsActiveTrue(UUID id);
 
-    List<HypoglycemiaEvent> findByVisitIdAndIsActiveTrueOrderByDetectedAtDesc(UUID visitId);
+    /**
+     * JOIN FETCH visit/patient and LEFT JOIN FETCH the (nullable) current bed so the response
+     * mapper can read patientName/zone/bedLabel after the service transaction closes without
+     * a LazyInitializationException or N+1 per row.
+     */
+    @Query("SELECT h FROM HypoglycemiaEvent h JOIN FETCH h.visit v JOIN FETCH v.patient " +
+            "LEFT JOIN FETCH v.currentBed " +
+            "WHERE h.visit.id = :visitId AND h.isActive = true ORDER BY h.detectedAt DESC")
+    List<HypoglycemiaEvent> findByVisitIdAndIsActiveTrueOrderByDetectedAtDesc(@Param("visitId") UUID visitId);
 
     /**
      * Active (unresolved) hypoglycemia events for a hospital.
+     * JOIN FETCH visit/patient (+ LEFT JOIN FETCH bed) for the same reason as above.
      */
-    @Query("SELECT h FROM HypoglycemiaEvent h JOIN h.visit v WHERE v.hospital.id = :hospitalId " +
-            "AND h.isActive = true AND h.resolved = false ORDER BY h.detectedAt DESC")
+    @Query("SELECT h FROM HypoglycemiaEvent h JOIN FETCH h.visit v JOIN FETCH v.patient " +
+            "LEFT JOIN FETCH v.currentBed " +
+            "WHERE v.hospital.id = :hospitalId AND h.isActive = true AND h.resolved = false " +
+            "ORDER BY h.detectedAt DESC")
     List<HypoglycemiaEvent> findActiveEventsByHospital(@Param("hospitalId") UUID hospitalId);
 
     /**

@@ -17,8 +17,21 @@ public interface MedicationSafetyCheckRepository extends JpaRepository<Medicatio
 
     Optional<MedicationSafetyCheck> findByIdAndIsActiveTrue(UUID id);
 
+    /**
+     * Paged checks for a visit — JOIN FETCHes visit → patient and (LEFT)
+     * visit.currentBed so the mapper can denormalise patient identity +
+     * location (who + where) onto each row without N+1 or
+     * LazyInitializationException. Only single-valued associations are
+     * fetched, so pagination remains DB-side (no in-memory paging warning).
+     */
+    @Query("SELECT c FROM MedicationSafetyCheck c "
+            + "JOIN FETCH c.visit v "
+            + "JOIN FETCH v.patient "
+            + "LEFT JOIN FETCH v.currentBed "
+            + "WHERE c.visit.id = :visitId AND c.isActive = true "
+            + "ORDER BY c.checkedAt DESC")
     Page<MedicationSafetyCheck> findByVisitIdAndIsActiveTrueOrderByCheckedAtDesc(
-            UUID visitId, Pageable pageable);
+            @Param("visitId") UUID visitId, Pageable pageable);
 
     List<MedicationSafetyCheck> findByVisitIdAndIsActiveTrueOrderByCheckedAtDesc(UUID visitId);
 

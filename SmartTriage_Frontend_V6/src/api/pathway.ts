@@ -1,4 +1,5 @@
 import { get, post, put } from './client';
+import type { EdZone } from './types';
 
 export interface ClinicalPathway {
   id: string;
@@ -31,8 +32,16 @@ export interface PathwayStep {
 export interface PathwayActivation {
   id: string;
   visitId: string;
+  visitNumber: string | null;
+  // Denormalised patient context so an activation row can show WHO the
+  // pathway is for and WHERE the patient is (mirrors backend DTO).
+  patientId: string | null;
+  patientName: string | null;
+  currentZone?: EdZone | null;
+  currentBedLabel?: string | null;
   pathwayId: string;
   pathwayName: string;
+  pathwayCode: string | null;
   activatedAt: string;
   activatedByName: string;
   completedAt: string | null;

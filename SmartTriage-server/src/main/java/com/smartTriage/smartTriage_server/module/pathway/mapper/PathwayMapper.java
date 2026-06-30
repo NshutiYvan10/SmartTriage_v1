@@ -2,6 +2,8 @@ package com.smartTriage.smartTriage_server.module.pathway.mapper;
 
 import com.smartTriage.smartTriage_server.module.pathway.dto.*;
 import com.smartTriage.smartTriage_server.module.pathway.entity.*;
+import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
+import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 
 /**
  * Maps pathway entities to response DTOs.
@@ -9,6 +11,10 @@ import com.smartTriage.smartTriage_server.module.pathway.entity.*;
 public final class PathwayMapper {
 
     private PathwayMapper() {}
+
+    private static String safe(String s) {
+        return s == null ? "" : s;
+    }
 
     public static ClinicalPathwayResponse toResponse(ClinicalPathway pathway) {
         return ClinicalPathwayResponse.builder()
@@ -39,10 +45,20 @@ public final class PathwayMapper {
     }
 
     public static PathwayActivationResponse toResponse(PathwayActivation activation) {
+        Visit visit = activation.getVisit();
+        Patient patient = visit != null ? visit.getPatient() : null;
         return PathwayActivationResponse.builder()
                 .id(activation.getId())
-                .visitId(activation.getVisit().getId())
-                .visitNumber(activation.getVisit().getVisitNumber())
+                .visitId(visit != null ? visit.getId() : null)
+                .visitNumber(visit != null ? visit.getVisitNumber() : null)
+                .patientId(patient != null ? patient.getId() : null)
+                .patientName(patient != null
+                        ? (safe(patient.getFirstName()) + " " + safe(patient.getLastName())).trim()
+                        : null)
+                .currentZone(visit != null ? visit.getCurrentEdZone() : null)
+                .currentBedLabel(visit != null && visit.getCurrentBed() != null
+                        ? visit.getCurrentBed().getCode()
+                        : null)
                 .pathwayId(activation.getPathway().getId())
                 .pathwayName(activation.getPathway().getPathwayName())
                 .pathwayCode(activation.getPathway().getPathwayCode())

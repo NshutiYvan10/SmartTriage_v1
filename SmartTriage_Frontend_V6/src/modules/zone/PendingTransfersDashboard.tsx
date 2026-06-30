@@ -34,6 +34,8 @@ import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
 import { useMyShift } from '@/hooks/useMyShift';
 import { zoneTransferApi, type ZoneTransferResponse } from '@/api/zoneTransfers';
+import { PatientContextLine } from '@/components/PatientContextLine';
+import { chartPath } from '@/lib/chartNav';
 
 /**
  * SATS acceptance windows in minutes — the slowest the charge nurse
@@ -266,14 +268,23 @@ export function PendingTransfersDashboard() {
                   <div className="flex flex-wrap items-start gap-3">
                     <div className="flex-1 min-w-[240px]">
                       <div className="flex items-center gap-2 flex-wrap">
+                        {/* Identity-first: who + where (source zone/bed) so a
+                            charge nurse can physically locate an overdue
+                            transfer patient without leaving the dashboard. */}
                         <button
                           type="button"
-                          onClick={() => navigate(`/visit/${t.visitId}`)}
-                          className={`text-sm font-bold ${text.heading} hover:underline`}
+                          onClick={() => navigate(chartPath(t.visitId))}
+                          className="text-left hover:underline"
+                          title="Open patient chart"
                         >
-                          {t.patientName ?? t.visitNumber}
+                          <PatientContextLine
+                            patientName={t.patientName}
+                            zone={t.fromZone}
+                            bedLabel={t.fromBedCode}
+                            visitNumber={t.visitNumber}
+                            className={`text-sm ${text.heading}`}
+                          />
                         </button>
-                        <span className={`text-[10px] font-mono ${text.muted}`}>{t.visitNumber}</span>
                         {t.isPediatric && (
                           <span
                             className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-pink-600"
@@ -316,6 +327,15 @@ export function PendingTransfersDashboard() {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate(chartPath(t.visitId))}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${isDark ? 'border-slate-600 text-slate-200 hover:bg-white/5' : 'border-slate-300 text-slate-700 hover:bg-slate-100'}`}
+                        title="Open the patient's chart"
+                      >
+                        <Stethoscope className="w-3 h-3" />
+                        Open chart
+                      </button>
                       <button
                         type="button"
                         disabled={acting}

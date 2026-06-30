@@ -131,44 +131,47 @@ export function useTheme(): ThemeStyles {
     toggle,
 
     glassCard: {
-      background: 'rgba(255, 255, 255, 0.55)',
+      background: 'rgba(255, 255, 255, 0.72)',
       backdropFilter: 'blur(24px)',
       WebkitBackdropFilter: 'blur(24px)',
-      border: '1px solid rgba(255, 255, 255, 0.6)',
+      border: '1px solid rgba(255, 255, 255, 0.5)',
       boxShadow:
-        '0 8px 32px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8)',
+        '0 8px 32px rgba(99, 102, 241, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
     },
 
     glassInner: {
-      background: 'rgba(255, 255, 255, 0.6)',
-      border: '1px solid rgba(203, 213, 225, 0.4)',
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.03)',
+      background: 'rgba(255, 255, 255, 0.65)',
+      backdropFilter: 'blur(16px)',
+      WebkitBackdropFilter: 'blur(16px)',
+      border: '1px solid rgba(255, 255, 255, 0.45)',
+      boxShadow: '0 2px 8px rgba(99, 102, 241, 0.05)',
     },
 
     glassPatientCard: {
-      background: 'rgba(255, 255, 255, 0.45)',
+      background: 'rgba(255, 255, 255, 0.68)',
       backdropFilter: 'blur(20px)',
       WebkitBackdropFilter: 'blur(20px)',
-      boxShadow: '0 4px 24px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.7)',
+      border: '1px solid rgba(255, 255, 255, 0.45)',
+      boxShadow: '0 4px 24px rgba(99, 102, 241, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
     },
 
     glassVitalTile: {
-      background: 'rgba(255, 255, 255, 0.55)',
+      background: 'rgba(255, 255, 255, 0.75)',
       backdropFilter: 'blur(12px)',
       WebkitBackdropFilter: 'blur(12px)',
-      border: '1px solid rgba(255, 255, 255, 0.6)',
-      boxShadow: '0 2px 12px rgba(0, 0, 0, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.8)',
+      border: '1px solid rgba(255, 255, 255, 0.5)',
+      boxShadow: '0 2px 12px rgba(99, 102, 241, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
     },
 
     glassExpandedBg: {
-      background: 'rgba(248, 250, 252, 0.35)',
+      background: 'rgba(255, 255, 255, 0.45)',
       backdropFilter: 'blur(16px)',
       WebkitBackdropFilter: 'blur(16px)',
     },
 
     headerGradient: 'bg-gradient-to-r from-slate-800 to-slate-700',
     pageBg:
-      'linear-gradient(135deg, #fafbfd 0%, #f3f6fb 25%, #f0f4f9 50%, #f5f8fc 75%, #fafbfd 100%)',
+      'linear-gradient(135deg, #dbeafe 0%, #e0e7ff 30%, #ede9fe 65%, #dbeafe 100%)',
 
     text: {
       heading: 'text-slate-800',

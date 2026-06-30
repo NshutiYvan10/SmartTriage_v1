@@ -317,7 +317,8 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         <div className="w-8 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent mb-4" />
 
         {/* Navigation Icons */}
-        <nav className="flex-1 flex flex-col items-center gap-2 overflow-y-auto overflow-x-hidden scrollbar-thin px-3 w-full">
+        <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
+        <nav className="flex flex-col items-center gap-2 px-3 w-full">
           {sections.map((section, sIdx) => (
             <div key={section.label} className="w-full flex flex-col items-center gap-2">
               {sIdx > 0 && (
@@ -335,6 +336,12 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
                           ? ''
                           : 'hover:bg-white/10'
                       }`}
+                      style={isActive ? {
+                        background: isDarkMode ? 'rgba(8,145,178,0.16)' : '#ffffff',
+                        boxShadow: isDarkMode
+                          ? 'inset 0 0 0 1px rgba(103,232,249,0.25)'
+                          : '0 6px 16px rgba(15,23,42,0.16)',
+                      } : undefined}
                       onClick={() => handleMenuItemClick(item.id)}
                       onMouseEnter={() => setHoveredItem(item.id)}
                       onMouseLeave={() => setHoveredItem(null)}
@@ -342,7 +349,9 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
                       type="button"
                     >
                       <Icon className={`w-5 h-5 transition-all duration-300 ${
-                        isActive ? 'text-cyan-400' : 'text-slate-300 group-hover:text-white'
+                        isActive
+                          ? (isDarkMode ? 'text-cyan-300' : 'text-cyan-600')
+                          : 'text-slate-300 group-hover:text-white'
                       }`} />
                       
                       {/* Badge */}
@@ -372,6 +381,7 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
             </div>
           ))}
         </nav>
+        </div>
 
         {/* Footer */}
         <div className="flex flex-col items-center gap-2 w-full px-3 mt-2">
@@ -462,7 +472,8 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
       <div className="mx-5 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
       {/* ── Navigation Sections ── */}
-      <nav className="flex-1 px-3 pb-2 flex flex-col gap-1 overflow-y-auto scrollbar-thin">
+      <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
+      <nav className="px-3 pb-2 flex flex-col gap-1">
         {sections.map((section, sIdx) => (
           <div key={section.label}>
             {/* Section label */}
@@ -481,26 +492,34 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
 
                 return (
                   <div key={item.id} className="flex flex-col">
+                    {/* Active item — a clean white rounded pill that floats on the
+                        sidebar (matches the reference "Dashbord" tab): rounded on
+                        all corners, soft elevation shadow, accent icon + dark text. */}
                     <button
                       className={`relative w-full h-11 flex items-center gap-3 px-3 rounded-xl transition-all duration-300 group ${
                         isActive
-                          ? 'bg-cyan-500/10 text-white'
-                          : 'hover:bg-white/[0.04] text-slate-400 hover:text-white'
+                          ? 'font-semibold'
+                          : 'hover:bg-white/[0.04] text-slate-300 hover:text-white'
                       }`}
+                      style={isActive ? {
+                        background: isDarkMode ? 'rgba(8,145,178,0.16)' : '#ffffff',
+                        boxShadow: isDarkMode
+                          ? 'inset 0 0 0 1px rgba(103,232,249,0.25)'
+                          : '0 6px 16px rgba(15,23,42,0.16)',
+                      } : undefined}
                       onClick={() => handleMenuItemClick(item.id)}
                       aria-current={isActive ? 'page' : undefined}
                       type="button"
                     >
-                      {isActive && (
-                        <div className="absolute left-0 w-[3px] h-6 rounded-r-full bg-cyan-400" />
-                      )}
                       <Icon className={`w-[18px] h-[18px] flex-shrink-0 transition-all duration-300 ${
                         isActive
-                          ? 'text-cyan-400'
+                          ? (isDarkMode ? 'text-cyan-300' : 'text-cyan-600')
                           : 'text-slate-300 group-hover:text-white'
                       }`} />
                       <span className={`flex-1 text-[13px] font-semibold text-left ${
-                        isActive ? 'text-white' : 'text-slate-300 group-hover:text-white'
+                        isActive
+                          ? (isDarkMode ? 'text-white' : 'text-slate-800')
+                          : 'text-slate-300 group-hover:text-white'
                       }`}>
                         {item.label}
                       </span>
@@ -517,6 +536,7 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
           </div>
         ))}
       </nav>
+      </div>
 
       {/* ── Footer ── */}
       <footer className="w-full px-3 pb-4 flex-shrink-0 space-y-1.5">

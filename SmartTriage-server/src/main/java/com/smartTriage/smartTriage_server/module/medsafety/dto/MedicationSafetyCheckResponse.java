@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.medsafety.dto;
 
+import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,6 +21,18 @@ public class MedicationSafetyCheckResponse {
     private UUID id;
     private UUID visitId;
     private UUID medicationId;
+
+    // ── Denormalised patient context (safety-check list display) ──
+    // The Safety Checks list previously showed only a weight value
+    // labelled "Patient:", with no identity or location. Every
+    // patient-scoped row MUST show WHO the check is for and WHERE that
+    // patient is. Populated from visit → patient / currentEdZone /
+    // currentBed (NULL-SAFE).
+    private String patientName;
+    private String visitNumber;
+    private EdZone currentZone;
+    private String currentBedLabel;
+
     private Instant checkedAt;
     private String drugName;
     private Double prescribedDoseMg;

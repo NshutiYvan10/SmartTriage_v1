@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.clinical.dto;
 
+import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.InvestigationStatus;
 import com.smartTriage.smartTriage_server.common.enums.InvestigationType;
 import lombok.AllArgsConstructor;
@@ -30,6 +31,15 @@ public class InvestigationResponse {
      */
     private String visitNumber;
     private String patientName;
+    /**
+     * Patient's CURRENT physical location — denormalised from the visit
+     * (currentEdZone / currentBed.code) so the doctor's aggregate
+     * "My Investigations" view can show WHERE the patient/specimen is on
+     * every row without a second fetch. Null-safe (currentBed is
+     * nullable; an unplaced patient simply has no bed label).
+     */
+    private EdZone currentZone;
+    private String currentBedLabel;
     private InvestigationType investigationType;
     /** True when this investigation is routed to the lab (has a linked LabOrder the lab
      *  owns). The chart hides specimen/result lifecycle actions for these so the

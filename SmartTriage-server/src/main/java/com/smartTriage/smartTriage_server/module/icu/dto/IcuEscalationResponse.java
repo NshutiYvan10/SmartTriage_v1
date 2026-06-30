@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.icu.dto;
 
+import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.IcuEscalationStatus;
 import com.smartTriage.smartTriage_server.common.enums.IcuTriggerType;
 import com.smartTriage.smartTriage_server.common.enums.TriageCategory;
@@ -25,6 +26,14 @@ public class IcuEscalationResponse {
     private String visitNumber;
     private String patientName;
     private TriageCategory triageCategory;
+
+    // ── Denormalised patient CURRENT physical location (board display) ──
+    // Where the patient is RIGHT NOW in the ED — distinct from the ICU
+    // destination (icuBedNumber). A clinician scanning the escalation
+    // board must see who+where without a second fetch. Populated from
+    // visit.currentEdZone / visit.currentBed.code (null-safe).
+    private EdZone currentEdZone;
+    private String currentBed;
 
     private String escalationReason;
     private IcuTriggerType triggerType;

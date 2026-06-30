@@ -23,6 +23,10 @@ public class SepsisScreeningResponse {
     private UUID visitId;
     private String visitNumber;
     private String patientName;
+    // Patient location context — denormalised so a sepsis card on the board
+    // shows WHERE the patient is without a second fetch.
+    private com.smartTriage.smartTriage_server.common.enums.EdZone currentZone;
+    private String currentBedLabel;
 
     private Instant screenedAt;
     private String screenedByName;

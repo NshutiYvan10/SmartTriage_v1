@@ -11,11 +11,12 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   FlaskConical, Clock, AlertTriangle, Loader2, RefreshCw,
   Inbox, Activity, Beaker, CheckCircle2, XCircle, Phone,
   ClipboardCheck, AlertOctagon, History as HistoryIcon, Search,
-  ChevronLeft, ChevronRight, Download, FileText,
+  ChevronLeft, ChevronRight, Download, FileText, ExternalLink,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { saveBlob } from '@/api/client';
@@ -24,6 +25,8 @@ import type { LabOrder, LabOrderStatus, LabPriority } from '@/api/lab';
 import { subscribeToLabOrders } from '@/api/websocket';
 import { formatDistanceToNow } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
+import { PatientContextLine } from '@/components/PatientContextLine';
+import { chartPath } from '@/lib/chartNav';
 import { ResultEntryModal } from './ResultEntryModal';
 import { RejectSpecimenModal } from './RejectSpecimenModal';
 import { AcknowledgeCriticalModal } from './AcknowledgeCriticalModal';
@@ -81,6 +84,7 @@ function slaInfo(order: LabOrder): { elapsed: number; target: number; overdueBy:
 }
 
 export function LabOrdersView() {
+  const navigate = useNavigate();
   const { glassCard, glassInner, isDark, text } = useTheme();
   const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const user = useAuthStore((s) => s.user);
@@ -404,6 +408,7 @@ export function LabOrdersView() {
             totalPages={historyTotalPages}
             total={historyTotal}
             onRefresh={loadHistory}
+            onOpenChart={(visitId) => visitId && navigate(chartPath(visitId))}
             glassCard={glassCard}
             glassInner={glassInner}
             text={text}
@@ -439,6 +444,7 @@ export function LabOrdersView() {
                 text={text}
                 isLoading={actionLoading === order.id}
                 isHeadLabTech={isHeadLabTech}
+                onOpenChart={() => order.visitId && navigate(chartPath(order.visitId))}
                 onReceive={() => handleReceive(order)}
                 onReject={() => setRejectTarget(order)}
                 onAckOrder={() => handleAcknowledge(order)}
@@ -521,6 +527,7 @@ interface CardProps {
   text: any;
   isLoading: boolean;
   isHeadLabTech: boolean;
+  onOpenChart: () => void;
   onReceive: () => void;
   onReject: () => void;
   onAckOrder: () => void;
@@ -534,7 +541,7 @@ interface CardProps {
 
 function LabOrderCard({
   order, animationDelay, glassCard, glassInner, text, isLoading, isHeadLabTech,
-  onReceive, onReject, onAckOrder, onStartProcessing, onEnterResult, onAcknowledge,
+  onOpenChart, onReceive, onReject, onAckOrder, onStartProcessing, onEnterResult, onAcknowledge,
   onVerify, onVerifyReject, onOverride,
 }: CardProps) {
   const pri = priorityColor(order.priority);
@@ -564,13 +571,41 @@ function LabOrderCard({
         <SlaBadge sla={sla} priority={order.priority} />
       </div>
 
+      {/* Patient context FIRST — name WHO the order is for and WHERE
+          they are; click to open the chart. */}
+      <button
+        type="button"
+        onClick={onOpenChart}
+        disabled={!order.visitId}
+        className={`group w-full text-left mb-2 ${order.visitId ? 'cursor-pointer' : 'cursor-default'}`}
+        title={order.visitId ? 'Open patient chart' : undefined}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <PatientContextLine
+            patientName={order.patientName}
+            zone={order.currentZone}
+            bedLabel={order.currentBedLabel}
+            visitNumber={order.visitNumber}
+            className={`text-[11px] ${text.body}`}
+          />
+          {order.visitId && (
+            <ExternalLink className={`w-3.5 h-3.5 flex-shrink-0 ${text.muted} opacity-0 group-hover:opacity-100 transition-opacity`} />
+          )}
+        </div>
+      </button>
+
       {/* Test + indication */}
-      <div className="mb-2">
+      <button
+        type="button"
+        onClick={onOpenChart}
+        disabled={!order.visitId}
+        className={`block w-full text-left mb-2 ${order.visitId ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+      >
         <h4 className={`text-sm font-bold ${text.heading}`}>{order.testName}</h4>
         <p className={`text-[10px] font-mono ${text.muted}`}>
           {order.orderNumber}{order.accessionNumber ? ` • ${order.accessionNumber}` : ''}
         </p>
-      </div>
+      </button>
       {order.clinicalIndication && (
         <p className={`text-xs italic mb-2 ${text.body}`}>
           “{order.clinicalIndication}”
@@ -773,7 +808,7 @@ function LabOrderCard({
    ════════════════════════════════════════════════════════════════════ */
 function HistoryPanel({
   rows, loading, status, setStatus, query, setQuery, page, setPage,
-  totalPages, total, onRefresh, glassCard, glassInner, text, isDark,
+  totalPages, total, onRefresh, onOpenChart, glassCard, glassInner, text, isDark,
 }: {
   rows: LabOrder[];
   loading: boolean;
@@ -786,6 +821,7 @@ function HistoryPanel({
   totalPages: number;
   total: number;
   onRefresh: () => void;
+  onOpenChart: (visitId: string) => void;
   glassCard: React.CSSProperties;
   glassInner: React.CSSProperties;
   text: { heading: string; muted: string; body: string; accent: string; label: string };
@@ -852,9 +888,23 @@ function HistoryPanel({
               const sc = statusChip(r.status);
               const pc = priorityColor(r.priority);
               return (
-                <li key={r.id} className="px-4 py-3 last:border-0 hover:bg-white/5" style={{ borderBottom: borderStyle }}>
+                <li
+                  key={r.id}
+                  onClick={() => r.visitId && onOpenChart(r.visitId)}
+                  className={`px-4 py-3 last:border-0 hover:bg-white/5 ${r.visitId ? 'cursor-pointer' : ''}`}
+                  style={{ borderBottom: borderStyle }}
+                  title={r.visitId ? 'Open patient chart' : undefined}
+                >
                   <div className="flex items-start gap-3 flex-wrap">
                     <div className="flex-1 min-w-0">
+                      {/* Identity FIRST — who + where, before the clinical payload. */}
+                      <PatientContextLine
+                        patientName={r.patientName}
+                        zone={r.currentZone}
+                        bedLabel={r.currentBedLabel}
+                        visitNumber={r.visitNumber}
+                        className={`text-[11px] mb-1 ${text.body}`}
+                      />
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`font-mono text-[11px] ${text.accent}`}>{r.orderNumber}</span>
                         <span className={`text-sm font-bold ${text.heading}`}>{r.testName}</span>

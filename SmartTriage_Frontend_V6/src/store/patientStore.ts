@@ -205,6 +205,11 @@ export const usePatientStore = create<PatientState>((set, get) => ({
         aiAlerts: [],
         overrideHistory: [],
         registrationCompletedAt: new Date(v.arrivalTime),
+        // Current location + visit number so patient cards show WHERE to
+        // go (zone/bed) without opening the chart.
+        visitNumber: v.visitNumber ?? undefined,
+        currentEdZone: v.currentEdZone ?? null,
+        currentBedLabel: v.currentBedLabel ?? null,
         // Shift-handoff aggregate signals already on the visit response.
         pendingInvestigationsCount: v.pendingInvestigationsCount ?? undefined,
         unacknowledgedCriticalResultsCount: v.unacknowledgedCriticalResultsCount ?? undefined,

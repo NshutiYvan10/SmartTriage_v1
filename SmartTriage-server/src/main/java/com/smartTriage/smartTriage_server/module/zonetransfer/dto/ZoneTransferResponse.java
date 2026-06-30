@@ -23,6 +23,13 @@ public class ZoneTransferResponse {
     private boolean isPediatric;
 
     private EdZone fromZone;
+    /**
+     * Human bed label the patient is physically in at the time of the
+     * (pending) transfer — denormalised from {@code visit.currentBed.code}
+     * so a charge nurse can locate an overdue-transfer patient without a
+     * second lookup. Null when the patient hasn't been placed in a bed.
+     */
+    private String fromBedCode;
     private EdZone toZone;
     private ZoneTransferStatus status;
     private String reason;

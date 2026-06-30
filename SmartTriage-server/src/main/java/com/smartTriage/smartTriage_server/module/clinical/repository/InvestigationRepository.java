@@ -74,7 +74,10 @@ public interface InvestigationRepository extends JpaRepository<Investigation, UU
      * name fallback for legacy rows that lack the FK.
      */
     @org.springframework.data.jpa.repository.Query(
-            "SELECT i FROM Investigation i WHERE i.isActive = true " +
+            "SELECT i FROM Investigation i " +
+            "JOIN FETCH i.visit v JOIN FETCH v.patient " +
+            "LEFT JOIN FETCH v.currentBed " +
+            "WHERE i.isActive = true " +
             "AND ( i.orderedBy.id = :doctorId " +
             "      OR (i.orderedBy IS NULL AND LOWER(i.orderedByName) = LOWER(:doctorName)) ) " +
             "ORDER BY i.orderedAt DESC")

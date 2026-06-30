@@ -7,11 +7,15 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Siren, ChevronUp, ChevronDown, AlertOctagon, MapPin, Clock, ClipboardCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Siren, ChevronUp, ChevronDown, MapPin, Clock, ClipboardCheck } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { emsApi } from '@/api/ems';
 import type { EmsRun, FieldTriageCategory } from '@/api/ems';
 import { subscribeToEmsRuns } from '@/api/websocket';
+import { useWebSocketGeneration } from '@/hooks/useWebSocket';
+import { PatientContextLine } from '@/components/PatientContextLine';
+import { chartPath } from '@/lib/chartNav';
 import { TransferOfCareModal } from './TransferOfCareModal';
 
 function triageColor(c: FieldTriageCategory | null | undefined): string {
@@ -26,6 +30,7 @@ function triageColor(c: FieldTriageCategory | null | undefined): string {
 }
 
 export function InboundEmsBoard() {
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const nurseName = user?.fullName ?? '';
@@ -33,14 +38,22 @@ export function InboundEmsBoard() {
   const [runs, setRuns] = useState<EmsRun[]>([]);
   const [expanded, setExpanded] = useState(true);
   const [transferTarget, setTransferTarget] = useState<EmsRun | null>(null);
+  // Distinguish a FAILED fetch from a genuinely empty board — otherwise a
+  // 403/network error self-hides exactly like "no ambulances coming", which on
+  // a life-critical board is a dangerous false reassurance.
+  const [error, setError] = useState<string | null>(null);
+  // Re-subscribe on every WS reconnect so the board never goes deaf.
+  const wsGen = useWebSocketGeneration();
 
   const load = useCallback(async () => {
     if (!hospitalId) return;
     try {
       const data = await emsApi.getInbound(hospitalId);
       setRuns(data || []);
+      setError(null);
     } catch (err) {
       console.error('[InboundEmsBoard] load failed:', err);
+      setError('Inbound ambulance board unavailable — could not reach the server.');
     }
   }, [hospitalId]);
 
@@ -50,9 +63,25 @@ export function InboundEmsBoard() {
     if (!hospitalId) return;
     const unsub = subscribeToEmsRuns(hospitalId, () => load());
     return () => unsub();
-  }, [hospitalId, load]);
+  }, [hospitalId, load, wsGen]);
 
-  if (runs.length === 0) return null;
+  if (runs.length === 0) {
+    // Genuinely no inbound ambulances → stay hidden (unchanged behavior).
+    if (!error) return null;
+    // Fetch failed → surface it instead of masquerading as "all clear".
+    return (
+      <div className="rounded-2xl bg-rose-500/10 border border-rose-400/40 text-rose-700 px-4 py-3 flex items-center gap-3">
+        <Siren className="w-5 h-5 flex-shrink-0 text-rose-500" />
+        <span className="text-sm font-medium flex-1">{error}</span>
+        <button
+          onClick={() => load()}
+          className="px-3 py-1.5 rounded-xl bg-rose-500 text-white hover:bg-rose-600 text-xs font-bold"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   const arrived = runs.filter((r) => r.status === 'ARRIVED');
   const enRoute = runs.filter((r) => r.status === 'EN_ROUTE');
@@ -89,10 +118,20 @@ export function InboundEmsBoard() {
           {expanded && (
             <div className="mt-3 space-y-2">
               {[...arrived, ...enRoute].map((run) => (
-                <div key={run.id} className="rounded-xl bg-white/10 px-3 py-2 flex items-start gap-3">
+                <div
+                  key={run.id}
+                  onClick={run.visitId ? () => navigate(chartPath(run.visitId!)) : undefined}
+                  className={`rounded-xl bg-white/10 px-3 py-2 flex items-start gap-3 ${run.visitId ? 'cursor-pointer hover:bg-white/15' : ''}`}
+                >
                   <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${triageColor(run.fieldTriageCategory)}`} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
+                    {/* Who + where first — a charge nurse must know the patient before the payload. */}
+                    <PatientContextLine
+                      patientName={run.patientName}
+                      visitNumber={run.visitNumber}
+                      className="text-[11px] text-white"
+                    />
+                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
                       <span className="text-sm font-bold truncate">{run.mechanism ?? 'Patient'}</span>
                       {run.fieldTriageCategory && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/20">
@@ -124,7 +163,7 @@ export function InboundEmsBoard() {
                   </div>
                   {run.status === 'ARRIVED' && (
                     <button
-                      onClick={() => setTransferTarget(run)}
+                      onClick={(e) => { e.stopPropagation(); setTransferTarget(run); }}
                       className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-amber-600 hover:bg-white/90 text-[11px] font-bold"
                     >
                       <ClipboardCheck className="w-3 h-3" /> Acknowledge

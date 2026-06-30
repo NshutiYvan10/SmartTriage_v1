@@ -65,7 +65,10 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 
 function AppContent() {
   const [currentView, setCurrentView] = useState('dashboard');
-  const [sidebarWidth, setSidebarWidth] = useState(72); // Default collapsed width
+  // Right-edge position of the floating sidebar (left-4 offset + its width), so
+  // the content sits flush against it and the carved active item merges into the
+  // page surface instead of floating in a gap. Collapsed = 16 + 72, expanded = 16 + 256.
+  const [sidebarWidth, setSidebarWidth] = useState(88);
   const navigate = useNavigate();
   const location = useLocation();
   const { isDark, pageBg } = useTheme();
@@ -94,7 +97,7 @@ function AppContent() {
   };
 
   const handleSidebarCollapse = () => {
-    setSidebarWidth(72);
+    setSidebarWidth(88);
   };
 
   // Landing page — full screen, no sidebar
@@ -144,9 +147,13 @@ function AppContent() {
 
       <main
         className="flex-1 min-w-0 overflow-y-auto transition-all duration-500 ease-out relative"
-        style={{ marginLeft: `${sidebarWidth + 32}px` }}
+        style={{ marginLeft: `${sidebarWidth}px`, background: 'var(--surface-canvas)' }}
       >
-        <div className="relative z-10 animate-fade-in">
+        {/* Single ivory canvas — the content area shares the page's light-ivory
+            background (no second surface) and fills the full height, so the curved
+            active sidebar item reads as carving into this surface. Palette +
+            typography unchanged. */}
+        <div className="relative z-10 animate-fade-in min-h-full">
           {/* ── Clinical-safety failsafe ──
               Wrap every route in an ErrorBoundary so a thrown error
               during render (e.g. a transient race between auth and

@@ -13,6 +13,7 @@ export interface HypoglycemiaEvent {
   visitNumber: string | null;
   patientName: string | null;
   currentZone: string | null;
+  currentBedLabel: string | null;
   detectedAt: string;
   glucoseLevel: number | null;
   triggerReason: string;

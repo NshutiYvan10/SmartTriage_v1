@@ -1,9 +1,15 @@
 import { get, post, put } from './client';
+import type { EdZone } from './types';
 
 export interface MedicationSafetyCheck {
   id: string;
   visitId: string;
   medicationId: string;
+  // Denormalised patient context (who + where) for list rows.
+  patientName: string | null;
+  visitNumber: string | null;
+  currentZone: EdZone | null;
+  currentBedLabel: string | null;
   checkedAt: string;
   drugName: string;
   prescribedDoseMg: number;

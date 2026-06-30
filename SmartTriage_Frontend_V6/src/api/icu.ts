@@ -6,6 +6,9 @@ export interface IcuEscalation {
   patientName: string;
   visitNumber: string;
   triageCategory: string;
+  /** Patient CURRENT physical location (distinct from icuBedNumber, the ICU destination). */
+  currentEdZone: string | null;
+  currentBed: string | null;
   escalationReason: string;
   triggerType: string;
   escalatedAt: string;

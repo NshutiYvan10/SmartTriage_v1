@@ -41,9 +41,12 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
     /**
      * Pending (not yet resulted and not cancelled) lab orders for a hospital.
      */
-    @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+    @Query(value = "SELECT o FROM LabOrder o JOIN FETCH o.visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
+            "WHERE v.hospital.id = :hospitalId " +
             "AND o.isActive = true AND o.resultedAt IS NULL AND o.cancelledAt IS NULL " +
-            "ORDER BY CASE o.priority WHEN 'STAT' THEN 0 WHEN 'URGENT' THEN 1 ELSE 2 END, o.orderedAt ASC")
+            "ORDER BY CASE o.priority WHEN 'STAT' THEN 0 WHEN 'URGENT' THEN 1 ELSE 2 END, o.orderedAt ASC",
+            countQuery = "SELECT COUNT(o) FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+            "AND o.isActive = true AND o.resultedAt IS NULL AND o.cancelledAt IS NULL")
     Page<LabOrder> findPendingOrders(
             @Param("hospitalId") UUID hospitalId, Pageable pageable);
 
@@ -59,7 +62,8 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
     /**
      * Unacknowledged critical results for a hospital.
      */
-    @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+    @Query("SELECT o FROM LabOrder o JOIN FETCH o.visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
+            "WHERE v.hospital.id = :hospitalId " +
             "AND o.isActive = true AND o.isCritical = true " +
             "AND o.criticalValueAcknowledgedAt IS NULL " +
             // RESULTED only — a critical value still AWAITING_VERIFICATION is a junior's
@@ -94,7 +98,8 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
     /**
      * Active STAT orders (not yet resulted and not cancelled) for a hospital.
      */
-    @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+    @Query("SELECT o FROM LabOrder o JOIN FETCH o.visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
+            "WHERE v.hospital.id = :hospitalId " +
             "AND o.isActive = true AND o.priority = 'STAT' " +
             "AND o.resultedAt IS NULL AND o.cancelledAt IS NULL " +
             "ORDER BY o.orderedAt ASC")
@@ -149,7 +154,8 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
      * the lab (or about to be) but not yet processing/resulted.
      * Sorted STAT first, then by oldest first within priority.
      */
-    @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+    @Query("SELECT o FROM LabOrder o JOIN FETCH o.visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
+            "WHERE v.hospital.id = :hospitalId " +
             "AND o.isActive = true " +
             "AND o.status IN (com.smartTriage.smartTriage_server.common.enums.LabOrderStatus.ORDERED, " +
             "                 com.smartTriage.smartTriage_server.common.enums.LabOrderStatus.SPECIMEN_COLLECTED, " +
@@ -161,7 +167,8 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
      * Orders the tech has accessioned and is actively processing —
      * waiting for a result.
      */
-    @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+    @Query("SELECT o FROM LabOrder o JOIN FETCH o.visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
+            "WHERE v.hospital.id = :hospitalId " +
             "AND o.isActive = true " +
             "AND o.status = com.smartTriage.smartTriage_server.common.enums.LabOrderStatus.PROCESSING " +
             "ORDER BY CASE o.priority WHEN 'STAT' THEN 0 WHEN 'URGENT' THEN 1 ELSE 2 END, o.processingStartedAt ASC")
@@ -171,7 +178,8 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
      * Orders by status for a hospital — generic helper for Phase 2
      * verification queues, etc.
      */
-    @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+    @Query("SELECT o FROM LabOrder o JOIN FETCH o.visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
+            "WHERE v.hospital.id = :hospitalId " +
             "AND o.isActive = true AND o.status = :status " +
             "ORDER BY o.orderedAt DESC")
     List<LabOrder> findByHospitalAndStatus(
@@ -190,14 +198,22 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
      * audit / re-look-up previously processed orders without the
      * page being limited to live work. Sorted newest first.
      */
-    @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+    @Query(value = "SELECT o FROM LabOrder o JOIN FETCH o.visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
+            "WHERE v.hospital.id = :hospitalId " +
             "AND o.isActive = true " +
             "AND (:status IS NULL OR o.status = :status) " +
             "AND ( :q IS NULL OR :q = '' " +
             "      OR LOWER(o.orderNumber)     LIKE LOWER(CONCAT('%', :q, '%')) " +
             "      OR LOWER(o.testName)        LIKE LOWER(CONCAT('%', :q, '%')) " +
             "      OR LOWER(o.accessionNumber) LIKE LOWER(CONCAT('%', :q, '%')) ) " +
-            "ORDER BY o.orderedAt DESC")
+            "ORDER BY o.orderedAt DESC",
+            countQuery = "SELECT COUNT(o) FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+            "AND o.isActive = true " +
+            "AND (:status IS NULL OR o.status = :status) " +
+            "AND ( :q IS NULL OR :q = '' " +
+            "      OR LOWER(o.orderNumber)     LIKE LOWER(CONCAT('%', :q, '%')) " +
+            "      OR LOWER(o.testName)        LIKE LOWER(CONCAT('%', :q, '%')) " +
+            "      OR LOWER(o.accessionNumber) LIKE LOWER(CONCAT('%', :q, '%')) )")
     org.springframework.data.domain.Page<LabOrder> searchHistory(
             @Param("hospitalId") UUID hospitalId,
             @Param("status") LabOrderStatus status,
@@ -211,7 +227,8 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
      * released to the doctor. Sorted by timeout-soonest first so
      * STAT items appear at the top.
      */
-    @Query("SELECT o FROM LabOrder o JOIN o.visit v WHERE v.hospital.id = :hospitalId " +
+    @Query("SELECT o FROM LabOrder o JOIN FETCH o.visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
+            "WHERE v.hospital.id = :hospitalId " +
             "AND o.isActive = true " +
             "AND o.status = com.smartTriage.smartTriage_server.common.enums.LabOrderStatus.AWAITING_VERIFICATION " +
             "ORDER BY o.verificationTimeoutAt ASC NULLS LAST, o.orderedAt ASC")

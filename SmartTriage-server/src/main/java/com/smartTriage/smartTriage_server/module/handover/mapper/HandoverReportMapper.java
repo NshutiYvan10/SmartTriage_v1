@@ -37,12 +37,19 @@ public final class HandoverReportMapper {
                 .createdAt(report.getCreatedAt());
 
         if (report.getVisit() != null) {
-            builder.visitId(report.getVisit().getId());
-            builder.visitNumber(report.getVisit().getVisitNumber());
-            if (report.getVisit().getPatient() != null) {
+            var visit = report.getVisit();
+            builder.visitId(visit.getId());
+            builder.visitNumber(visit.getVisitNumber());
+            if (visit.getPatient() != null) {
                 builder.patientName(
-                        report.getVisit().getPatient().getFirstName() + " " +
-                                report.getVisit().getPatient().getLastName());
+                        visit.getPatient().getFirstName() + " " +
+                                visit.getPatient().getLastName());
+            }
+            // Patient context — WHERE the patient is, so a handover row shows
+            // location alongside identity. NULL-SAFE (currentBed is nullable).
+            builder.currentZone(visit.getCurrentEdZone());
+            if (visit.getCurrentBed() != null) {
+                builder.currentBedLabel(visit.getCurrentBed().getCode());
             }
         }
 

@@ -22,6 +22,7 @@ export interface FastTrackActivation {
   patientName: string | null;
   hospitalId: string | null;
   currentZone: string | null;
+  currentBedLabel: string | null;
 
   fastTrackType: FastTrackType;
   status: FastTrackStatusValue;

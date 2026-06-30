@@ -16,8 +16,21 @@ public interface PathwayActivationRepository extends JpaRepository<PathwayActiva
 
     Optional<PathwayActivation> findByIdAndIsActiveTrue(UUID id);
 
+    /**
+     * Active activations for a visit, newest first. JOIN FETCH visit →
+     * patient (+ LEFT pathway / currentBed) so the mapper can denormalise
+     * patient name / zone / bed for board/list rows without N+1 or
+     * LazyInitializationException. Mirrors the medication repo pattern.
+     */
+    @Query("SELECT a FROM PathwayActivation a "
+            + "JOIN FETCH a.visit v "
+            + "JOIN FETCH v.patient "
+            + "JOIN FETCH a.pathway "
+            + "LEFT JOIN FETCH v.currentBed "
+            + "WHERE v.id = :visitId AND a.status = :status AND a.isActive = true "
+            + "ORDER BY a.activatedAt DESC")
     List<PathwayActivation> findByVisitIdAndStatusAndIsActiveTrueOrderByActivatedAtDesc(
-            UUID visitId, PathwayActivationStatus status);
+            @Param("visitId") UUID visitId, @Param("status") PathwayActivationStatus status);
 
     List<PathwayActivation> findByVisitIdAndIsActiveTrueOrderByActivatedAtDesc(UUID visitId);
 

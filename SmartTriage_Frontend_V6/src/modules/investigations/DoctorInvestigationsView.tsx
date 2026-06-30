@@ -27,6 +27,8 @@ import {
 import { investigationApi } from '@/api/investigations';
 import type { InvestigationResponse, InvestigationStatus } from '@/api/types';
 import { useTheme } from '@/hooks/useTheme';
+import { PatientContextLine } from '@/components/PatientContextLine';
+import { chartPath } from '@/lib/chartNav';
 
 type Section = {
   status: InvestigationStatus;
@@ -297,7 +299,15 @@ function SectionCard({
           <li key={r.id} className={`px-4 py-2.5 flex items-center gap-3 border-b last:border-0 ${
             isDark ? 'border-white/5 hover:bg-white/5' : 'border-slate-100 hover:bg-slate-50'
           }`}>
-            <div className="flex-1 min-w-0">
+            <Link to={chartPath(r.visitId)} className="flex-1 min-w-0 block">
+              {/* WHO + WHERE first — identity/location before the clinical payload. */}
+              <PatientContextLine
+                patientName={r.patientName}
+                zone={r.currentZone}
+                bedLabel={r.currentBedLabel}
+                visitNumber={r.visitNumber}
+                className={`text-[11px] mb-0.5 ${text.body}`}
+              />
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-sm font-bold ${text.heading}`}>{r.testName}</span>
                 <span
@@ -332,8 +342,6 @@ function SectionCard({
                 )}
               </div>
               <div className={`text-[11px] mt-0.5 ${text.muted} flex items-center gap-3 flex-wrap`}>
-                <span>Visit <span className={`font-mono ${text.body}`}>{r.visitNumber}</span></span>
-                {r.patientName && <span>{r.patientName}</span>}
                 <span>Ordered {fmtRelative(r.orderedAt)}</span>
                 {r.resultedAt && <span>Resulted {fmtDateTime(r.resultedAt)}</span>}
               </div>
@@ -343,9 +351,9 @@ function SectionCard({
                   {r.resultUnit && <span className={text.muted}> {r.resultUnit}</span>}
                 </div>
               )}
-            </div>
+            </Link>
             <Link
-              to={`/visit/${r.visitId}`}
+              to={chartPath(r.visitId)}
               className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white transition-colors"
             >
               Open visit <ChevronRight className="w-3 h-3" />

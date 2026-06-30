@@ -22,7 +22,9 @@ public interface EmsRunRepository extends JpaRepository<EmsRun, UUID> {
      * yet handed off. Sorted by ETA / dispatch so RED-likely cases
      * surface first.
      */
-    @Query("SELECT r FROM EmsRun r WHERE r.hospital.id = :hospitalId " +
+    @Query("SELECT r FROM EmsRun r " +
+            "LEFT JOIN FETCH r.visit v LEFT JOIN FETCH v.patient " +
+            "WHERE r.hospital.id = :hospitalId " +
             "AND r.isActive = true " +
             "AND r.status IN (com.smartTriage.smartTriage_server.common.enums.EmsRunStatus.EN_ROUTE, " +
             "                 com.smartTriage.smartTriage_server.common.enums.EmsRunStatus.ARRIVED) " +
@@ -33,12 +35,16 @@ public interface EmsRunRepository extends JpaRepository<EmsRun, UUID> {
     List<EmsRun> findInbound(@Param("hospitalId") UUID hospitalId);
 
     /** A paramedic's recent runs (any status). */
-    @Query("SELECT r FROM EmsRun r WHERE r.paramedic.id = :paramedicId " +
+    @Query("SELECT r FROM EmsRun r " +
+            "LEFT JOIN FETCH r.visit v LEFT JOIN FETCH v.patient " +
+            "WHERE r.paramedic.id = :paramedicId " +
             "AND r.isActive = true ORDER BY r.dispatchedAt DESC")
     List<EmsRun> findByParamedic(@Param("paramedicId") UUID paramedicId);
 
     /** Active (non-final) runs by paramedic. */
-    @Query("SELECT r FROM EmsRun r WHERE r.paramedic.id = :paramedicId " +
+    @Query("SELECT r FROM EmsRun r " +
+            "LEFT JOIN FETCH r.visit v LEFT JOIN FETCH v.patient " +
+            "WHERE r.paramedic.id = :paramedicId " +
             "AND r.isActive = true " +
             "AND r.status NOT IN (com.smartTriage.smartTriage_server.common.enums.EmsRunStatus.HANDED_OFF, " +
             "                     com.smartTriage.smartTriage_server.common.enums.EmsRunStatus.CANCELLED) " +

@@ -58,6 +58,8 @@ public final class FastTrackMapper {
             builder.visitNumber(activation.getVisit().getVisitNumber());
             builder.currentZone(activation.getVisit().getCurrentEdZone() != null
                     ? activation.getVisit().getCurrentEdZone().name() : null);
+            builder.currentBedLabel(activation.getVisit().getCurrentBed() != null
+                    ? activation.getVisit().getCurrentBed().getCode() : null);
             if (activation.getVisit().getHospital() != null) {
                 builder.hospitalId(activation.getVisit().getHospital().getId());
             }

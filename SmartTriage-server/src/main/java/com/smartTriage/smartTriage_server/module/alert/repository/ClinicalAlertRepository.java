@@ -37,10 +37,30 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
                                                           com.smartTriage.smartTriage_server.common.enums.AlertType alertType);
 
         /**
+         * Severity-aware idempotency check — is an alert of this type AND
+         * severity already live for the visit? Used by the EMS pre-arrival
+         * re-escalation so a run that becomes CRITICAL after the first ping
+         * (lights switched on / recomputed to RED) raises the CRITICAL/RESUS
+         * inbound exactly once, without re-paging on every later toggle.
+         */
+        boolean existsByVisitIdAndAlertTypeAndSeverityAndIsActiveTrue(
+                UUID visitId,
+                com.smartTriage.smartTriage_server.common.enums.AlertType alertType,
+                com.smartTriage.smartTriage_server.common.enums.AlertSeverity severity);
+
+        /**
          * All alerts for a hospital (acknowledged + unacknowledged) — for the full
          * alert history view.
          */
-        @Query("SELECT a FROM ClinicalAlert a JOIN a.visit v WHERE v.hospital.id = :hospitalId " +
+        // JOIN FETCH the to-one visit / patient / currentBed so the mapper's
+        // denormalisation of WHO (patient name) and WHERE (current zone + bed)
+        // resolves without a LazyInitializationException — the page is mapped
+        // in the controller, outside the service @Transactional boundary — and
+        // without an N+1 across the feed. currentBed is LEFT JOIN FETCH because
+        // it is nullable (patient not yet placed in a bed). Fetching only
+        // to-one associations keeps DB-side pagination intact.
+        @Query("SELECT a FROM ClinicalAlert a JOIN FETCH a.visit v JOIN FETCH v.patient " +
+                        "LEFT JOIN FETCH v.currentBed WHERE v.hospital.id = :hospitalId " +
                         "AND a.isActive = true ORDER BY a.createdAt DESC")
         Page<ClinicalAlert> findAllAlertsByHospital(@Param("hospitalId") UUID hospitalId, Pageable pageable);
 

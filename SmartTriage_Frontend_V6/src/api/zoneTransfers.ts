@@ -24,6 +24,8 @@ export interface ZoneTransferResponse {
   patientName: string | null;
   isPediatric: boolean;
   fromZone: EdZone | null;
+  /** Human bed label the patient is physically in (source bed). Null if unbedded. */
+  fromBedCode: string | null;
   toZone: EdZone;
   status: ZoneTransferStatus;
   reason: string | null;

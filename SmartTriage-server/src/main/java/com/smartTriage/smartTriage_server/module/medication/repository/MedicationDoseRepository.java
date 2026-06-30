@@ -73,6 +73,7 @@ public interface MedicationDoseRepository extends JpaRepository<MedicationDose, 
      */
     @Query("SELECT d FROM MedicationDose d "
             + "JOIN FETCH d.medication m JOIN FETCH d.visit v JOIN FETCH v.patient "
+            + "LEFT JOIN FETCH v.currentBed "
             + "WHERE v.hospital.id = :hospitalId AND d.isActive = true "
             + "AND d.status = com.smartTriage.smartTriage_server.common.enums.DoseStatus.DUE "
             + "ORDER BY d.dueAt ASC")
@@ -83,6 +84,7 @@ public interface MedicationDoseRepository extends JpaRepository<MedicationDose, 
      */
     @Query("SELECT d FROM MedicationDose d "
             + "JOIN FETCH d.medication m JOIN FETCH d.visit v JOIN FETCH v.patient "
+            + "LEFT JOIN FETCH v.currentBed "
             + "WHERE v.hospital.id = :hospitalId AND d.isActive = true "
             + "AND d.status = com.smartTriage.smartTriage_server.common.enums.DoseStatus.GIVEN "
             + "AND d.givenAt >= :since "
@@ -97,7 +99,7 @@ public interface MedicationDoseRepository extends JpaRepository<MedicationDose, 
      */
     @Query("SELECT d FROM MedicationDose d "
             + "JOIN FETCH d.medication m JOIN FETCH d.visit v "
-            + "JOIN FETCH v.patient JOIN FETCH v.hospital "
+            + "JOIN FETCH v.patient JOIN FETCH v.hospital LEFT JOIN FETCH v.currentBed "
             + "WHERE d.isActive = true "
             + "AND d.status = com.smartTriage.smartTriage_server.common.enums.DoseStatus.DUE "
             + "AND d.dueAt < :cutoff")

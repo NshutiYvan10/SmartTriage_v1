@@ -32,7 +32,8 @@ public interface ZoneTransferRepository extends JpaRepository<ZoneTransfer, UUID
      * nurse dashboard. Joined through visits.hospital_id since the
      * transfer itself is visit-scoped.
      */
-    @Query("SELECT t FROM ZoneTransfer t JOIN t.visit v " +
+    @Query("SELECT t FROM ZoneTransfer t JOIN FETCH t.visit v " +
+            "JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
             "WHERE v.hospital.id = :hospitalId " +
             "AND t.status = 'PENDING_ACCEPT' AND t.isActive = true " +
             "ORDER BY t.initiatedAt ASC")
@@ -42,7 +43,8 @@ public interface ZoneTransferRepository extends JpaRepository<ZoneTransfer, UUID
      * Pending transfers into a specific zone — used to surface
      * incoming patients on the receiving zone's My Patients view.
      */
-    @Query("SELECT t FROM ZoneTransfer t JOIN t.visit v " +
+    @Query("SELECT t FROM ZoneTransfer t JOIN FETCH t.visit v " +
+            "JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
             "WHERE v.hospital.id = :hospitalId " +
             "AND t.toZone = :zone " +
             "AND t.status = 'PENDING_ACCEPT' AND t.isActive = true " +

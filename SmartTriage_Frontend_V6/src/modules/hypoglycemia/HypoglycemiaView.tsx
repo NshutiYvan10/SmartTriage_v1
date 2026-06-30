@@ -4,12 +4,15 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Droplets, AlertTriangle, CheckCircle2, RefreshCw,
   Loader2, Clock, Syringe, FlaskConical, ArrowRight,
-  Activity, CircleDot,
+  Activity, CircleDot, ChevronRight,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { PatientContextLine } from '@/components/PatientContextLine';
+import { chartPath } from '@/lib/chartNav';
 import { useAuthStore } from '@/store/authStore';
 import { hypoglycemiaApi } from '@/api/hypoglycemia';
 import { subscribeToHypoglycemia } from '@/api/websocket';
@@ -51,6 +54,7 @@ type WorkflowStep = 'treat' | 'repeat-glucose' | 'resolve';
 
 export function HypoglycemiaView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const navigate = useNavigate();
   const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
@@ -254,15 +258,28 @@ export function HypoglycemiaView() {
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        {/* Patient identity — a hospital-wide board must say WHO is hypoglycemic */}
-                        {(evt.patientName || evt.visitNumber) && (
-                          <p className={`text-sm font-bold ${text.heading} mb-1`}>
-                            {evt.patientName || 'Patient'}
-                            {evt.visitNumber && <span className={`ml-2 text-[10px] font-mono font-normal ${text.muted}`}>{evt.visitNumber}</span>}
-                            {evt.currentZone && <span className={`ml-2 text-[10px] font-normal ${text.muted}`}>· {evt.currentZone.replace(/_/g, ' ')}</span>}
-                            {evt.neonatal && <span className="ml-2 inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-fuchsia-600" style={{ background: 'rgba(217,70,239,0.08)', border: '1px solid rgba(217,70,239,0.2)' }}>NEONATAL</span>}
-                          </p>
-                        )}
+                        {/* Patient identity — a hospital-wide board MUST always say WHO is
+                            hypoglycemic and WHERE; click-through opens that patient's chart. */}
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <button
+                            type="button"
+                            onClick={() => navigate(chartPath(evt.visitId))}
+                            className="group flex items-center gap-1.5 min-w-0 text-left hover:opacity-80 transition-opacity"
+                            title="Open patient chart"
+                          >
+                            <PatientContextLine
+                              patientName={evt.patientName}
+                              zone={evt.currentZone ? evt.currentZone.replace(/_/g, ' ') : null}
+                              bedLabel={evt.currentBedLabel}
+                              visitNumber={evt.visitNumber}
+                              className={`text-sm ${text.heading}`}
+                            />
+                            {evt.neonatal && (
+                              <span className="ml-1 inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-fuchsia-600 shrink-0" style={{ background: 'rgba(217,70,239,0.08)', border: '1px solid rgba(217,70,239,0.2)' }}>NEONATAL</span>
+                            )}
+                            <ChevronRight className={`w-4 h-4 shrink-0 ${text.muted} group-hover:translate-x-0.5 transition-transform`} />
+                          </button>
+                        </div>
                         {/* Badges row */}
                         <div className="flex flex-wrap items-center gap-2 mb-1.5">
                           <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg border ${sev.bg} ${sev.color} ${sev.border}`}>

@@ -10,14 +10,18 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AlertOctagon, Phone, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { labApi } from '@/api/lab';
 import type { LabOrder } from '@/api/lab';
 import { subscribeToLabOrders } from '@/api/websocket';
+import { PatientContextLine } from '@/components/PatientContextLine';
+import { chartPath } from '@/lib/chartNav';
 import { AcknowledgeCriticalModal } from './AcknowledgeCriticalModal';
 
 export function CriticalLabBanner() {
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const docName = user?.fullName ?? '';
@@ -89,13 +93,26 @@ export function CriticalLabBanner() {
                   key={o.id}
                   className="flex items-center justify-between gap-3 rounded-xl bg-white/10 px-3 py-2"
                 >
-                  <div className="min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => o.visitId && navigate(chartPath(o.visitId))}
+                    className="min-w-0 text-left hover:bg-white/10 -mx-1 px-1 rounded-lg"
+                    title="Open patient chart"
+                  >
+                    {/* Identity FIRST — name the patient this critical value is for. */}
+                    <PatientContextLine
+                      patientName={o.patientName}
+                      zone={o.currentZone}
+                      bedLabel={o.currentBedLabel}
+                      visitNumber={o.visitNumber}
+                      className="text-[11px] text-white/90"
+                    />
                     <div className="text-sm font-bold truncate">{o.testName}</div>
                     <div className="text-[11px] text-white/85 truncate">
                       {o.orderNumber} • {o.resultValue ?? ''} {o.resultUnit ?? ''}
                       {o.criticalValueType ? ` • ${o.criticalValueType.replace(/_/g, ' ')}` : ''}
                     </div>
-                  </div>
+                  </button>
                   <button
                     onClick={() => setAckTarget(o)}
                     className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-rose-600 hover:bg-white/90 text-[11px] font-bold"
