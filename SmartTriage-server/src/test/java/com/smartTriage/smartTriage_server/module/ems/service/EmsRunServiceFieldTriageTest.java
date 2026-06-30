@@ -64,6 +64,7 @@ class EmsRunServiceFieldTriageTest {
     private com.smartTriage.smartTriage_server.module.visit.service.ZoneRoutingService zoneRoutingService;
     private ClinicalAlertRepository clinicalAlertRepository;
     private ShiftAssignmentService shiftAssignmentService;
+    private com.smartTriage.smartTriage_server.module.clinical.repository.ClinicalNoteRepository clinicalNoteRepository;
     private EmsRunService service;
 
     private EmsRun run;
@@ -87,6 +88,8 @@ class EmsRunServiceFieldTriageTest {
         shiftAssignmentService = mock(ShiftAssignmentService.class);
         when(shiftAssignmentService.getChargeNurse(any())).thenReturn(java.util.List.of());
         zoneRoutingService = mock(com.smartTriage.smartTriage_server.module.visit.service.ZoneRoutingService.class);
+        clinicalNoteRepository = mock(com.smartTriage.smartTriage_server.module.clinical.repository.ClinicalNoteRepository.class);
+        when(clinicalNoteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         // REAL engines — this is the whole point of the test.
         TewsCalculator tewsCalculator = new TewsCalculator();
@@ -101,7 +104,8 @@ class EmsRunServiceFieldTriageTest {
                 hospitalRepository, shiftAssignmentService,
                 tewsCalculator, pediatricTewsCalculator, decisionEngine, pediatricDecisionEngine,
                 mock(EmsPcrPdfService.class),
-                zoneRoutingService);
+                zoneRoutingService,
+                clinicalNoteRepository);
 
         Hospital hospital = new Hospital();
         run = EmsRun.builder()
@@ -318,5 +322,44 @@ class EmsRunServiceFieldTriageTest {
                 cap.getValue().getAlertType());
         assertEquals(com.smartTriage.smartTriage_server.common.enums.AlertSeverity.CRITICAL,
                 cap.getValue().getSeverity());
+    }
+
+    @Test
+    void transferOfCare_writesImmutableHandoverAttestation() {
+        // Override the principal with an identified receiver (still SUPER_ADMIN so
+        // the access check short-circuits) so we can assert server-attribution.
+        UUID receiverId = UUID.randomUUID();
+        User receiver = new User();
+        receiver.setId(receiverId);
+        receiver.setRole(Role.SUPER_ADMIN);
+        receiver.setFirstName("Aline");
+        receiver.setLastName("Uwase");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(receiver, null, List.of()));
+
+        com.smartTriage.smartTriage_server.module.visit.entity.Visit visit =
+                new com.smartTriage.smartTriage_server.module.visit.entity.Visit();
+        run.setVisit(visit);
+        run.setStatus(EmsRunStatus.ARRIVED);
+        run.setParamedicName("P. Mugisha");
+        run.setFieldTriageCategory("ORANGE");
+
+        com.smartTriage.smartTriage_server.module.ems.dto.TransferOfCareRequest req =
+                new com.smartTriage.smartTriage_server.module.ems.dto.TransferOfCareRequest();
+        req.setAcknowledgementText("RTA, splinted, IV running");
+
+        service.transferOfCare(RUN_ID, req);
+
+        // An append-only HANDOVER note is written, principal-attributed (author from
+        // the authenticated caller, not client-supplied) with the read-back captured.
+        org.mockito.ArgumentCaptor<com.smartTriage.smartTriage_server.module.clinical.entity.ClinicalNote> cap =
+                org.mockito.ArgumentCaptor.forClass(
+                        com.smartTriage.smartTriage_server.module.clinical.entity.ClinicalNote.class);
+        org.mockito.Mockito.verify(clinicalNoteRepository).save(cap.capture());
+        com.smartTriage.smartTriage_server.module.clinical.entity.ClinicalNote note = cap.getValue();
+        assertEquals(com.smartTriage.smartTriage_server.common.enums.NoteType.HANDOVER, note.getNoteType());
+        assertEquals(receiverId, note.getAuthorUserId());
+        assertTrue(note.getContent().contains("RTA, splinted, IV running"));
+        assertTrue(note.getContent().contains("transfer of care accepted"));
     }
 }

@@ -32,7 +32,10 @@ import com.smartTriage.smartTriage_server.module.vital.entity.VitalSigns;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.common.enums.VisitStatus;
 import com.smartTriage.smartTriage_server.common.enums.TriageCategory;
+import com.smartTriage.smartTriage_server.common.enums.NoteType;
 import com.smartTriage.smartTriage_server.module.visit.service.ZoneRoutingService;
+import com.smartTriage.smartTriage_server.module.clinical.entity.ClinicalNote;
+import com.smartTriage.smartTriage_server.module.clinical.repository.ClinicalNoteRepository;
 import com.smartTriage.smartTriage_server.module.visit.repository.VisitRepository;
 import com.smartTriage.smartTriage_server.module.visit.service.VisitService;
 import com.smartTriage.smartTriage_server.security.ClinicalAuthz;
@@ -98,6 +101,7 @@ public class EmsRunService {
     private final RwandaPediatricTriageDecisionEngine pediatricDecisionEngine;
     private final EmsPcrPdfService emsPcrPdfService;
     private final ZoneRoutingService zoneRoutingService;
+    private final ClinicalNoteRepository clinicalNoteRepository;
 
     /** Patients younger than this use the KFH pediatric form/engine. */
     private static final int PEDIATRIC_AGE_CEILING_YEARS = 13;
@@ -647,9 +651,55 @@ public class EmsRunService {
         }
 
         run = emsRunRepository.save(run);
-        log.info("[ems] Run {} HANDED_OFF to {}", runId, run.getHandedOffToName());
+
+        // Immutable transfer-of-care attestation. The EmsRun columns above are
+        // mutable display/state; THIS is the append-only legal record of the
+        // transfer of responsibility, written as a HANDOVER ClinicalNote that is
+        // principal-attributed (author resolved server-side from the authenticated
+        // caller — NOT the client-supplied receivedByName, closing that spoof gap)
+        // and never updated/deleted. Part of the same transaction as the status
+        // change, so there is never a HANDED_OFF run without its attestation.
+        if (run.getVisit() != null) {
+            ClinicalNote attestation = ClinicalNote.builder()
+                    .visit(run.getVisit())
+                    .noteType(NoteType.HANDOVER)
+                    .section("EMS Transfer of Care")
+                    .content(buildHandoverAttestation(run, caller))
+                    .recordedByName(caller != null
+                            ? caller.getFirstName() + " " + caller.getLastName() : "Unknown")
+                    .authorUserId(caller != null ? caller.getId() : null)
+                    .authorRole(caller != null ? caller.getRole() : null)
+                    .recordedAt(now)
+                    .build();
+            clinicalNoteRepository.save(attestation);
+        }
+
+        log.info("[ems] Run {} HANDED_OFF to {} (attestation recorded)", runId, run.getHandedOffToName());
 
         return broadcastAndMap(run, true);
+    }
+
+    /**
+     * Build the immutable transfer-of-care attestation text: who accepted the
+     * patient (server-authenticated), from whom, the clinical state at the moment
+     * of transfer, and the read-back. This is the legal record of what was true
+     * when responsibility passed from the paramedic to the receiving clinician.
+     */
+    private String buildHandoverAttestation(EmsRun run, User receiver) {
+        StringBuilder sb = new StringBuilder("EMS transfer of care accepted.\n");
+        sb.append("Received by: ")
+          .append(receiver != null ? receiver.getFirstName() + " " + receiver.getLastName() : "Unknown")
+          .append(receiver != null && receiver.getRole() != null ? " (" + receiver.getRole() + ")" : "")
+          .append('\n');
+        sb.append("From paramedic: ").append(safe(run.getParamedicName(), "unknown")).append('\n');
+        sb.append("Field triage at handover: ")
+          .append(run.getFieldTriageCategory() != null ? run.getFieldTriageCategory() : "not assessed")
+          .append(run.getFieldTewsScore() != null ? " · TEWS " + run.getFieldTewsScore() : "")
+          .append(run.isLightsActive() ? " · lights / priority transport" : "")
+          .append('\n');
+        String ack = run.getHandoverAcknowledgementText();
+        sb.append("Read-back: ").append(ack != null && !ack.isBlank() ? ack : "(none recorded)");
+        return sb.toString();
     }
 
     /**
