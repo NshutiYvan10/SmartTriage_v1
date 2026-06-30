@@ -59,8 +59,16 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
         // without an N+1 across the feed. currentBed is LEFT JOIN FETCH because
         // it is nullable (patient not yet placed in a bed). Fetching only
         // to-one associations keeps DB-side pagination intact.
+        // targetDoctor + acknowledgedBy are ALSO fetched: the enriched mapper
+        // dereferences them (escalated / acknowledged alerts), and they were the
+        // un-fetched LAZY associations that made the feed 500 once a hospital had
+        // any escalated or acknowledged alert. All fetches are to-one → DB-side
+        // pagination is preserved. Mapping now also runs inside the service tx as
+        // the definitive safety net (this query is the no-N+1 optimisation).
         @Query("SELECT a FROM ClinicalAlert a JOIN FETCH a.visit v JOIN FETCH v.patient " +
-                        "LEFT JOIN FETCH v.currentBed WHERE v.hospital.id = :hospitalId " +
+                        "LEFT JOIN FETCH v.currentBed " +
+                        "LEFT JOIN FETCH a.targetDoctor LEFT JOIN FETCH a.acknowledgedBy " +
+                        "WHERE v.hospital.id = :hospitalId " +
                         "AND a.isActive = true ORDER BY a.createdAt DESC")
         Page<ClinicalAlert> findAllAlertsByHospital(@Param("hospitalId") UUID hospitalId, Pageable pageable);
 

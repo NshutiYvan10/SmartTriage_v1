@@ -3,8 +3,6 @@ package com.smartTriage.smartTriage_server.module.alert.controller;
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.module.alert.dto.ClinicalAlertResponse;
-import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
-import com.smartTriage.smartTriage_server.module.alert.mapper.ClinicalAlertMapper;
 import com.smartTriage.smartTriage_server.module.alert.service.ClinicalAlertService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -16,7 +14,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Clinical alerts endpoints — the alert queue for the ED dashboard.
@@ -34,8 +31,9 @@ public class ClinicalAlertController {
     public ResponseEntity<ApiResponse<Page<ClinicalAlertResponse>>> getAlertsForVisit(
             @PathVariable UUID visitId,
             @PageableDefault(size = 20) Pageable pageable) {
-        Page<ClinicalAlertResponse> response = clinicalAlertService.getAlertsForVisit(visitId, pageable)
-                .map(ClinicalAlertMapper::toResponse);
+        // Mapping happens INSIDE the service transaction (lazy associations) — see
+        // ClinicalAlertService. The controller must not re-map post-transaction.
+        Page<ClinicalAlertResponse> response = clinicalAlertService.getAlertsForVisit(visitId, pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -44,8 +42,7 @@ public class ClinicalAlertController {
     public ResponseEntity<ApiResponse<Page<ClinicalAlertResponse>>> getUnacknowledgedAlerts(
             @PathVariable UUID hospitalId,
             @PageableDefault(size = 50) Pageable pageable) {
-        Page<ClinicalAlertResponse> response = clinicalAlertService.getUnacknowledgedAlerts(hospitalId, pageable)
-                .map(ClinicalAlertMapper::toResponse);
+        Page<ClinicalAlertResponse> response = clinicalAlertService.getUnacknowledgedAlerts(hospitalId, pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -54,8 +51,7 @@ public class ClinicalAlertController {
     public ResponseEntity<ApiResponse<Page<ClinicalAlertResponse>>> getAllAlerts(
             @PathVariable UUID hospitalId,
             @PageableDefault(size = 100) Pageable pageable) {
-        Page<ClinicalAlertResponse> response = clinicalAlertService.getAllAlerts(hospitalId, pageable)
-                .map(ClinicalAlertMapper::toResponse);
+        Page<ClinicalAlertResponse> response = clinicalAlertService.getAllAlerts(hospitalId, pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -64,8 +60,7 @@ public class ClinicalAlertController {
     public ResponseEntity<ApiResponse<Page<ClinicalAlertResponse>>> getCriticalAlerts(
             @PathVariable UUID hospitalId,
             @PageableDefault(size = 50) Pageable pageable) {
-        Page<ClinicalAlertResponse> response = clinicalAlertService.getCriticalAlerts(hospitalId, pageable)
-                .map(ClinicalAlertMapper::toResponse);
+        Page<ClinicalAlertResponse> response = clinicalAlertService.getCriticalAlerts(hospitalId, pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -91,8 +86,7 @@ public class ClinicalAlertController {
             @RequestParam(required = false, defaultValue = "all") String range,
             @PageableDefault(size = 200) Pageable pageable) {
         Page<ClinicalAlertResponse> response = clinicalAlertService
-                .getSafetyOverrides(hospitalId, range, pageable)
-                .map(ClinicalAlertMapper::toResponse);
+                .getSafetyOverrides(hospitalId, range, pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -104,8 +98,8 @@ public class ClinicalAlertController {
             // B5 — optional acknowledge/dismiss comment. Previously the
             // dialog captured this but it was never sent or stored.
             @RequestParam(required = false) String note) {
-        ClinicalAlert alert = clinicalAlertService.acknowledgeAlert(alertId, note);
-        return ResponseEntity.ok(ApiResponse.success("Alert acknowledged", ClinicalAlertMapper.toResponse(alert)));
+        ClinicalAlertResponse alert = clinicalAlertService.acknowledgeAlert(alertId, note);
+        return ResponseEntity.ok(ApiResponse.success("Alert acknowledged", alert));
     }
 
     /**
@@ -121,8 +115,8 @@ public class ClinicalAlertController {
     public ResponseEntity<ApiResponse<ClinicalAlertResponse>> acknowledgeSafetyOverride(
             @PathVariable UUID alertId,
             @RequestParam(required = false) String note) {
-        ClinicalAlert alert = clinicalAlertService.acknowledgeAlert(alertId, note);
-        return ResponseEntity.ok(ApiResponse.success("Override acknowledged", ClinicalAlertMapper.toResponse(alert)));
+        ClinicalAlertResponse alert = clinicalAlertService.acknowledgeAlert(alertId, note);
+        return ResponseEntity.ok(ApiResponse.success("Override acknowledged", alert));
     }
 
     // ====================================================================
@@ -142,10 +136,7 @@ public class ClinicalAlertController {
     public ResponseEntity<ApiResponse<List<ClinicalAlertResponse>>> getZoneAlerts(
             @PathVariable UUID hospitalId,
             @PathVariable EdZone zone) {
-        List<ClinicalAlertResponse> alerts = clinicalAlertService.getUnacknowledgedAlertsByZone(hospitalId, zone)
-                .stream()
-                .map(ClinicalAlertMapper::toResponse)
-                .collect(Collectors.toList());
+        List<ClinicalAlertResponse> alerts = clinicalAlertService.getUnacknowledgedAlertsByZone(hospitalId, zone);
         return ResponseEntity.ok(ApiResponse.success(alerts));
     }
 
@@ -162,10 +153,7 @@ public class ClinicalAlertController {
             + "    and @clinicalAuthz.canAccessUser(authentication, #doctorId))")
     public ResponseEntity<ApiResponse<List<ClinicalAlertResponse>>> getDoctorAlerts(
             @PathVariable UUID doctorId) {
-        List<ClinicalAlertResponse> alerts = clinicalAlertService.getAlertsForDoctor(doctorId)
-                .stream()
-                .map(ClinicalAlertMapper::toResponse)
-                .collect(Collectors.toList());
+        List<ClinicalAlertResponse> alerts = clinicalAlertService.getAlertsForDoctor(doctorId);
         return ResponseEntity.ok(ApiResponse.success(alerts));
     }
 }

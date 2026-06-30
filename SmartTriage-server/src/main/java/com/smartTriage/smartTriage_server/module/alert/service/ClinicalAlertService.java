@@ -5,7 +5,9 @@ import com.smartTriage.smartTriage_server.common.enums.AlertType;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.EmsRunStatus;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
+import com.smartTriage.smartTriage_server.module.alert.dto.ClinicalAlertResponse;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
+import com.smartTriage.smartTriage_server.module.alert.mapper.ClinicalAlertMapper;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
 import com.smartTriage.smartTriage_server.module.ems.mapper.EmsRunMapper;
 import com.smartTriage.smartTriage_server.module.ems.repository.EmsRunRepository;
@@ -14,6 +16,7 @@ import com.smartTriage.smartTriage_server.module.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -39,35 +42,75 @@ public class ClinicalAlertService {
     private final EmsRunRepository emsRunRepository;
     private final RealTimeEventPublisher eventPublisher;
 
-    public Page<ClinicalAlert> getAlertsForVisit(UUID visitId, Pageable pageable) {
-        return clinicalAlertRepository.findByVisitIdAndIsActiveTrueOrderByCreatedAtDesc(visitId, pageable);
+    // ── Alert-feed reads ──────────────────────────────────────────────
+    // CRITICAL: these MUST map entity → DTO INSIDE this @Transactional(readOnly)
+    // service, NOT in the controller. ClinicalAlert.visit / targetDoctor /
+    // acknowledgedBy are all @ManyToOne(LAZY); the enriched ClinicalAlertMapper
+    // dereferences them. Mapping in the controller (after the tx closed) threw
+    // LazyInitializationException → HTTP 500 → the Alert Center showed "feed
+    // unavailable" for every hospital that had any escalated/acknowledged alert,
+    // even though the live WS dashboard (which never uses this mapper) worked.
+    // Mapping here keeps the session open for every lazy field the mapper touches
+    // now or in future. Each row is mapped defensively (see toResponses): one
+    // un-mappable alert is logged + skipped, never blanking the whole feed.
+
+    public Page<ClinicalAlertResponse> getAlertsForVisit(UUID visitId, Pageable pageable) {
+        return toResponses(clinicalAlertRepository.findByVisitIdAndIsActiveTrueOrderByCreatedAtDesc(visitId, pageable),
+                pageable);
     }
 
-    public Page<ClinicalAlert> getAllAlerts(UUID hospitalId, Pageable pageable) {
-        return clinicalAlertRepository.findAllAlertsByHospital(hospitalId, pageable);
+    public Page<ClinicalAlertResponse> getAllAlerts(UUID hospitalId, Pageable pageable) {
+        return toResponses(clinicalAlertRepository.findAllAlertsByHospital(hospitalId, pageable), pageable);
     }
 
-    public Page<ClinicalAlert> getUnacknowledgedAlerts(UUID hospitalId, Pageable pageable) {
-        return clinicalAlertRepository.findUnacknowledgedAlerts(hospitalId, pageable);
+    public Page<ClinicalAlertResponse> getUnacknowledgedAlerts(UUID hospitalId, Pageable pageable) {
+        return toResponses(clinicalAlertRepository.findUnacknowledgedAlerts(hospitalId, pageable), pageable);
     }
 
-    public Page<ClinicalAlert> getCriticalAlerts(UUID hospitalId, Pageable pageable) {
-        return clinicalAlertRepository.findUnacknowledgedAlertsBySeverity(
-                hospitalId, AlertSeverity.CRITICAL, pageable);
+    public Page<ClinicalAlertResponse> getCriticalAlerts(UUID hospitalId, Pageable pageable) {
+        return toResponses(clinicalAlertRepository.findUnacknowledgedAlertsBySeverity(
+                hospitalId, AlertSeverity.CRITICAL, pageable), pageable);
     }
 
     /**
      * Get unacknowledged alerts for a specific ED zone.
      */
-    public List<ClinicalAlert> getUnacknowledgedAlertsByZone(UUID hospitalId, EdZone zone) {
-        return clinicalAlertRepository.findUnacknowledgedAlertsByZone(hospitalId, zone);
+    public List<ClinicalAlertResponse> getUnacknowledgedAlertsByZone(UUID hospitalId, EdZone zone) {
+        return toResponses(clinicalAlertRepository.findUnacknowledgedAlertsByZone(hospitalId, zone));
     }
 
     /**
      * Get unacknowledged alerts targeted at a specific doctor.
      */
-    public List<ClinicalAlert> getAlertsForDoctor(UUID doctorId) {
-        return clinicalAlertRepository.findUnacknowledgedAlertsForDoctor(doctorId);
+    public List<ClinicalAlertResponse> getAlertsForDoctor(UUID doctorId) {
+        return toResponses(clinicalAlertRepository.findUnacknowledgedAlertsForDoctor(doctorId));
+    }
+
+    // ── Resilient mapping (runs inside this service's transaction) ──
+    private Page<ClinicalAlertResponse> toResponses(Page<ClinicalAlert> page, Pageable pageable) {
+        return new PageImpl<>(toResponses(page.getContent()), pageable, page.getTotalElements());
+    }
+
+    /**
+     * Map alerts → DTOs, skipping (and loudly logging) any single row that fails
+     * to map. RELIABILITY GUARANTEE: on this life-critical feed, one malformed or
+     * un-mappable alert must NEVER take the entire Alert Center down — the
+     * clinician still sees every other alert, and the failure is logged (not
+     * silently swallowed) for monitoring.
+     */
+    private List<ClinicalAlertResponse> toResponses(List<ClinicalAlert> alerts) {
+        List<ClinicalAlertResponse> out = new java.util.ArrayList<>(alerts.size());
+        for (ClinicalAlert a : alerts) {
+            try {
+                out.add(ClinicalAlertMapper.toResponse(a));
+            } catch (Exception e) {
+                UUID id = null;
+                try { id = a.getId(); } catch (Exception ignored) { /* broken proxy */ }
+                log.error("[alert-feed] Skipped un-mappable alert {} — feed stays available. Cause: {}",
+                        id, e.toString(), e);
+            }
+        }
+        return out;
     }
 
     /**
@@ -77,7 +120,7 @@ public class ClinicalAlertService {
      * is treated as "all" rather than throwing, because a malformed
      * query string from a stale link shouldn't take the dashboard down.
      */
-    public Page<ClinicalAlert> getSafetyOverrides(
+    public Page<ClinicalAlertResponse> getSafetyOverrides(
             UUID hospitalId,
             String range,
             Pageable pageable) {
@@ -92,11 +135,11 @@ public class ClinicalAlertService {
                 default    -> from = null;
             }
         }
-        return clinicalAlertRepository.findSafetyOverrides(hospitalId, from, null, pageable);
+        return toResponses(clinicalAlertRepository.findSafetyOverrides(hospitalId, from, null, pageable), pageable);
     }
 
     @Transactional
-    public ClinicalAlert acknowledgeAlert(UUID alertId, String note) {
+    public ClinicalAlertResponse acknowledgeAlert(UUID alertId, String note) {
         ClinicalAlert alert = clinicalAlertRepository.findByIdAndIsActiveTrue(alertId)
                 .orElseThrow(() -> new ResourceNotFoundException("ClinicalAlert", "id", alertId));
 
@@ -145,7 +188,8 @@ public class ClinicalAlertService {
                         alert.getVisit().getId(), e.getMessage());
             }
         }
-        return alert;
+        // Map inside the tx (same LazyInit reason as the read paths above).
+        return ClinicalAlertMapper.toResponse(alert);
     }
 
     private static String ackerName(ClinicalAlert alert) {
