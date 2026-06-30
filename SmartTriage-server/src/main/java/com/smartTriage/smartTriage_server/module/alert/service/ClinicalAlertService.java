@@ -41,6 +41,7 @@ public class ClinicalAlertService {
     private final ClinicalAlertRepository clinicalAlertRepository;
     private final EmsRunRepository emsRunRepository;
     private final RealTimeEventPublisher eventPublisher;
+    private final AlertScopeResolver alertScopeResolver;
 
     // ── Alert-feed reads ──────────────────────────────────────────────
     // CRITICAL: these MUST map entity → DTO INSIDE this @Transactional(readOnly)
@@ -60,7 +61,20 @@ public class ClinicalAlertService {
     }
 
     public Page<ClinicalAlertResponse> getAllAlerts(UUID hospitalId, Pageable pageable) {
-        return toResponses(clinicalAlertRepository.findAllAlertsByHospital(hospitalId, pageable), pageable);
+        // Role/zone-scoped at the DATA level — a Zone Nurse gets only their zone's
+        // alerts (+ ones addressed to them), a Lab Tech only lab alerts, oversight
+        // roles everything. This is the authoritative filter, not a UI hide.
+        AlertScopeResolver.AlertScope scope = alertScopeResolver.resolve(
+                SecurityContextHolder.getContext().getAuthentication(), hospitalId);
+        Page<ClinicalAlert> page = switch (scope.kind()) {
+            case ALL -> clinicalAlertRepository.findAllAlertsByHospital(hospitalId, pageable);
+            case ZONE -> scope.zones().isEmpty()
+                    ? clinicalAlertRepository.findPersonalScopedAlerts(hospitalId, scope.userId(), pageable)
+                    : clinicalAlertRepository.findZoneScopedAlerts(hospitalId, scope.zones(), scope.userId(), pageable);
+            case CATEGORY -> clinicalAlertRepository.findScopedByAlertTypes(hospitalId, scope.alertTypes(), pageable);
+            case NONE -> Page.<ClinicalAlert>empty(pageable);
+        };
+        return toResponses(page, pageable);
     }
 
     public Page<ClinicalAlertResponse> getUnacknowledgedAlerts(UUID hospitalId, Pageable pageable) {

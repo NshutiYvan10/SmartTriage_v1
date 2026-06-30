@@ -8,6 +8,7 @@ import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertR
 import com.smartTriage.smartTriage_server.module.ems.repository.EmsRunRepository;
 import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher;
 import org.hibernate.LazyInitializationException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -15,10 +16,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -38,10 +41,22 @@ class ClinicalAlertServiceTest {
     private final ClinicalAlertRepository repo = mock(ClinicalAlertRepository.class);
     private final EmsRunRepository emsRepo = mock(EmsRunRepository.class);
     private final RealTimeEventPublisher publisher = mock(RealTimeEventPublisher.class);
-    private final ClinicalAlertService service = new ClinicalAlertService(repo, emsRepo, publisher);
+    private final AlertScopeResolver scopeResolver = mock(AlertScopeResolver.class);
+    private final ClinicalAlertService service =
+            new ClinicalAlertService(repo, emsRepo, publisher, scopeResolver);
 
     private final UUID hospitalId = UUID.randomUUID();
     private final Pageable pageable = PageRequest.of(0, 50);
+
+    @BeforeEach
+    void defaultScope() {
+        // These tests exercise the resilient-mapping path; resolve to ALL so
+        // getAllAlerts routes through findAllAlertsByHospital (scoping itself is
+        // covered by AlertScopeResolverTest).
+        when(scopeResolver.resolve(any(), any())).thenReturn(
+                new AlertScopeResolver.AlertScope(
+                        AlertScopeResolver.Kind.ALL, Set.of(), null, Set.of()));
+    }
 
     @Test
     void getAllAlerts_skipsUnmappableAlert_keepsFeedAvailable() {

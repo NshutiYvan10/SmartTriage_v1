@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -71,6 +72,47 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
                         "WHERE v.hospital.id = :hospitalId " +
                         "AND a.isActive = true ORDER BY a.createdAt DESC")
         Page<ClinicalAlert> findAllAlertsByHospital(@Param("hospitalId") UUID hospitalId, Pageable pageable);
+
+        // ── Role/zone-scoped Alert Center feeds (AlertScopeResolver) ──
+        // Same fetch-join set as findAllAlertsByHospital (no LazyInit, no N+1).
+        // ZONE scope: alerts for a patient in one of the caller's covered zones, OR
+        // routed to one of those zones, OR addressed to the caller (escalation), OR
+        // acknowledged by the caller. This is how a Zone Nurse / Doctor sees exactly
+        // their zone's alerts — and how an EMS pre-arrival reaches the receiving-zone
+        // nurse (its targetZone) but not unrelated zones.
+        @Query("SELECT a FROM ClinicalAlert a JOIN FETCH a.visit v JOIN FETCH v.patient " +
+                        "LEFT JOIN FETCH v.currentBed " +
+                        "LEFT JOIN FETCH a.targetDoctor LEFT JOIN FETCH a.acknowledgedBy " +
+                        "WHERE v.hospital.id = :hospitalId AND a.isActive = true AND (" +
+                        "  a.targetZone IN :zones OR v.currentEdZone IN :zones " +
+                        "  OR a.targetDoctor.id = :userId OR a.acknowledgedBy.id = :userId" +
+                        ") ORDER BY a.createdAt DESC")
+        Page<ClinicalAlert> findZoneScopedAlerts(@Param("hospitalId") UUID hospitalId,
+                        @Param("zones") Collection<EdZone> zones,
+                        @Param("userId") UUID userId,
+                        Pageable pageable);
+
+        // ZONE scope when the caller has no current zone assignment → personal-only
+        // (alerts addressed to them / acknowledged by them). Avoids an empty IN ().
+        @Query("SELECT a FROM ClinicalAlert a JOIN FETCH a.visit v JOIN FETCH v.patient " +
+                        "LEFT JOIN FETCH v.currentBed " +
+                        "LEFT JOIN FETCH a.targetDoctor LEFT JOIN FETCH a.acknowledgedBy " +
+                        "WHERE v.hospital.id = :hospitalId AND a.isActive = true AND (" +
+                        "  a.targetDoctor.id = :userId OR a.acknowledgedBy.id = :userId" +
+                        ") ORDER BY a.createdAt DESC")
+        Page<ClinicalAlert> findPersonalScopedAlerts(@Param("hospitalId") UUID hospitalId,
+                        @Param("userId") UUID userId,
+                        Pageable pageable);
+
+        // CATEGORY scope (Lab Technician): laboratory alert types only, hospital-wide.
+        @Query("SELECT a FROM ClinicalAlert a JOIN FETCH a.visit v JOIN FETCH v.patient " +
+                        "LEFT JOIN FETCH v.currentBed " +
+                        "LEFT JOIN FETCH a.targetDoctor LEFT JOIN FETCH a.acknowledgedBy " +
+                        "WHERE v.hospital.id = :hospitalId AND a.isActive = true " +
+                        "AND a.alertType IN :types ORDER BY a.createdAt DESC")
+        Page<ClinicalAlert> findScopedByAlertTypes(@Param("hospitalId") UUID hospitalId,
+                        @Param("types") Collection<AlertType> types,
+                        Pageable pageable);
 
         /**
          * Unacknowledged alerts for a hospital — the critical alert queue.
