@@ -146,6 +146,14 @@ export function InboundEmsBoard() {
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${run.status === 'ARRIVED' ? 'bg-rose-500/40' : 'bg-white/15'}`}>
                         {run.status === 'ARRIVED' ? 'AT DOOR' : 'EN ROUTE'}
                       </span>
+                      {/* Receipt acknowledged (alert acked in the Alert Center) — the card
+                          reflects it so the patient isn't acknowledged twice; the remaining
+                          action is the deliberate read-back handover. */}
+                      {run.status === 'ARRIVED' && run.arrivalAckedAt && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/30 inline-flex items-center gap-1">
+                          <ClipboardCheck className="w-3 h-3" /> RECEIVED{run.arrivalAckedByName ? ` · ${run.arrivalAckedByName}` : ''}
+                        </span>
+                      )}
                     </div>
                     <div className="text-[11px] text-white/85 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
                       {run.incidentLocation && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {run.incidentLocation}</span>}
@@ -166,7 +174,7 @@ export function InboundEmsBoard() {
                       onClick={(e) => { e.stopPropagation(); setTransferTarget(run); }}
                       className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-amber-600 hover:bg-white/90 text-[11px] font-bold"
                     >
-                      <ClipboardCheck className="w-3 h-3" /> Acknowledge
+                      <ClipboardCheck className="w-3 h-3" /> {run.arrivalAckedAt ? 'Complete handover' : 'Acknowledge'}
                     </button>
                   )}
                 </div>

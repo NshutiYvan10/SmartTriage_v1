@@ -325,6 +325,98 @@ class EmsRunServiceFieldTriageTest {
     }
 
     @Test
+    void confirmArrival_orange_placesAcuteZone_bypassesTriageDesk() {
+        com.smartTriage.smartTriage_server.module.visit.entity.Visit visit =
+                new com.smartTriage.smartTriage_server.module.visit.entity.Visit();
+        visit.setStatus(com.smartTriage.smartTriage_server.common.enums.VisitStatus.REGISTERED);
+        run.setVisit(visit);
+        run.setStatus(EmsRunStatus.EN_ROUTE);
+        run.setFieldTriageCategory("ORANGE");
+        when(zoneRoutingService.routeFor(visit,
+                com.smartTriage.smartTriage_server.common.enums.TriageCategory.ORANGE))
+                .thenReturn(com.smartTriage.smartTriage_server.common.enums.EdZone.ACUTE);
+
+        service.confirmArrival(RUN_ID);
+
+        // Acuity-split: ORANGE is high-acuity → placed straight into ACUTE, bypassing the
+        // triage-desk queue (currentEdZone set). Still AWAITING_TRIAGE for the formal triage.
+        assertEquals(com.smartTriage.smartTriage_server.common.enums.TriageCategory.ORANGE,
+                visit.getCurrentTriageCategory());
+        assertEquals(com.smartTriage.smartTriage_server.common.enums.EdZone.ACUTE,
+                visit.getCurrentEdZone());
+        assertEquals(com.smartTriage.smartTriage_server.common.enums.VisitStatus.AWAITING_TRIAGE,
+                visit.getStatus());
+    }
+
+    @Test
+    void confirmArrival_yellow_entersTriageQueue_noZonePlacement() {
+        com.smartTriage.smartTriage_server.module.visit.entity.Visit visit =
+                new com.smartTriage.smartTriage_server.module.visit.entity.Visit();
+        visit.setStatus(com.smartTriage.smartTriage_server.common.enums.VisitStatus.REGISTERED);
+        run.setVisit(visit);
+        run.setStatus(EmsRunStatus.EN_ROUTE);
+        run.setFieldTriageCategory("YELLOW");
+
+        service.confirmArrival(RUN_ID);
+
+        // Acuity-split: YELLOW is lower-acuity → the field call stands as the advisory
+        // category, but currentEdZone stays NULL so the patient enters the ED triage-DESK
+        // queue for a formal triage like a walk-in. Routing is NOT invoked.
+        assertEquals(com.smartTriage.smartTriage_server.common.enums.TriageCategory.YELLOW,
+                visit.getCurrentTriageCategory());
+        assertNull(visit.getCurrentEdZone());
+        org.mockito.Mockito.verify(zoneRoutingService, org.mockito.Mockito.never())
+                .routeFor(any(), any());
+    }
+
+    @Test
+    void confirmArrival_autoAcknowledgesOpenPreArrivalAlert() {
+        com.smartTriage.smartTriage_server.module.visit.entity.Visit visit =
+                new com.smartTriage.smartTriage_server.module.visit.entity.Visit();
+        visit.setStatus(com.smartTriage.smartTriage_server.common.enums.VisitStatus.REGISTERED);
+        run.setVisit(visit);
+        run.setStatus(EmsRunStatus.EN_ROUTE);
+        run.setFieldTriageCategory("YELLOW");
+
+        com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert preArrival =
+                com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert.builder()
+                        .alertType(com.smartTriage.smartTriage_server.common.enums.AlertType.EMS_PRE_ARRIVAL)
+                        .build();
+        when(clinicalAlertRepository.findByVisitIdAndAlertTypeInAndIsAcknowledgedFalseAndIsActiveTrue(
+                any(), any())).thenReturn(new java.util.ArrayList<>(List.of(preArrival)));
+
+        service.confirmArrival(RUN_ID);
+
+        // Issue-1 sync: arrival supersedes the en-route ping, so the open EMS_PRE_ARRIVAL
+        // alert is auto-acknowledged — it must not linger in the Alert Center after arrival.
+        assertTrue(preArrival.isAcknowledged());
+    }
+
+    @Test
+    void transferOfCare_autoAcknowledgesEmsAlerts() {
+        com.smartTriage.smartTriage_server.module.visit.entity.Visit visit =
+                new com.smartTriage.smartTriage_server.module.visit.entity.Visit();
+        run.setVisit(visit);
+        run.setStatus(EmsRunStatus.ARRIVED);
+
+        com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert preArrival =
+                com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert.builder()
+                        .alertType(com.smartTriage.smartTriage_server.common.enums.AlertType.EMS_PRE_ARRIVAL).build();
+        com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert arrived =
+                com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert.builder()
+                        .alertType(com.smartTriage.smartTriage_server.common.enums.AlertType.EMS_ARRIVED).build();
+        when(clinicalAlertRepository.findByVisitIdAndAlertTypeInAndIsAcknowledgedFalseAndIsActiveTrue(
+                any(), any())).thenReturn(new java.util.ArrayList<>(List.of(preArrival, arrived)));
+
+        service.transferOfCare(RUN_ID, new com.smartTriage.smartTriage_server.module.ems.dto.TransferOfCareRequest());
+
+        // Issue-1 sync ("vice versa"): completing the handover from the dashboard clears
+        // BOTH EMS notifications in the Alert Center — no second acknowledge needed.
+        assertTrue(preArrival.isAcknowledged());
+        assertTrue(arrived.isAcknowledged());
+    }
+
+    @Test
     void transferOfCare_writesImmutableHandoverAttestation() {
         // Override the principal with an identified receiver (still SUPER_ADMIN so
         // the access check short-circuits) so we can assert server-attribution.

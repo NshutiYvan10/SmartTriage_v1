@@ -234,6 +234,31 @@ public class ClinicalAlertService {
                         alert.getVisit().getId(), e.getMessage());
             }
         }
+
+        // Issue-1 sync (the "vice versa" direction): acknowledging the patient-AT-DOOR
+        // alert here in the Alert Center RECORDS that the ED received the patient and
+        // who/when, so the inbound-ambulance dashboard card reflects it ("Received by
+        // <name> — awaiting handover") instead of demanding a second acknowledge. This
+        // is the RECEIPT, NOT the formal transfer of care — the read-back handover stays
+        // a deliberate step (run goes HANDED_OFF only via transfer-of-care).
+        if (alert.getAlertType() == AlertType.EMS_ARRIVED && alert.getVisit() != null) {
+            try {
+                String acker = ackerName(alert);
+                emsRunRepository.findByVisitIdAndIsActiveTrue(alert.getVisit().getId()).ifPresent(run -> {
+                    if (run.getArrivalAckedAt() == null
+                            && run.getStatus() != EmsRunStatus.HANDED_OFF
+                            && run.getStatus() != EmsRunStatus.CANCELLED) {
+                        run.setArrivalAckedAt(Instant.now());
+                        run.setArrivalAckedByName(acker);
+                        emsRunRepository.save(run);
+                        eventPublisher.publishEmsRun(run.getHospital().getId(), EmsRunMapper.toResponse(run));
+                    }
+                });
+            } catch (Exception e) {
+                log.warn("Could not stamp EMS arrival ack for visit {}: {}",
+                        alert.getVisit().getId(), e.getMessage());
+            }
+        }
         // Map inside the tx (same LazyInit reason as the read paths above).
         return ClinicalAlertMapper.toResponse(alert);
     }

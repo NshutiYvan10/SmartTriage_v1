@@ -78,6 +78,9 @@ public class EmsRunResponse {
     private Instant preArrivalAckedAt;
     private String preArrivalAckedByName;
 
+    private Instant arrivalAckedAt;
+    private String arrivalAckedByName;
+
     private Instant createdAt;
     private Instant updatedAt;
 

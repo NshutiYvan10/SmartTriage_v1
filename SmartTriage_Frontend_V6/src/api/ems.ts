@@ -88,6 +88,10 @@ export interface EmsRun {
   preArrivalAckedAt: string | null;
   preArrivalAckedByName: string | null;
 
+  /** When the ED acknowledged the patient AT THE DOOR (acking the EMS_ARRIVED alert). */
+  arrivalAckedAt: string | null;
+  arrivalAckedByName: string | null;
+
   createdAt: string;
   updatedAt: string;
 

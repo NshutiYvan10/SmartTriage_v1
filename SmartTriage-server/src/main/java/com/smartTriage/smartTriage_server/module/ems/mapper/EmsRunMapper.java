@@ -70,6 +70,8 @@ public final class EmsRunMapper {
                 .lightsActivatedAt(r.getLightsActivatedAt())
                 .preArrivalAckedAt(r.getPreArrivalAckedAt())
                 .preArrivalAckedByName(r.getPreArrivalAckedByName())
+                .arrivalAckedAt(r.getArrivalAckedAt())
+                .arrivalAckedByName(r.getArrivalAckedByName())
                 .createdAt(r.getCreatedAt())
                 .updatedAt(r.getUpdatedAt())
                 .interventions(interventions == null ? null

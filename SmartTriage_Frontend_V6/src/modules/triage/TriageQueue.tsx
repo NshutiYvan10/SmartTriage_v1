@@ -358,9 +358,22 @@ export function TriageQueue() {
 
   const allPatients = useMemo(() => storePatients, [storePatients]);
 
+  // The triage-DESK queue is for patients awaiting their INITIAL ED triage. A patient
+  // who is still 'WAITING' (AWAITING_TRIAGE) but already holds a real treatment zone has
+  // been placed there ahead of the desk — a field-triaged RED/ORANGE ambulance arrival
+  // (acuity-split: they bypass the desk and go straight to Resus/Acute) or a Direct Resus
+  // admission. They belong on their ZONE board, not this queue, so we exclude them here —
+  // this is what stops a field-triaged "Unknown Alpha" RED showing as awaiting triage for
+  // a charge-nurse/all-zones viewer. (The pre-triage placeholder zone TRIAGE is NOT a real
+  // placement, so those stay in the queue.)
+  const placedAwaitingTriage = useCallback(
+    (p: Patient) => p.triageStatus === 'WAITING' && !!p.currentEdZone && p.currentEdZone !== 'TRIAGE',
+    [],
+  );
+
   // Only show triage-relevant statuses (not IN_TREATMENT usually, but include for visibility)
   const triageQueue = useMemo(() => {
-    let list = [...allPatients];
+    let list = allPatients.filter((p) => !placedAwaitingTriage(p));
 
     // Tab filter
     if (activeTab === 'adult') list = list.filter((p) => !p.isPediatric);
@@ -394,15 +407,18 @@ export function TriageQueue() {
     });
 
     return list;
-  }, [allPatients, activeTab, statusFilter, search, now]);
+  }, [allPatients, activeTab, statusFilter, search, now, placedAwaitingTriage]);
 
   // Stats
   const stats = useMemo(() => {
+    // Keep the counts consistent with the queue: exclude zone-placed patients who are
+    // awaiting their bedside triage (field-triaged ambulance arrivals / Direct Resus).
+    const deskBase = allPatients.filter((p) => !placedAwaitingTriage(p));
     const scope = activeTab === 'adult'
-      ? allPatients.filter((p) => !p.isPediatric)
+      ? deskBase.filter((p) => !p.isPediatric)
       : activeTab === 'pediatric'
-        ? allPatients.filter((p) => p.isPediatric)
-        : allPatients;
+        ? deskBase.filter((p) => p.isPediatric)
+        : deskBase;
     return {
       total: scope.length,
       waiting: scope.filter((p) => p.triageStatus === 'WAITING').length,
@@ -412,7 +428,7 @@ export function TriageQueue() {
       adults: allPatients.filter((p) => !p.isPediatric).length,
       peds: allPatients.filter((p) => p.isPediatric).length,
     };
-  }, [allPatients, activeTab, now]);
+  }, [allPatients, activeTab, now, placedAwaitingTriage]);
 
   const ensurePatient = usePatientStore((s) => s.ensurePatient);
 

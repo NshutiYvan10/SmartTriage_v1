@@ -48,7 +48,7 @@ function mapAlertType(t: AlertType | string): AIAlert['type'] {
  * while zone/user topics send ClinicalAlertResponse (with "alertType" key).
  * This handles both formats.
  */
-function mapWsAlert(raw: any): Omit<AIAlert, 'id' | 'timestamp' | 'acknowledged'> {
+function mapWsAlert(raw: any): Omit<AIAlert, 'id' | 'timestamp' | 'acknowledged'> & { acknowledged?: boolean } {
   const alertType = raw.alertType ?? raw.type;
   return {
     patientId: raw.visitId,
@@ -63,6 +63,10 @@ function mapWsAlert(raw: any): Omit<AIAlert, 'id' | 'timestamp' | 'acknowledged'
     satsTargetMinutes: raw.satsTargetMinutes || undefined,
     visitNumber: raw.visitNumber || undefined,
     patientName: raw.patientName || undefined,
+    // Carry the server's acknowledged flag so a re-broadcast of an alert that was
+    // auto-acknowledged server-side (e.g. an EMS alert closed on arrival/handover)
+    // clears it from the Alert Center live. addAlert applies this monotonically.
+    acknowledged: raw.acknowledged === true ? true : undefined,
   };
 }
 

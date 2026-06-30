@@ -546,29 +546,47 @@ public class EmsRunService {
         if (v.getStatus() == VisitStatus.REGISTERED) {
             v.setStatus(VisitStatus.AWAITING_TRIAGE);
         }
-        // Provisional placement from the paramedic's field triage so an arriving
-        // ambulance patient lands in the clinically-correct zone IMMEDIATELY
-        // (RED→Resus, ORANGE→Acute, YELLOW→Observation, GREEN→Ambulatory, BLUE→General)
-        // instead of sitting in AWAITING_TRIAGE with no zone. This is ADVISORY:
-        // the visit deliberately STAYS AWAITING_TRIAGE and the ED re-triage clock
-        // still forces a formal triage — which overwrites both fields via
-        // TriageService.performTriage (the nurse can re-triage/override). Routing
-        // goes through the SAME ZoneRoutingService the ED uses, so the placement
-        // policy is identical regardless of how the category was set. Guarded so an
-        // already-triaged visit is never re-placed from the (older) field category.
+        // ACUITY-SPLIT placement from the paramedic's field triage. The field call
+        // stands as the ADVISORY working category for everyone (a badge on the
+        // boards), regardless of acuity. Where the patient lands depends on acuity:
+        //
+        //   • RED / ORANGE  → bypass the triage DESK and are placed straight into a
+        //     treatment zone (RED→Resus, ORANGE→Acute) via the SAME ZoneRoutingService
+        //     the ED uses. A field-critical patient at the door is NOT made to wait in
+        //     the triage line — they go to the resus/acute team immediately.
+        //   • YELLOW / GREEN / BLUE → currentEdZone is deliberately left NULL so they
+        //     enter the ED triage-desk queue for a formal triage, exactly like a
+        //     walk-in (they are stable enough to be triaged in turn).
+        //
+        // In BOTH cases the visit STAYS AWAITING_TRIAGE and the ED re-triage clock
+        // (EmsRetriageMonitor) still forces a formal triage, which can re-place/override
+        // via TriageService.performTriage. Guarded so an already-triaged visit is never
+        // re-placed from the (older) field category.
         TriageCategory fieldCat = parseFieldCategory(run.getFieldTriageCategory());
         if (fieldCat != null && v.getCurrentTriageCategory() == null) {
             v.setCurrentTriageCategory(fieldCat);
-            v.setCurrentEdZone(zoneRoutingService.routeFor(v, fieldCat));
-            log.info("[ems] Run {} provisional placement from field triage {} → zone {} "
-                    + "(visit {} stays AWAITING_TRIAGE for formal ED triage)",
-                    runId, fieldCat, v.getCurrentEdZone(), v.getId());
+            if (fieldCat == TriageCategory.RED || fieldCat == TriageCategory.ORANGE) {
+                v.setCurrentEdZone(zoneRoutingService.routeFor(v, fieldCat));
+                log.info("[ems] Run {} high-acuity arrival {} → placed in zone {} (bypasses triage desk; "
+                        + "visit {} stays AWAITING_TRIAGE for formal ED triage)",
+                        runId, fieldCat, v.getCurrentEdZone(), v.getId());
+            } else {
+                log.info("[ems] Run {} lower-acuity arrival {} → enters the ED triage-desk queue "
+                        + "(no zone placement; visit {} AWAITING_TRIAGE)", runId, fieldCat, v.getId());
+            }
         }
         visitRepository.save(v);
 
         run = emsRunRepository.save(run);
         log.info("[ems] Run {} ARRIVED — visit {} re-triage due at {}",
                 runId, v.getId(), v.getEdRetriageDueAt());
+
+        // Issue-1 sync: the patient is now AT THE DOOR, so the "ambulance inbound"
+        // (EMS_PRE_ARRIVAL) notification is superseded by the EMS_ARRIVED alert below.
+        // Auto-acknowledge any open pre-arrival alert for this visit so it does not
+        // linger in the Alert Center after arrival (best-effort; never blocks arrival).
+        autoAcknowledgeEmsAlerts(v, List.of(AlertType.EMS_PRE_ARRIVAL),
+                "Superseded — patient arrived at ED");
 
         // Notify the receiving team that the patient is physically AT THE DOOR.
         // Arrival was previously only a silent card-flip on the inbound board, so a
@@ -678,7 +696,63 @@ public class EmsRunService {
 
         log.info("[ems] Run {} HANDED_OFF to {} (attestation recorded)", runId, run.getHandedOffToName());
 
+        // Issue-1 sync: completing the handover from the dashboard clears the EMS
+        // notifications in the Alert Center too — a clinician should never have to
+        // acknowledge the same arrival twice. Auto-acknowledge any open pre-arrival /
+        // arrived alerts for this visit (best-effort; never blocks the handover).
+        if (run.getVisit() != null) {
+            autoAcknowledgeEmsAlerts(run.getVisit(),
+                    List.of(AlertType.EMS_PRE_ARRIVAL, AlertType.EMS_ARRIVED),
+                    "Resolved — care handed over to " + safe(run.getHandedOffToName(), "ED"));
+        }
+
         return broadcastAndMap(run, true);
+    }
+
+    /**
+     * Acknowledge any OPEN (unacknowledged, active) EMS alerts of the given types
+     * for a visit, attributing the ack to the authenticated caller, and re-publish
+     * each AFTER COMMIT so live Alert Center / dashboard clients clear it. This is
+     * the cross-surface sync for issue 1: a workflow step on the dashboard (arrival,
+     * handover) closes the matching notification so it isn't acknowledged twice.
+     * Best-effort — a routing/persistence hiccup here must never roll back or block
+     * the workflow transition that triggered it.
+     */
+    private void autoAcknowledgeEmsAlerts(Visit visit, List<AlertType> types, String reason) {
+        if (visit == null) return;
+        try {
+            User actor = currentUser().orElse(null);
+            List<ClinicalAlert> open = clinicalAlertRepository
+                    .findByVisitIdAndAlertTypeInAndIsAcknowledgedFalseAndIsActiveTrue(visit.getId(), types);
+            if (open == null || open.isEmpty()) return;
+            UUID hospitalId = visit.getHospital() != null ? visit.getHospital().getId() : null;
+            for (ClinicalAlert a : open) {
+                a.setAcknowledged(true);
+                a.setAcknowledgedAt(Instant.now());
+                if (actor != null) a.setAcknowledgedBy(actor);
+                if (reason != null && !reason.isBlank()) {
+                    a.setAcknowledgmentNote(reason.length() > 1000 ? reason.substring(0, 1000) : reason);
+                }
+                ClinicalAlert saved = clinicalAlertRepository.save(a);
+                // Fan out after commit so a rolled-back transition never pushes a phantom
+                // "acknowledged" state. Per-alert try/catch so a publish hiccup on one alert
+                // never prevents the OTHERS from being acknowledged (the state change above
+                // is the critical part; the live push is a convenience).
+                try {
+                    ClinicalAlertResponse resp = ClinicalAlertMapper.toResponse(saved);
+                    realTimeEventPublisher.publishOwnedAlertAfterCommit(
+                            hospitalId, saved.getTargetZone(), resp, List.of());
+                } catch (Exception pub) {
+                    log.warn("[ems] Could not republish auto-acked alert {}: {}",
+                            saved.getId(), pub.getMessage());
+                }
+            }
+            log.info("[ems] Auto-acknowledged {} EMS alert(s) for visit {} — {}",
+                    open.size(), visit.getId(), reason);
+        } catch (Exception e) {
+            log.warn("[ems] Auto-acknowledge of EMS alerts for visit {} failed: {}",
+                    visit.getId(), e.getMessage());
+        }
     }
 
     /**

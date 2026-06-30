@@ -54,7 +54,7 @@ interface AlertState {
   fetchAlerts: (hospitalId: string) => Promise<void>;
   /** Fetch all alerts including acknowledged */
   fetchAllAlerts: (hospitalId: string) => Promise<void>;
-  addAlert: (alert: Omit<AIAlert, 'id' | 'timestamp' | 'acknowledged'> & { backendId?: string }) => void;
+  addAlert: (alert: Omit<AIAlert, 'id' | 'timestamp' | 'acknowledged'> & { backendId?: string; acknowledged?: boolean }) => void;
   acknowledgeAlert: (id: string, clinicianId: string, comment?: string) => void;
   /** Acknowledge via API then update local store */
   acknowledgeAlertApi: (alertId: string) => Promise<void>;
@@ -125,12 +125,31 @@ export const useAlertStore = create<AlertState>((set, get) => ({
           escalationTier: alertData.escalationTier ?? existing.escalationTier,
           targetZone: alertData.targetZone ?? existing.targetZone,
           targetDoctorName: alertData.targetDoctorName ?? existing.targetDoctorName,
+          // Honor an incoming ACK monotonically: a re-broadcast that carries
+          // acknowledged=true (e.g. an EMS alert auto-acknowledged server-side when the
+          // patient arrives or care is handed over) clears the row from the Alert Center
+          // live, so the same arrival is never acknowledged twice. Never UN-acks (a
+          // re-page keeps it acked) — matches the "re-page never un-acks" rule.
+          acknowledged: (alertData as { acknowledged?: boolean }).acknowledged === true
+            ? true
+            : existing.acknowledged,
+          acknowledgedAt: (alertData as { acknowledged?: boolean }).acknowledged === true
+            ? (existing.acknowledgedAt ?? new Date())
+            : existing.acknowledgedAt,
         };
         const next = state.alerts.slice();
         next[idx] = merged;
         return { alerts: next };
       }
-      const alert: AIAlert = { ...alertData, id, timestamp: new Date(), acknowledged: false };
+      const alert: AIAlert = {
+        ...alertData,
+        id,
+        timestamp: new Date(),
+        // A first-sighting frame that already carries acknowledged=true (an alert
+        // auto-resolved server-side before this client ever saw it live) must not
+        // resurface as unacknowledged.
+        acknowledged: alertData.acknowledged === true,
+      };
       return { alerts: [...state.alerts, alert] };
     });
   },

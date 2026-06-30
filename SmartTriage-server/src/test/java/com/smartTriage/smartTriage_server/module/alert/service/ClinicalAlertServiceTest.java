@@ -121,6 +121,41 @@ class ClinicalAlertServiceTest {
     }
 
     @Test
+    void acknowledgeEmsArrived_stampsArrivalReceiptOnRun() {
+        // Issue-1 sync ("vice versa"): acknowledging the patient-AT-DOOR alert in the
+        // Alert Center records arrival receipt on the run (who/when) so the inbound
+        // dashboard card reflects it — without completing the formal handover.
+        UUID alertId = UUID.randomUUID();
+        UUID visitId = UUID.randomUUID();
+        com.smartTriage.smartTriage_server.module.visit.entity.Visit visit =
+                mock(com.smartTriage.smartTriage_server.module.visit.entity.Visit.class);
+        when(visit.getId()).thenReturn(visitId);
+
+        ClinicalAlert alert = mock(ClinicalAlert.class);
+        when(alert.getId()).thenReturn(alertId);
+        when(alert.getAlertType()).thenReturn(AlertType.EMS_ARRIVED);
+        when(alert.getVisit()).thenReturn(visit);
+        when(repo.findByIdAndIsActiveTrue(alertId)).thenReturn(java.util.Optional.of(alert));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        com.smartTriage.smartTriage_server.module.hospital.entity.Hospital hospital =
+                new com.smartTriage.smartTriage_server.module.hospital.entity.Hospital();
+        hospital.setId(UUID.randomUUID());
+        com.smartTriage.smartTriage_server.module.ems.entity.EmsRun emsRun =
+                com.smartTriage.smartTriage_server.module.ems.entity.EmsRun.builder()
+                        .hospital(hospital)
+                        .status(com.smartTriage.smartTriage_server.common.enums.EmsRunStatus.ARRIVED)
+                        .build();
+        when(emsRepo.findByVisitIdAndIsActiveTrue(visitId)).thenReturn(java.util.Optional.of(emsRun));
+        when(emsRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.acknowledgeAlert(alertId, "received at door");
+
+        assertNotNull(emsRun.getArrivalAckedAt());
+        assertNotNull(emsRun.getArrivalAckedByName());
+    }
+
+    @Test
     void getUnacknowledged_noneScope_returnsEmpty_andNeverQueriesUnscoped() {
         // Paramedic / Registrar → scope NONE. The alert STORE seeds from this
         // endpoint, so it MUST return empty and must NOT touch the hospital-wide

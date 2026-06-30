@@ -193,6 +193,20 @@ public class EmsRun extends BaseEntity {
     @Column(name = "pre_arrival_acked_by_name", length = 255)
     private String preArrivalAckedByName;
 
+    // ── Arrival acknowledgement (ED received the patient AT THE DOOR)
+
+    /**
+     * When the ED acknowledged the patient AT THE DOOR — set when the EMS_ARRIVED
+     * alert is acknowledged (Alert Center) or the inbound board's acknowledge is
+     * used. First ack wins. Distinct from {@link #preArrivalAckedAt} (en-route ping
+     * seen) and {@link #handedOffAt} (the formal read-back transfer of care).
+     */
+    @Column(name = "arrival_acked_at")
+    private Instant arrivalAckedAt;
+
+    @Column(name = "arrival_acked_by_name", length = 255)
+    private String arrivalAckedByName;
+
     // ── Lights / priority transport
 
     /** Blue-light run — drives urgent (audible, RESUS-routed) pre-arrival alerts. */
