@@ -37,7 +37,13 @@ export function Dashboard() {
   const user = useAuthStore((s) => s.user);
   const roleMeta = user ? ROLE_META[user.role] : null;
   const patients = usePatientStore((state) => state.patients);
-  const alerts = useAlertStore((state) => state.getActiveAlerts());
+  // Subscribe to the RAW store array (reference-stable — only changes when the store
+  // replaces it) and derive the active list in a memo. Selecting `getActiveAlerts()`
+  // returned a NEW array on every call, which is a Zustand footgun; subscribing to the
+  // stable array + memo guarantees the dashboard re-renders whenever ANY surface
+  // (Alert Center, dashboard ACK, WS auto-ack) changes the store.
+  const allAlerts = useAlertStore((state) => state.alerts);
+  const alerts = useMemo(() => allAlerts.filter((a) => !a.acknowledged), [allAlerts]);
   const acknowledgeAlert = useAlertStore((state) => state.acknowledgeAlert);
   const acknowledgeAlertApi = useAlertStore((state) => state.acknowledgeAlertApi);
   const { zone: myZone, assignment: myShiftAssignment } = useMyShift();

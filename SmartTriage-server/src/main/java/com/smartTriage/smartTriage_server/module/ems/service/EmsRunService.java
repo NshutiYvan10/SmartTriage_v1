@@ -639,6 +639,43 @@ public class EmsRunService {
     }
 
     /**
+     * Receiving ED clinician acknowledges RECEIPT of the patient at the door — the
+     * "Received" lifecycle step. This is the reliable, single-click confirmation the
+     * case card offers; it is DISTINCT from the formal read-back transfer of care
+     * (which still moves the run to HANDED_OFF and writes the attestation).
+     *
+     * <p>Idempotent (first ack wins). Crucially it also auto-acknowledges the open
+     * EMS_ARRIVED / EMS_PRE_ARRIVAL alerts, so acknowledging on the CARD clears the
+     * Alert Center too — the same ambulance is never acknowledged twice. (The reverse
+     * direction — acking the alert in the Alert Center — stamps this same receipt via
+     * {@link com.smartTriage.smartTriage_server.module.alert.service.ClinicalAlertService}.)
+     * The case advances to the RECEIVED stage; its next action becomes "Complete handover".
+     */
+    @Transactional
+    public EmsRunResponse acknowledgeArrival(UUID runId) {
+        EmsRun run = findOrThrow(runId);
+        if (run.getStatus() != EmsRunStatus.ARRIVED) {
+            throw new ClinicalBusinessException(
+                    "Cannot acknowledge receipt for run " + runId + " from status " + run.getStatus()
+                            + " — the patient must be confirmed at the door first.");
+        }
+        if (run.getArrivalAckedAt() == null) {
+            User caller = currentUser().orElse(null);
+            run.setArrivalAckedAt(Instant.now());
+            run.setArrivalAckedByName(caller != null
+                    ? (caller.getFirstName() + " " + caller.getLastName()).trim() : "ED");
+            run = emsRunRepository.save(run);
+            if (run.getVisit() != null) {
+                autoAcknowledgeEmsAlerts(run.getVisit(),
+                        List.of(AlertType.EMS_PRE_ARRIVAL, AlertType.EMS_ARRIVED),
+                        "Received by " + safe(run.getArrivalAckedByName(), "ED"));
+            }
+            log.info("[ems] Run {} arrival RECEIPT acknowledged by {}", runId, run.getArrivalAckedByName());
+        }
+        return broadcastAndMap(run, true);
+    }
+
+    /**
      * Receiving nurse acknowledges handover.
      * Status: ARRIVED → HANDED_OFF.
      *

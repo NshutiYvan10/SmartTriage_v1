@@ -81,6 +81,21 @@ public class EmsRunResponse {
     private Instant arrivalAckedAt;
     private String arrivalAckedByName;
 
+    /**
+     * Explicit case-lifecycle stage the dashboard renders as a stepper — the SINGLE
+     * source of truth for "where is this ambulance case". Derived server-side from
+     * status + arrivalAckedAt so every surface agrees:
+     * DISPATCHED → EN_ROUTE → AT_DOOR → RECEIVED → HANDED_OFF (or CANCELLED).
+     */
+    private String lifecycleStage;
+
+    /**
+     * Where the patient is headed under the acuity-split policy, for the card's
+     * routing badge: a treatment zone name (RESUS/ACUTE for RED/ORANGE) or
+     * "TRIAGE_QUEUE" (YELLOW/GREEN/BLUE), or null when not yet field-triaged.
+     */
+    private String routingTarget;
+
     private Instant createdAt;
     private Instant updatedAt;
 

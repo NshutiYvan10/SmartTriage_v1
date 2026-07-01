@@ -72,6 +72,8 @@ public final class EmsRunMapper {
                 .preArrivalAckedByName(r.getPreArrivalAckedByName())
                 .arrivalAckedAt(r.getArrivalAckedAt())
                 .arrivalAckedByName(r.getArrivalAckedByName())
+                .lifecycleStage(lifecycleStage(r))
+                .routingTarget(routingTarget(r, visit))
                 .createdAt(r.getCreatedAt())
                 .updatedAt(r.getUpdatedAt())
                 .interventions(interventions == null ? null
@@ -97,6 +99,50 @@ public final class EmsRunMapper {
         String name = ((patient.getFirstName() == null ? "" : patient.getFirstName()) + " "
                 + (patient.getLastName() == null ? "" : patient.getLastName())).trim();
         return name.isEmpty() ? null : name;
+    }
+
+    /**
+     * The explicit case-lifecycle stage, derived so every surface (card stepper,
+     * chart, board) agrees on where the ambulance case is:
+     * <ul>
+     *   <li>CANCELLED / HANDED_OFF — terminal (the dashboard card resolves).</li>
+     *   <li>RECEIVED — physically at the door AND the ED has acknowledged receipt
+     *       (arrivalAckedAt) but the formal read-back handover isn't done yet.</li>
+     *   <li>AT_DOOR — arrived, receipt not yet acknowledged.</li>
+     *   <li>EN_ROUTE — pre-arrival sent, inbound.</li>
+     *   <li>DISPATCHED — created, not yet announced to the ED.</li>
+     * </ul>
+     */
+    private static String lifecycleStage(EmsRun r) {
+        if (r.getStatus() == null) return "DISPATCHED";
+        return switch (r.getStatus()) {
+            case CANCELLED -> "CANCELLED";
+            case HANDED_OFF -> "HANDED_OFF";
+            case ARRIVED -> r.getArrivalAckedAt() != null ? "RECEIVED" : "AT_DOOR";
+            case EN_ROUTE -> "EN_ROUTE";
+            case DISPATCHED -> "DISPATCHED";
+        };
+    }
+
+    /**
+     * Acuity-split destination for the card's routing badge. Once the visit has a
+     * real ED-zone placement (RED/ORANGE → Resus/Acute on arrival) that zone is
+     * authoritative; otherwise it is projected from the field-triage category
+     * (RED→RESUS, ORANGE→ACUTE, YELLOW/GREEN/BLUE→TRIAGE_QUEUE). Null until a field
+     * call exists. Pure (no service deps) — mirrors ZoneRoutingService's policy.
+     */
+    private static String routingTarget(EmsRun r, Visit visit) {
+        if (visit != null && visit.getCurrentEdZone() != null) {
+            return visit.getCurrentEdZone().name();
+        }
+        String cat = r.getFieldTriageCategory();
+        if (cat == null) return null;
+        return switch (cat.trim().toUpperCase()) {
+            case "RED" -> "RESUS";
+            case "ORANGE" -> "ACUTE";
+            case "YELLOW", "GREEN", "BLUE" -> "TRIAGE_QUEUE";
+            default -> null;
+        };
     }
 
     public static EmsInterventionResponse toInterventionResponse(EmsIntervention i) {

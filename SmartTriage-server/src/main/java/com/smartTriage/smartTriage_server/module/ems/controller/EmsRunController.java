@@ -116,6 +116,20 @@ public class EmsRunController {
     }
 
     /**
+     * Receiving nurse / doctor acknowledges RECEIPT of the patient at the door
+     * (the "Received" lifecycle step) — a reliable single-click confirmation that
+     * also clears the ambulance's Alert-Center notifications. Distinct from the
+     * formal read-back handover below. ED-side only (a paramedic hands over; the
+     * ED receives).
+     */
+    @PostMapping("/runs/{id}/acknowledge-arrival")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'NURSE', 'DOCTOR')")
+    public ResponseEntity<ApiResponse<EmsRunResponse>> acknowledgeArrival(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success("Arrival receipt acknowledged",
+                emsRunService.acknowledgeArrival(id)));
+    }
+
+    /**
      * Receiving nurse / doctor acknowledges the handover. Paramedics
      * are NOT permitted (the receiving clinician must be a different
      * actor) — service layer enforces this defensively.

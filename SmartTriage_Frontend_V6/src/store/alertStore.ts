@@ -94,15 +94,27 @@ export const useAlertStore = create<AlertState>((set, get) => ({
   },
 
   acknowledgeAlertApi: async (alertId: string) => {
+    // OPTIMISTIC: flip the row acknowledged immediately so the click ALWAYS has a
+    // visible effect (the reported "ACK button does nothing" — the previous version
+    // only updated AFTER the network round-trip and swallowed failures silently, so a
+    // slow or failing request looked like a dead button). On failure we revert JUST this
+    // row (not the whole array — a WS frame may have landed during the await), so the
+    // alert reappears: a failed acknowledge must never masquerade as done on a
+    // life-critical board.
+    set((state) => ({
+      alerts: state.alerts.map((a) =>
+        a.id === alertId ? { ...a, acknowledged: true, acknowledgedAt: new Date() } : a
+      ),
+    }));
     try {
       await alertApi.acknowledge(alertId);
+    } catch (err) {
+      console.error('[alertStore] acknowledgeAlertApi failed — reverting:', err);
       set((state) => ({
         alerts: state.alerts.map((a) =>
-          a.id === alertId ? { ...a, acknowledged: true, acknowledgedAt: new Date() } : a
+          a.id === alertId ? { ...a, acknowledged: false, acknowledgedAt: undefined } : a
         ),
       }));
-    } catch (err) {
-      console.error('[alertStore] acknowledgeAlertApi failed:', err);
     }
   },
 

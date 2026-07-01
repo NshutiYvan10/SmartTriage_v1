@@ -417,6 +417,50 @@ class EmsRunServiceFieldTriageTest {
     }
 
     @Test
+    void acknowledgeArrival_stampsReceipt_advancesToReceived_andAutoAcksAlerts() {
+        com.smartTriage.smartTriage_server.module.visit.entity.Visit visit =
+                new com.smartTriage.smartTriage_server.module.visit.entity.Visit();
+        run.setVisit(visit);
+        run.setStatus(EmsRunStatus.ARRIVED);
+
+        com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert arrived =
+                com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert.builder()
+                        .alertType(com.smartTriage.smartTriage_server.common.enums.AlertType.EMS_ARRIVED).build();
+        when(clinicalAlertRepository.findByVisitIdAndAlertTypeInAndIsAcknowledgedFalseAndIsActiveTrue(
+                any(), any())).thenReturn(new java.util.ArrayList<>(List.of(arrived)));
+
+        EmsRunResponse resp = service.acknowledgeArrival(RUN_ID);
+
+        // Receipt is stamped (who/when), the case advances to RECEIVED, and the open
+        // EMS alert is auto-acknowledged — one action on the card clears the Alert Center.
+        assertNotNull(run.getArrivalAckedAt());
+        assertTrue(arrived.isAcknowledged());
+        assertEquals("RECEIVED", resp.getLifecycleStage());
+    }
+
+    @Test
+    void acknowledgeArrival_isIdempotent_firstAckWins() {
+        com.smartTriage.smartTriage_server.module.visit.entity.Visit visit =
+                new com.smartTriage.smartTriage_server.module.visit.entity.Visit();
+        run.setVisit(visit);
+        run.setStatus(EmsRunStatus.ARRIVED);
+        java.time.Instant first = java.time.Instant.now().minusSeconds(120);
+        run.setArrivalAckedAt(first);
+        run.setArrivalAckedByName("First Nurse");
+
+        service.acknowledgeArrival(RUN_ID);
+
+        assertEquals(first, run.getArrivalAckedAt());          // not overwritten
+        assertEquals("First Nurse", run.getArrivalAckedByName());
+    }
+
+    @Test
+    void acknowledgeArrival_rejectedWhenNotAtDoor() {
+        run.setStatus(EmsRunStatus.EN_ROUTE);
+        assertThrows(ClinicalBusinessException.class, () -> service.acknowledgeArrival(RUN_ID));
+    }
+
+    @Test
     void transferOfCare_writesImmutableHandoverAttestation() {
         // Override the principal with an identified receiver (still SUPER_ADMIN so
         // the access check short-circuits) so we can assert server-attribution.

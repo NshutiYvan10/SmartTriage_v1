@@ -13,6 +13,10 @@ export type EmsInterventionType =
 
 export type FieldTriageCategory = 'RED' | 'ORANGE' | 'YELLOW' | 'GREEN' | 'BLUE';
 
+/** Explicit ambulance-case lifecycle stage (server-derived, single source of truth). */
+export type EmsLifecycleStage =
+  | 'DISPATCHED' | 'EN_ROUTE' | 'AT_DOOR' | 'RECEIVED' | 'HANDED_OFF' | 'CANCELLED';
+
 export type MobilityStatus = 'WALKING' | 'WITH_HELP' | 'STRETCHER';
 export type AvpuScore = 'ALERT' | 'CONFUSED' | 'VERBAL' | 'PAIN' | 'UNRESPONSIVE';
 export type TraumaStatus = 'NO_TRAUMA' | 'TRAUMA';
@@ -91,6 +95,11 @@ export interface EmsRun {
   /** When the ED acknowledged the patient AT THE DOOR (acking the EMS_ARRIVED alert). */
   arrivalAckedAt: string | null;
   arrivalAckedByName: string | null;
+
+  /** Explicit case-lifecycle stage the dashboard renders as a stepper (server-derived). */
+  lifecycleStage: EmsLifecycleStage;
+  /** Acuity-split destination: a zone name (RESUS/ACUTE/…) or 'TRIAGE_QUEUE', or null. */
+  routingTarget: string | null;
 
   createdAt: string;
   updatedAt: string;
@@ -267,6 +276,11 @@ export const emsApi = {
 
   confirmArrival: (id: string) =>
     post<EmsRun>(`/ems/runs/${id}/confirm-arrival`, {}),
+
+  /** ED acknowledges RECEIPT of the patient at the door — advances the case to RECEIVED
+   *  and clears the ambulance's Alert-Center notifications (single-click, no read-back). */
+  acknowledgeArrival: (id: string) =>
+    post<EmsRun>(`/ems/runs/${id}/acknowledge-arrival`, {}),
 
   transferOfCare: (id: string, body?: TransferOfCareRequest) =>
     post<EmsRun>(`/ems/runs/${id}/transfer-of-care`, body ?? {}),
