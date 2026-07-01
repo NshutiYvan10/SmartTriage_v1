@@ -91,4 +91,28 @@ public class TriageController {
         return ResponseEntity.ok(ApiResponse.success(
                 visitService.getPlacedAwaitingEdTriage(hospitalId, pageable)));
     }
+
+    /**
+     * EMS field-triage CONFIRMATION — the receiving clinician accepts the paramedic's RED/ORANGE
+     * field category on arrival, flipping the visit to TRIAGED without waiting for the triage-desk
+     * nurse. This is the release valve for the triage bottleneck when the triage/charge nurse is
+     * occupied elsewhere.
+     *
+     * <p>Authorized more broadly than {@link #performTriage} — by
+     * {@code callerCanConfirmFieldTriage}: the triage authorities (triage nurse / charge nurse /
+     * shift-lead) OR the DOCTOR/NURSE whose current shift covers the patient's zone (the receiving
+     * Resus/Acute team). A clinician who DISAGREES with the field category does not confirm — they
+     * re-run the full triage form ({@link #performTriage}), which stays gated to the triage
+     * authorities only. The service enforces the clinical scope (AWAITING_TRIAGE + RED/ORANGE +
+     * not-already-triaged).
+     */
+    @PostMapping("/visit/{visitId}/confirm-field")
+    @PreAuthorize("@clinicalAuthz.callerCanConfirmFieldTriage(authentication, #visitId) "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
+    public ResponseEntity<ApiResponse<TriageRecordResponse>> confirmFieldTriage(
+            @PathVariable UUID visitId) {
+        TriageRecordResponse response = triageService.confirmFieldTriage(visitId);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Field triage confirmed", response));
+    }
 }

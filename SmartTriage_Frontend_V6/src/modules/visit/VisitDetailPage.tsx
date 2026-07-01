@@ -27,6 +27,7 @@ import { InvestigationPanel } from './InvestigationPanel';
 import { MedicationPanel } from './MedicationPanel';
 import { useTheme } from '@/hooks/useTheme';
 import { useCanPerformTriage } from '@/hooks/useCanPerformTriage';
+import { useCanConfirmFieldTriage } from '@/hooks/useCanConfirmFieldTriage';
 import { useAuthStore } from '@/store/authStore';
 import { UnidentifiedBadge } from '@/modules/admission/UnidentifiedBadge';
 import { IdentityResolutionModal } from '@/modules/admission/IdentityResolutionModal';
@@ -938,12 +939,99 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
     navigate(`${path}/${visit.id}?visitId=${visit.id}`);
   };
 
+  // EMS field-triage CONFIRMATION — a RED/ORANGE ambulance arrival the paramedic already triaged
+  // in the field and the acuity-split placed straight into a zone. The receiving clinician can
+  // ACCEPT that category on sight (no dependency on the specific triage/charge nurse being free),
+  // or re-triage if they disagree. This is the release valve for the triage bottleneck.
+  const fieldCategory = visit.currentTriageCategory as TriageCategory | undefined;
+  const isFieldConfirmable = !latestTriage
+    && visit.status === 'AWAITING_TRIAGE'
+    && (fieldCategory === 'RED' || fieldCategory === 'ORANGE');
+  const canConfirmField = useCanConfirmFieldTriage(visit.currentEdZone ?? null);
+  const fieldCatColor = CATEGORY_COLORS[fieldCategory ?? 'RED'] ?? CATEGORY_COLORS.RED;
+  const [confirmingField, setConfirmingField] = useState(false);
+  const [confirmFieldError, setConfirmFieldError] = useState<string | null>(null);
+  const handleConfirmField = async () => {
+    if (!visit?.id) return;
+    setConfirmingField(true);
+    setConfirmFieldError(null);
+    try {
+      await triageApi.confirmField(visit.id);
+      if (reload) reload();
+    } catch (e: any) {
+      setConfirmFieldError(
+        e?.response?.data?.message || e?.message || 'Could not confirm the field triage. Please retry.');
+    } finally {
+      setConfirmingField(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
+    {/* EMS field-triage CONFIRMATION — a RED/ORANGE ambulance arrival the paramedic already
+        triaged in the field and the acuity-split placed straight into a zone. The clinician
+        RECEIVING them (zone doctor/nurse) or any triage authority confirms the category on sight,
+        or re-triages if they disagree — so the patient never stalls in "Awaiting Triage" waiting
+        for the specific triage/charge nurse to be free. */}
+    {isFieldConfirmable && (
+      <div className={`rounded-2xl p-4 border flex items-start gap-3 animate-fade-up ${fieldCatColor.bg} ${fieldCatColor.border}`}>
+        <Stethoscope className={`w-5 h-5 flex-shrink-0 mt-0.5 ${fieldCatColor.text}`} />
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-bold ${fieldCatColor.text}`}>
+            Field-triaged <span className="font-black">{fieldCategory}</span> by EMS — awaiting ED confirmation
+          </p>
+          <p className={`text-xs mt-0.5 ${text.body}`}>
+            The paramedic assessed this patient as <span className="font-bold">{fieldCategory}</span> en route
+            {visit.currentEdZone ? <> and they were placed in <span className="font-bold">{visit.currentEdZone}</span></> : ''}.
+            {' '}Confirm to accept the field triage and start the care pathway, or re-triage if you disagree.
+          </p>
+          {confirmFieldError && (
+            <p className="text-xs mt-2 font-semibold text-rose-600">{confirmFieldError}</p>
+          )}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleConfirmField}
+              disabled={!canConfirmField || confirmingField}
+              title={canConfirmField
+                ? `Accept the paramedic's ${fieldCategory} field triage for this patient`
+                : 'Confirmation is for the receiving zone team or a triage authority. You are not on this patient’s zone this shift.'}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg shadow-md transition-all ${
+                canConfirmField && !confirmingField
+                  ? `${fieldCatColor.dot} text-white hover:-translate-y-0.5`
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              <Stethoscope className="w-3 h-3" />
+              {confirmingField
+                ? 'Confirming…'
+                : canConfirmField
+                  ? `Confirm ${fieldCategory} field triage`
+                  : 'Receiving-team authority required'}
+            </button>
+            <button
+              onClick={goToInitialTriage}
+              disabled={!canTriage}
+              title={canTriage
+                ? 'Disagree? Open the full triage form to re-triage this patient'
+                : 'Re-triage uses the full triage form, which stays with the Triage Nurse / Charge Nurse on duty.'}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg border transition-all ${
+                canTriage
+                  ? `${text.body} border-slate-400/50 hover:-translate-y-0.5`
+                  : 'text-slate-400 border-slate-200 cursor-not-allowed'
+              }`}
+            >
+              Re-triage instead
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     {/* #1 — initial-triage entry point for a placed-but-never-triaged patient (acuity-split RED/
         ORANGE ambulance arrival / Direct Resus). Without this the triage/charge nurse had no
-        in-app button to file the FIRST triage for a patient who bypassed the desk queue. */}
-    {!latestTriage && visit.status === 'AWAITING_TRIAGE' && (
+        in-app button to file the FIRST triage for a patient who bypassed the desk queue. This is
+        the NON-confirmable variant: an uncategorised arrival, or YELLOW/GREEN, where there is no
+        field category to accept — the full form is the only path. */}
+    {!latestTriage && visit.status === 'AWAITING_TRIAGE' && !isFieldConfirmable && (
       <div
         className="rounded-2xl p-4 border border-amber-500/40 flex items-start gap-3 animate-fade-up"
         style={{ background: 'rgba(245,158,11,0.08)' }}

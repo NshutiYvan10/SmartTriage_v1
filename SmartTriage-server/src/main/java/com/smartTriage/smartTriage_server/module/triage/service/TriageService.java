@@ -528,6 +528,116 @@ public class TriageService {
         return TriageRecordMapper.toResponse(record);
     }
 
+    /**
+     * EMS field-triage CONFIRMATION — flip a placed high-acuity ambulance arrival to TRIAGED by
+     * ACCEPTING the paramedic's field category, without waiting for the triage-desk nurse to re-run
+     * the full form. Removes the single-point bottleneck when the triage/charge nurse is occupied:
+     * the clinician actually RECEIVING the patient in the zone (see
+     * {@code ClinicalAuthz.callerCanConfirmFieldTriage}) can attest the category on sight.
+     *
+     * <p>Scope is deliberately narrow — a clinician who DISAGREES re-runs the full form (re-triage)
+     * instead of confirming:
+     * <ul>
+     *   <li>the visit must be AWAITING_TRIAGE (arrived, but no ED triage filed yet);</li>
+     *   <li>the field category on the visit must be RED or ORANGE — the high-acuity arrivals this
+     *       bottleneck actually endangers; lower acuity flows through the normal desk queue;</li>
+     *   <li>no ED TriageRecord may exist yet (idempotency / double-confirm guard).</li>
+     * </ul>
+     *
+     * <p>Produces an ATTRIBUTED, non-system TriageRecord (triagedBy = the confirming clinician, the
+     * decisionPath names them) so the confirmation is medico-legally owned — mirroring the Direct
+     * Resus "clinical-eye" record, but preserving the paramedic's category + field TEWS rather than
+     * forcing RED. Clears the EMS re-triage countdown and pushes the same triage notifications /
+     * zone-routed doctor alert as {@link #performTriage}. The acuity-split arrival already placed
+     * the patient in RESUS/ACUTE, so the zone is left untouched.
+     */
+    @Transactional
+    public TriageRecordResponse confirmFieldTriage(UUID visitId) {
+        Visit visit = visitService.findVisitOrThrow(visitId);
+
+        if (visit.getStatus() != VisitStatus.AWAITING_TRIAGE) {
+            throw new IllegalStateException(
+                    "Field triage can only be confirmed while the visit is AWAITING_TRIAGE (current: "
+                            + visit.getStatus() + "). Use re-triage to change an already-triaged patient.");
+        }
+        TriageCategory fieldCategory = visit.getCurrentTriageCategory();
+        if (fieldCategory != TriageCategory.RED && fieldCategory != TriageCategory.ORANGE) {
+            throw new IllegalStateException(
+                    "Field-triage confirmation is only for a RED or ORANGE ambulance arrival (current: "
+                            + fieldCategory + "). Use the triage form for anything else.");
+        }
+        // Idempotency / double-confirm guard: a filed ED triage already owns this visit.
+        if (triageRecordRepository.findFirstByVisitIdAndIsActiveTrueOrderByTriageTimeDesc(visitId).isPresent()) {
+            throw new IllegalStateException(
+                    "This visit already has a filed triage record; confirmation is not needed.");
+        }
+
+        User actor = resolveCurrentUser();
+        String actorName = actor != null
+                ? (actor.getFirstName() + " " + actor.getLastName()).trim()
+                : "unknown clinician";
+
+        // Field TEWS from the linked EMS run when present (paramedic-computed); else 0 — the
+        // category being attested, not the score, is what confirmation is about.
+        Integer fieldTews = emsRunRepository.findByVisitIdAndIsActiveTrue(visitId)
+                .map(run -> run.getFieldTewsScore())
+                .orElse(null);
+        int tewsScore = fieldTews != null ? fieldTews : 0;
+
+        Instant now = Instant.now();
+        String decisionPath = "EMS_FIELD_TRIAGE_CONFIRMED: paramedic field " + fieldCategory
+                + " confirmed on arrival by " + actorName + " at " + now;
+
+        TriageRecord record = TriageRecord.builder()
+                .visit(visit)
+                .triagedBy(actor)
+                .triageTime(now)
+                .tewsScore(tewsScore)
+                .triageCategory(fieldCategory)
+                .isRetriage(false)
+                .isSystemTriggered(false)   // a human clinician attested this — not system orchestration
+                .decisionPath(decisionPath)
+                .presentingComplaints(visit.getChiefComplaint())
+                .triageNurseName(actorName)
+                .build();
+        record = triageRecordRepository.save(record);
+
+        visit.setCurrentTewsScore(tewsScore);
+        visit.setTriageTime(now);
+        visit.setStatus(VisitStatus.TRIAGED);
+        // currentTriageCategory + currentEdZone were set by the acuity-split arrival; confirmation
+        // accepts them as-is and does not move the patient.
+        clearEmsRetriageObligation(visit);
+        visitRepository.save(visit);
+
+        // Zone-routed doctor notification, same as the manual triage path.
+        try {
+            alertEscalationService.createZoneRoutedAlert(visit, fieldCategory, tewsScore, decisionPath);
+        } catch (Exception e) {
+            log.warn("Failed to create zone-routed alert for confirmed field triage on visit {}: {}",
+                    visit.getVisitNumber(), e.getMessage());
+        }
+
+        try {
+            eventPublisher.publishTriageChange(visit.getId(), Map.of(
+                    "visitId", visit.getId().toString(),
+                    "visitNumber", visit.getVisitNumber(),
+                    "patientName", visit.getPatient().getFirstName() + " " + visit.getPatient().getLastName(),
+                    "triageCategory", fieldCategory.name(),
+                    "tewsScore", tewsScore,
+                    "decisionPath", decisionPath,
+                    "isRetriage", false,
+                    "nurseName", actorName));
+        } catch (Exception e) {
+            log.warn("Failed to publish WebSocket notification for confirmed field triage: {}", e.getMessage());
+        }
+
+        log.info("[field-triage-confirm] Visit {} → {} confirmed by {} (field TEWS: {})",
+                visit.getVisitNumber(), fieldCategory, actorName, tewsScore);
+
+        return TriageRecordMapper.toResponse(record);
+    }
+
     // --- Private helper methods ---
 
     private int calculateTews(VitalSigns vitals, PerformTriageRequest request, Visit visit) {

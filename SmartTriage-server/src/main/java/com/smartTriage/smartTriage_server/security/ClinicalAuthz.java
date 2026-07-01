@@ -721,6 +721,48 @@ public class ClinicalAuthz {
     }
 
     /**
+     * Who may CONFIRM a paramedic's field triage for a placed high-acuity ambulance arrival —
+     * accepting the field category on sight to flip the visit to TRIAGED WITHOUT waiting for the
+     * triage-desk nurse. This is deliberately BROADER than {@link #callerCanPerformTriage}: it
+     * removes the single-point bottleneck when the triage/charge nurse is occupied elsewhere by
+     * also empowering the clinician actually RECEIVING the patient in the zone. It stays controlled
+     * — NOT "anyone with an account". Allowed:
+     * <ul>
+     *   <li>the triage authorities (triage nurse / charge nurse / shift-lead) — the full
+     *       {@link #callerCanPerformTriage} set; OR</li>
+     *   <li>a DOCTOR or NURSE whose current shift covers the patient's CURRENT ed-zone (the
+     *       receiving Resus/Acute team), resolved via the same shift-coverage check that gates
+     *       zone alerts ({@link #canReceiveZoneAlerts}).</li>
+     * </ul>
+     * Admins, read-only accounts, registrars and paramedics are excluded. A clinician who
+     * DISAGREES with the field category does not confirm — they re-run the full triage form
+     * (gated by {@link #callerCanPerformTriage}), so widening confirmation never widens the
+     * ability to author an arbitrary triage from scratch.
+     */
+    @Transactional(readOnly = true)
+    public boolean callerCanConfirmFieldTriage(Authentication authentication, UUID visitId) {
+        try {
+            if (visitId == null) return false;
+            // Triage trio always may.
+            if (callerCanPerformTriage(authentication)) return true;
+            User user = currentUser(authentication);
+            if (user == null) return false;
+            // Beyond the trio, only bedside clinicians — never admins/registrars/paramedics.
+            if (user.getRole() != Role.DOCTOR && user.getRole() != Role.NURSE) return false;
+            UUID hospitalId = visitRepository.findHospitalIdByVisitId(visitId).orElse(null);
+            EdZone zone = visitRepository.findCurrentEdZoneByVisitId(visitId).orElse(null);
+            // A placed high-acuity arrival has a concrete zone (RESUS/ACUTE); if it is still
+            // unplaced (zone null) there is no "receiving team" to attest — fall back to the trio,
+            // which already returned above, so deny here.
+            if (hospitalId == null || zone == null) return false;
+            return canReceiveZoneAlerts(authentication, hospitalId, zone);
+        } catch (Exception e) {
+            log.error("callerCanConfirmFieldTriage error for visit {}: {}", visitId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
      * RBAC fix — true when the caller's currently-assigned ED zone matches
      * the visit's {@code currentEdZone}. Used to gate clinical writes
      * (vital signs, clinical signs, status changes) so a NURSE assigned to

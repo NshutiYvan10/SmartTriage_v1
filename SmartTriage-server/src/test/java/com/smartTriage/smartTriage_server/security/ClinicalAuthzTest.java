@@ -716,4 +716,103 @@ class ClinicalAuthzTest {
         assertFalse(authz.canOperateRfidDevice(null, deviceId));
         assertFalse(authz.canOperateRfidDevice(authFor(user(Role.REGISTRAR, null, hospitalId)), null));
     }
+
+    // ── callerCanConfirmFieldTriage (EMS field-triage confirmation — who may accept the
+    //    paramedic's RED/ORANGE category on arrival WITHOUT re-running the full form) ──
+
+    /** Wire up a doctor/nurse's current shift so their zone coverage resolves. */
+    private void assignShift(User user, UUID atHospital,
+                             com.smartTriage.smartTriage_server.common.enums.EdZone zone,
+                             java.util.Set<com.smartTriage.smartTriage_server.common.enums.EdZone> additional) {
+        when(shiftAssignmentService.isUserCurrentShiftLead(user.getId(), atHospital)).thenReturn(false);
+        com.smartTriage.smartTriage_server.module.shift.dto.ShiftAssignmentResponse sa =
+                mock(com.smartTriage.smartTriage_server.module.shift.dto.ShiftAssignmentResponse.class);
+        lenient().when(sa.getHospitalId()).thenReturn(atHospital);
+        lenient().when(sa.getZone()).thenReturn(zone);
+        lenient().when(sa.getAdditionalZones()).thenReturn(additional);
+        when(shiftAssignmentService.getCurrentShiftForUser(user.getId()))
+                .thenReturn(java.util.Optional.of(sa));
+    }
+
+    @Test
+    void callerCanConfirmFieldTriage_allowsTriageAuthority_evenWithoutZoneMatch() {
+        // A shift-lead nurse is a triage authority → may confirm anywhere; no visit-zone lookup needed.
+        UUID visitId = UUID.randomUUID();
+        User nurse = user(Role.NURSE, Designation.STAFF_NURSE, hospitalId);
+        when(shiftAssignmentService.isUserCurrentShiftLead(nurse.getId(), hospitalId)).thenReturn(true);
+        assertTrue(authz.callerCanConfirmFieldTriage(authFor(nurse), visitId));
+    }
+
+    @Test
+    void callerCanConfirmFieldTriage_allowsReceivingZoneDoctor_andNurseViaAdditionalZone() {
+        UUID visitId = UUID.randomUUID();
+        when(visitRepository.findHospitalIdByVisitId(visitId)).thenReturn(Optional.of(hospitalId));
+        when(visitRepository.findCurrentEdZoneByVisitId(visitId))
+                .thenReturn(Optional.of(com.smartTriage.smartTriage_server.common.enums.EdZone.RESUS));
+
+        // Doctor whose PRIMARY shift zone is RESUS (the receiving team) — not a triage authority.
+        User doctor = user(Role.DOCTOR, null, hospitalId);
+        assignShift(doctor, hospitalId,
+                com.smartTriage.smartTriage_server.common.enums.EdZone.RESUS, null);
+        assertTrue(authz.callerCanConfirmFieldTriage(authFor(doctor), visitId));
+
+        // Nurse who covers RESUS as an ADDITIONAL zone this shift.
+        User nurse = user(Role.NURSE, null, hospitalId);
+        assignShift(nurse, hospitalId,
+                com.smartTriage.smartTriage_server.common.enums.EdZone.GENERAL,
+                java.util.Set.of(com.smartTriage.smartTriage_server.common.enums.EdZone.RESUS));
+        assertTrue(authz.callerCanConfirmFieldTriage(authFor(nurse), visitId));
+    }
+
+    @Test
+    void callerCanConfirmFieldTriage_deniesClinicianNotCoveringThePatientsZone() {
+        UUID visitId = UUID.randomUUID();
+        when(visitRepository.findHospitalIdByVisitId(visitId)).thenReturn(Optional.of(hospitalId));
+        when(visitRepository.findCurrentEdZoneByVisitId(visitId))
+                .thenReturn(Optional.of(com.smartTriage.smartTriage_server.common.enums.EdZone.RESUS));
+        // Doctor working GENERAL this shift — not the receiving team for a RESUS arrival.
+        User doctor = user(Role.DOCTOR, null, hospitalId);
+        assignShift(doctor, hospitalId,
+                com.smartTriage.smartTriage_server.common.enums.EdZone.GENERAL, null);
+        assertFalse(authz.callerCanConfirmFieldTriage(authFor(doctor), visitId));
+    }
+
+    @Test
+    void callerCanConfirmFieldTriage_deniesNonBedsideRoles() {
+        UUID visitId = UUID.randomUUID();
+        // Even with a placed zone, admins / registrars / paramedics / read-only never confirm triage.
+        lenient().when(visitRepository.findHospitalIdByVisitId(visitId)).thenReturn(Optional.of(hospitalId));
+        lenient().when(visitRepository.findCurrentEdZoneByVisitId(visitId))
+                .thenReturn(Optional.of(com.smartTriage.smartTriage_server.common.enums.EdZone.RESUS));
+        assertFalse(authz.callerCanConfirmFieldTriage(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), visitId));
+        assertFalse(authz.callerCanConfirmFieldTriage(authFor(user(Role.REGISTRAR, null, hospitalId)), visitId));
+        assertFalse(authz.callerCanConfirmFieldTriage(authFor(user(Role.PARAMEDIC, null, hospitalId)), visitId));
+        assertFalse(authz.callerCanConfirmFieldTriage(authFor(user(Role.READ_ONLY, null, hospitalId)), visitId));
+        // SUPER_ADMIN is not a bedside clinician either — confirmation is a clinical act.
+        assertFalse(authz.callerCanConfirmFieldTriage(authFor(user(Role.SUPER_ADMIN, null, null)), visitId));
+    }
+
+    @Test
+    void callerCanConfirmFieldTriage_deniesUnplacedVisit_crossHospital_andNullArgs() {
+        // Unplaced (zone null) → no "receiving team" to attest → deny (the trio path already ran).
+        UUID unplaced = UUID.randomUUID();
+        when(visitRepository.findHospitalIdByVisitId(unplaced)).thenReturn(Optional.of(hospitalId));
+        when(visitRepository.findCurrentEdZoneByVisitId(unplaced)).thenReturn(Optional.empty());
+        User doctor = user(Role.DOCTOR, null, hospitalId);
+        assignShift(doctor, hospitalId,
+                com.smartTriage.smartTriage_server.common.enums.EdZone.RESUS, null);
+        assertFalse(authz.callerCanConfirmFieldTriage(authFor(doctor), unplaced));
+
+        // Cross-hospital: a doctor at another hospital cannot confirm this hospital's arrival —
+        // the belongs-to-hospital check inside canReceiveZoneAlerts denies before any zone match.
+        UUID visitId = UUID.randomUUID();
+        when(visitRepository.findHospitalIdByVisitId(visitId)).thenReturn(Optional.of(hospitalId));
+        when(visitRepository.findCurrentEdZoneByVisitId(visitId))
+                .thenReturn(Optional.of(com.smartTriage.smartTriage_server.common.enums.EdZone.RESUS));
+        User otherHospDoctor = user(Role.DOCTOR, null, UUID.randomUUID());
+        assertFalse(authz.callerCanConfirmFieldTriage(authFor(otherHospDoctor), visitId));
+
+        // Null visitId denied.
+        assertFalse(authz.callerCanConfirmFieldTriage(authFor(doctor), null));
+    }
 }
