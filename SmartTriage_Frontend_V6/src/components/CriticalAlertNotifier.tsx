@@ -70,6 +70,11 @@ export function CriticalAlertNotifier() {
     return false;
   };
 
+  // Prime the audio unlock so the CRITICAL beep actually sounds — browser
+  // autoplay policy keeps the AudioContext suspended until the first real user
+  // gesture, so this arms a one-time resume on the next click/key/touch.
+  useEffect(() => { installAudioUnlock(); }, []);
+
   useEffect(() => {
     // First render: seed announced set with everything currently in
     // the store so we don't blast on initial hydration.
@@ -195,18 +200,82 @@ function messageOf(a: AIAlert): string {
 }
 
 /**
- * Two-tone alert beep via Web Audio API. No asset to ship, no autoplay
- * issues if it's triggered by a state change after a real WebSocket
- * frame (browsers consider that user-initiated context).
+ * Shared AudioContext for the critical-alert beep.
+ *
+ * <p>Browser autoplay policy keeps a freshly-created AudioContext SUSPENDED
+ * until the user has made a real gesture (click / key / touch) on the page — a
+ * WebSocket frame does NOT count as one. So we (a) keep ONE context and reuse
+ * it across beeps (a per-beep {@code new AudioContext()} is created suspended
+ * and stays silent), and (b) resume it on the first user gesture via
+ * {@link installAudioUnlock}. Until that first interaction the tone may be
+ * silent — the full-screen flash + toast are the backup signals.
+ */
+let sharedCtx: AudioContext | null = null;
+
+function getAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  const Ctor = window.AudioContext || (window as any).webkitAudioContext;
+  if (!Ctor) return null;
+  if (!sharedCtx) {
+    try { sharedCtx = new Ctor(); } catch { return null; }
+  }
+  return sharedCtx;
+}
+
+let unlockInstalled = false;
+
+/**
+ * Resume (and, on iOS/Safari, cement) the shared AudioContext on the first real
+ * user gesture, then detach the listeners. Idempotent — safe to call on every
+ * mount. Without this the very first CRITICAL beep is silent under modern
+ * autoplay rules.
+ */
+export function installAudioUnlock(): void {
+  if (unlockInstalled || typeof window === 'undefined') return;
+  unlockInstalled = true;
+  const detach = () => {
+    window.removeEventListener('pointerdown', unlock);
+    window.removeEventListener('keydown', unlock);
+    window.removeEventListener('touchstart', unlock);
+  };
+  const unlock = () => {
+    const ctx = getAudioContext();
+    if (!ctx) { detach(); return; }
+    const finish = () => {
+      // iOS/Safari: a near-silent blip inside the gesture cements the unlock.
+      try {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        g.gain.value = 0.0001;
+        osc.connect(g).connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.01);
+      } catch { /* ignore */ }
+      detach();
+    };
+    if (ctx.state === 'suspended') ctx.resume().then(finish).catch(() => {});
+    else finish();
+  };
+  window.addEventListener('pointerdown', unlock);
+  window.addEventListener('keydown', unlock);
+  window.addEventListener('touchstart', unlock);
+}
+
+/**
+ * Two-tone alert beep via Web Audio API on the shared, gesture-unlocked
+ * context. Muted via the settings sessionStorage flag. If the context is still
+ * suspended (no user gesture yet) it best-effort resumes; a stubbornly
+ * suspended context just means no sound — the visual flash is the backup.
  *
  * <p>Wrapped in try/catch because some browsers / OS-level audio mute
- * configurations will throw — the visual flash is the backup signal.
+ * configurations will throw.
  */
 function playAlertTone() {
   try {
-    const muted = sessionStorage.getItem('smarttriage:critical-mute') === '1';
-    if (muted) return;
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    if (sessionStorage.getItem('smarttriage:critical-mute') === '1') return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     const beep = (freq: number, startAt: number, duration: number, gain: number) => {
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
@@ -223,7 +292,8 @@ function playAlertTone() {
     // "attend to me" cadence, distinct from a phone ring or chat ping.
     beep(880, 0,    0.18, 0.28);
     beep(1100, 0.22, 0.22, 0.28);
-    window.setTimeout(() => ctx.close().catch(() => {}), 600);
+    // NB: never close the shared context — it is reused across beeps and its
+    // resumed/running state is what keeps subsequent alerts audible.
   } catch {
     /* visual flash is the backup */
   }

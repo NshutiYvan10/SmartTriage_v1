@@ -909,8 +909,10 @@ function Step5Send({ draft, setDraft, text, glassInner, isDark, run, onToggleLig
       <div className="rounded-xl p-3 bg-amber-500/10 ring-1 ring-amber-500/20 flex items-start gap-2">
         <AlertOctagon className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
         <p className={`text-sm ${text.body}`}>
-          For RED / cardiac-arrest cases the charge nurse and resus zone get an urgent audible alert. The ED nurse
-          confirms arrival when you roll in and acknowledges handover after MIST.
+          For RED / cardiac-arrest cases — or when your blue lights are on — the hospital's charge nurse and Resus
+          zone get a top-priority CRITICAL alert the moment you're flagged: a full-screen flash and an audible
+          alarm on their station. The ED nurse confirms your arrival when you roll in and acknowledges handover
+          after your MIST.
         </p>
       </div>
     </div>
