@@ -93,11 +93,17 @@ export function MedicationBoard() {
   const [refreshing, setRefreshing] = useState(false);
   /** Charge/admin-only manual zone filter (null = whole hospital). */
   const [zoneFilter, setZoneFilter] = useState<EdZone | null>(null);
+  /** Multi-zone nurse's selected covered zone (null = their primary zone). */
+  const [zoneSel, setZoneSel] = useState<EdZone | null>(null);
 
-  // The zone the BACKEND query uses: a zone nurse is pinned to their
-  // shift zone; cross-zone roles use the manual filter (or all).
+  // The zone the BACKEND query uses:
+  //  • ZONE_SCOPED nurse → a zone they COVER (primary ∪ additionalZones); the
+  //    selector below lets a multi-zone nurse switch, defaulting to primary.
+  //  • cross-zone roles → the manual filter (or all/hospital-wide when null).
   const effectiveZone: EdZone | null =
-    scope.mode === 'ZONE_SCOPED' ? scope.zone : zoneFilter;
+    scope.mode === 'ZONE_SCOPED'
+      ? (zoneSel && scope.coveredZones.includes(zoneSel) ? zoneSel : scope.zone)
+      : zoneFilter;
 
   // 30s tick so "due in X min" labels advance.
   const [, setNow] = useState(0);
@@ -133,11 +139,11 @@ export function MedicationBoard() {
       if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
       reloadTimer.current = window.setTimeout(() => load(), 300);
     };
-    const unsub = scope.mode === 'ZONE_SCOPED' && scope.zone
-      ? subscribeToZoneMedications(hospitalId, scope.zone, onEvent)
+    const unsub = scope.mode === 'ZONE_SCOPED' && effectiveZone
+      ? subscribeToZoneMedications(hospitalId, effectiveZone, onEvent)
       : subscribeToMedications(hospitalId, onEvent);
     return () => unsub();
-  }, [hospitalId, scope.mode, scope.zone, scope.isLoading, load]);
+  }, [hospitalId, scope.mode, effectiveZone, scope.isLoading, load]);
 
   // ── Modal-driven actions ──────────────────────────────────────────
   const [modal, setModal] = useState<ModalKind | null>(null);
@@ -323,6 +329,24 @@ export function MedicationBoard() {
                       type="button"
                       onClick={() => setZoneFilter(z)}
                       className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${zoneFilter === z
+                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+                        : 'text-white/70 hover:bg-white/5 border-transparent'}`}
+                    >
+                      {z}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* Multi-zone nurse: switch between the zones they cover this shift
+                  (primary ∪ additionalZones). Single-zone nurses get no selector. */}
+              {scope.mode === 'ZONE_SCOPED' && scope.coveredZones.length > 1 && (
+                <div className="flex items-center gap-1 flex-wrap">
+                  {scope.coveredZones.map((z) => (
+                    <button
+                      key={z}
+                      type="button"
+                      onClick={() => setZoneSel(z)}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${effectiveZone === z
                         ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
                         : 'text-white/70 hover:bg-white/5 border-transparent'}`}
                     >
