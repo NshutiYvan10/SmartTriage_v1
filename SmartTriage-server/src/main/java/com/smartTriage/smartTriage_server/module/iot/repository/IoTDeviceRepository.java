@@ -28,6 +28,14 @@ public interface IoTDeviceRepository extends JpaRepository<IoTDevice, UUID> {
         @Query("SELECT d.hospital.id FROM IoTDevice d WHERE d.id = :id")
         Optional<UUID> findHospitalIdById(@Param("id") UUID id);
 
+        /** Resolve a device's owning user (self-registered paramedic monitor) — used by
+         *  ClinicalAuthz.canOperateDevice for user-owned (hospital-agnostic) scoping (V98). */
+        @Query("SELECT d.registeredByUserId FROM IoTDevice d WHERE d.id = :id")
+        Optional<UUID> findRegisteredByUserIdById(@Param("id") UUID id);
+
+        /** A user's own self-registered devices (their field monitors) — for the "My Monitor" list (V98). */
+        List<IoTDevice> findByRegisteredByUserIdAndIsActiveTrueOrderByDeviceNameAsc(UUID registeredByUserId);
+
         /** RFID readers at a hospital — for the registration desk-device picker (V95). */
         List<IoTDevice> findByHospitalIdAndDeviceTypeAndIsActiveTrueOrderByDeviceNameAsc(
                         UUID hospitalId, com.smartTriage.smartTriage_server.common.enums.DeviceType deviceType);

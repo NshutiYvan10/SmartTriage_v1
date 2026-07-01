@@ -18,10 +18,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   X, ChevronLeft, ChevronRight, Loader2, Send, AlertOctagon,
-  Check, Plus, Siren, Activity, Calculator, MapPin,
+  Check, Plus, Siren, Activity, Calculator, MapPin, Radio,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { emsApi } from '@/api/ems';
+import { iotApi } from '@/api/iot';
+import type { DeviceResponse } from '@/api/types';
 import type {
   EmsRun, FieldTriageCategory, EmsService, EmsInterventionType,
   FieldTriageRequest, MobilityStatus, AvpuScore, TraumaStatus, DestinationHospital,
@@ -555,12 +557,15 @@ function Step2Vitals({ draft, setDraft, mobility, setMobility, avpu, setAvpu, tr
     <div>
       <Label text={text}>{label}</Label>
       <input type="number" inputMode="decimal" step="any" value={(draft as any)[key]} placeholder={ph}
-        onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} className={inputClass} style={glassInner} />
+        onChange={(e) => setDraft((d: any) => ({ ...d, [key]: e.target.value }))} className={inputClass} style={glassInner} />
     </div>
   );
   return (
     <div className="space-y-4">
-      <h4 className={`text-base font-bold ${text.heading}`}>Field vitals</h4>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <h4 className={`text-base font-bold ${text.heading}`}>Field vitals</h4>
+        <PullFromMonitor setDraft={setDraft} text={text} glassInner={glassInner} isDark={isDark} />
+      </div>
       <p className={`text-sm ${text.muted}`}>Snapshot at scene. These drive the computed TEWS on the next step.</p>
       <div className="grid grid-cols-2 gap-3">
         {numField('fieldRespRate', 'Resp rate', '16')}
@@ -611,6 +616,112 @@ function Step2Vitals({ draft, setDraft, mobility, setMobility, avpu, setAvpu, tr
       </div>
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Pull-from-monitor — one-shot snapshot from the paramedic's OWN
+// registered field monitor into the Step-2 vitals. Filled fields stay
+// EDITABLE (field readings in a moving ambulance are noisy — the crew
+// must be able to correct them). Manual entry is always available.
+// ─────────────────────────────────────────────────────────────────
+
+function PullFromMonitor({ setDraft, text, glassInner, isDark }: any) {
+  const [devices, setDevices] = useState<DeviceResponse[]>([]);
+  const [pickedId, setPickedId] = useState<string>('');
+  const [loadingDevices, setLoadingDevices] = useState(true);
+  const [pulling, setPulling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // "source: monitor" indicator (mirrors the triage form's per-pull badge).
+  const [pulledFrom, setPulledFrom] = useState<{ deviceName: string; ageSeconds: number | null; hasReading: boolean } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    iotApi.myDevices()
+      .then((all) => {
+        if (cancelled) return;
+        const monitors = (all || []).filter((d) => d.deviceType === 'PARAMEDIC_MONITOR');
+        setDevices(monitors);
+        if (monitors.length === 1) setPickedId(monitors[0].id);
+      })
+      .catch(() => { /* silent — feature degrades to manual entry */ })
+      .finally(() => { if (!cancelled) setLoadingDevices(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const pull = async (deviceId: string) => {
+    if (!deviceId) return;
+    setPulling(true);
+    setError(null);
+    try {
+      const snap = await iotApi.latestVitals(deviceId);
+      if (!snap.hasReading) {
+        setPulledFrom({ deviceName: snap.deviceName, ageSeconds: snap.ageSeconds, hasReading: false });
+        return;
+      }
+      // Fill only the vitals the monitor actually reported. Leave everything
+      // else — and every filled field stays editable (no lock).
+      setDraft((d: any) => ({
+        ...d,
+        ...(snap.heartRate != null       ? { fieldHr: String(snap.heartRate) } : {}),
+        ...(snap.respiratoryRate != null ? { fieldRespRate: String(snap.respiratoryRate) } : {}),
+        ...(snap.systolicBp != null      ? { fieldSbp: String(snap.systolicBp) } : {}),
+        ...(snap.diastolicBp != null     ? { fieldDbp: String(snap.diastolicBp) } : {}),
+        ...(snap.spo2 != null            ? { fieldSpo2: String(snap.spo2) } : {}),
+        ...(snap.temperature != null     ? { fieldTemp: String(snap.temperature) } : {}),
+        ...(snap.glucose != null         ? { fieldGlucose: String(snap.glucose) } : {}),
+      }));
+      setPulledFrom({ deviceName: snap.deviceName, ageSeconds: snap.ageSeconds, hasReading: true });
+    } catch (e: any) {
+      setError(e?.message || 'Could not pull from your monitor.');
+    } finally {
+      setPulling(false);
+    }
+  };
+
+  // No monitor registered → subtle hint, no button.
+  if (!loadingDevices && devices.length === 0) {
+    return (
+      <span className={`text-xs ${text.muted}`}>Register your monitor on the dashboard to pull vitals</span>
+    );
+  }
+
+  const btnClass = `inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold disabled:opacity-50 ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`;
+
+  return (
+    <div className="flex flex-col items-end gap-1.5">
+      <div className="flex items-center gap-2">
+        {devices.length > 1 && (
+          <select value={pickedId} onChange={(e) => setPickedId(e.target.value)}
+            className={`px-2.5 py-2 rounded-xl text-sm max-w-[10rem] focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white' : 'text-slate-800'}`}
+            style={glassInner}>
+            <option value="">— pick monitor —</option>
+            {devices.map((d) => <option key={d.id} value={d.id}>{d.deviceName}</option>)}
+          </select>
+        )}
+        <button type="button" onClick={() => pull(pickedId)} disabled={pulling || loadingDevices || !pickedId} className={btnClass}>
+          {pulling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radio className="w-4 h-4" />} Pull from my monitor
+        </button>
+      </div>
+      {error && <span className="text-xs font-semibold text-rose-500">{error}</span>}
+      {pulledFrom && !pulledFrom.hasReading && (
+        <span className="text-xs font-semibold text-amber-600">No recent reading from {pulledFrom.deviceName}</span>
+      )}
+      {pulledFrom && pulledFrom.hasReading && (
+        <span className={`text-xs ${pulledFrom.ageSeconds != null && pulledFrom.ageSeconds > 120 ? 'font-semibold text-amber-600' : text.muted}`}>
+          Pulled from {pulledFrom.deviceName}{pulledFrom.ageSeconds != null ? ` · ${formatAge(pulledFrom.ageSeconds)}` : ''}
+          {pulledFrom.ageSeconds != null && pulledFrom.ageSeconds > 120 ? ' — verify, reading may be stale' : ''}
+          {' · editable'}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Compact "12s ago" / "3m ago" for a snapshot's ageSeconds. */
+function formatAge(sec: number): string {
+  if (sec < 60) return `${Math.round(sec)}s ago`;
+  if (sec < 3600) return `${Math.round(sec / 60)}m ago`;
+  return `${Math.round(sec / 3600)}h ago`;
 }
 
 // ─────────────────────────────────────────────────────────────────

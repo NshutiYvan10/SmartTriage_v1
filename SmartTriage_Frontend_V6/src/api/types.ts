@@ -134,7 +134,7 @@ export const MEDICATION_PRIORITIES: Array<{
   { value: 'URGENT',  label: 'Urgent',  description: 'Give within 30 min',               slaMinutes: 30,  tint: 'bg-orange-100 text-orange-800 border-orange-300', overdueTint: 'bg-orange-600 text-white border-orange-700' },
   { value: 'ROUTINE', label: 'Routine', description: 'Give per scheduled frequency',    slaMinutes: 240, tint: 'bg-emerald-100 text-emerald-800 border-emerald-300', overdueTint: 'bg-amber-500 text-white border-amber-600' },
 ];
-export type DeviceType = 'ESP32_MONITOR' | 'PULSE_OXIMETER' | 'ECG_MONITOR' | 'BP_MONITOR' | 'TEMPERATURE_PROBE' | 'GLUCOMETER' | 'AMBULANCE_MONITOR' | 'OTHER';
+export type DeviceType = 'ESP32_MONITOR' | 'PULSE_OXIMETER' | 'ECG_MONITOR' | 'BP_MONITOR' | 'TEMPERATURE_PROBE' | 'GLUCOMETER' | 'AMBULANCE_MONITOR' | 'PARAMEDIC_MONITOR' | 'RFID_READER' | 'OTHER';
 export type DeviceStatus = 'REGISTERED' | 'ONLINE' | 'OFFLINE' | 'MONITORING' | 'ERROR' | 'DECOMMISSIONED';
 export type SignalQuality = 'GOOD' | 'ACCEPTABLE' | 'POOR' | 'INVALID' | 'UNKNOWN';
 export type AlertSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
@@ -1338,6 +1338,22 @@ export interface DeviceResponse {
   notes: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Latest device-keyed vitals snapshot a paramedic pulls from their own monitor (V98). */
+export interface DeviceLatestVitalsResponse {
+  deviceId: string;
+  deviceName: string;
+  hasReading: boolean;
+  heartRate: number | null;
+  respiratoryRate: number | null;
+  spo2: number | null;
+  systolicBp: number | null;
+  diastolicBp: number | null;
+  temperature: number | null;
+  glucose: number | null;
+  recordedAt: string | null;
+  ageSeconds: number | null;
 }
 
 export interface StartMonitoringRequest {

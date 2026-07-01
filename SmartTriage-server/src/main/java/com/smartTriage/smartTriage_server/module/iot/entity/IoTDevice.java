@@ -63,6 +63,44 @@ public class IoTDevice extends BaseEntity {
     @Column(name = "api_key", nullable = false, length = 255)
     private String apiKey;
 
+    /**
+     * Owning user for a self-registered device (a paramedic's own field
+     * monitor). Null for hospital-pool devices registered by an admin.
+     * Ownership is by THIS user, not the hospital — a paramedic's monitor
+     * follows the crew to any destination hospital (see canOperateDevice).
+     */
+    @Column(name = "registered_by_user_id")
+    private java.util.UUID registeredByUserId;
+
+    // ── Latest device-keyed vitals snapshot (V98) ──
+    // The most recent reading the device reported, kept per-DEVICE (not per
+    // visit/session). Lets a paramedic "pull from my monitor" into the EMS
+    // field-vitals before any hospital Visit exists — decoupled from the
+    // visit-keyed bedside monitoring pipeline.
+    @Column(name = "last_heart_rate")
+    private Integer lastHeartRate;
+
+    @Column(name = "last_resp_rate")
+    private Integer lastRespRate;
+
+    @Column(name = "last_spo2")
+    private Integer lastSpo2;
+
+    @Column(name = "last_systolic_bp")
+    private Integer lastSystolicBp;
+
+    @Column(name = "last_diastolic_bp")
+    private Integer lastDiastolicBp;
+
+    @Column(name = "last_temperature")
+    private Double lastTemperature;
+
+    @Column(name = "last_glucose")
+    private Double lastGlucose;
+
+    @Column(name = "last_vitals_at")
+    private Instant lastVitalsAt;
+
     /** Current device status */
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)

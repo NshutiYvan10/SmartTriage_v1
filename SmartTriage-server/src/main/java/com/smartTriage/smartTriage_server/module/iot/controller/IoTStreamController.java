@@ -45,6 +45,33 @@ public class IoTStreamController {
     private final ContinuousMonitoringEngine monitoringEngine;
 
     /**
+     * Device-keyed telemetry snapshot (V98) — a self-registered paramedic monitor
+     * posts its latest reading here (X-Device-API-Key). Stored per-DEVICE (no
+     * visit / session), which is what the paramedic's "pull from my monitor"
+     * reads into the EMS field-vitals. Deliberately separate from /ingest, which
+     * flows visit-bound sessions into the ED bedside-monitoring pipeline. Resilient:
+     * a bad key → 401 (the device renders its own offline state).
+     */
+    @PostMapping("/device-telemetry")
+    public ResponseEntity<DeviceAckResponse> deviceTelemetry(
+            @RequestHeader("X-Device-API-Key") String apiKey,
+            @RequestBody com.smartTriage.smartTriage_server.module.iot.dto.DeviceTelemetryRequest req) {
+        try {
+            deviceService.recordDeviceTelemetry(apiKey, req);
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body(DeviceAckResponse.builder()
+                    .accepted(false)
+                    .rejectionReason("Device authentication failed")
+                    .serverTimestamp(Instant.now().toEpochMilli())
+                    .build());
+        }
+        return ResponseEntity.ok(DeviceAckResponse.builder()
+                .accepted(true)
+                .serverTimestamp(Instant.now().toEpochMilli())
+                .build());
+    }
+
+    /**
      * Ingest vital data from an IoT device.
      *
      * ESP32 devices call this endpoint every N seconds with their latest readings.

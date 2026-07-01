@@ -17,12 +17,15 @@ import {
   Siren, Plus, RefreshCw, Loader2, CheckCircle2, AlertOctagon,
   Send, MapPin, Clock, Activity, ClipboardList, Wifi, WifiOff,
   ShieldAlert, HeartPulse, ChevronDown, ChevronUp, Download, ExternalLink,
+  Radio, Copy, Check, KeyRound,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { emsApi } from '@/api/ems';
+import { iotApi } from '@/api/iot';
 import { saveBlob } from '@/api/client';
 import { chartPath } from '@/lib/chartNav';
 import type { EmsRun, EmsRunStatus, FieldTriageCategory, PatientHistory } from '@/api/ems';
+import type { DeviceResponse } from '@/api/types';
 import { subscribeToEmsRuns, getStompClient } from '@/api/websocket';
 import { useWebSocketGeneration } from '@/hooks/useWebSocket';
 import { formatDistanceToNow } from 'date-fns';
@@ -251,6 +254,12 @@ export function ParamedicDashboard() {
               ))}
             </div>
           </div>
+        )}
+
+        {/* My Field Monitor — self-register a vitals monitor + pairing key.
+            Paramedic-only (mirrors the create-run gate). */}
+        {canCreateRun && (
+          <MyFieldMonitor glassCard={glassCard} glassInner={glassInner} text={text} isDark={isDark} />
         )}
       </div>
 
@@ -499,6 +508,152 @@ function Stat({ label, value, text }: { label: string; value: any; text: any }) 
     <div>
       <div className={`text-[10px] uppercase font-bold ${text.label}`}>{label}</div>
       <div className={`font-bold ${text.heading}`}>{value ?? '—'}</div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// My Field Monitor — paramedic self-registers a vitals monitor, then
+// pulls its snapshot into a run (the pull lives in EmsRunForm step 2).
+// The ESP32 pairing key is returned ONCE by self-register; we surface it
+// in a copyable box that clears on the next load/register.
+// ─────────────────────────────────────────────────────────────────
+
+function MyFieldMonitor({ glassCard, glassInner, text, isDark }: any) {
+  const [devices, setDevices] = useState<DeviceResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [serialNumber, setSerialNumber] = useState('');
+  const [deviceName, setDeviceName] = useState('');
+  const [registering, setRegistering] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // The pairing key is shown ONCE, right after a successful register. It is
+  // never returned again by myDevices(), so we hold it in local state only.
+  const [pairingKey, setPairingKey] = useState<{ deviceName: string; apiKey: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await iotApi.myDevices();
+      setDevices(data || []);
+    } catch (e) {
+      console.error('[MyFieldMonitor] load failed:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const register = async () => {
+    const sn = serialNumber.trim();
+    const name = deviceName.trim();
+    if (!sn || !name) { setError('Serial number and device name are both required.'); return; }
+    setRegistering(true);
+    setError(null);
+    try {
+      const created = await iotApi.selfRegisterDevice({ serialNumber: sn, deviceName: name });
+      setSerialNumber('');
+      setDeviceName('');
+      // apiKey is present exactly once — right here. Surface it, then refresh.
+      if (created.apiKey) setPairingKey({ deviceName: created.deviceName, apiKey: created.apiKey });
+      await load();
+    } catch (e: any) {
+      const msg = String(e?.message ?? '');
+      setError(
+        /exist|duplicate|already|conflict|409/i.test(msg)
+          ? 'A monitor with that serial number is already registered.'
+          : (msg || 'Could not register the monitor.'),
+      );
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  const copyKey = async () => {
+    if (!pairingKey) return;
+    try {
+      await navigator.clipboard.writeText(pairingKey.apiKey);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard blocked — the key is still visible to copy manually */ }
+  };
+
+  const inputClass = `w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`;
+
+  return (
+    <div className="space-y-3">
+      <h2 className={`text-base font-bold ${text.heading}`}>
+        <Radio className="w-5 h-5 inline mr-1.5 text-cyan-500" />
+        My Field Monitor
+      </h2>
+      <div className="rounded-2xl p-4 space-y-4" style={glassCard}>
+        <p className={`text-sm ${text.muted}`}>
+          Register your vitals monitor once, pair it with the key below, then pull its readings
+          straight into a run's field vitals.
+        </p>
+
+        {/* Registered monitors */}
+        {loading ? (
+          <div className={`flex items-center gap-2 text-sm ${text.muted}`}><Loader2 className="w-4 h-4 animate-spin" /> Loading your monitors…</div>
+        ) : devices.length === 0 ? (
+          <div className={`text-sm ${text.muted}`}>No monitors registered yet — add one below.</div>
+        ) : (
+          <div className="space-y-2">
+            {devices.map((d) => (
+              <div key={d.id} className="rounded-xl px-3 py-2.5 flex items-center justify-between gap-2" style={glassInner}>
+                <div className="min-w-0">
+                  <div className={`text-sm font-bold truncate ${text.heading}`}>{d.deviceName}</div>
+                  <div className={`text-xs font-mono truncate ${text.muted}`}>{d.serialNumber}</div>
+                </div>
+                <span className="text-xs font-bold uppercase tracking-wider px-2 py-1 rounded-lg shrink-0 text-slate-600"
+                  style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}>
+                  {d.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Pairing key — shown ONCE right after register */}
+        {pairingKey && (
+          <div className="rounded-xl p-3.5 ring-2 ring-cyan-500/40 bg-cyan-500/10 space-y-2">
+            <div className="flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-cyan-500 shrink-0" />
+              <span className={`text-sm font-bold ${text.heading}`}>
+                Pairing key for {pairingKey.deviceName}
+              </span>
+            </div>
+            <p className={`text-xs ${text.muted}`}>
+              Enter this in your monitor — <b>shown only once</b>. Copy it now; you can't retrieve it later.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className={`flex-1 min-w-0 px-3 py-2 rounded-lg text-sm font-mono break-all ${isDark ? 'bg-black/30 text-cyan-200' : 'bg-white text-cyan-700'}`} style={glassInner}>
+                {pairingKey.apiKey}
+              </code>
+              <button onClick={copyKey}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold bg-cyan-600 text-white hover:bg-cyan-700 shrink-0">
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />} {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Register form */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <input value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} placeholder="Serial number"
+            className={inputClass} style={glassInner} />
+          <input value={deviceName} onChange={(e) => setDeviceName(e.target.value)} placeholder="Device name (e.g. SAMU-K7 monitor)"
+            className={inputClass} style={glassInner} />
+        </div>
+        {error && (
+          <div className="rounded-xl px-3 py-2 text-sm font-semibold bg-rose-500/10 text-rose-500">{error}</div>
+        )}
+        <button onClick={register} disabled={registering || !serialNumber.trim() || !deviceName.trim()}
+          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50">
+          {registering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Register monitor
+        </button>
+      </div>
     </div>
   );
 }

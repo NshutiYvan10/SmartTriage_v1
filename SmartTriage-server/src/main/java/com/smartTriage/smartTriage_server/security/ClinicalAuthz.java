@@ -908,6 +908,41 @@ public class ClinicalAuthz {
         }
     }
 
+    /**
+     * Who may operate a self-registered device (read its latest-vitals snapshot, manage it): the
+     * OWNING user (a paramedic and THEIR own field monitor — user-owned / hospital-agnostic, so it
+     * works at any destination hospital), SUPER_ADMIN anywhere, or a HOSPITAL_ADMIN at the device's
+     * own hospital. Ownership (registeredByUserId) is checked first so a paramedic's monitor is theirs
+     * regardless of which hospital they've transported into. Denies an unknown device. The telemetry
+     * ingest itself is device-API-key authed, not here.
+     */
+    @Transactional(readOnly = true)
+    public boolean canOperateDevice(Authentication authentication, UUID deviceId) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null || deviceId == null) {
+                return false;
+            }
+            if (user.getRole() == Role.SUPER_ADMIN) {
+                return true;
+            }
+            // Owner path — user-owned, hospital-agnostic.
+            UUID owner = ioTDeviceRepository.findRegisteredByUserIdById(deviceId).orElse(null);
+            if (owner != null && owner.equals(user.getId())) {
+                return true;
+            }
+            // Admin path — HOSPITAL_ADMIN at the device's own hospital.
+            UUID hospitalId = ioTDeviceRepository.findHospitalIdById(deviceId).orElse(null);
+            if (hospitalId == null || !belongsToHospital(user, hospitalId)) {
+                return false;
+            }
+            return user.getRole() == Role.HOSPITAL_ADMIN;
+        } catch (Exception e) {
+            log.error("canOperateDevice error for device {}: {}", deviceId, e.getMessage(), e);
+            return false;
+        }
+    }
+
     /** Scopes the fast-track mutating endpoints (status / ecg / ct / complete /
      *  cancel / acknowledge) to the activation's own hospital, so a clinician at
      *  hospital B cannot record an ECG/CT result or drive the status of hospital

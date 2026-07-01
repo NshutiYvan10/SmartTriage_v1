@@ -65,6 +65,39 @@ public class IoTDeviceController {
                 .body(ApiResponse.success("Device registered successfully", response));
     }
 
+    // ── Paramedic self-registered field monitor (V98) ──
+
+    /** A paramedic registers their OWN field monitor (owned by them, type forced,
+     *  hospital taken from the caller). Returns the API key once so they can pair it. */
+    @PostMapping("/devices/self-register")
+    @PreAuthorize("hasRole('PARAMEDIC')")
+    public ResponseEntity<ApiResponse<DeviceResponse>> selfRegisterMonitor(
+            @Valid @RequestBody SelfRegisterMonitorRequest request,
+            Authentication authentication) {
+        UUID callerId = ((com.smartTriage.smartTriage_server.module.user.entity.User)
+                authentication.getPrincipal()).getId();
+        DeviceResponse response = deviceService.selfRegisterParamedicMonitor(request, callerId);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Monitor registered", response));
+    }
+
+    /** The caller's own registered monitors (for the "My Monitor" picker). */
+    @GetMapping("/devices/mine")
+    @PreAuthorize("hasRole('PARAMEDIC')")
+    public ResponseEntity<ApiResponse<List<DeviceResponse>>> myDevices(Authentication authentication) {
+        UUID callerId = ((com.smartTriage.smartTriage_server.module.user.entity.User)
+                authentication.getPrincipal()).getId();
+        return ResponseEntity.ok(ApiResponse.success(deviceService.getMyDevices(callerId)));
+    }
+
+    /** Latest device-keyed vitals snapshot — what "pull from my monitor" reads.
+     *  Owner-gated (or admin at the device's hospital / super-admin). */
+    @GetMapping("/devices/{deviceId}/latest-vitals")
+    @PreAuthorize("@clinicalAuthz.canOperateDevice(authentication, #deviceId)")
+    public ResponseEntity<ApiResponse<DeviceLatestVitalsResponse>> latestVitals(@PathVariable UUID deviceId) {
+        return ResponseEntity.ok(ApiResponse.success(deviceService.getLatestVitals(deviceId)));
+    }
+
     @GetMapping("/devices/{id}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<DeviceResponse>> getDevice(@PathVariable UUID id) {

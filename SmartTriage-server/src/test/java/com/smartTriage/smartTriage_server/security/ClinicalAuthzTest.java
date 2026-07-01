@@ -815,4 +815,47 @@ class ClinicalAuthzTest {
         // Null visitId denied.
         assertFalse(authz.callerCanConfirmFieldTriage(authFor(doctor), null));
     }
+
+    // ── canOperateDevice (V98 — self-registered paramedic monitor: owner + admin) ──
+
+    @Test
+    void canOperateDevice_allowsTheOwningUser_hospitalAgnostic() {
+        UUID deviceId = UUID.randomUUID();
+        User paramedic = user(Role.PARAMEDIC, null, hospitalId);
+        // Owner match short-circuits BEFORE any hospital check → works at any destination hospital.
+        when(ioTDeviceRepository.findRegisteredByUserIdById(deviceId)).thenReturn(Optional.of(paramedic.getId()));
+        assertTrue(authz.canOperateDevice(authFor(paramedic), deviceId));
+    }
+
+    @Test
+    void canOperateDevice_deniesADifferentUsersMonitor() {
+        UUID deviceId = UUID.randomUUID();
+        when(ioTDeviceRepository.findRegisteredByUserIdById(deviceId)).thenReturn(Optional.of(UUID.randomUUID()));
+        when(ioTDeviceRepository.findHospitalIdById(deviceId)).thenReturn(Optional.of(hospitalId));
+        // A paramedic who is NOT the owner (and not an admin) cannot read someone else's monitor.
+        assertFalse(authz.canOperateDevice(authFor(user(Role.PARAMEDIC, null, hospitalId)), deviceId));
+    }
+
+    @Test
+    void canOperateDevice_allowsSuperAdmin_andHospitalAdminAtDeviceHospital() {
+        UUID deviceId = UUID.randomUUID();
+        // SUPER_ADMIN short-circuits before any lookup.
+        assertTrue(authz.canOperateDevice(authFor(user(Role.SUPER_ADMIN, null, null)), deviceId));
+        // HOSPITAL_ADMIN at the device's own hospital (not the owner).
+        when(ioTDeviceRepository.findRegisteredByUserIdById(deviceId)).thenReturn(Optional.empty());
+        when(ioTDeviceRepository.findHospitalIdById(deviceId)).thenReturn(Optional.of(hospitalId));
+        assertTrue(authz.canOperateDevice(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), deviceId));
+        // ...but not a hospital admin at a DIFFERENT hospital.
+        assertFalse(authz.canOperateDevice(authFor(user(Role.HOSPITAL_ADMIN, null, UUID.randomUUID())), deviceId));
+    }
+
+    @Test
+    void canOperateDevice_deniesUnknownDevice_andNullArgs() {
+        UUID deviceId = UUID.randomUUID();
+        when(ioTDeviceRepository.findRegisteredByUserIdById(deviceId)).thenReturn(Optional.empty());
+        when(ioTDeviceRepository.findHospitalIdById(deviceId)).thenReturn(Optional.empty());
+        assertFalse(authz.canOperateDevice(authFor(user(Role.PARAMEDIC, null, hospitalId)), deviceId));
+        assertFalse(authz.canOperateDevice(null, deviceId));
+        assertFalse(authz.canOperateDevice(authFor(user(Role.PARAMEDIC, null, hospitalId)), null));
+    }
 }

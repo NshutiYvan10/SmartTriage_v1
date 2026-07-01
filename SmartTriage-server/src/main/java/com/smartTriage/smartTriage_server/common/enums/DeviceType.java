@@ -34,6 +34,12 @@ public enum DeviceType {
     /** ESP32 + RFID reader at the registration desk — tap-to-identify (V95) */
     RFID_READER("RFID Card Reader"),
 
+    /** A paramedic's own portable field monitor, self-registered and owned by
+     *  the crew member (user-owned / hospital-agnostic — works at any
+     *  destination hospital). Feeds the paramedic's "pull from my monitor"
+     *  field-vitals snapshot. */
+    PARAMEDIC_MONITOR("Paramedic Field Monitor"),
+
     /** Generic / other device */
     OTHER("Other Device");
 

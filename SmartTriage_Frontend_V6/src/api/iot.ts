@@ -3,6 +3,7 @@ import { get, post, patch } from './client';
 import type {
   RegisterDeviceRequest,
   DeviceResponse,
+  DeviceLatestVitalsResponse,
   StartMonitoringRequest,
   DeviceSessionResponse,
   VitalStreamResponse,
@@ -13,6 +14,20 @@ export const iotApi = {
   // Device management
   registerDevice: (data: RegisterDeviceRequest) =>
     post<DeviceResponse>('/iot/devices', data),
+
+  // ── Paramedic self-registered field monitor (V98) ──
+  /** A paramedic registers their OWN monitor. Backend forces the type +
+   *  ownership; returns the API key once (in the response) to pair the device. */
+  selfRegisterDevice: (data: Pick<RegisterDeviceRequest, 'serialNumber' | 'deviceName' | 'macAddress' | 'notes'>) =>
+    post<DeviceResponse>('/iot/devices/self-register', data),
+
+  /** The caller's own registered monitors (no API key exposed). */
+  myDevices: () =>
+    get<DeviceResponse[]>('/iot/devices/mine'),
+
+  /** Latest vitals snapshot the paramedic's monitor reported — for "pull from my monitor". */
+  latestVitals: (deviceId: string) =>
+    get<DeviceLatestVitalsResponse>(`/iot/devices/${deviceId}/latest-vitals`),
 
   getDevice: (id: string) =>
     get<DeviceResponse>(`/iot/devices/${id}`),

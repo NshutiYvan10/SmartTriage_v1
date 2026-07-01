@@ -64,6 +64,8 @@ public class DeviceService {
      */
     private final VitalStreamService vitalStreamService;
     private final com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService shiftAssignmentService;
+    /** Resolves a self-registering paramedic's own hospital (V98). */
+    private final com.smartTriage.smartTriage_server.module.user.repository.UserRepository userRepository;
 
     /**
      * Optional simulator dependency — only resolves in dev/sim builds
@@ -130,6 +132,115 @@ public class DeviceService {
         DeviceResponse response = IoTMapper.toResponse(device);
         response.setApiKey(apiKey);
         return response;
+    }
+
+    // ====================================================================
+    // PARAMEDIC SELF-REGISTERED FIELD MONITOR (V98)
+    // ====================================================================
+
+    /**
+     * A paramedic registers their OWN portable field monitor. Unlike the
+     * admin path, the device type is forced to PARAMEDIC_MONITOR and the
+     * device is OWNED by the caller (registeredByUserId) — user-owned /
+     * hospital-agnostic, so it follows the crew to any destination hospital.
+     * The hospital is taken from the caller (never client-supplied). Returns
+     * the API key in full (only time) so the paramedic can pair the device.
+     */
+    @Transactional
+    public DeviceResponse selfRegisterParamedicMonitor(
+            com.smartTriage.smartTriage_server.module.iot.dto.SelfRegisterMonitorRequest request,
+            java.util.UUID callerId) {
+        java.util.UUID hospitalId = userRepository.findHospitalIdByUserId(callerId)
+                .orElseThrow(() -> new com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException(
+                        "You are not attached to a hospital, so a device cannot be registered."));
+
+        deviceRepository.findBySerialNumberAndIsActiveTrue(request.getSerialNumber())
+                .ifPresent(d -> {
+                    throw new DuplicateResourceException("IoTDevice", "serialNumber", request.getSerialNumber());
+                });
+
+        Hospital hospital = hospitalService.findHospitalOrThrow(hospitalId);
+        String apiKey = generateApiKey();
+
+        IoTDevice device = IoTDevice.builder()
+                .serialNumber(request.getSerialNumber())
+                .deviceName(request.getDeviceName())
+                .deviceType(com.smartTriage.smartTriage_server.common.enums.DeviceType.PARAMEDIC_MONITOR) // forced
+                .hospital(hospital)
+                .registeredByUserId(callerId)                 // user-owned
+                .apiKey(apiKey)
+                .status(DeviceStatus.REGISTERED)
+                .macAddress(request.getMacAddress())
+                .heartbeatTimeoutSeconds(30)
+                .dataIntervalSeconds(5)
+                .notes(request.getNotes())
+                .build();
+
+        device = deviceRepository.save(device);
+        log.info("Paramedic self-registered field monitor: {} (Serial: {}, owner: {})",
+                device.getDeviceName(), device.getSerialNumber(), callerId);
+
+        DeviceResponse response = IoTMapper.toResponse(device);
+        response.setApiKey(apiKey);
+        return response;
+    }
+
+    /** The caller's own self-registered devices (their field monitors) — no API key exposed. */
+    @Transactional(readOnly = true)
+    public java.util.List<DeviceResponse> getMyDevices(java.util.UUID callerId) {
+        return deviceRepository.findByRegisteredByUserIdAndIsActiveTrueOrderByDeviceNameAsc(callerId)
+                .stream()
+                .map(IoTMapper::toResponse)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * Device-authed telemetry snapshot (V98). A self-registered monitor posts its
+     * latest reading here (X-Device-API-Key); we store it PER-DEVICE (no visit /
+     * session), which is what "pull from my monitor" reads. Only non-null fields
+     * overwrite, so a device that reports a subset keeps the last known values for
+     * the rest; lastVitalsAt always advances. Decoupled from the visit-keyed
+     * bedside pipeline on purpose.
+     */
+    @Transactional
+    public void recordDeviceTelemetry(String apiKey,
+            com.smartTriage.smartTriage_server.module.iot.dto.DeviceTelemetryRequest req) {
+        IoTDevice device = deviceRepository.findByApiKeyAndIsActiveTrue(apiKey)
+                .orElseThrow(() -> new ResourceNotFoundException("IoTDevice", "apiKey", "***"));
+        if (req.getHeartRate() != null) device.setLastHeartRate(req.getHeartRate());
+        if (req.getRespiratoryRate() != null) device.setLastRespRate(req.getRespiratoryRate());
+        if (req.getSpo2() != null) device.setLastSpo2(req.getSpo2());
+        if (req.getSystolicBp() != null) device.setLastSystolicBp(req.getSystolicBp());
+        if (req.getDiastolicBp() != null) device.setLastDiastolicBp(req.getDiastolicBp());
+        if (req.getTemperature() != null) device.setLastTemperature(req.getTemperature());
+        if (req.getGlucose() != null) device.setLastGlucose(req.getGlucose());
+        Instant now = Instant.now();
+        device.setLastVitalsAt(now);
+        device.setLastDataAt(now);
+        deviceRepository.save(device);
+    }
+
+    /** The latest device-keyed vitals snapshot a paramedic pulls into the EMS field-vitals. */
+    @Transactional(readOnly = true)
+    public com.smartTriage.smartTriage_server.module.iot.dto.DeviceLatestVitalsResponse getLatestVitals(
+            java.util.UUID deviceId) {
+        IoTDevice d = deviceRepository.findByIdAndIsActiveTrue(deviceId)
+                .orElseThrow(() -> new ResourceNotFoundException("IoTDevice", "id", deviceId));
+        boolean has = d.getLastVitalsAt() != null;
+        return com.smartTriage.smartTriage_server.module.iot.dto.DeviceLatestVitalsResponse.builder()
+                .deviceId(d.getId())
+                .deviceName(d.getDeviceName())
+                .hasReading(has)
+                .heartRate(d.getLastHeartRate())
+                .respiratoryRate(d.getLastRespRate())
+                .spo2(d.getLastSpo2())
+                .systolicBp(d.getLastSystolicBp())
+                .diastolicBp(d.getLastDiastolicBp())
+                .temperature(d.getLastTemperature())
+                .glucose(d.getLastGlucose())
+                .recordedAt(d.getLastVitalsAt())
+                .ageSeconds(has ? java.time.Duration.between(d.getLastVitalsAt(), Instant.now()).getSeconds() : null)
+                .build();
     }
 
     // ====================================================================
