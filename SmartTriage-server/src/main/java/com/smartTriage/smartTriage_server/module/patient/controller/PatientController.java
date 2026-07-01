@@ -130,8 +130,15 @@ public class PatientController {
         return ResponseEntity.ok(ApiResponse.success("Chronic conditions updated", response));
     }
 
+    // Registry list + search expose the whole hospital patient population, so
+    // they are NOT for paramedics — a paramedic's patients are the ones they
+    // transported (their own EMS runs), never the hospital-wide registry.
+    // Allowlist = every role that legitimately needs registry access EXCEPT
+    // PARAMEDIC (lab tech looks up a specimen's patient; read-only is
+    // governance) — mirrors the /lookup gate, minus paramedic.
     @GetMapping("/hospital/{hospitalId}")
-    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR', 'LAB_TECHNICIAN', 'READ_ONLY') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<PatientResponse>>> getPatientsByHospital(
             @PathVariable UUID hospitalId,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -140,7 +147,8 @@ public class PatientController {
     }
 
     @GetMapping("/hospital/{hospitalId}/search")
-    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR', 'LAB_TECHNICIAN', 'READ_ONLY') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<PatientResponse>>> searchPatients(
             @PathVariable UUID hospitalId,
             @RequestParam String query,

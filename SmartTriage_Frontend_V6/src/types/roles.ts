@@ -278,8 +278,12 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   // crews in real Rwandan practice DO work 24/7 rotations, but
   // their roster is currently managed outside SmartTriage. Re-add
   // this entry the moment a PARAMEDIC ShiftFunction is introduced.
+  // Paramedics must NOT see the hospital-wide Patients page / registry — that
+  // is other clinicians' patients (a PHI leak). Their patients are the ones
+  // they transported, surfaced by their own EMS runs on the 'ems' dashboard
+  // (emsApi.myRuns, own-run-scoped) + 'entry' to register a new arrival.
   PARAMEDIC: [
-    'dashboard', 'ems', 'entry', 'patients',
+    'dashboard', 'ems', 'entry',
     'notifications', 'profile',
     'handover',
   ],

@@ -170,4 +170,47 @@ class VisitServiceTest {
         assertThat(number).endsWith("-00002");
         verify(visitSequenceCounterRepository, org.mockito.Mockito.times(2)).claimNext(eq("KFH"), any());
     }
+
+    // ── Issue 1 security: paramedics must NOT see the hospital-wide active roster ──
+
+    private org.springframework.security.core.Authentication authFor(
+            com.smartTriage.smartTriage_server.common.enums.Role role) {
+        com.smartTriage.smartTriage_server.module.user.entity.User u =
+                new com.smartTriage.smartTriage_server.module.user.entity.User();
+        u.setId(UUID.randomUUID());
+        u.setRole(role);
+        return new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(u, null);
+    }
+
+    @Test
+    void getActiveVisitsForCaller_paramedic_getsEmpty_neverTheFullRoster() {
+        var pageable = org.springframework.data.domain.PageRequest.of(0, 20);
+        // No canSeeAllZones / triage-nurse / shift (all mocks default to false/empty), so a
+        // paramedic falls through to the zone branch → empty. The crux: they must NEVER reach
+        // the hospital-wide list query. This is the PHI-leak fix.
+        var page = service.getActiveVisitsForCaller(
+                UUID.randomUUID(),
+                authFor(com.smartTriage.smartTriage_server.common.enums.Role.PARAMEDIC),
+                pageable);
+
+        assertThat(page.getTotalElements()).isZero();
+        verify(visitRepository, never()).findActiveVisits(any(), any());
+    }
+
+    @Test
+    void getActiveVisitsForCaller_registrar_stillGetsTheFullRoster() {
+        UUID hosp = UUID.randomUUID();
+        var pageable = org.springframework.data.domain.PageRequest.of(0, 20);
+        when(visitRepository.findActiveVisits(eq(hosp), any()))
+                .thenReturn(org.springframework.data.domain.Page.empty(pageable));
+
+        // Control: an operational role that SHOULD see the roster still takes the full-list path,
+        // proving the paramedic exclusion didn't over-lock the non-zone-bound bucket.
+        service.getActiveVisitsForCaller(
+                hosp,
+                authFor(com.smartTriage.smartTriage_server.common.enums.Role.REGISTRAR),
+                pageable);
+
+        verify(visitRepository).findActiveVisits(eq(hosp), any());
+    }
 }

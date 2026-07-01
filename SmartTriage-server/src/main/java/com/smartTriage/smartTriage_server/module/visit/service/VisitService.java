@@ -298,18 +298,23 @@ public class VisitService {
         //    desk: needs the active queue to answer "where is patient
         //    X / has the family arrived"), LAB_TECHNICIAN (needs to
         //    look up the patient associated with a specimen),
-        //    PARAMEDIC (arrives with a patient and may hand off
-        //    repeatedly), READ_ONLY (governance audit). None of
-        //    these roles take a zone shift, so they were previously
-        //    falling through the zone-resolution branch and getting
-        //    an empty page — that was the "Registrar registered a
-        //    patient but couldn't see them in the list" bug.
+        //    READ_ONLY (governance audit). None of these roles take a
+        //    zone shift, so they were previously falling through the
+        //    zone-resolution branch and getting an empty page — that
+        //    was the "Registrar registered a patient but couldn't see
+        //    them in the list" bug.
+        //
+        //    PARAMEDIC is deliberately EXCLUDED: a paramedic's patients
+        //    are the ones THEY transported (their own EMS runs, served by
+        //    getMyRuns), NOT the hospital-wide active roster. Letting them
+        //    read every active patient here was a PHI leak. Removed, they
+        //    fall through to the zone branch below and — having no shift —
+        //    get an empty page, which is correct.
         //
         //    They still must belong to this hospital — the controller
         //    enforces that with @PreAuthorize canAccessHospital.
         if (role == com.smartTriage.smartTriage_server.common.enums.Role.REGISTRAR
                 || role == com.smartTriage.smartTriage_server.common.enums.Role.LAB_TECHNICIAN
-                || role == com.smartTriage.smartTriage_server.common.enums.Role.PARAMEDIC
                 || role == com.smartTriage.smartTriage_server.common.enums.Role.READ_ONLY) {
             return getActiveVisits(hospitalId, pageable);
         }
