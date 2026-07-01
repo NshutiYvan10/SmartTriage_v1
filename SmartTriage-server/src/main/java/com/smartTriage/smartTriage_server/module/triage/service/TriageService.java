@@ -75,6 +75,9 @@ public class TriageService {
     private final VitalSignsRepository vitalSignsRepository;
     private final UserRepository userRepository;
     private final ClinicalAlertRepository clinicalAlertRepository;
+    /** To discharge an EMS re-triage obligation the moment a formal triage is filed (clears the
+     *  visit's edRetriageDueAt + refreshes the inbound board so its "ED triage due" countdown stops). */
+    private final com.smartTriage.smartTriage_server.module.ems.repository.EmsRunRepository emsRunRepository;
     private final TewsCalculator tewsCalculator;
     private final PediatricTewsCalculator pediatricTewsCalculator;
     private final RwandaTriageDecisionEngine decisionEngine;
@@ -372,6 +375,7 @@ public class TriageService {
         // acceptance; today the manual triage nurse already saw the
         // patient and chose the category, so the move is final.)
         visit.setCurrentEdZone(zoneRoutingService.routeFor(visit, category));
+        clearEmsRetriageObligation(visit);
         visitRepository.save(visit);
 
         // --- STEP 6: Generate zone-routed alerts ---
@@ -553,6 +557,30 @@ public class TriageService {
         return (int) Math.max(0, months);
     }
 
+    /**
+     * A formal ED triage DISCHARGES any pending EMS re-triage obligation. Clearing the visit's
+     * edRetriageDueAt here (rather than waiting up to 60s for EmsRetriageMonitor to null it lazily)
+     * stops the monitor firing a "re-triage overdue" alert for an already-triaged patient AND
+     * removes the "ED triage due / OVERDUE" countdown on the inbound board. For an EMS-linked visit
+     * we also push an EMS-run refresh so that board drops the countdown at once instead of showing a
+     * false OVERDUE until its next unrelated reload. Best-effort — a notification hiccup must never
+     * fail the triage that just happened.
+     */
+    private void clearEmsRetriageObligation(Visit visit) {
+        if (visit == null || visit.getEdRetriageDueAt() == null) return;
+        visit.setEdRetriageDueAt(null);
+        if (visit.getEmsRunId() == null) return;
+        try {
+            emsRunRepository.findByVisitIdAndIsActiveTrue(visit.getId()).ifPresent(run ->
+                    eventPublisher.publishEmsRunAfterCommit(
+                            run.getHospital() != null ? run.getHospital().getId() : null,
+                            com.smartTriage.smartTriage_server.module.ems.mapper.EmsRunMapper.toResponse(run)));
+        } catch (Exception e) {
+            log.warn("[triage] EMS-run refresh after triage failed for visit {}: {}",
+                    visit.getId(), e.getMessage());
+        }
+    }
+
     private boolean isEscalation(TriageCategory previous, TriageCategory current) {
         if (previous == null || current == null)
             return false;
@@ -651,6 +679,7 @@ public class TriageService {
         if (fromZone == null) {
             visit.setCurrentEdZone(targetZone);
         }
+        clearEmsRetriageObligation(visit);
         visitRepository.save(visit);
 
         // Initiate the inter-zone transfer when the zone actually

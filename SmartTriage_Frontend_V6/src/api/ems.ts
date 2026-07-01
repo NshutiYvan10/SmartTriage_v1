@@ -100,6 +100,8 @@ export interface EmsRun {
   lifecycleStage: EmsLifecycleStage;
   /** Acuity-split destination: a zone name (RESUS/ACUTE/…) or 'TRIAGE_QUEUE', or null. */
   routingTarget: string | null;
+  /** When ED formal triage is due for this arrived patient — drives the countdown; null once triaged. */
+  edRetriageDueAt: string | null;
 
   createdAt: string;
   updatedAt: string;

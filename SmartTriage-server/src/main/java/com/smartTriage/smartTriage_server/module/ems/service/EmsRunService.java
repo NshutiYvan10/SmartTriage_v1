@@ -80,6 +80,9 @@ public class EmsRunService {
     private static final Duration ED_RETRIAGE_WINDOW = Duration.ofMinutes(15);
     /** Tighter re-triage fuse for a field-RED / lights arrival — they can't wait 15 min at the door. */
     private static final Duration ED_RETRIAGE_WINDOW_RED = Duration.ofMinutes(5);
+    /** Tightest fuse: an UNCATEGORISED ambulance arrival (paramedic filed no field triage at all) —
+     *  a potential critical hiding with no colour must be triaged within 2 min, not left in the queue. */
+    private static final Duration ED_RETRIAGE_WINDOW_UNCATEGORIZED = Duration.ofMinutes(2);
 
     private final EmsRunRepository emsRunRepository;
     private final EmsInterventionRepository interventionRepository;
@@ -535,10 +538,17 @@ public class EmsRunService {
 
         Visit v = run.getVisit();
         v.setArrivalConfirmedAt(now);
-        // RED / lights arrivals get a tighter ED re-triage deadline — a
-        // field-critical patient at the door must not sit 15 min un-triaged.
         boolean redOrLights = isRedField(run.getFieldTriageCategory()) || run.isLightsActive();
-        v.setEdRetriageDueAt(now.plus(redOrLights ? ED_RETRIAGE_WINDOW_RED : ED_RETRIAGE_WINDOW));
+        TriageCategory fieldCat = parseFieldCategory(run.getFieldTriageCategory());
+        boolean uncategorized = fieldCat == null; // paramedic filed no field triage
+        // Re-triage fuse by risk: 5 min for a field-critical / lights arrival, 2 min for an
+        // UNCATEGORISED arrival (no field call — a colour-less critical must be triaged fast),
+        // 15 min for a routine field-triaged arrival. A field-critical patient at the door must
+        // not sit 15 min un-triaged.
+        v.setEdRetriageDueAt(now.plus(
+                redOrLights ? ED_RETRIAGE_WINDOW_RED
+                        : uncategorized ? ED_RETRIAGE_WINDOW_UNCATEGORIZED
+                        : ED_RETRIAGE_WINDOW));
         // B11 — advance REGISTERED → AWAITING_TRIAGE on physical arrival so the
         // triage queue/board reflects "arrived, awaiting triage" rather than the
         // pre-arrival REGISTERED state. Guarded to REGISTERED so a visit that has
@@ -558,11 +568,10 @@ public class EmsRunService {
         //     enter the ED triage-desk queue for a formal triage, exactly like a
         //     walk-in (they are stable enough to be triaged in turn).
         //
-        // In BOTH cases the visit STAYS AWAITING_TRIAGE and the ED re-triage clock
+        // In every case the visit STAYS AWAITING_TRIAGE and the ED re-triage clock
         // (EmsRetriageMonitor) still forces a formal triage, which can re-place/override
         // via TriageService.performTriage. Guarded so an already-triaged visit is never
         // re-placed from the (older) field category.
-        TriageCategory fieldCat = parseFieldCategory(run.getFieldTriageCategory());
         if (fieldCat != null && v.getCurrentTriageCategory() == null) {
             v.setCurrentTriageCategory(fieldCat);
             if (fieldCat == TriageCategory.RED || fieldCat == TriageCategory.ORANGE) {
@@ -573,6 +582,23 @@ public class EmsRunService {
             } else {
                 log.info("[ems] Run {} lower-acuity arrival {} → enters the ED triage-desk queue "
                         + "(no zone placement; visit {} AWAITING_TRIAGE)", runId, fieldCat, v.getId());
+            }
+        } else if (uncategorized && v.getCurrentTriageCategory() == null && v.getCurrentEdZone() == null) {
+            // HYBRID handling of an UNCATEGORISED ambulance arrival (paramedic filed no field
+            // call). It must NOT silently join the back of the general triage queue:
+            //   • lights / priority transport → treat as presumptively critical: place straight
+            //     into RESUS pending ED triage. NO category is fabricated (currentTriageCategory
+            //     stays null — the ED files the real one); this is placement, not a triage call.
+            //   • no lights → left un-placed, BUT the 2-min fuse above + the HIGH "needs immediate
+            //     triage" arrival alert (publishArrivalAlert, uncategorised branch) get the charge
+            //     nurse to triage it fast rather than leaving it to wait in the general queue.
+            if (run.isLightsActive()) {
+                v.setCurrentEdZone(EdZone.RESUS);
+                log.warn("[ems] Run {} UNCATEGORISED lights arrival → presumptively placed in RESUS "
+                        + "pending ED triage (visit {})", runId, v.getId());
+            } else {
+                log.warn("[ems] Run {} UNCATEGORISED arrival (no field triage) → charge-nurse "
+                        + "immediate-triage prompt on a 2-min fuse (visit {})", runId, v.getId());
             }
         }
         visitRepository.save(v);
@@ -609,18 +635,32 @@ public class EmsRunService {
     private void publishArrivalAlert(EmsRun run, boolean critical) {
         Visit v = run.getVisit();
         EdZone zone = v != null ? v.getCurrentEdZone() : null;
+        // An UNCATEGORISED arrival (no field triage) is escalated to HIGH with a "triage now"
+        // framing so the charge nurse acts fast — a colour-less patient is more concerning than
+        // a routine field-GREEN, not less. Critical (RED/lights) still wins.
+        boolean uncategorized = run.getFieldTriageCategory() == null;
+        AlertSeverity severity = critical ? AlertSeverity.CRITICAL
+                : uncategorized ? AlertSeverity.HIGH
+                : severityFor(run.getFieldTriageCategory());
+        String title = (critical ? "PATIENT AT DOOR — CRITICAL: "
+                : uncategorized ? "AMBULANCE AT DOOR — NEEDS IMMEDIATE TRIAGE: "
+                : "Ambulance arrived: ")
+                + safe(run.getMechanism(), "patient");
+        String message = uncategorized && !critical
+                ? String.format("Patient is AT THE ED DOOR with NO field triage — triage immediately. %s.",
+                        zone != null ? "Provisionally placed in " + zone : "Not yet placed")
+                : String.format(
+                        "Patient is AT THE ED DOOR. Field triage %s%s. %s — acknowledge handover.",
+                        run.getFieldTriageCategory() != null ? run.getFieldTriageCategory() : "?",
+                        run.getFieldTewsScore() != null ? " · TEWS " + run.getFieldTewsScore() : "",
+                        zone != null ? "Provisionally placed in " + zone : "Awaiting triage");
         try {
             ClinicalAlert alert = ClinicalAlert.builder()
                     .visit(v)
                     .alertType(AlertType.EMS_ARRIVED)
-                    .severity(critical ? AlertSeverity.CRITICAL : severityFor(run.getFieldTriageCategory()))
-                    .title((critical ? "PATIENT AT DOOR — CRITICAL: " : "Ambulance arrived: ")
-                            + safe(run.getMechanism(), "patient"))
-                    .message(String.format(
-                            "Patient is AT THE ED DOOR. Field triage %s%s. %s — acknowledge handover.",
-                            run.getFieldTriageCategory() != null ? run.getFieldTriageCategory() : "?",
-                            run.getFieldTewsScore() != null ? " · TEWS " + run.getFieldTewsScore() : "",
-                            zone != null ? "Provisionally placed in " + zone : "Awaiting triage"))
+                    .severity(severity)
+                    .title(title)
+                    .message(message)
                     .targetZone(zone)
                     .escalationTier(1)
                     .autoGenerated(true)

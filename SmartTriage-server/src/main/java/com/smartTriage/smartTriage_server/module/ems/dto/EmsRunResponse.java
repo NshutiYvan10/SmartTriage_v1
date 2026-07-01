@@ -81,6 +81,10 @@ public class EmsRunResponse {
     private Instant arrivalAckedAt;
     private String arrivalAckedByName;
 
+    /** When the ED formal-triage becomes due for this arrived patient (visit.edRetriageDueAt) —
+     *  drives the "ED triage due in M:SS / OVERDUE" countdown on the case card. Null once triaged. */
+    private Instant edRetriageDueAt;
+
     /**
      * Explicit case-lifecycle stage the dashboard renders as a stepper — the SINGLE
      * source of truth for "where is this ambulance case". Derived server-side from

@@ -320,6 +320,15 @@ function CaseCard({
         })}
       </div>
 
+      {/* ED-triage countdown — proactive: the nurse sees the clock, not just an after-the-fact
+          alert. Shows only while the patient is arrived + still awaiting ED triage
+          (edRetriageDueAt is cleared by the re-triage monitor once a triage is filed). */}
+      {run.status === 'ARRIVED' && run.edRetriageDueAt && (
+        <div className="mt-2">
+          <RetriageCountdown dueAt={run.edRetriageDueAt} />
+        </div>
+      )}
+
       {/* Vitals + context */}
       <div className="text-[11px] text-white/85 mt-2.5 flex flex-wrap gap-x-3 gap-y-0.5">
         {run.incidentLocation && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {run.incidentLocation}</span>}
@@ -357,6 +366,28 @@ function CaseCard({
         </div>
       )}
     </div>
+  );
+}
+
+/** Live ED-triage countdown: "ED triage due in M:SS" → "ED TRIAGE OVERDUE M:SS" (pulsing red). */
+function RetriageCountdown({ dueAt }: { dueAt: string }) {
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const due = new Date(dueAt).getTime();
+  if (Number.isNaN(due)) return null;
+  const diffMs = due - now;
+  const overdue = diffMs <= 0;
+  const secs = Math.floor(Math.abs(diffMs) / 1000);
+  const label = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded ${
+      overdue ? 'bg-rose-600 text-white animate-pulse' : 'bg-white/20 text-white'}`}>
+      <Clock className="w-3 h-3" />
+      {overdue ? `ED TRIAGE OVERDUE ${label}` : `ED triage due in ${label}`}
+    </span>
   );
 }
 

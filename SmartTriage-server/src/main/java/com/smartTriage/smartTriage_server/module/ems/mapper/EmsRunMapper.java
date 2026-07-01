@@ -72,6 +72,7 @@ public final class EmsRunMapper {
                 .preArrivalAckedByName(r.getPreArrivalAckedByName())
                 .arrivalAckedAt(r.getArrivalAckedAt())
                 .arrivalAckedByName(r.getArrivalAckedByName())
+                .edRetriageDueAt(visit != null ? visit.getEdRetriageDueAt() : null)
                 .lifecycleStage(lifecycleStage(r))
                 .routingTarget(routingTarget(r, visit))
                 .createdAt(r.getCreatedAt())

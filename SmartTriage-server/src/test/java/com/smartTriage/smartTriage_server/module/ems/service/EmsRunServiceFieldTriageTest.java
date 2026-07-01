@@ -417,6 +417,51 @@ class EmsRunServiceFieldTriageTest {
     }
 
     @Test
+    void confirmArrival_uncategorizedWithLights_presumptivelyPlacedInResus() {
+        com.smartTriage.smartTriage_server.module.visit.entity.Visit visit =
+                new com.smartTriage.smartTriage_server.module.visit.entity.Visit();
+        visit.setStatus(com.smartTriage.smartTriage_server.common.enums.VisitStatus.REGISTERED);
+        run.setVisit(visit);
+        run.setStatus(EmsRunStatus.EN_ROUTE);
+        run.setFieldTriageCategory(null);   // paramedic filed NO field triage
+        run.setLightsActive(true);          // …but lights were on
+
+        service.confirmArrival(RUN_ID);
+
+        // Hybrid policy: uncategorised + lights → presumptively critical → straight to RESUS,
+        // WITHOUT fabricating a triage category (the ED files the real one).
+        assertEquals(com.smartTriage.smartTriage_server.common.enums.EdZone.RESUS,
+                visit.getCurrentEdZone());
+        assertNull(visit.getCurrentTriageCategory());
+    }
+
+    @Test
+    void confirmArrival_uncategorizedNoLights_notPlaced_butArrivalAlertIsHigh() {
+        com.smartTriage.smartTriage_server.module.visit.entity.Visit visit =
+                new com.smartTriage.smartTriage_server.module.visit.entity.Visit();
+        visit.setStatus(com.smartTriage.smartTriage_server.common.enums.VisitStatus.REGISTERED);
+        run.setVisit(visit);
+        run.setStatus(EmsRunStatus.EN_ROUTE);
+        run.setFieldTriageCategory(null);
+        run.setLightsActive(false);
+
+        service.confirmArrival(RUN_ID);
+
+        // No zone placement (it will enter the triage-desk flow), but it must NOT look routine:
+        // the arrival alert is escalated to HIGH with a "needs immediate triage" framing.
+        assertNull(visit.getCurrentEdZone());
+        assertNull(visit.getCurrentTriageCategory());
+        org.mockito.ArgumentCaptor<com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert> cap =
+                org.mockito.ArgumentCaptor.forClass(
+                        com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert.class);
+        org.mockito.Mockito.verify(clinicalAlertRepository).save(cap.capture());
+        assertEquals(com.smartTriage.smartTriage_server.common.enums.AlertType.EMS_ARRIVED,
+                cap.getValue().getAlertType());
+        assertEquals(com.smartTriage.smartTriage_server.common.enums.AlertSeverity.HIGH,
+                cap.getValue().getSeverity());
+    }
+
+    @Test
     void acknowledgeArrival_stampsReceipt_advancesToReceived_andAutoAcksAlerts() {
         com.smartTriage.smartTriage_server.module.visit.entity.Visit visit =
                 new com.smartTriage.smartTriage_server.module.visit.entity.Visit();

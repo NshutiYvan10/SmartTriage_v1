@@ -249,6 +249,12 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
         java.util.Optional<ClinicalAlert> findFirstByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(
                 UUID visitId, AlertType alertType);
 
+        /** The most-recent ACTIVE alert of a type for a visit, REGARDLESS of acknowledgement —
+         *  used by the EMS re-triage escalation ratchet so that acknowledging (without triaging)
+         *  a HIGH nudge cannot masquerade as "no alert exists" and defeat the CRITICAL escalation. */
+        java.util.Optional<ClinicalAlert> findFirstByVisitIdAndAlertTypeAndIsActiveTrueOrderByCreatedAtDesc(
+                UUID visitId, AlertType alertType);
+
         /** Open (unacknowledged, active) alerts of any of the given types for a visit —
          *  used to acknowledge the lab CRITICAL_LAB_RESULT / CRITICAL_VALUE_UNACKNOWLEDGED
          *  alerts when a doctor read-back-acknowledges the critical value, so the

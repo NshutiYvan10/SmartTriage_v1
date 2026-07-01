@@ -129,6 +129,15 @@ export const useAlertStore = create<AlertState>((set, get) => ({
         // message reach the UI and re-trigger the CriticalAlertNotifier (which keys on
         // id+escalationTier). Acknowledgement state is PRESERVED — a re-page never un-acks.
         const existing = state.alerts[idx];
+        const incomingAcked = (alertData as { acknowledged?: boolean }).acknowledged === true;
+        // A genuine RE-ESCALATION (a HIGHER escalation tier than we hold) demands attention
+        // again: un-acknowledge locally so the CriticalAlertNotifier re-alarms and the row
+        // re-surfaces — this matches the server, which un-acks on escalation (a RED/uncategorised
+        // patient still un-triaged past the window must not stay silenced by an earlier ack).
+        const tierBumped =
+          alertData.escalationTier != null &&
+          existing.escalationTier != null &&
+          alertData.escalationTier > existing.escalationTier;
         const merged: AIAlert = {
           ...existing,
           message: alertData.message ?? existing.message,
@@ -137,17 +146,11 @@ export const useAlertStore = create<AlertState>((set, get) => ({
           escalationTier: alertData.escalationTier ?? existing.escalationTier,
           targetZone: alertData.targetZone ?? existing.targetZone,
           targetDoctorName: alertData.targetDoctorName ?? existing.targetDoctorName,
-          // Honor an incoming ACK monotonically: a re-broadcast that carries
-          // acknowledged=true (e.g. an EMS alert auto-acknowledged server-side when the
-          // patient arrives or care is handed over) clears the row from the Alert Center
-          // live, so the same arrival is never acknowledged twice. Never UN-acks (a
-          // re-page keeps it acked) — matches the "re-page never un-acks" rule.
-          acknowledged: (alertData as { acknowledged?: boolean }).acknowledged === true
-            ? true
-            : existing.acknowledged,
-          acknowledgedAt: (alertData as { acknowledged?: boolean }).acknowledged === true
-            ? (existing.acknowledgedAt ?? new Date())
-            : existing.acknowledgedAt,
+          // Honor an incoming ACK monotonically (auto-ack server-side clears the row live so the
+          // same arrival is never acknowledged twice) — EXCEPT a tier bump, which forces un-ack.
+          acknowledged: tierBumped ? false : (incomingAcked ? true : existing.acknowledged),
+          acknowledgedAt: tierBumped ? undefined
+            : (incomingAcked ? (existing.acknowledgedAt ?? new Date()) : existing.acknowledgedAt),
         };
         const next = state.alerts.slice();
         next[idx] = merged;
