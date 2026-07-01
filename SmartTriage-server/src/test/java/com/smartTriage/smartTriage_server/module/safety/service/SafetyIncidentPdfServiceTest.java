@@ -46,7 +46,7 @@ class SafetyIncidentPdfServiceTest {
                 .reportedAt(Instant.now())
                 .patientHarmed(false)
                 .build();
-        assertIsPdf(service.render(i));
+        assertIsPdf(service.render(i, "Dr Test Exporter"));
     }
 
     @Test
@@ -74,6 +74,6 @@ class SafetyIncidentPdfServiceTest {
                 .closedAt(Instant.now())
                 .lessonsLearned("Always raise side rails during transfer.")
                 .build();
-        assertIsPdf(service.render(i));
+        assertIsPdf(service.render(i, "Dr Test Exporter"));
     }
 }

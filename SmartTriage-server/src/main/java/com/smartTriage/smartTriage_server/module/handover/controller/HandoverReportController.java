@@ -141,8 +141,16 @@ public class HandoverReportController {
      */
     @GetMapping("/{id}/pdf")
     @PreAuthorize("@clinicalAuthz.canReadHandoverReport(authentication, #id)")
-    public ResponseEntity<byte[]> downloadPdf(@PathVariable UUID id) {
-        HandoverPdfService.RenderedPdf pdf = handoverPdfService.renderDocument(id);
+    public ResponseEntity<byte[]> downloadPdf(
+            @PathVariable UUID id,
+            org.springframework.security.core.Authentication authentication) {
+        String exportedBy = "SmartTriage user";
+        if (authentication != null
+                && authentication.getPrincipal() instanceof com.smartTriage.smartTriage_server.module.user.entity.User u) {
+            exportedBy = (u.getFirstName() + " " + u.getLastName()).trim();
+            if (exportedBy.isBlank()) exportedBy = u.getEmail();
+        }
+        HandoverPdfService.RenderedPdf pdf = handoverPdfService.renderDocument(id, exportedBy);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + pdf.filename() + "\"")
                 .contentType(MediaType.APPLICATION_PDF)

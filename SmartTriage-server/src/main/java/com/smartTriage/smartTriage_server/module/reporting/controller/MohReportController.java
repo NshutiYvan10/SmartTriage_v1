@@ -18,6 +18,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -156,8 +157,14 @@ public class MohReportController {
      */
     @GetMapping("/{id}/pdf")
     @PreAuthorize("@clinicalAuthz.canViewMohReport(authentication, #id)")
-    public ResponseEntity<byte[]> downloadReportPdf(@PathVariable UUID id) {
-        byte[] pdf = mohReportPdfService.renderById(id);
+    public ResponseEntity<byte[]> downloadReportPdf(@PathVariable UUID id, Authentication authentication) {
+        String exportedBy = "SmartTriage user";
+        if (authentication != null && authentication.getPrincipal()
+                instanceof com.smartTriage.smartTriage_server.module.user.entity.User u) {
+            exportedBy = (u.getFirstName() + " " + u.getLastName()).trim();
+            if (exportedBy.isBlank()) exportedBy = u.getEmail();
+        }
+        byte[] pdf = mohReportPdfService.renderById(id, exportedBy);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"moh-report-" + id + ".pdf\"")

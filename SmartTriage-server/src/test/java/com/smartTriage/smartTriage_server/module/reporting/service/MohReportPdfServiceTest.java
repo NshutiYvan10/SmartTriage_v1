@@ -64,7 +64,7 @@ class MohReportPdfServiceTest {
                 .topChiefComplaints("Fever, Cough, Abdominal pain")
                 .build();
 
-        assertIsPdf(service.render(r));
+        assertIsPdf(service.render(r, "Admin Test"));
     }
 
     @Test
@@ -84,7 +84,7 @@ class MohReportPdfServiceTest {
                 .mortalityCount(430)
                 .build();
 
-        assertIsPdf(service.render(r));
+        assertIsPdf(service.render(r, "Admin Test"));
     }
 
     @Test
@@ -97,6 +97,6 @@ class MohReportPdfServiceTest {
                 .status(ReportStatus.DRAFT)
                 .build();
 
-        assertIsPdf(service.render(r));
+        assertIsPdf(service.render(r, "Admin Test"));
     }
 }

@@ -943,12 +943,12 @@ public class EmsRunService {
      * run, ED staff/admin only runs at their hospital, super-admin any). Runs inside this read-only
      * transaction so the PDF service can resolve the lazy visit/patient/hospital associations.
      */
-    public EmsPcrPdfService.RenderedPdf renderPcr(UUID runId) {
+    public EmsPcrPdfService.RenderedPdf renderPcr(UUID runId, String exportedBy) {
         EmsRun run = findOrThrow(runId);
         List<EmsIntervention> ivs = interventionRepository
                 .findByEmsRunIdAndIsActiveTrueOrderByGivenAtAsc(runId);
         return new EmsPcrPdfService.RenderedPdf(
-                emsPcrPdfService.render(run, ivs), emsPcrPdfService.filename(run));
+                emsPcrPdfService.render(run, ivs, exportedBy), emsPcrPdfService.filename(run));
     }
 
     @Transactional(readOnly = true)

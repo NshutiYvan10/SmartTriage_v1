@@ -56,7 +56,7 @@ class HandoverPdfServiceTest {
         p.setFirstName("Marie");
         p.setLastName("Uwimana");
         p.setMedicalRecordNumber("KGL-ED-100");
-        assertIsPdf(service.render(report(p)));
+        assertIsPdf(service.render(report(p), "Dr Test Exporter"));
     }
 
     @Test
@@ -68,7 +68,7 @@ class HandoverPdfServiceTest {
         p.setUnidentified(true);
         p.setPlaceholderLabel("Alpha");
         p.setPlaceholderAssignedAt(Instant.now());
-        assertIsPdf(service.render(report(p)));
+        assertIsPdf(service.render(report(p), "Dr Test Exporter"));
     }
 
     @Test
@@ -103,6 +103,6 @@ class HandoverPdfServiceTest {
                 .planOfCare("Doctor of Record: Dr Habimana\nClinical Impression: ACS, await troponin.")
                 .build();
 
-        assertIsPdf(service.render(report));
+        assertIsPdf(service.render(report, "Dr Test Exporter"));
     }
 }

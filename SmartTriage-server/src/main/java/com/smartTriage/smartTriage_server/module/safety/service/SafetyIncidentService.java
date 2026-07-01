@@ -304,10 +304,11 @@ public class SafetyIncidentService {
      * Render a single incident's report PDF. Runs in this service's read-only transaction so the
      * lazy hospital association resolves while the PDF is built.
      */
-    public SafetyIncidentPdfService.RenderedPdf renderIncidentPdf(UUID incidentId) {
+    public SafetyIncidentPdfService.RenderedPdf renderIncidentPdf(UUID incidentId, String exportedBy) {
         SafetyIncident incident = findActiveIncident(incidentId);
         return new SafetyIncidentPdfService.RenderedPdf(
-                safetyIncidentPdfService.render(incident), safetyIncidentPdfService.filename(incident));
+                safetyIncidentPdfService.render(incident, exportedBy),
+                safetyIncidentPdfService.filename(incident));
     }
 
     /**

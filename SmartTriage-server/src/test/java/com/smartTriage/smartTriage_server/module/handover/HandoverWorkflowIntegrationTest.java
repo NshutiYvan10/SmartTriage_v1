@@ -89,7 +89,7 @@ class HandoverWorkflowIntegrationTest extends AbstractIntegrationTest {
         assertTrue(summary.contains("RESUS"), "must include the current zone");
 
         // PDF renders as a valid, non-trivial document.
-        HandoverPdfService.RenderedPdf pdf = handoverPdfService.renderDocument(report.getId());
+        HandoverPdfService.RenderedPdf pdf = handoverPdfService.renderDocument(report.getId(), "Test Exporter");
         assertTrue(pdf.bytes().length > 800);
         assertEquals("%PDF", new String(pdf.bytes(), 0, 4, StandardCharsets.US_ASCII));
         assertTrue(pdf.filename().startsWith("handover-") && pdf.filename().endsWith(".pdf"));
@@ -163,7 +163,7 @@ class HandoverWorkflowIntegrationTest extends AbstractIntegrationTest {
         assertTrue(docs.contains("Dr Mukamana"), "must name the author");
 
         // The new sections also render into the PDF.
-        HandoverPdfService.RenderedPdf pdf = handoverPdfService.renderDocument(report.getId());
+        HandoverPdfService.RenderedPdf pdf = handoverPdfService.renderDocument(report.getId(), "Test Exporter");
         assertEquals("%PDF", new String(pdf.bytes(), 0, 4, StandardCharsets.US_ASCII));
         assertTrue(pdf.bytes().length > 800);
     }

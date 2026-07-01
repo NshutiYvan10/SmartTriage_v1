@@ -43,14 +43,14 @@ class LabReportPdfServiceTest {
                 order("U&E", LabPriority.ROUTINE, LabOrderStatus.PROCESSING, null, false),
                 order("Malaria RDT", LabPriority.URGENT, LabOrderStatus.RESULTED, 90, false));
         byte[] pdf = service.render("Kigali Emergency Hospital",
-                LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 23), orders);
+                LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 23), orders, "Dr Test Exporter");
         assertIsPdf(pdf);
     }
 
     @Test
     void rendersValidPdfForEmptyPeriod() {
         byte[] pdf = service.render("Kigali Emergency Hospital",
-                LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 23), List.of());
+                LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 23), List.of(), "Dr Test Exporter");
         assertIsPdf(pdf);
     }
 }

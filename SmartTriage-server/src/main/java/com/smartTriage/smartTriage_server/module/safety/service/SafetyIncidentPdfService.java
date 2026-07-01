@@ -1,32 +1,26 @@
 package com.smartTriage.smartTriage_server.module.safety.service;
 
-import com.lowagie.text.Chunk;
-import com.lowagie.text.Document;
-import com.lowagie.text.Element;
-import com.lowagie.text.Font;
-import com.lowagie.text.PageSize;
-import com.lowagie.text.Paragraph;
-import com.lowagie.text.Phrase;
-import com.lowagie.text.pdf.ColumnText;
-import com.lowagie.text.pdf.PdfContentByte;
-import com.lowagie.text.pdf.PdfPageEventHelper;
-import com.lowagie.text.pdf.PdfWriter;
+import com.smartTriage.smartTriage_server.common.report.PdfReport;
+import com.smartTriage.smartTriage_server.common.report.PdfReport.KeyVal;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import com.smartTriage.smartTriage_server.module.safety.entity.SafetyIncident;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.awt.Color;
-import java.io.ByteArrayOutputStream;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+
+import static com.smartTriage.smartTriage_server.common.report.PdfReport.kv;
 
 /**
  * Renders a {@link SafetyIncident} into a printable single-incident report PDF — the formal record
  * for the quality/governance file: classification, timeline, narrative, investigation, root cause,
- * corrective action, and closure. Mirrors {@code HandoverPdfService}; must run in an open
- * transaction (reads the lazy hospital association).
+ * corrective action, and closure. Built on the shared {@link PdfReport} house style so it reads as a
+ * branded, consistent deliverable. Must run in an open transaction (reads the lazy hospital
+ * association).
  */
 @Slf4j
 @Service
@@ -38,141 +32,147 @@ public class SafetyIncidentPdfService {
     private static final DateTimeFormatter TS =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.of("Africa/Kigali"));
 
-    private static final Color NAVY = new Color(11, 74, 110);
-    private static final Color GREY = new Color(110, 110, 110);
-    private static final Color RED = new Color(190, 30, 45);
-
-    private static final Font H_HOSPITAL = new Font(Font.HELVETICA, 18, Font.BOLD, NAVY);
-    private static final Font H_META = new Font(Font.HELVETICA, 8, Font.NORMAL, GREY);
-    private static final Font H_TITLE = new Font(Font.HELVETICA, 13, Font.BOLD, Color.BLACK);
-    private static final Font H_SECTION = new Font(Font.HELVETICA, 11, Font.BOLD, NAVY);
-    private static final Font H_BODY = new Font(Font.COURIER, 8, Font.NORMAL, Color.BLACK);
-    private static final Font H_ALERT = new Font(Font.HELVETICA, 11, Font.BOLD, RED);
-
     public String filename(SafetyIncident i) {
         String n = i.getIncidentNumber() != null ? i.getIncidentNumber() : "incident";
         return ("safety-incident-" + n + ".pdf").replaceAll("[^A-Za-z0-9._-]", "_");
     }
 
-    public byte[] render(SafetyIncident i) {
-        Document doc = new Document(PageSize.A4, 42, 42, 60, 54);
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+    /**
+     * Render the incident report. {@code exportedBy} is the display name of the caller who
+     * triggered the export — recorded in the masthead + footer for traceability.
+     */
+    public byte[] render(SafetyIncident i, String exportedBy) {
         try {
-            PdfWriter writer = PdfWriter.getInstance(doc, out);
-            writer.setPageEvent(new Footer());
-            doc.open();
-
             Hospital h = safeHospital(i);
-            doc.add(new Paragraph(h != null && h.getName() != null ? h.getName() : "Hospital", H_HOSPITAL));
-            doc.add(rule());
+            String orgName = (h != null && h.getName() != null && !h.getName().isBlank())
+                    ? h.getName() : "Hospital";
 
-            Paragraph title = new Paragraph("PATIENT SAFETY INCIDENT REPORT", H_TITLE);
-            title.setSpacingBefore(8f);
-            title.setSpacingAfter(4f);
-            doc.add(title);
-            if (Boolean.TRUE.equals(i.getPatientHarmed())) {
-                doc.add(new Paragraph("** PATIENT HARM REPORTED **", H_ALERT));
-            }
-            doc.add(new Paragraph(
-                    "No. " + nz(i.getIncidentNumber()) + "   ·   " + nz(name(i.getIncidentType()))
-                    + "   ·   Severity " + nz(name(i.getSeverity())) + "   ·   " + nz(name(i.getStatus())),
-                    H_META));
-            doc.add(rule());
+            PdfReport r = PdfReport.begin(new PdfReport.Spec(
+                    "PATIENT SAFETY INCIDENT REPORT",
+                    "Safety Incident Report",
+                    orgName,
+                    orgMeta(h),
+                    exportedBy,
+                    "patient-safety incident report"));
 
-            addSection(doc, "Classification", build(
+            // Subject line: incident number + at-a-glance classification.
+            String meta = "No. " + nz(i.getIncidentNumber())
+                    + "  ·  " + nz(name(i.getIncidentType()))
+                    + "  ·  Severity " + nz(name(i.getSeverity()))
+                    + "  ·  " + nz(name(i.getStatus()));
+            r.subjectHeadline("Incident " + nz(i.getIncidentNumber()), meta);
+
+            // Prominent safety banners (patient harm and/or critical severity).
+            String banner = severityBanner(i);
+            if (banner != null) r.alertBanner(banner);
+
+            r.sectionHeader("Classification");
+            r.keyValues(List.of(
                     kv("Type", name(i.getIncidentType())),
                     kv("Severity", name(i.getSeverity())),
                     kv("Status", name(i.getStatus())),
-                    kv("Patient harmed", i.getPatientHarmed() != null ? (i.getPatientHarmed() ? "Yes" : "No") : null),
+                    kv("Patient harmed", tri(i.getPatientHarmed())),
                     kv("Anonymous report", i.isAnonymous() ? "Yes" : null)));
 
-            addSection(doc, "When & where", build(
+            r.sectionHeader("When & where");
+            r.keyValues(List.of(
                     kv("Occurred", ts(i.getIncidentDateTime())),
                     kv("Location", i.getLocationInHospital()),
                     kv("Reported", ts(i.getReportedAt())),
                     kv("Reported by", i.getReportedByName()),
                     kv("Reporter role", i.getReportedByRole())));
 
-            addSection(doc, "Description", i.getDescription());
-            addSection(doc, "Contributing factors", i.getContributingFactors());
-            addSection(doc, "Immediate actions", i.getImmediateActions());
-            addSection(doc, "Involved staff", i.getInvolvedStaffNames());
+            narrativeSection(r, "Description", i.getDescription());
+            narrativeSection(r, "Contributing factors", i.getContributingFactors());
+            narrativeSection(r, "Immediate actions", i.getImmediateActions());
+            narrativeSection(r, "Involved staff", i.getInvolvedStaffNames());
 
-            addSection(doc, "Investigation", build(
+            r.sectionHeader("Investigation");
+            r.keyValues(List.of(
                     kv("Investigator", i.getInvestigatorName()),
                     kv("Started", ts(i.getInvestigationStartedAt())),
                     kv("Completed", ts(i.getInvestigationCompletedAt())),
                     kv("Root cause category", i.getRootCauseCategory())));
-            addSection(doc, "Root cause analysis", i.getRootCauseAnalysis());
+            narrativeSection(r, "Root cause analysis", i.getRootCauseAnalysis());
 
-            addSection(doc, "Corrective action", build(
+            r.sectionHeader("Corrective action");
+            r.keyValues(List.of(
                     kv("Action", i.getCorrectiveAction()),
                     kv("Owner", i.getCorrectiveActionOwner()),
                     kv("Deadline", ts(i.getCorrectiveActionDeadline())),
                     kv("Completed", ts(i.getCorrectiveActionCompletedAt()))));
-            addSection(doc, "Preventive measures", i.getPreventiveMeasures());
+            narrativeSection(r, "Preventive measures", i.getPreventiveMeasures());
 
-            addSection(doc, "Closure", build(
+            r.sectionHeader("Closure");
+            r.keyValues(List.of(
                     kv("Closed", ts(i.getClosedAt())),
                     kv("Closed by", i.getClosedByName())));
-            addSection(doc, "Lessons learned", i.getLessonsLearned());
-            addSection(doc, "Notes", i.getNotes());
+            narrativeSection(r, "Lessons learned", i.getLessonsLearned());
+            narrativeSection(r, "Notes", i.getNotes());
 
-            doc.close();
+            return r.finish();
         } catch (Exception e) {
             log.error("Failed to render safety-incident PDF for {}: {}", i.getId(), e.getMessage(), e);
             throw new IllegalStateException("Could not generate safety-incident PDF", e);
         }
-        return out.toByteArray();
     }
 
     // ── helpers ──
-    private void addSection(Document doc, String label, String content) throws Exception {
+
+    /** A section header + narrative panel; renders nothing when the content is blank. */
+    private static void narrativeSection(PdfReport r, String label, String content) {
         if (content == null || content.isBlank()) return;
-        Paragraph heading = new Paragraph(label, H_SECTION);
-        heading.setSpacingBefore(11f);
-        heading.setSpacingAfter(3f);
-        heading.setKeepTogether(true);
-        doc.add(heading);
-        for (String line : content.split("\n", -1)) {
-            Paragraph p = new Paragraph(line.isEmpty() ? Chunk.NEWLINE.getContent() : line, H_BODY);
-            p.setLeading(10f);
-            doc.add(p);
-        }
+        r.sectionHeader(label);
+        r.narrative(content);
     }
 
-    private static String build(String... lines) {
+    /** Address / district / province / phone lines for the masthead (blank lines auto-dropped). */
+    private static List<String> orgMeta(Hospital h) {
+        List<String> lines = new ArrayList<>();
+        if (h == null) return lines;
+        String cityProvince = joinNonBlank(", ", h.getCity(), h.getProvince());
+        addIfPresent(lines, h.getAddress());
+        addIfPresent(lines, cityProvince);
+        addIfPresent(lines, h.getPhoneNumber());
+        addIfPresent(lines, h.getEmail());
+        return lines;
+    }
+
+    /** The safety banner: patient harm and/or a severe/critical severity, else null. */
+    private static String severityBanner(SafetyIncident i) {
+        String sev = name(i.getSeverity());
+        boolean harm = Boolean.TRUE.equals(i.getPatientHarmed());
+        boolean critical = sev != null
+                && (sev.contains("SEVERE") || sev.contains("DEATH") || sev.contains("CRITICAL"));
+        if (harm && critical) return "** PATIENT HARM REPORTED · SEVERITY " + sev + " **";
+        if (harm) return "** PATIENT HARM REPORTED **";
+        if (critical) return "** SEVERITY " + sev + " **";
+        return null;
+    }
+
+    private static void addIfPresent(List<String> lines, String v) {
+        if (v != null && !v.isBlank()) lines.add(v);
+    }
+
+    private static String joinNonBlank(String sep, String... parts) {
         StringBuilder sb = new StringBuilder();
-        for (String l : lines) if (l != null) sb.append(l).append('\n');
+        for (String p : parts) {
+            if (p == null || p.isBlank()) continue;
+            if (sb.length() > 0) sb.append(sep);
+            sb.append(p);
+        }
         return sb.toString();
     }
-    private static String kv(String label, String value) {
-        return (value != null && !value.isBlank()) ? label + ": " + value : null;
+
+    private static String tri(Boolean b) {
+        return b != null ? (b ? "Yes" : "No") : null;
     }
+
     private static String name(Enum<?> e) { return e != null ? e.name() : null; }
     private static String nz(String s) { return s != null ? s : "—"; }
     private static String ts(Instant i) { return i != null ? TS.format(i) : null; }
 
     private static Hospital safeHospital(SafetyIncident i) {
         try { return i.getHospital(); } catch (Exception e) { return null; }
-    }
-
-    private static Paragraph rule() {
-        Paragraph p = new Paragraph("");
-        p.setSpacingBefore(2f);
-        p.add(new Chunk(new com.lowagie.text.pdf.draw.LineSeparator(0.6f, 100f, NAVY, Element.ALIGN_CENTER, -2)));
-        p.setSpacingAfter(4f);
-        return p;
-    }
-
-    private static final class Footer extends PdfPageEventHelper {
-        private final Font f = new Font(Font.HELVETICA, 7, Font.ITALIC, GREY);
-        @Override
-        public void onEndPage(PdfWriter writer, Document doc) {
-            PdfContentByte cb = writer.getDirectContent();
-            Phrase p = new Phrase("CONFIDENTIAL — patient safety incident report · Page " + writer.getPageNumber(), f);
-            ColumnText.showTextAligned(cb, Element.ALIGN_CENTER, p,
-                    (doc.left() + doc.right()) / 2, doc.bottom() - 20, 0);
-        }
     }
 }

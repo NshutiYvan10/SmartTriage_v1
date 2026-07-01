@@ -253,7 +253,7 @@ class EmsWorkflowIntegrationTest extends AbstractIntegrationTest {
                 FieldTriageRequest.builder().hasCardiacArrest(true).build());
 
         // The owning paramedic gets a valid PCR PDF.
-        EmsPcrPdfService.RenderedPdf pdf = emsRunService.renderPcr(run.getId());
+        EmsPcrPdfService.RenderedPdf pdf = emsRunService.renderPcr(run.getId(), "Owner Paramedic");
         assertTrue(pdf.bytes().length > 800, "PCR PDF should be non-trivial");
         assertEquals("%PDF", new String(pdf.bytes(), 0, 4, StandardCharsets.US_ASCII), "PDF magic bytes");
         assertTrue(pdf.filename().startsWith("pcr-"), "filename is the PCR convention");
@@ -262,7 +262,7 @@ class EmsWorkflowIntegrationTest extends AbstractIntegrationTest {
         User otherMedic = seedUser("medic2-" + UUID.randomUUID().toString().substring(0, 8),
                 Role.PARAMEDIC, Designation.PARAMEDIC, hospital);
         actAs(otherMedic);
-        assertThrows(AccessDeniedException.class, () -> emsRunService.renderPcr(run.getId()));
+        assertThrows(AccessDeniedException.class, () -> emsRunService.renderPcr(run.getId(), "Other Paramedic"));
     }
 
     @Test

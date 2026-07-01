@@ -187,8 +187,16 @@ public class SafetyIncidentController {
     /** Printable single-incident report (PDF) — the formal record for the governance file. */
     @GetMapping("/{id}/pdf")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<byte[]> downloadIncidentPdf(@PathVariable UUID id) {
-        var pdf = safetyIncidentService.renderIncidentPdf(id);
+    public ResponseEntity<byte[]> downloadIncidentPdf(
+            @PathVariable UUID id,
+            org.springframework.security.core.Authentication authentication) {
+        String exportedBy = "SmartTriage user";
+        if (authentication != null && authentication.getPrincipal()
+                instanceof com.smartTriage.smartTriage_server.module.user.entity.User u) {
+            exportedBy = (u.getFirstName() + " " + u.getLastName()).trim();
+            if (exportedBy.isBlank()) exportedBy = u.getEmail();
+        }
+        var pdf = safetyIncidentService.renderIncidentPdf(id, exportedBy);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"" + pdf.filename() + "\"")

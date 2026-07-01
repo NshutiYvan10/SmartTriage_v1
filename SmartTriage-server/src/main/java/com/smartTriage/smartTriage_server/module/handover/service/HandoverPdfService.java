@@ -1,17 +1,7 @@
 package com.smartTriage.smartTriage_server.module.handover.service;
 
-import com.lowagie.text.Chunk;
-import com.lowagie.text.Document;
-import com.lowagie.text.Element;
-import com.lowagie.text.Font;
-import com.lowagie.text.PageSize;
-import com.lowagie.text.Paragraph;
-import com.lowagie.text.Phrase;
-import com.lowagie.text.pdf.ColumnText;
-import com.lowagie.text.pdf.PdfContentByte;
-import com.lowagie.text.pdf.PdfPageEventHelper;
-import com.lowagie.text.pdf.PdfWriter;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
+import com.smartTriage.smartTriage_server.common.report.PdfReport;
 import com.smartTriage.smartTriage_server.module.handover.entity.HandoverReport;
 import com.smartTriage.smartTriage_server.module.handover.repository.HandoverReportRepository;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
@@ -22,8 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.awt.Color;
-import java.io.ByteArrayOutputStream;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -33,9 +21,11 @@ import java.util.function.Supplier;
 
 /**
  * Renders a {@link HandoverReport} into a professional, printable PDF for
- * physical handover and record-keeping. Hospital letterhead, a patient banner
- * (with an unmistakable unidentified-patient flag), every on-screen section
- * verbatim (nothing summarised away), and a confidentiality + page footer.
+ * physical handover and record-keeping. Now rendered through the shared
+ * {@link PdfReport} kit so it carries the SmartTriage branded masthead, an
+ * unmistakable unidentified-patient flag, every on-screen section verbatim
+ * (nothing summarised away), and the standard confidentiality + attribution +
+ * page-number footer.
  *
  * <p>Server-side (OpenPDF) rather than client-side so the document is
  * deterministic, complete (the medication audit can run long), and archivable.
@@ -56,28 +46,17 @@ public class HandoverPdfService {
     /** A rendered PDF plus a safe download filename, both computed inside the load transaction. */
     public record RenderedPdf(byte[] bytes, String filename) {}
 
-    private static final Color NAVY = new Color(11, 74, 110);
-    private static final Color GREY = new Color(110, 110, 110);
-    private static final Color RED = new Color(190, 30, 45);
-
-    private static final Font H_HOSPITAL = new Font(Font.HELVETICA, 18, Font.BOLD, NAVY);
-    private static final Font H_META = new Font(Font.HELVETICA, 8, Font.NORMAL, GREY);
-    private static final Font H_TITLE = new Font(Font.HELVETICA, 13, Font.BOLD, Color.BLACK);
-    private static final Font H_PATIENT = new Font(Font.HELVETICA, 12, Font.BOLD, Color.BLACK);
-    private static final Font H_LABEL = new Font(Font.HELVETICA, 8, Font.BOLD, GREY);
-    private static final Font H_SECTION = new Font(Font.HELVETICA, 11, Font.BOLD, NAVY);
-    private static final Font H_BODY = new Font(Font.COURIER, 8, Font.NORMAL, Color.BLACK);
-    private static final Font H_ALERT = new Font(Font.HELVETICA, 11, Font.BOLD, RED);
-
     /**
      * Load the report and render it within ONE transaction (so the lazy
      * visit/patient/hospital associations resolve safely), returning the PDF
      * bytes plus a sanitised download filename.
+     *
+     * @param exportedBy display name of the user who triggered the export (attribution)
      */
-    public RenderedPdf renderDocument(UUID reportId) {
+    public RenderedPdf renderDocument(UUID reportId, String exportedBy) {
         HandoverReport report = handoverReportRepository.findByIdAndIsActiveTrue(reportId)
                 .orElseThrow(() -> new ResourceNotFoundException("HandoverReport", "id", reportId));
-        byte[] bytes = render(report);
+        byte[] bytes = render(report, exportedBy);
         String visitNo = report.getVisit() != null && report.getVisit().getVisitNumber() != null
                 ? report.getVisit().getVisitNumber() : "report";
         String date = report.getGeneratedAt() != null ? "-" + FILE_TS.format(report.getGeneratedAt()) : "";
@@ -85,141 +64,118 @@ public class HandoverPdfService {
         return new RenderedPdf(bytes, filename);
     }
 
-    public byte[] render(HandoverReport report) {
-        Document doc = new Document(PageSize.A4, 42, 42, 60, 54);
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+    public byte[] render(HandoverReport report, String exportedBy) {
+        Hospital h = report.getHospital();
+        String orgName = h != null && h.getName() != null ? h.getName() : "Hospital";
+
+        String type = report.getReportType() != null
+                ? report.getReportType().name().replace('_', ' ') : "HANDOVER";
+
         try {
-            PdfWriter writer = PdfWriter.getInstance(doc, out);
-            writer.setPageEvent(new Footer());
-            doc.open();
+            PdfReport r = PdfReport.begin(new PdfReport.Spec(
+                    "EMERGENCY DEPARTMENT — " + type,
+                    "Handover / SBAR",
+                    orgName,
+                    hospitalMeta(h),
+                    exportedBy,
+                    "clinical handover report"));
 
-            renderLetterhead(doc, report.getHospital());
-            renderTitleAndPatient(doc, report);
-            renderSections(doc, report);
+            renderTitleAndPatient(r, report);
+            renderSections(r, report);
 
-            doc.close();
+            return r.finish();
         } catch (Exception e) {
             log.error("Failed to render handover PDF for report {}: {}", report.getId(), e.getMessage(), e);
             throw new IllegalStateException("Could not generate handover PDF", e);
         }
-        return out.toByteArray();
     }
 
-    // ── Letterhead ──────────────────────────────────────────────────
+    // ── Hospital masthead meta ──────────────────────────────────────
 
-    private void renderLetterhead(Document doc, Hospital h) throws Exception {
-        String name = h != null && h.getName() != null ? h.getName() : "Hospital";
-        Paragraph hp = new Paragraph(name, H_HOSPITAL);
-        hp.setSpacingAfter(1f);
-        doc.add(hp);
-
-        if (h != null) {
-            List<String> bits = new ArrayList<>();
-            if (h.getHospitalCode() != null) bits.add("Code: " + h.getHospitalCode());
-            if (h.getTier() != null) bits.add(h.getTier().toString());
-            String addr = joinNonBlank(" ", h.getAddress(), h.getCity(), h.getCountry());
-            if (!addr.isBlank()) bits.add(addr);
-            if (h.getPhoneNumber() != null) bits.add("Tel: " + h.getPhoneNumber());
-            if (h.getEmail() != null) bits.add(h.getEmail());
-            if (!bits.isEmpty()) {
-                Paragraph meta = new Paragraph(String.join("  ·  ", bits), H_META);
-                meta.setSpacingAfter(6f);
-                doc.add(meta);
-            }
-        }
-        doc.add(rule());
+    private List<String> hospitalMeta(Hospital h) {
+        List<String> bits = new ArrayList<>();
+        if (h == null) return bits;
+        if (h.getHospitalCode() != null) bits.add("Code: " + h.getHospitalCode());
+        if (h.getTier() != null) bits.add(h.getTier().toString());
+        String addr = joinNonBlank(" ", h.getAddress(), h.getCity(), h.getCountry());
+        if (!addr.isBlank()) bits.add(addr);
+        if (h.getPhoneNumber() != null) bits.add("Tel: " + h.getPhoneNumber());
+        if (h.getEmail() != null) bits.add(h.getEmail());
+        return bits;
     }
 
     // ── Title + patient banner ──────────────────────────────────────
 
-    private void renderTitleAndPatient(Document doc, HandoverReport report) throws Exception {
-        String type = report.getReportType() != null
-                ? report.getReportType().name().replace('_', ' ') : "HANDOVER";
-        Paragraph title = new Paragraph("EMERGENCY DEPARTMENT — " + type, H_TITLE);
-        title.setSpacingBefore(8f);
-        title.setSpacingAfter(6f);
-        doc.add(title);
-
+    private void renderTitleAndPatient(PdfReport r, HandoverReport report) {
         Visit visit = report.getVisit();
         Patient patient = visit != null ? visit.getPatient() : null;
 
+        // Unmistakable unidentified-patient flag — preserved from the original render.
         if (patient != null && patient.isUnidentified()) {
-            doc.add(new Paragraph("** UNIDENTIFIED PATIENT — identity unresolved **", H_ALERT));
+            r.alertBanner("** UNIDENTIFIED PATIENT — identity unresolved **");
         }
+        if (!report.isAcknowledged()) {
+            r.alertBanner("** NOT YET ACKNOWLEDGED **");
+        }
+
         String patientName = patient != null
                 ? (patient.getFirstName() + " " + patient.getLastName()).trim() : "Unknown";
-        doc.add(new Paragraph(patientName, H_PATIENT));
+        if (patientName.isBlank()) patientName = "Unknown";
 
         List<String> ids = new ArrayList<>();
         if (visit != null && visit.getVisitNumber() != null) ids.add("Visit: " + visit.getVisitNumber());
         if (patient != null && patient.getMedicalRecordNumber() != null) ids.add("MRN: " + patient.getMedicalRecordNumber());
-        if (!ids.isEmpty()) doc.add(new Paragraph(String.join("   ", ids), H_META));
+        r.subjectHeadline(patientName, String.join("   ", ids));
 
-        // Generation + acknowledgement provenance.
-        String gen = "Generated " + (report.getGeneratedAt() != null ? TS.format(report.getGeneratedAt()) : "—");
+        // Generation + acknowledgement provenance as a clean key/value block.
+        String gen = (report.getGeneratedAt() != null ? TS.format(report.getGeneratedAt()) : "—");
         if (report.getGeneratedByName() != null) gen += " by " + report.getGeneratedByName();
-        doc.add(new Paragraph(gen, H_META));
 
         String ack = report.isAcknowledged()
                 ? "Acknowledged " + (report.getAcknowledgedAt() != null ? TS.format(report.getAcknowledgedAt()) : "")
                   + (report.getReceivedByName() != null ? " by " + report.getReceivedByName() : "")
-                : "** NOT YET ACKNOWLEDGED **";
-        doc.add(new Paragraph(ack, report.isAcknowledged() ? H_META : H_LABEL));
-        doc.add(rule());
+                : "Not yet acknowledged";
+
+        r.keyValues(List.of(
+                PdfReport.kv("Generated", gen),
+                PdfReport.kv("Acknowledgement", ack)));
     }
 
     // ── Sections ────────────────────────────────────────────────────
 
-    private void renderSections(Document doc, HandoverReport r) throws Exception {
+    private void renderSections(PdfReport r, HandoverReport report) {
         // Order mirrors the on-screen report exactly — nothing summarised away.
-        addSection(doc, "Patient Summary", r::getPatientSummary);
-        addSection(doc, "Pre-Hospital / EMS", r::getPrehospitalSummary);
-        addSection(doc, "Presenting Complaint", r::getPresentingComplaint);
-        addSection(doc, "Triage Summary", r::getTriageSummary);
-        addSection(doc, "Vital Signs Trend", r::getVitalSignsTrend);
-        addSection(doc, "Investigations & Results", r::getInvestigationsResults);
-        addSection(doc, "Diagnosis Summary", r::getDiagnosisSummary);
-        addSection(doc, "Acute Protocols & Critical Events", r::getAcuteProtocols);
-        addSection(doc, "Treatment Summary", r::getTreatmentSummary);
-        addSection(doc, "Medication Audit Trail", r::getMedicationAudit);
-        addSection(doc, "Procedures & Documents", r::getProceduresDocuments);
-        addSection(doc, "Active Clinical Alerts", r::getActiveClinicalAlerts);
-        addSection(doc, "Outstanding Tasks & Disposition", r::getOutstandingTasks);
-        addSection(doc, "Assessment & Plan", r::getPlanOfCare);
-        addSection(doc, "ED Timeline", r::getEdTimeline);
-        addSection(doc, "Handover Notes", r::getNotes);
+        addSection(r, "Patient Summary", report::getPatientSummary);
+        addSection(r, "Pre-Hospital / EMS", report::getPrehospitalSummary);
+        addSection(r, "Presenting Complaint", report::getPresentingComplaint);
+        addSection(r, "Triage Summary", report::getTriageSummary);
+        addSection(r, "Vital Signs Trend", report::getVitalSignsTrend);
+        addSection(r, "Investigations & Results", report::getInvestigationsResults);
+        addSection(r, "Diagnosis Summary", report::getDiagnosisSummary);
+        addSection(r, "Acute Protocols & Critical Events", report::getAcuteProtocols);
+        addSection(r, "Treatment Summary", report::getTreatmentSummary);
+        addSection(r, "Medication Audit Trail", report::getMedicationAudit);
+        addSection(r, "Procedures & Documents", report::getProceduresDocuments);
+        addSection(r, "Active Clinical Alerts", report::getActiveClinicalAlerts);
+        addSection(r, "Outstanding Tasks & Disposition", report::getOutstandingTasks);
+        addSection(r, "Assessment & Plan", report::getPlanOfCare);
+        addSection(r, "ED Timeline", report::getEdTimeline);
+        addSection(r, "Handover Notes", report::getNotes);
     }
 
-    private void addSection(Document doc, String label, Supplier<String> contentSupplier) throws Exception {
+    /**
+     * Render one SBAR section. Content is pre-formatted multi-line text (the
+     * section's indentation is significant), so it goes into the narrative
+     * panel which preserves line breaks verbatim.
+     */
+    private void addSection(PdfReport r, String label, Supplier<String> contentSupplier) {
         String content = contentSupplier.get();
         if (content == null || content.isBlank()) return;
-
-        Paragraph heading = new Paragraph(label, H_SECTION);
-        heading.setSpacingBefore(11f);
-        heading.setSpacingAfter(3f);
-        heading.setKeepTogether(true);
-        doc.add(heading);
-
-        // Monospaced, line-by-line so the section's indentation/formatting is
-        // preserved exactly as on screen.
-        for (String line : content.split("\n", -1)) {
-            Paragraph p = new Paragraph(line.isEmpty() ? Chunk.NEWLINE.getContent() : line, H_BODY);
-            p.setLeading(10f);
-            doc.add(p);
-        }
+        r.sectionHeader(label);
+        r.narrative(content);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────
-
-    private static Paragraph rule() {
-        Paragraph p = new Paragraph("");
-        p.setSpacingBefore(2f);
-        // A thin underline rule via a bottom border on a 1pt chunk.
-        Chunk line = new Chunk(new com.lowagie.text.pdf.draw.LineSeparator(0.6f, 100f, NAVY, Element.ALIGN_CENTER, -2));
-        p.add(line);
-        p.setSpacingAfter(4f);
-        return p;
-    }
 
     private static String joinNonBlank(String sep, String... parts) {
         StringBuilder sb = new StringBuilder();
@@ -230,19 +186,5 @@ public class HandoverPdfService {
             }
         }
         return sb.toString();
-    }
-
-    /** Bottom-of-page confidentiality line + page number. */
-    private static final class Footer extends PdfPageEventHelper {
-        private final Font f = new Font(Font.HELVETICA, 7, Font.ITALIC, GREY);
-
-        @Override
-        public void onEndPage(PdfWriter writer, Document doc) {
-            PdfContentByte cb = writer.getDirectContent();
-            Phrase p = new Phrase(
-                    "CONFIDENTIAL — Emergency Department clinical handover · Page " + writer.getPageNumber(), f);
-            ColumnText.showTextAligned(cb, Element.ALIGN_CENTER, p,
-                    (doc.left() + doc.right()) / 2, doc.bottom() - 20, 0);
-        }
     }
 }

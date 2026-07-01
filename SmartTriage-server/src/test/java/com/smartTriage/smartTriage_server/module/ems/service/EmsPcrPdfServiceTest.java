@@ -72,7 +72,7 @@ class EmsPcrPdfServiceTest {
                 .notes("Stable throughout transport.")
                 .build();
 
-        assertIsPdf(service.render(run, interventions()));
+        assertIsPdf(service.render(run, interventions(), "Dr Test Exporter"));
         assertTrue(service.filename(run).startsWith("pcr-"));
         assertTrue(service.filename(run).endsWith(".pdf"));
     }
@@ -91,7 +91,7 @@ class EmsPcrPdfServiceTest {
                 .fieldGcs(8).fieldRespRate(30).fieldHr(140)
                 .build();
 
-        assertIsPdf(service.render(run, List.of()));
+        assertIsPdf(service.render(run, List.of(), "SmartTriage user"));
         assertTrue(service.filename(run).startsWith("pcr-"));
     }
 }

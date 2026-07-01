@@ -84,11 +84,12 @@ public class LabOrderService {
     }
 
     /** Render the lab reporting-pack PDF for a hospital + date window. Hospital name from the record. */
-    public byte[] renderReportPdf(java.util.UUID hospitalId, java.time.LocalDate from, java.time.LocalDate to) {
+    public byte[] renderReportPdf(java.util.UUID hospitalId, java.time.LocalDate from, java.time.LocalDate to,
+                                  String exportedBy) {
         String hospitalName = hospitalRepository.findByIdAndIsActiveTrue(hospitalId)
                 .map(com.smartTriage.smartTriage_server.module.hospital.entity.Hospital::getName)
                 .orElse("Hospital");
-        return labReportPdfService.render(hospitalName, from, to, getOrdersForReport(hospitalId, from, to));
+        return labReportPdfService.render(hospitalName, from, to, getOrdersForReport(hospitalId, from, to), exportedBy);
     }
 
     // ====================================================================

@@ -258,8 +258,15 @@ public class LabOrderController {
     public ResponseEntity<byte[]> downloadReportPdf(
             @PathVariable UUID hospitalId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        byte[] pdf = labOrderService.renderReportPdf(hospitalId, from, to);
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            org.springframework.security.core.Authentication authentication) {
+        String exportedBy = "SmartTriage user";
+        if (authentication != null && authentication.getPrincipal()
+                instanceof com.smartTriage.smartTriage_server.module.user.entity.User u) {
+            exportedBy = (u.getFirstName() + " " + u.getLastName()).trim();
+            if (exportedBy.isBlank()) exportedBy = u.getEmail();
+        }
+        byte[] pdf = labOrderService.renderReportPdf(hospitalId, from, to, exportedBy);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"lab-report_" + from + "_" + to + ".pdf\"")

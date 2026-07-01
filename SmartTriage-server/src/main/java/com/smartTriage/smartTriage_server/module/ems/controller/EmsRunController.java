@@ -3,6 +3,7 @@ package com.smartTriage.smartTriage_server.module.ems.controller;
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.module.ems.dto.*;
 import com.smartTriage.smartTriage_server.module.ems.service.EmsRunService;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -10,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -164,8 +166,13 @@ public class EmsRunController {
      */
     @GetMapping("/runs/{id}/pcr")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PARAMEDIC', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'READ_ONLY')")
-    public ResponseEntity<byte[]> downloadPcr(@PathVariable UUID id) {
-        var pdf = emsRunService.renderPcr(id);
+    public ResponseEntity<byte[]> downloadPcr(@PathVariable UUID id, Authentication authentication) {
+        String exportedBy = "SmartTriage user";
+        if (authentication != null && authentication.getPrincipal() instanceof User u) {
+            exportedBy = (u.getFirstName() + " " + u.getLastName()).trim();
+            if (exportedBy.isBlank()) exportedBy = u.getEmail();
+        }
+        var pdf = emsRunService.renderPcr(id, exportedBy);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + pdf.filename() + "\"")
                 .contentType(MediaType.APPLICATION_PDF)
