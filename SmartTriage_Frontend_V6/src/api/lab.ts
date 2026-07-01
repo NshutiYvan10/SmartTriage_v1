@@ -21,6 +21,9 @@ export type CriticalContactMethod = 'PHONE' | 'IN_PERSON' | 'IN_APP';
 export interface LabOrder {
   id: string;
   visitId: string;
+  /** FK to the linked Investigation row — lets a doctor's investigation list
+   *  match its row to the full lab order (drives the test-detail drill-down). */
+  investigationId?: string | null;
   // ── Denormalised patient context (worklist card + critical banner) ──
   // Backend now denormalises these onto LabOrderResponse and
   // CriticalValueResponse so a lab card / critical result NAMES the
@@ -222,8 +225,8 @@ export const labApi = {
     return put<LabOrder>(`/lab/${orderId}/cancel?${params.toString()}`);
   },
 
-  getForVisit: (visitId: string, page = 0) =>
-    get<{ content: LabOrder[]; totalElements: number }>(`/lab/visit/${visitId}?page=${page}&size=20`),
+  getForVisit: (visitId: string, page = 0, size = 20) =>
+    get<{ content: LabOrder[]; totalElements: number }>(`/lab/visit/${visitId}?page=${page}&size=${size}`),
 
   getInbox: (hospitalId: string) =>
     get<LabOrder[]>(`/lab/hospital/${hospitalId}/inbox`),

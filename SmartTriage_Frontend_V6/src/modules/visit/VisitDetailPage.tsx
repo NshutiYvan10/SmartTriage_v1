@@ -31,6 +31,7 @@ import { useCanConfirmFieldTriage } from '@/hooks/useCanConfirmFieldTriage';
 import { useAuthStore } from '@/store/authStore';
 import { UnidentifiedBadge } from '@/modules/admission/UnidentifiedBadge';
 import { IdentityResolutionModal } from '@/modules/admission/IdentityResolutionModal';
+import { LabTestDetailModal } from '@/modules/lab/LabTestDetailModal';
 import { visitApi } from '@/api/visits';
 import type { DispositionRequest } from '@/api/visits';
 import { vitalApi } from '@/api/vitals';
@@ -1679,6 +1680,10 @@ function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, on
     notes: string;
   } | null>(null);
 
+  // Full "test run" drill-down for a lab-routed investigation (per-analyte
+  // results + reference ranges + the actions the clinician must take).
+  const [detailInv, setDetailInv] = useState<{ visitId: string; investigationId: string; testName: string } | null>(null);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -1792,10 +1797,20 @@ function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, on
                 NOT offer specimen/result actions for them; doing so would desync the
                 Investigation and LabOrder records. */}
             {inv.labRouted ? (
-              inv.status !== 'RESULTED' && inv.status !== 'CANCELLED' && (
-                <p className={`text-[10px] mt-3 inline-flex items-center gap-1 ${text.muted}`}>
-                  <FlaskConical className="w-3 h-3" /> Managed by the Lab — track progress in the Lab queue
-                </p>
+              inv.status !== 'CANCELLED' && (
+                <div className="flex items-center gap-2 mt-3 flex-wrap">
+                  <button
+                    onClick={() => setDetailInv({ visitId: inv.visitId, investigationId: inv.id, testName: inv.testName })}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20 transition-colors"
+                  >
+                    <FlaskConical className="w-3 h-3" /> View full result
+                  </button>
+                  {inv.status !== 'RESULTED' && (
+                    <span className={`text-[10px] inline-flex items-center gap-1 ${text.muted}`}>
+                      Managed by the Lab — track progress in the Lab queue
+                    </span>
+                  )}
+                </div>
               )
             ) : inv.status !== 'RESULTED' && inv.status !== 'CANCELLED' && (
               <div className="flex items-center gap-2 mt-3">
@@ -1808,6 +1823,15 @@ function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, on
           </div>
         ))}
       </div>
+
+      {detailInv && (
+        <LabTestDetailModal
+          visitId={detailInv.visitId}
+          investigationId={detailInv.investigationId}
+          testName={detailInv.testName}
+          onClose={() => setDetailInv(null)}
+        />
+      )}
     </div>
   );
 }

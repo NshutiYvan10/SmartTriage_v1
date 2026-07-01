@@ -63,7 +63,7 @@ function priorityColor(priority: LabPriority): { ring: string; chip: string; pul
   }
 }
 
-function statusChip(status: LabOrderStatus): { label: string; className: string } {
+function statusChip(status: LabOrderStatus | null | undefined): { label: string; className: string } {
   switch (status) {
     case 'ORDERED':               return { label: 'Ordered',              className: 'bg-slate-500/15 text-slate-500' };
     case 'SPECIMEN_COLLECTED':    return { label: 'Specimen collected',   className: 'bg-blue-500/15 text-blue-500' };
@@ -73,6 +73,10 @@ function statusChip(status: LabOrderStatus): { label: string; className: string 
     case 'RESULTED':              return { label: 'Resulted',             className: 'bg-emerald-500/15 text-emerald-500' };
     case 'REJECTED':              return { label: 'Rejected',             className: 'bg-rose-500/15 text-rose-500' };
     case 'CANCELLED':             return { label: 'Cancelled',            className: 'bg-slate-500/15 text-slate-400' };
+    // Defensive default — a missing/unknown status must NEVER crash the card by
+    // returning undefined (then `.className` throws). This bit the Critical tab,
+    // whose CriticalValueResponse payload carries no `status` field.
+    default:                      return { label: status ? String(status).replace(/_/g, ' ') : 'Resulted', className: 'bg-slate-500/15 text-slate-500' };
   }
 }
 
@@ -107,7 +111,8 @@ export function LabOrdersView() {
   const [historyQuery, setHistoryQuery] = useState('');
   const [historyPage, setHistoryPage] = useState(0);
   const [historyTotalPages, setHistoryTotalPages] = useState(0);
-  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyTotal, setHistoryTotal] = useState(0);          // panel header — reflects status + search
+  const [historyBadgeCount, setHistoryBadgeCount] = useState(0); // tab badge — status only, search-independent
   const HISTORY_PAGE_SIZE = 25;
 
   // Senior tech privilege — drives the Verify / Reject buttons
@@ -170,9 +175,23 @@ export function LabOrdersView() {
       setInbox(inboxRes || []);
       setInProgress(ipRes || []);
       setVerification(verifyRes || []);
-      // getCritical returns CriticalValueResponse-shaped items; we treat them as LabOrder-shape
-      // for the small set of fields the card touches (testName, orderNumber, resultValue, etc.).
-      setCritical((critRes as unknown as LabOrder[]) || []);
+      // getCritical returns CriticalValueResponse-shaped items (labOrderId, and NO
+      // status / isCritical / criticalValueAcknowledgedAt / orderedAt). Normalise them
+      // into a well-formed LabOrder shape so the shared card renders AND stays useful:
+      //  • id = labOrderId  → the React key + the acknowledge action target
+      //  • status = RESULTED, isCritical = true  → shows the CRITICAL UNACK badge and
+      //    the "Acknowledge with read-back" button (both were silently missing before)
+      //  • orderedAt ← resultedAt  → the SLA clock ages the *unacknowledged critical*
+      //    instead of computing NaN on an undefined date.
+      // Previously these items were cast raw and the card crashed on statusChip(undefined).
+      setCritical(((critRes as unknown as any[]) || []).map((c) => ({
+        ...c,
+        id: c.labOrderId ?? c.id,
+        status: 'RESULTED' as LabOrderStatus,
+        isCritical: true,
+        isAbnormal: true,
+        orderedAt: c.orderedAt ?? c.resultedAt ?? c.criticalValueNotifiedAt ?? new Date().toISOString(),
+      })) as LabOrder[]);
     } catch (err) {
       console.error('[LabOrdersView] load failed:', err);
       flash('err', 'Failed to load lab queue');
@@ -214,6 +233,29 @@ export function LabOrdersView() {
     const t = window.setTimeout(() => { void loadHistory(); }, 250);
     return () => window.clearTimeout(t);
   }, [activeTab, loadHistory]);
+
+  // Keep the History tab badge count honest even before the tab is opened.
+  // A cheap size-1 fetch reads only Page.totalElements for the current status
+  // filter — deliberately WITHOUT the free-text search `q`, so the cross-tab
+  // badge always reads the true completed-work total and never a stale, hidden
+  // search filter the tech left behind (which would misleadingly read "little
+  // history exists"). Skipped while the History tab is active (the panel header
+  // shows the filtered total there); re-runs on mount, status change, and tab
+  // switch so the badge tracks reality without a dedicated socket.
+  useEffect(() => {
+    if (!hospitalId || activeTab === 'history') return;
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      labApi.getHistory(hospitalId, {
+        status: historyStatus || undefined,
+        page: 0,
+        size: 1,
+      })
+        .then((res) => { if (!cancelled) setHistoryBadgeCount(res.totalElements || 0); })
+        .catch(() => { /* leave the badge at its last known value */ });
+    }, 300);
+    return () => { cancelled = true; window.clearTimeout(t); };
+  }, [hospitalId, historyStatus, activeTab]);
 
   // ── Live updates ─────────────────────────────────────────────────
   // Subscribe to /topic/lab/{hospitalId}. Each message is a full
@@ -291,11 +333,12 @@ export function LabOrdersView() {
     { id: 'in-progress',  label: 'In Progress',  icon: Activity,       count: inProgress.length },
     { id: 'verification', label: 'Verification', icon: ClipboardCheck, count: verification.length },
     { id: 'critical',     label: 'Critical',     icon: AlertOctagon,   count: critical.length },
-    // Workflow 2 refinement — paginated history of completed work.
-    // Count omitted (0) because the total is paginated server-side
-    // and shown on the panel header. A zero count next to a tab the
-    // tech KNOWS has data is worse than no count at all.
-    { id: 'history',      label: 'History',      icon: HistoryIcon,    count: 0 },
+    // Paginated history of completed work. The badge shows the server-side TOTAL
+    // for the current status filter (historyBadgeCount, from Page.totalElements) —
+    // search-independent and kept honest by the eager count fetch below even
+    // before the tab is opened. (It used to be hard-coded 0, which read as "no
+    // history".) The in-panel header separately shows the search-filtered total.
+    { id: 'history',      label: 'History',      icon: HistoryIcon,    count: historyBadgeCount },
   ];
 
   const list =
