@@ -19,6 +19,8 @@ import type { ThemeStyles } from '@/hooks/useTheme';
 import { BedDouble } from 'lucide-react';
 import { BedTile } from './BedTile';
 import { BedActionSheet } from './BedActionSheet';
+import { useScopedView } from '@/hooks/useScopedView';
+import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
 
 const ZONES: { key: EdZone; label: string; hint: string }[] = [
   { key: 'RESUS', label: 'Resuscitation', hint: 'Critical RED patients' },
@@ -44,19 +46,48 @@ export function BedGridView({ initialZone = 'RESUS' }: BedGridViewProps) {
   const [selectedBed, setSelectedBed] = useState<BedResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Zone-scope the board to what the caller may actually see. The backend now
+  // gates the per-zone bed endpoints with canReceiveZoneAlerts (occupancy is
+  // patient PHI), so a zone clinician selecting a zone they don't cover would
+  // get a 403. Oversight (admin / charge nurse / shift-lead → HOSPITAL_WIDE)
+  // sees every zone; an on-shift clinician sees only their covered zones
+  // (current ∪ additional); an off-shift clinician gets the restriction card.
+  const scope = useScopedView();
+  const coveredZones = useMemo<EdZone[]>(() => {
+    if (scope.mode === 'HOSPITAL_WIDE') return ZONES.map((z) => z.key);
+    const set = new Set<EdZone>();
+    if (user?.currentZone) set.add(user.currentZone);
+    (user?.additionalZones ?? []).forEach((z) => set.add(z));
+    return ZONES.map((z) => z.key).filter((k) => set.has(k));
+  }, [scope.mode, user?.currentZone, user?.additionalZones]);
+  const visibleZones = useMemo(
+    () => ZONES.filter((z) => coveredZones.includes(z.key)),
+    [coveredZones],
+  );
+
   const snap = zoneSnapshots.get(zone);
   const beds = snap?.beds ?? [];
 
   const refresh = useCallback(async () => {
-    if (!hospitalId) return;
+    // Never call a zone the caller can't cover — it would 403. The clamp
+    // effect below re-points `zone` to a covered zone, then this refires.
+    if (!hospitalId || !coveredZones.includes(zone)) return;
     setLoading(true);
     await loadZone(hospitalId, zone);
     setLoading(false);
-  }, [hospitalId, zone, loadZone]);
+  }, [hospitalId, zone, loadZone, coveredZones]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Keep the active zone within the caller's covered set (e.g. a GENERAL nurse
+  // must not sit on the default RESUS tab, which would 403).
+  useEffect(() => {
+    if (coveredZones.length && !coveredZones.includes(zone)) {
+      setZone(coveredZones[0]);
+    }
+  }, [coveredZones, zone]);
 
   // Subscribe to real-time bed updates
   useEffect(() => {
@@ -78,6 +109,18 @@ export function BedGridView({ initialZone = 'RESUS' }: BedGridViewProps) {
     setSelectedBed(null);
     refresh();
   };
+
+  // Off-shift clinician with no covered zone → show the restriction card
+  // instead of an empty board that would 403 on every zone.
+  if (!scope.isLoading && visibleZones.length === 0) {
+    return (
+      <div className="min-h-full animate-fade-in">
+        <div className="p-4 lg:p-6 max-w-7xl mx-auto">
+          <CrossZoneRestrictedPanel pageTitle="Bed Management" zone={null} reason="OFF_SHIFT" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-full animate-fade-in">
@@ -102,7 +145,7 @@ export function BedGridView({ initialZone = 'RESUS' }: BedGridViewProps) {
 
         {/* Zone tabs */}
         <div className="flex flex-wrap gap-1 rounded-2xl p-1 animate-fade-up" style={glassInner}>
-          {ZONES.map((z) => {
+          {visibleZones.map((z) => {
             const active = z.key === zone;
             return (
               <button

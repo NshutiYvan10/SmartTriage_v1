@@ -3,6 +3,14 @@ package com.smartTriage.smartTriage_server.module.bed.service;
 import com.smartTriage.smartTriage_server.common.enums.BedStatus;
 import com.smartTriage.smartTriage_server.common.enums.DeviceStatus;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
+import com.smartTriage.smartTriage_server.common.enums.Role;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
+import com.smartTriage.smartTriage_server.security.ClinicalAuthz;
+import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import java.util.HashSet;
+import java.util.Set;
 import com.smartTriage.smartTriage_server.common.enums.TriageCategory;
 import com.smartTriage.smartTriage_server.common.enums.VisitStatus;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
@@ -77,6 +85,8 @@ public class BedService {
     private final DeviceSessionRepository sessionRepository;
     private final HospitalService hospitalService;
     private final RealTimeEventPublisher eventPublisher;
+    private final ClinicalAuthz clinicalAuthz;
+    private final ShiftAssignmentService shiftAssignmentService;
 
     // ====================================================================
     // ADMIN CRUD
@@ -182,7 +192,45 @@ public class BedService {
 
     public List<BedResponse> getBedsForHospital(UUID hospitalId) {
         List<Bed> beds = bedRepository.findAllByHospital(hospitalId);
-        return enrichAll(beds);
+        return scopeToCoveredZones(hospitalId, enrichAll(beds));
+    }
+
+    /**
+     * Zone-scope a hospital-wide bed list to what the caller may see. The all-beds list carries
+     * occupant PHI (patient name / visit / acuity) for every zone, so — mirroring the shipped
+     * LabOrderService.getCriticalResults scoping — oversight (charge-nurse designation / shift-lead
+     * / admins, via canSeeAllZonesAtHospital) sees every bed, while an on-shift DOCTOR/NURSE sees
+     * only beds in the zone(s) their current shift covers. Fail-closed on no principal.
+     */
+    private List<BedResponse> scopeToCoveredZones(UUID hospitalId, List<BedResponse> all) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        User caller = (auth != null && auth.getPrincipal() instanceof User u) ? u : null;
+        if (caller == null) {
+            return List.of();
+        }
+        if (clinicalAuthz.canSeeAllZonesAtHospital(auth, hospitalId)) {
+            return all;
+        }
+        Set<EdZone> covered = currentCoveredZones(caller.getId(), hospitalId);
+        return all.stream()
+                .filter(b -> b.getZone() != null && covered.contains(b.getZone()))
+                .toList();
+    }
+
+    /** The caller's currently-covered zones (active shift's primary ∪ additional). */
+    private Set<EdZone> currentCoveredZones(UUID userId, UUID hospitalId) {
+        Set<EdZone> zones = new HashSet<>();
+        shiftAssignmentService.getCurrentShiftForUser(userId).ifPresent(sa -> {
+            if (sa.getHospitalId() == null || sa.getHospitalId().equals(hospitalId)) {
+                if (sa.getZone() != null) {
+                    zones.add(sa.getZone());
+                }
+                if (sa.getAdditionalZones() != null) {
+                    zones.addAll(sa.getAdditionalZones());
+                }
+            }
+        });
+        return zones;
     }
 
     public List<BedResponse> getBedsByZone(UUID hospitalId, EdZone zone) {

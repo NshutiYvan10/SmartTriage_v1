@@ -81,10 +81,11 @@ public class ZoneTransferController {
                 "Transfer cancelled", zoneTransferService.cancel(transferId, reason)));
     }
 
-    /** All pending transfers across the hospital — for charge nurse. */
+    /** All pending transfers across the hospital — for charge nurse / oversight. */
     @GetMapping("/hospital/{hospitalId}/pending")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
-            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId) "
+            + "and @clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<ZoneTransferResponse>>> pendingForHospital(
             @PathVariable UUID hospitalId) {
         return ResponseEntity.ok(ApiResponse.success(
@@ -94,7 +95,8 @@ public class ZoneTransferController {
     /** Pending transfers into a specific zone. */
     @GetMapping("/hospital/{hospitalId}/pending/zone/{zone}")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
-            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId) "
+            + "and @clinicalAuthz.canReceiveZoneAlerts(authentication, #hospitalId, #zone)")
     public ResponseEntity<ApiResponse<List<ZoneTransferResponse>>> pendingIntoZone(
             @PathVariable UUID hospitalId,
             @PathVariable EdZone zone) {

@@ -13,10 +13,12 @@ import {
 import { useTheme } from '@/hooks/useTheme';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
+import { useScopedView } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
 import { hypoglycemiaApi } from '@/api/hypoglycemia';
 import { subscribeToHypoglycemia } from '@/api/websocket';
 import { useWebSocketGeneration } from '@/hooks/useWebSocket';
+import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
 import { ApiError } from '@/api/client';
 import type { HypoglycemiaEvent } from '@/api/hypoglycemia';
 import { format } from 'date-fns';
@@ -58,6 +60,7 @@ export function HypoglycemiaView() {
   const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
+  const scope = useScopedView();
 
   const wsGen = useWebSocketGeneration();
   const [events, setEvents] = useState<HypoglycemiaEvent[]>([]);
@@ -74,10 +77,15 @@ export function HypoglycemiaView() {
 
   /* ── Data loading ──────────────────────────────────────── */
   const loadEvents = useCallback(async () => {
-    if (!hospitalId) return;
+    if (!hospitalId || scope.mode === 'RESTRICTED') return;
     setLoading(true);
     try {
-      const data = await hypoglycemiaApi.getUnresolved(hospitalId);
+      // ZONE_SCOPED → pass zone, backend returns only this zone's events.
+      // HOSPITAL_WIDE → omit zone, backend returns every event.
+      const data = await hypoglycemiaApi.getActive(
+        hospitalId,
+        scope.mode === 'ZONE_SCOPED' ? scope.zone ?? undefined : undefined,
+      );
       setEvents(Array.isArray(data) ? data : []);
       setError(null);
     } catch (err) {
@@ -89,16 +97,16 @@ export function HypoglycemiaView() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId]);
+  }, [hospitalId, scope.mode, scope.zone]);
 
   useEffect(() => { loadEvents(); }, [loadEvents]);
 
   /* ── Live refresh — dedicated hypoglycemia topic; re-subscribes on reconnect. ── */
   useEffect(() => {
-    if (!hospitalId) return;
+    if (!hospitalId || scope.mode === 'RESTRICTED') return;
     const unsub = subscribeToHypoglycemia(hospitalId, () => { loadEvents(); });
     return () => unsub();
-  }, [hospitalId, loadEvents, wsGen]);
+  }, [hospitalId, scope.mode, loadEvents, wsGen]);
 
   const reportError = (err: unknown, fallback: string) => {
     setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : fallback);
@@ -182,6 +190,31 @@ export function HypoglycemiaView() {
   };
 
   const unresolvedCount = events.length;
+
+  // Off-shift clinicians have no zone to scope by → show the restriction
+  // card with a clear "pick up a shift" hint. On-shift clinicians fall
+  // through and see their zone's events; admins / CN / shift-lead see the
+  // full hospital view. Don't render the restriction panel until the shift
+  // fetch resolves — useMyShift starts isLoading=true with no assignment,
+  // which would otherwise flash the "you're off shift" card for every user
+  // (incl. admins/CN) on first paint.
+  if (scope.isLoading) {
+    return (
+      <div className="min-h-full flex items-center justify-center p-10">
+        <div className="w-8 h-8 rounded-full border-2 border-slate-400/40 border-t-slate-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (scope.mode === 'RESTRICTED') {
+    return (
+      <CrossZoneRestrictedPanel
+        pageTitle="Hypoglycemia Management"
+        zone={null}
+        reason="OFF_SHIFT"
+      />
+    );
+  }
 
   return (
     <div className="min-h-full">

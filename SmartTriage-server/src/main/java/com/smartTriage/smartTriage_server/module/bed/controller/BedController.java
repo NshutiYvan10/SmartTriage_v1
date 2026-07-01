@@ -86,6 +86,11 @@ public class BedController {
         return ResponseEntity.ok(ApiResponse.success(bedService.getBed(id)));
     }
 
+    // The all-beds list carries occupant PHI (patient name / visit / acuity) across every zone, so
+    // it is scoped SERVICE-SIDE rather than oversight-locked at the gate: oversight sees all beds;
+    // a zone doctor/nurse sees only beds in the zone(s) their current shift covers. Kept at
+    // canAccessHospital so a regular clinician (e.g. the doctor workspace) still gets their filtered
+    // view instead of a blanket 403 — see BedService.getBedsForHospital.
     @GetMapping("/hospital/{hospitalId}")
     @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<BedResponse>>> getBedsForHospital(
@@ -94,7 +99,8 @@ public class BedController {
     }
 
     @GetMapping("/hospital/{hospitalId}/zone/{zone}")
-    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId) and "
+            + "@clinicalAuthz.canReceiveZoneAlerts(authentication, #hospitalId, #zone)")
     public ResponseEntity<ApiResponse<List<BedResponse>>> getBedsByZone(
             @PathVariable UUID hospitalId,
             @PathVariable EdZone zone) {
@@ -106,7 +112,8 @@ public class BedController {
      * bed-grid header ("6 of 8 occupied"). One call per zone view.
      */
     @GetMapping("/hospital/{hospitalId}/zone/{zone}/occupancy")
-    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId) and "
+            + "@clinicalAuthz.canReceiveZoneAlerts(authentication, #hospitalId, #zone)")
     public ResponseEntity<ApiResponse<ZoneOccupancyResponse>> getZoneOccupancy(
             @PathVariable UUID hospitalId,
             @PathVariable EdZone zone) {

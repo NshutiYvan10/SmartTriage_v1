@@ -79,7 +79,8 @@ public class FastTrackController {
      */
     @GetMapping("/hospital/{hospitalId}/active")
     @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId) and "
-            + "(#zone != null or @clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId))")
+            + "((#zone != null and @clinicalAuthz.canReceiveZoneAlerts(authentication, #hospitalId, #zone)) "
+            + "or (#zone == null and @clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)))")
     public ResponseEntity<ApiResponse<List<FastTrackResponse>>> getActiveFastTracks(
             @PathVariable UUID hospitalId,
             @RequestParam(required = false) com.smartTriage.smartTriage_server.common.enums.EdZone zone) {

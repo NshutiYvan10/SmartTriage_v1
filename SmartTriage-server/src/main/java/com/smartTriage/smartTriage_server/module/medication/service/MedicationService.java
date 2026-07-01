@@ -9,6 +9,8 @@ import com.smartTriage.smartTriage_server.common.enums.MedicationPriority;
 import com.smartTriage.smartTriage_server.common.enums.MedicationProductType;
 import com.smartTriage.smartTriage_server.common.enums.MedicationStatus;
 import com.smartTriage.smartTriage_server.common.enums.PrescriptionType;
+import com.smartTriage.smartTriage_server.common.enums.EdZone;
+import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
@@ -29,9 +31,11 @@ import com.smartTriage.smartTriage_server.module.medsafety.engine.MedicationSafe
 import com.smartTriage.smartTriage_server.module.medsafety.entity.DrugFormulary;
 import com.smartTriage.smartTriage_server.module.medsafety.repository.MedicationSafetyCheckRepository;
 import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
+import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.visit.service.VisitService;
+import com.smartTriage.smartTriage_server.security.ClinicalAuthz;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -42,7 +46,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -102,6 +108,19 @@ public class MedicationService {
      * typed ONE_TIME orders' dose rows in sync.
      */
     private final MedicationDoseRepository medicationDoseRepository;
+    /**
+     * Zone-scope authorization for hospital-wide worklists. Oversight
+     * (charge-nurse designation / shift function, shift lead, admins)
+     * sees every zone; a zone clinician sees only the zones their
+     * current shift covers. Mirrors the reference filter in
+     * LabOrderService.getCriticalResults.
+     */
+    private final ClinicalAuthz clinicalAuthz;
+    /**
+     * Resolves the caller's current shift so the queue can be filtered
+     * to the primary ∪ additional zones they cover.
+     */
+    private final ShiftAssignmentService shiftAssignmentService;
 
     // ====================================================================
     // PRESCRIBE
@@ -1046,12 +1065,49 @@ public class MedicationService {
      * hospital that has not yet been administered (or held / refused /
      * cancelled). Sorted STAT → URGENT → ROUTINE then oldest first
      * within each tier so the most overdue STAT bubbles to the top.
+     *
+     * Zone-scoped server-side (mirrors LabOrderService.getCriticalResults):
+     * a LAB_TECHNICIAN or oversight (charge-nurse designation / shift
+     * function, shift lead, super-admin) sees the whole hospital; a zone
+     * doctor / nurse sees only medications for patients in a zone their
+     * current shift covers, so a General nurse no longer sees an Acute
+     * patient's pending dose. Enforced here, not as a UI filter.
      */
     public List<MedicationResponse> getPendingQueueForHospital(UUID hospitalId) {
-        return medicationRepository.findPendingForHospital(hospitalId)
+        List<MedicationResponse> all = medicationRepository.findPendingForHospital(hospitalId)
                 .stream()
                 .map(MedicationMapper::toResponse)
                 .collect(Collectors.toList());
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        User caller = (auth != null && auth.getPrincipal() instanceof User u) ? u : null;
+        if (caller == null) {
+            return List.of();
+        }
+        if (caller.getRole() == Role.LAB_TECHNICIAN
+                || clinicalAuthz.canSeeAllZonesAtHospital(auth, hospitalId)) {
+            return all;
+        }
+        Set<EdZone> covered = currentCoveredZones(caller.getId(), hospitalId);
+        return all.stream()
+                .filter(m -> m.getZone() != null && covered.contains(m.getZone()))
+                .collect(Collectors.toList());
+    }
+
+    /** The caller's currently-covered zones (active shift's primary ∪ additional). */
+    private Set<EdZone> currentCoveredZones(UUID userId, UUID hospitalId) {
+        Set<EdZone> zones = new HashSet<>();
+        shiftAssignmentService.getCurrentShiftForUser(userId).ifPresent(sa -> {
+            if (sa.getHospitalId() == null || sa.getHospitalId().equals(hospitalId)) {
+                if (sa.getZone() != null) {
+                    zones.add(sa.getZone());
+                }
+                if (sa.getAdditionalZones() != null) {
+                    zones.addAll(sa.getAdditionalZones());
+                }
+            }
+        });
+        return zones;
     }
 
     // ====================================================================

@@ -307,8 +307,9 @@ public class MedicationController {
      * appears on their NEW zone's board immediately.
      */
     @GetMapping("/board/{hospitalId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
-            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId) and "
+            + "((#zone != null and @clinicalAuthz.canReceiveZoneAlerts(authentication, #hospitalId, #zone)) "
+            + "or (#zone == null and @clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)))")
     public ResponseEntity<ApiResponse<ZoneMedicationBoardResponse>> getZoneBoard(
             @PathVariable UUID hospitalId,
             @RequestParam(required = false) EdZone zone) {

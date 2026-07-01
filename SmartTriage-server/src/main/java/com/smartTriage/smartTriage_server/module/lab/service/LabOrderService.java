@@ -1099,10 +1099,11 @@ public class LabOrderService {
     }
 
     public Page<LabOrderResponse> getPendingOrders(UUID hospitalId, Pageable pageable) {
-        return labOrderRepository
+        Page<LabOrderResponse> page = labOrderRepository
                 .findPendingOrders(hospitalId, pageable)
                 .map(LabOrderMapper::toResponse)
                 .map(LabOrderService::maskPreVerificationResult);
+        return scopeToCoveredZones(hospitalId, page);
     }
 
     @Transactional(readOnly = true)
@@ -1133,6 +1134,55 @@ public class LabOrderService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Zone-scope a list of lab-order responses for the CURRENT caller, using the same
+     * uniform policy as {@link #getCriticalResults} — a LAB_TECHNICIAN (serves the whole
+     * lab) and oversight (charge nurse / shift lead / super-admin) see every order; a zone
+     * doctor / nurse sees only orders whose patient is in a zone they currently cover.
+     * Enforced server-side (not a UI filter) so a General-zone clinician cannot read an
+     * Acute patient's lab data. No authenticated principal → empty (fail closed).
+     */
+    private List<LabOrderResponse> scopeToCoveredZones(UUID hospitalId, List<LabOrderResponse> all) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        User caller = (auth != null && auth.getPrincipal() instanceof User u) ? u : null;
+        if (caller == null) {
+            return List.of();
+        }
+        if (caller.getRole() == Role.LAB_TECHNICIAN
+                || clinicalAuthz.canSeeAllZonesAtHospital(auth, hospitalId)) {
+            return all;
+        }
+        Set<EdZone> covered = currentCoveredZones(caller.getId(), hospitalId);
+        return all.stream()
+                .filter(r -> r.getCurrentZone() != null && covered.contains(r.getCurrentZone()))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Page variant of {@link #scopeToCoveredZones(UUID, List)} — filters the page CONTENT
+     * for a non-bypass zone clinician (bypass callers get the page untouched). The total
+     * element count is left as the pre-filter count, so a zone clinician may see a slightly
+     * inflated total / short page; this minor skew is the accepted trade-off for not leaking
+     * out-of-zone rows. Bypass callers (lab tech / oversight) are unaffected.
+     */
+    private Page<LabOrderResponse> scopeToCoveredZones(UUID hospitalId, Page<LabOrderResponse> page) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        User caller = (auth != null && auth.getPrincipal() instanceof User u) ? u : null;
+        if (caller == null) {
+            return Page.empty(page.getPageable());
+        }
+        if (caller.getRole() == Role.LAB_TECHNICIAN
+                || clinicalAuthz.canSeeAllZonesAtHospital(auth, hospitalId)) {
+            return page;
+        }
+        Set<EdZone> covered = currentCoveredZones(caller.getId(), hospitalId);
+        List<LabOrderResponse> filtered = page.getContent().stream()
+                .filter(r -> r.getCurrentZone() != null && covered.contains(r.getCurrentZone()))
+                .collect(Collectors.toList());
+        return new org.springframework.data.domain.PageImpl<>(
+                filtered, page.getPageable(), page.getTotalElements());
+    }
+
     /** The caller's currently-covered zones (active shift's primary ∪ additional). */
     private Set<EdZone> currentCoveredZones(UUID userId, UUID hospitalId) {
         Set<EdZone> zones = new HashSet<>();
@@ -1150,34 +1200,34 @@ public class LabOrderService {
     }
 
     public List<LabOrderResponse> getStatOrders(UUID hospitalId) {
-        return labOrderRepository.findActiveStatOrders(hospitalId)
+        return scopeToCoveredZones(hospitalId, labOrderRepository.findActiveStatOrders(hospitalId)
                 .stream()
                 .map(LabOrderMapper::toResponse)
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()));
     }
 
     /** Lab-tech inbox — orders waiting on lab action. */
     public List<LabOrderResponse> getInboxForLab(UUID hospitalId) {
-        return labOrderRepository.findInboxForLab(hospitalId)
+        return scopeToCoveredZones(hospitalId, labOrderRepository.findInboxForLab(hospitalId)
                 .stream()
                 .map(LabOrderMapper::toResponse)
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()));
     }
 
     /** Orders the tech is actively processing. */
     public List<LabOrderResponse> getInProgressForLab(UUID hospitalId) {
-        return labOrderRepository.findInProgressForLab(hospitalId)
+        return scopeToCoveredZones(hospitalId, labOrderRepository.findInProgressForLab(hospitalId)
                 .stream()
                 .map(LabOrderMapper::toResponse)
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()));
     }
 
     /** Senior-tech verification queue (Phase 2). */
     public List<LabOrderResponse> getAwaitingVerification(UUID hospitalId) {
-        return labOrderRepository.findAwaitingVerification(hospitalId)
+        return scopeToCoveredZones(hospitalId, labOrderRepository.findAwaitingVerification(hospitalId)
                 .stream()
                 .map(LabOrderMapper::toResponse)
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()));
     }
 
     /**
@@ -1192,9 +1242,10 @@ public class LabOrderService {
             UUID hospitalId, LabOrderStatus status, String query, Pageable pageable) {
         String normalised = query != null ? query.trim() : "";
         if (normalised.isEmpty()) normalised = null;
-        return labOrderRepository
+        Page<LabOrderResponse> page = labOrderRepository
                 .searchHistory(hospitalId, status, normalised, pageable)
                 .map(LabOrderMapper::toResponse);
+        return scopeToCoveredZones(hospitalId, page);
     }
 
     // ====================================================================

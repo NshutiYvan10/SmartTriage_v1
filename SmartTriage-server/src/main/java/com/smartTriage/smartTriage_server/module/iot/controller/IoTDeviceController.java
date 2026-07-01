@@ -231,21 +231,26 @@ public class IoTDeviceController {
             Authentication authentication) {
         // B8 — zone-scope the Constant Monitoring sessions list server-side.
         // Cross-zone authorities (admin / charge nurse / shift-lead) see every
-        // monitored patient; a zone-scoped clinician sees only their current
-        // zone's, and a caller with no current zone sees none. Filtering here
-        // means other zones' monitored-patient / trend data never reaches the
-        // client. NB: the displayed patient list is already zone-scoped via
-        // the visit store (/visits/.../active/mine); this closes the parallel
-        // leak on the sessions/trend endpoint.
+        // monitored patient; a zone-scoped clinician sees every zone their
+        // current shift COVERS (primary ∪ additionalZones), and a caller with
+        // no covered zone sees none. Filtering here means other zones'
+        // monitored-patient / trend data never reaches the client. NB: the
+        // displayed patient list is already zone-scoped via the visit store
+        // (/visits/.../active/mine); this closes the parallel leak on the
+        // sessions/trend endpoint.
         if (clinicalAuthz.canSeeAllZonesAtHospital(authentication, hospitalId)) {
             return ResponseEntity.ok(ApiResponse.success(deviceService.getActiveSessions(hospitalId)));
         }
-        EdZone callerZone = clinicalAuthz.callerCurrentZone(authentication);
-        if (callerZone == null) {
+        Object principal = authentication != null ? authentication.getPrincipal() : null;
+        if (!(principal instanceof com.smartTriage.smartTriage_server.module.user.entity.User caller)) {
+            return ResponseEntity.ok(ApiResponse.success(List.<DeviceSessionResponse>of()));
+        }
+        java.util.Set<EdZone> coveredZones = deviceService.currentCoveredZones(caller.getId(), hospitalId);
+        if (coveredZones.isEmpty()) {
             return ResponseEntity.ok(ApiResponse.success(List.<DeviceSessionResponse>of()));
         }
         return ResponseEntity.ok(ApiResponse.success(
-                deviceService.getActiveSessions(hospitalId, callerZone)));
+                deviceService.getActiveSessions(hospitalId, coveredZones)));
     }
 
     @GetMapping("/monitoring/session/{sessionId}")

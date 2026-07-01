@@ -61,6 +61,15 @@ export const hypoglycemiaApi = {
   resolve: (id: string) => put<HypoglycemiaEvent>(`/hypoglycemia/${id}/resolve`),
   getForVisit: (visitId: string) => get<HypoglycemiaEvent[]>(`/hypoglycemia/visit/${visitId}`),
   // Backend path is /active (was wrongly /unresolved → the dashboard 404'd, always empty).
+  // Optional zone → an on-shift clinician passes their covered zone and the
+  // backend returns only that zone's events; oversight omits it for the full
+  // hospital view. Zone scope is enforced server-side by the controller gate.
+  getActive: (hospitalId: string, zone?: string) =>
+    get<HypoglycemiaEvent[]>(
+      `/hypoglycemia/hospital/${hospitalId}/active${zone ? `?zone=${zone}` : ''}`,
+    ),
+  // Back-compat alias — full hospital-wide list (used only where cross-zone
+  // read authority is guaranteed).
   getUnresolved: (hospitalId: string) =>
     get<HypoglycemiaEvent[]>(`/hypoglycemia/hospital/${hospitalId}/active`),
 };

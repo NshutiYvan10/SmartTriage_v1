@@ -63,7 +63,8 @@ public class InfectionIsolationController {
      */
     @GetMapping("/hospital/{hospitalId}/active")
     @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId) and "
-            + "(#zone != null or @clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId))")
+            + "((#zone != null and @clinicalAuthz.canReceiveZoneAlerts(authentication, #hospitalId, #zone)) "
+            + "or (#zone == null and @clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)))")
     public ResponseEntity<ApiResponse<List<InfectionScreeningResponse>>> getActiveIsolations(
             @PathVariable UUID hospitalId,
             @RequestParam(required = false) com.smartTriage.smartTriage_server.common.enums.EdZone zone) {

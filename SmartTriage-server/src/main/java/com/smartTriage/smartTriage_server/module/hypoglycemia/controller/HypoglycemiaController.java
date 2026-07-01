@@ -79,11 +79,21 @@ public class HypoglycemiaController {
         return ResponseEntity.ok(ApiResponse.success(responses));
     }
 
+    /**
+     * Active (unresolved) hypoglycemia events at a hospital. Optionally
+     * filtered by ED zone — passing {@code ?zone=ACUTE} restricts the list
+     * to that zone, which is how an on-shift clinician sees only their zone's
+     * events. With no zone parameter the caller must have cross-zone read
+     * authority (admin / CN / shift-lead), enforced by the controller gate.
+     */
     @GetMapping("/hospital/{hospitalId}/active")
-    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId) and "
+            + "((#zone != null and @clinicalAuthz.canReceiveZoneAlerts(authentication, #hospitalId, #zone)) "
+            + "or (#zone == null and @clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)))")
     public ResponseEntity<ApiResponse<List<HypoglycemiaEventResponse>>> getActiveEvents(
-            @PathVariable UUID hospitalId) {
-        List<HypoglycemiaEventResponse> responses = hypoglycemiaService.getActiveEvents(hospitalId)
+            @PathVariable UUID hospitalId,
+            @RequestParam(required = false) com.smartTriage.smartTriage_server.common.enums.EdZone zone) {
+        List<HypoglycemiaEventResponse> responses = hypoglycemiaService.getActiveEvents(hospitalId, zone)
                 .stream()
                 .map(HypoglycemiaEventMapper::toResponse)
                 .collect(Collectors.toList());

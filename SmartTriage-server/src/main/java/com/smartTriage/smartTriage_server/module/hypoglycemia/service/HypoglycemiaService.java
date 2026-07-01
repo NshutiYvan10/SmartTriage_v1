@@ -231,8 +231,23 @@ public class HypoglycemiaService {
         return event;
     }
 
+    /**
+     * Get all active (unresolved) hypoglycemia events at a hospital, optionally
+     * filtered to a single ED zone. Hospital-wide access is gated by the
+     * controller; the zone filter lets an on-shift clinician see only their own
+     * zone's events without needing cross-zone read authority.
+     */
+    public List<HypoglycemiaEvent> getActiveEvents(UUID hospitalId, EdZone zone) {
+        List<HypoglycemiaEvent> all = hypoglycemiaEventRepository.findActiveEventsByHospital(hospitalId);
+        if (zone == null) return all;
+        return all.stream()
+                .filter(e -> e.getVisit() != null && e.getVisit().getCurrentEdZone() == zone)
+                .toList();
+    }
+
+    /** Back-compat overload — full hospital-wide list, no zone filter. */
     public List<HypoglycemiaEvent> getActiveEvents(UUID hospitalId) {
-        return hypoglycemiaEventRepository.findActiveEventsByHospital(hospitalId);
+        return getActiveEvents(hospitalId, null);
     }
 
     public List<HypoglycemiaEvent> getEventsForVisit(UUID visitId) {

@@ -819,27 +819,67 @@ public class DeviceService {
     }
 
     public List<DeviceSessionResponse> getActiveSessions(UUID hospitalId) {
-        return getActiveSessions(hospitalId, null);
+        return getActiveSessions(hospitalId, (java.util.Set<com.smartTriage.smartTriage_server.common.enums.EdZone>) null);
     }
 
     /**
-     * B8 — active monitoring sessions for a hospital, optionally zone-scoped.
-     * When {@code zone} is non-null only sessions whose visit's
-     * {@code currentEdZone} matches are returned, so a zone-scoped clinician
-     * never receives other zones' monitored-patient (or trend) data. A null
-     * {@code zone} returns the full hospital list — used only for callers with
-     * cross-zone authority, enforced at the controller.
+     * B8 — active monitoring sessions for a hospital, scoped to a single zone.
+     * Back-compat overload — delegates to the zone-set variant so a caller with
+     * exactly one covered zone still works. A null {@code zone} returns the full
+     * hospital list (cross-zone authority, enforced at the controller).
      */
     public List<DeviceSessionResponse> getActiveSessions(
             UUID hospitalId,
             com.smartTriage.smartTriage_server.common.enums.EdZone zone) {
+        return getActiveSessions(hospitalId,
+                zone == null ? null : java.util.Set.of(zone));
+    }
+
+    /**
+     * B8 — active monitoring sessions for a hospital, optionally scoped to a
+     * SET of covered zones (a multi-zone clinician's primary ∪ additionalZones).
+     * When {@code zones} is non-null only sessions whose visit's
+     * {@code currentEdZone} is in the set are returned, so a zone-scoped
+     * clinician sees every zone they cover — no more, no less — and never
+     * receives another zone's monitored-patient (or trend) data. A null
+     * {@code zones} returns the full hospital list — used only for callers with
+     * cross-zone authority, enforced at the controller. An empty (but non-null)
+     * set returns nothing (clinician with no covered zone).
+     */
+    public List<DeviceSessionResponse> getActiveSessions(
+            UUID hospitalId,
+            java.util.Set<com.smartTriage.smartTriage_server.common.enums.EdZone> zones) {
         return sessionRepository
                 .findByDeviceHospitalIdAndSessionActiveTrueAndIsActiveTrue(hospitalId)
                 .stream()
-                .filter(s -> zone == null
-                        || (s.getVisit() != null && s.getVisit().getCurrentEdZone() == zone))
+                .filter(s -> zones == null
+                        || (s.getVisit() != null && s.getVisit().getCurrentEdZone() != null
+                                && zones.contains(s.getVisit().getCurrentEdZone())))
                 .map(IoTMapper::toResponse)
                 .toList();
+    }
+
+    /**
+     * The caller's currently-covered zones (active shift's primary ∪ additional),
+     * hospital-checked. Mirrors {@code LabOrderService.currentCoveredZones} so
+     * the Constant Monitoring sessions list scopes to a multi-zone clinician's
+     * FULL covered set rather than only their primary zone. Returns an empty set
+     * when the caller has no current shift at this hospital.
+     */
+    public java.util.Set<com.smartTriage.smartTriage_server.common.enums.EdZone> currentCoveredZones(
+            UUID userId, UUID hospitalId) {
+        java.util.Set<com.smartTriage.smartTriage_server.common.enums.EdZone> zones = new java.util.HashSet<>();
+        shiftAssignmentService.getCurrentShiftForUser(userId).ifPresent(sa -> {
+            if (sa.getHospitalId() == null || sa.getHospitalId().equals(hospitalId)) {
+                if (sa.getZone() != null) {
+                    zones.add(sa.getZone());
+                }
+                if (sa.getAdditionalZones() != null) {
+                    zones.addAll(sa.getAdditionalZones());
+                }
+            }
+        });
+        return zones;
     }
 
     public DeviceSessionResponse getSession(UUID sessionId) {
