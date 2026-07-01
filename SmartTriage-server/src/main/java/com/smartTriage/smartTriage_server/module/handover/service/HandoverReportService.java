@@ -11,7 +11,9 @@ import com.smartTriage.smartTriage_server.module.clinical.repository.ClinicalNot
 import com.smartTriage.smartTriage_server.module.clinical.repository.DiagnosisRepository;
 import com.smartTriage.smartTriage_server.module.clinical.repository.InvestigationRepository;
 import com.smartTriage.smartTriage_server.module.handover.dto.GenerateShiftHandoverRequest;
+import com.smartTriage.smartTriage_server.module.handover.dto.HandoverReportResponse;
 import com.smartTriage.smartTriage_server.module.handover.entity.HandoverReport;
+import com.smartTriage.smartTriage_server.module.handover.mapper.HandoverReportMapper;
 import com.smartTriage.smartTriage_server.module.handover.repository.HandoverReportRepository;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import com.smartTriage.smartTriage_server.module.hospital.repository.HospitalRepository;
@@ -198,6 +200,50 @@ public class HandoverReportService {
     public HandoverReport getReport(UUID reportId) {
         return handoverReportRepository.findByIdAndIsActiveTrue(reportId)
                 .orElseThrow(() -> new ResourceNotFoundException("HandoverReport", "id", reportId));
+    }
+
+    /* ─────────────────────────── DTO-returning variants ───────────────────────────
+     * These map entity → DTO INSIDE the service transaction. That is mandatory here:
+     * spring.jpa.open-in-view=false, and HandoverReport.visit / .hospital (and the
+     * visit's patient / currentBed) are LAZY @ManyToOne. If the controller maps a
+     * detached entity (after this tx has closed), touching any of those associations
+     * throws LazyInitializationException → an unhandled 500 ("An unexpected error
+     * occurred"). It bit the Charge Nurse shift-summary card intermittently: the
+     * /shift list defaults to the last 12h, so an EMPTY window mapped fine while a
+     * window with ≥1 report blew up. Mapping in-tx (as ClinicalAlertService does)
+     * initialises the associations before the session closes. Self-invocation of the
+     * entity methods runs their body within THIS method's active transaction. */
+
+    @Transactional(readOnly = true)
+    public List<HandoverReportResponse> getReportResponsesForVisit(UUID visitId) {
+        return getReportsForVisit(visitId).stream().map(HandoverReportMapper::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<HandoverReportResponse> getReportResponsesForShift(UUID hospitalId, Instant shiftStart, Instant shiftEnd) {
+        return getReportsForShift(hospitalId, shiftStart, shiftEnd).stream().map(HandoverReportMapper::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public HandoverReportResponse getReportResponse(UUID reportId) {
+        return HandoverReportMapper.toResponse(getReport(reportId));
+    }
+
+    @Transactional
+    public HandoverReportResponse generateReportResponse(UUID visitId, HandoverReportType type,
+                                                         String generatedByName, String notes) {
+        return HandoverReportMapper.toResponse(generateReport(visitId, type, generatedByName, notes));
+    }
+
+    @Transactional
+    public HandoverReportResponse acknowledgeHandoverResponse(UUID reportId, String receiverName) {
+        return HandoverReportMapper.toResponse(acknowledgeHandover(reportId, receiverName));
+    }
+
+    @Transactional
+    public List<HandoverReportResponse> generateBulkShiftHandoverResponses(UUID hospitalId,
+                                                                           GenerateShiftHandoverRequest request) {
+        return generateBulkShiftHandover(hospitalId, request).stream().map(HandoverReportMapper::toResponse).toList();
     }
 
     /**

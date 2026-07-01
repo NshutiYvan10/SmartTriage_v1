@@ -36,25 +36,41 @@ export function ShiftSummaryCard() {
   const [pendingHandovers, setPendingHandovers] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Partial-failure note: one sub-fetch failed but others succeeded. We still
+  // render the card (never blank a live safety surface for one bad endpoint).
+  const [partialError, setPartialError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!hospitalId) return;
     setLoading(true);
     setError(null);
-    try {
-      const [shifts, criticals, handovers] = await Promise.all([
-        shiftApi.getCurrentShift(hospitalId),
-        alertApi.getCritical(hospitalId, 0, 100),
-        handoverApi.getForHospital(hospitalId),
-      ]);
-      setAssignments((shifts ?? []).filter((a) => a.active));
-      setOpenCriticals((criticals?.content ?? []).filter((a) => !a.acknowledgedAt).length);
-      setPendingHandovers((handovers ?? []).filter((h) => !h.isAcknowledged).length);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load shift summary');
-    } finally {
-      setLoading(false);
+    setPartialError(null);
+    // allSettled, NOT all — the card is assembled from three independent
+    // endpoints, and one failing must not blank the whole safety summary.
+    // Each pane fills from its own result; a partial failure shows a note.
+    const [shiftsR, critsR, handoversR] = await Promise.allSettled([
+      shiftApi.getCurrentShift(hospitalId),
+      alertApi.getCritical(hospitalId, 0, 100),
+      handoverApi.getForHospital(hospitalId),
+    ]);
+    const failed: string[] = [];
+    if (shiftsR.status === 'fulfilled') setAssignments((shiftsR.value ?? []).filter((a) => a.active));
+    else failed.push('staffing');
+    if (critsR.status === 'fulfilled') setOpenCriticals((critsR.value?.content ?? []).filter((a) => !a.acknowledgedAt).length);
+    else failed.push('critical alerts');
+    if (handoversR.status === 'fulfilled') setPendingHandovers((handoversR.value ?? []).filter((h) => !h.isAcknowledged).length);
+    else failed.push('handovers');
+
+    if (failed.length === 3) {
+      // Everything failed — surface the first error as the hard card error.
+      const firstRejected = [shiftsR, critsR, handoversR]
+        .find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined;
+      const reason = firstRejected?.reason;
+      setError(reason instanceof ApiError ? reason.message : 'Could not load shift summary');
+    } else if (failed.length > 0) {
+      setPartialError(`Couldn't refresh ${failed.join(' & ')} — showing the rest.`);
     }
+    setLoading(false);
   }, [hospitalId]);
 
   useEffect(() => { load(); }, [load]);
@@ -101,6 +117,12 @@ export function ShiftSummaryCard() {
         <div className="rounded-lg p-3 text-xs font-semibold text-red-700 bg-red-50 border border-red-200">{error}</div>
       ) : (
         <>
+          {partialError && (
+            <div className="rounded-lg px-3 py-2 mb-4 flex items-center gap-2 bg-amber-50 border border-amber-200">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span className="text-xs font-semibold text-amber-700">{partialError}</span>
+            </div>
+          )}
           {/* KPI strip */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
             <Kpi icon={Users} label="In department" value={totalPatients} tone="text-cyan-600" />

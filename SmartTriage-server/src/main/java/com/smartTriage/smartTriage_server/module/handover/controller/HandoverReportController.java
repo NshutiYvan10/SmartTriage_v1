@@ -5,8 +5,6 @@ import com.smartTriage.smartTriage_server.module.handover.dto.AcknowledgeHandove
 import com.smartTriage.smartTriage_server.module.handover.dto.GenerateHandoverRequest;
 import com.smartTriage.smartTriage_server.module.handover.dto.GenerateShiftHandoverRequest;
 import com.smartTriage.smartTriage_server.module.handover.dto.HandoverReportResponse;
-import com.smartTriage.smartTriage_server.module.handover.entity.HandoverReport;
-import com.smartTriage.smartTriage_server.module.handover.mapper.HandoverReportMapper;
 import com.smartTriage.smartTriage_server.module.handover.service.HandoverPdfService;
 import com.smartTriage.smartTriage_server.module.handover.service.HandoverReportService;
 import jakarta.validation.Valid;
@@ -22,7 +20,6 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Handover report endpoints — generate and manage patient handover reports
@@ -47,14 +44,13 @@ public class HandoverReportController {
     public ResponseEntity<ApiResponse<HandoverReportResponse>> generateReport(
             @PathVariable UUID visitId,
             @Valid @RequestBody GenerateHandoverRequest request) {
-        HandoverReport report = handoverReportService.generateReport(
+        HandoverReportResponse response = handoverReportService.generateReportResponse(
                 visitId,
                 request.getReportType(),
                 request.getGeneratedByName(),
                 request.getNotes()
         );
-        return ResponseEntity.ok(ApiResponse.success(
-                "Handover report generated", HandoverReportMapper.toResponse(report)));
+        return ResponseEntity.ok(ApiResponse.success("Handover report generated", response));
     }
 
     /**
@@ -66,10 +62,8 @@ public class HandoverReportController {
     public ResponseEntity<ApiResponse<List<HandoverReportResponse>>> generateBulkShiftHandover(
             @PathVariable UUID hospitalId,
             @Valid @RequestBody GenerateShiftHandoverRequest request) {
-        List<HandoverReport> reports = handoverReportService.generateBulkShiftHandover(hospitalId, request);
-        List<HandoverReportResponse> responses = reports.stream()
-                .map(HandoverReportMapper::toResponse)
-                .collect(Collectors.toList());
+        List<HandoverReportResponse> responses =
+                handoverReportService.generateBulkShiftHandoverResponses(hospitalId, request);
         return ResponseEntity.ok(ApiResponse.success(
                 "Bulk shift handover generated: " + responses.size() + " reports", responses));
     }
@@ -82,9 +76,9 @@ public class HandoverReportController {
     public ResponseEntity<ApiResponse<HandoverReportResponse>> acknowledgeHandover(
             @PathVariable UUID id,
             @Valid @RequestBody AcknowledgeHandoverRequest request) {
-        HandoverReport report = handoverReportService.acknowledgeHandover(id, request.getReceiverName());
-        return ResponseEntity.ok(ApiResponse.success(
-                "Handover acknowledged", HandoverReportMapper.toResponse(report)));
+        HandoverReportResponse response =
+                handoverReportService.acknowledgeHandoverResponse(id, request.getReceiverName());
+        return ResponseEntity.ok(ApiResponse.success("Handover acknowledged", response));
     }
 
     /**
@@ -94,10 +88,7 @@ public class HandoverReportController {
     @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<List<HandoverReportResponse>>> getReportsForVisit(
             @PathVariable UUID visitId) {
-        List<HandoverReportResponse> responses = handoverReportService.getReportsForVisit(visitId)
-                .stream()
-                .map(HandoverReportMapper::toResponse)
-                .collect(Collectors.toList());
+        List<HandoverReportResponse> responses = handoverReportService.getReportResponsesForVisit(visitId);
         return ResponseEntity.ok(ApiResponse.success(responses));
     }
 
@@ -117,11 +108,8 @@ public class HandoverReportController {
         if (shiftEnd == null) {
             shiftEnd = Instant.now();
         }
-        List<HandoverReportResponse> responses = handoverReportService
-                .getReportsForShift(hospitalId, shiftStart, shiftEnd)
-                .stream()
-                .map(HandoverReportMapper::toResponse)
-                .collect(Collectors.toList());
+        List<HandoverReportResponse> responses =
+                handoverReportService.getReportResponsesForShift(hospitalId, shiftStart, shiftEnd);
         return ResponseEntity.ok(ApiResponse.success(responses));
     }
 
@@ -131,8 +119,7 @@ public class HandoverReportController {
     @GetMapping("/{id}")
     @PreAuthorize("@clinicalAuthz.canReadHandoverReport(authentication, #id)")
     public ResponseEntity<ApiResponse<HandoverReportResponse>> getReport(@PathVariable UUID id) {
-        HandoverReport report = handoverReportService.getReport(id);
-        return ResponseEntity.ok(ApiResponse.success(HandoverReportMapper.toResponse(report)));
+        return ResponseEntity.ok(ApiResponse.success(handoverReportService.getReportResponse(id)));
     }
 
     /**
