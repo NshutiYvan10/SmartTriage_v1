@@ -10,7 +10,7 @@ import {
   CircleDot, FileCheck, XCircle, UserCheck, X,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
-import { useScopedView } from '@/hooks/useScopedView';
+import { useScopedView, fetchForScope } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
 import { fasttrackApi } from '@/api/fasttrack';
 import { subscribeToFastTrack } from '@/api/websocket';
@@ -94,18 +94,17 @@ export function FastTrackDashboard() {
     if (!hospitalId || scope.mode === 'RESTRICTED') return;
     setLoading(true);
     try {
-      const data = await fasttrackApi.getActive(
-        hospitalId,
-        scope.mode === 'ZONE_SCOPED' ? scope.zone ?? undefined : undefined,
-      );
-      setActivations(Array.isArray(data) ? data : []);
+      // fetchForScope: hospital-wide (no zone) / zone-scoped (one call per COVERED
+      // zone — primary ∪ additional — merged) / restricted (empty).
+      const data = await fetchForScope(scope, (zone) => fasttrackApi.getActive(hospitalId, zone));
+      setActivations(data);
     } catch (err) {
       console.error('Failed to load fast-track activations:', err);
       setActivations([]);
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, scope.mode, scope.zone]);
+  }, [hospitalId, scope.mode, scope.coveredKey]);
 
   useEffect(() => { loadActivations(); }, [loadActivations]);
 

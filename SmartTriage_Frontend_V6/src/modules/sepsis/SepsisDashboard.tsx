@@ -13,7 +13,7 @@ import {
 import { useTheme } from '@/hooks/useTheme';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
-import { useScopedView } from '@/hooks/useScopedView';
+import { useScopedView, fetchForScope } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
 import { sepsisApi } from '@/api/sepsis';
 import { subscribeToSepsis } from '@/api/websocket';
@@ -91,20 +91,18 @@ export function SepsisDashboard() {
     if (!hospitalId || scope.mode === 'RESTRICTED') return;
     setLoading(true);
     try {
-      // ZONE_SCOPED → pass zone, backend returns only this zone's cases.
-      // HOSPITAL_WIDE → omit zone, backend returns every case.
-      const data = await sepsisApi.getActive(
-        hospitalId,
-        scope.mode === 'ZONE_SCOPED' ? scope.zone ?? undefined : undefined,
-      );
-      setScreenings(Array.isArray(data) ? data : []);
+      // fetchForScope handles all three modes: hospital-wide (no zone),
+      // zone-scoped (one call per COVERED zone — primary ∪ additional — merged),
+      // restricted (empty). A multi-zone clinician no longer loses a zone.
+      const data = await fetchForScope(scope, (zone) => sepsisApi.getActive(hospitalId, zone));
+      setScreenings(data);
     } catch (err) {
       console.error('Failed to load sepsis screenings:', err);
       setScreenings([]);
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, scope.mode, scope.zone]);
+  }, [hospitalId, scope.mode, scope.coveredKey]);
 
   useEffect(() => { loadScreenings(); }, [loadScreenings]);
 

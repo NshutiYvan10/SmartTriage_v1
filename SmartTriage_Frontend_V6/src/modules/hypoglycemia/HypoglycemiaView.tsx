@@ -13,7 +13,7 @@ import {
 import { useTheme } from '@/hooks/useTheme';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
-import { useScopedView } from '@/hooks/useScopedView';
+import { useScopedView, fetchForScope } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
 import { hypoglycemiaApi } from '@/api/hypoglycemia';
 import { subscribeToHypoglycemia } from '@/api/websocket';
@@ -80,13 +80,10 @@ export function HypoglycemiaView() {
     if (!hospitalId || scope.mode === 'RESTRICTED') return;
     setLoading(true);
     try {
-      // ZONE_SCOPED → pass zone, backend returns only this zone's events.
-      // HOSPITAL_WIDE → omit zone, backend returns every event.
-      const data = await hypoglycemiaApi.getActive(
-        hospitalId,
-        scope.mode === 'ZONE_SCOPED' ? scope.zone ?? undefined : undefined,
-      );
-      setEvents(Array.isArray(data) ? data : []);
+      // fetchForScope: hospital-wide (no zone) / zone-scoped (one call per COVERED
+      // zone — primary ∪ additional — merged) / restricted (empty).
+      const data = await fetchForScope(scope, (zone) => hypoglycemiaApi.getActive(hospitalId, zone));
+      setEvents(data);
       setError(null);
     } catch (err) {
       // Surface the failure — never render a green "all clear" empty state when
@@ -97,7 +94,7 @@ export function HypoglycemiaView() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, scope.mode, scope.zone]);
+  }, [hospitalId, scope.mode, scope.coveredKey]);
 
   useEffect(() => { loadEvents(); }, [loadEvents]);
 

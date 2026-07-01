@@ -11,7 +11,7 @@ import {
   Shield, Eye, Hand, Shirt, Footprints, ChevronRight,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
-import { useScopedView } from '@/hooks/useScopedView';
+import { useScopedView, fetchForScope } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
 import { isolationApi } from '@/api/isolation';
 import { PatientContextLine } from '@/components/PatientContextLine';
@@ -70,11 +70,10 @@ export function IsolationDashboard() {
     if (!hospitalId || scope.mode === 'RESTRICTED') return;
     setLoading(true);
     try {
-      const data = await isolationApi.getActiveIsolations(
-        hospitalId,
-        scope.mode === 'ZONE_SCOPED' ? scope.zone ?? undefined : undefined,
-      );
-      setIsolations(Array.isArray(data) ? data : []);
+      // fetchForScope: hospital-wide (no zone) / zone-scoped (one call per COVERED
+      // zone — primary ∪ additional — merged) / restricted (empty).
+      const data = await fetchForScope(scope, (zone) => isolationApi.getActiveIsolations(hospitalId, zone));
+      setIsolations(data);
       setError(null);
     } catch (err) {
       // Surface the failure — never render a green "no active isolations" when the load failed.
@@ -84,16 +83,19 @@ export function IsolationDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, scope.mode, scope.zone]);
+  }, [hospitalId, scope.mode, scope.coveredKey]);
 
   useEffect(() => { loadIsolations(); }, [loadIsolations]);
 
   /* ── Live refresh — dedicated isolation topic; re-subscribes on reconnect. ── */
   useEffect(() => {
-    if (!hospitalId) return;
+    // Don't hold a hospital-wide isolation subscription for an off-shift
+    // (RESTRICTED) clinician — matches the other clinical dashboards + the
+    // loader guard, which already no-ops in RESTRICTED.
+    if (!hospitalId || scope.mode === 'RESTRICTED') return;
     const unsub = subscribeToIsolation(hospitalId, () => { loadIsolations(); });
     return () => unsub();
-  }, [hospitalId, loadIsolations, wsGen]);
+  }, [hospitalId, scope.mode, loadIsolations, wsGen]);
 
   /* ── Actions ───────────────────────────────────────────── */
   const handleAssignRoom = async (id: string) => {
