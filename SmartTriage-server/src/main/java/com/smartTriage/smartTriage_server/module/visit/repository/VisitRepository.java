@@ -147,6 +147,22 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
                         @Param("hospitalId") UUID hospitalId,
                         Pageable pageable);
 
+        /**
+         * The "placed but not yet formally triaged" worklist: patients who were routed straight
+         * into a treatment zone (a field-RED/ORANGE ambulance arrival, or a Direct Resus admission)
+         * and so BYPASS the pre-triage desk queue above, but still owe a formal ED triage
+         * ({@code status = AWAITING_TRIAGE} while holding a real zone). Without this, an acuity-split
+         * RESUS patient is invisible to the triage-desk queue and can only be reached via an alert —
+         * this makes them a first-class worklist for whoever can perform triage. Oldest first.
+         */
+        @Query("SELECT v FROM Visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed WHERE v.hospital.id = :hospitalId AND v.isActive = true " +
+                        "AND v.status = 'AWAITING_TRIAGE' " +
+                        "AND v.currentEdZone IS NOT NULL AND v.currentEdZone <> 'TRIAGE' " +
+                        "ORDER BY v.arrivalTime ASC")
+        Page<Visit> findPlacedAwaitingEdTriage(
+                        @Param("hospitalId") UUID hospitalId,
+                        Pageable pageable);
+
         // JOIN FETCH the patient so the mapper doesn't lazy-load one
         // patient per visit when serializing the response.
         @Query("SELECT v FROM Visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed WHERE v.hospital.id = :hospitalId AND v.isActive = true " +

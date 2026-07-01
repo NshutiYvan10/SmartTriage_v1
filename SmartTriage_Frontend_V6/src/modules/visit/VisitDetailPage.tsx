@@ -34,6 +34,7 @@ import { visitApi } from '@/api/visits';
 import type { DispositionRequest } from '@/api/visits';
 import { vitalApi } from '@/api/vitals';
 import { triageApi } from '@/api/triage';
+import { usePatientStore, visitResponseToPatient } from '@/store/patientStore';
 import { clinicalNoteApi } from '@/api/clinicalNotes';
 import { diagnosisApi } from '@/api/diagnoses';
 import { investigationApi } from '@/api/investigations';
@@ -925,8 +926,53 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
     navigate(`${path}/${visit.patientId}?${params.toString()}`);
   };
 
+  // #1 — the INITIAL triage entry point for a patient who arrived already placed in a zone
+  // (an acuity-split RED/ORANGE ambulance arrival, or a Direct Resus admission) and so never
+  // passed through the triage-desk queue. The triage form resolves its patient from the store by
+  // visitId, so we hydrate the store from the loaded visit before navigating (the route param IS
+  // the visitId — Patient.id === visitId in the store).
+  const goToInitialTriage = () => {
+    if (!visit?.id || !navigate) return;
+    usePatientStore.getState().ensurePatient(visitResponseToPatient(visit));
+    const path = visit.isPediatric ? '/pediatric-triage' : '/adult-triage';
+    navigate(`${path}/${visit.id}?visitId=${visit.id}`);
+  };
+
   return (
     <div className="space-y-4">
+    {/* #1 — initial-triage entry point for a placed-but-never-triaged patient (acuity-split RED/
+        ORANGE ambulance arrival / Direct Resus). Without this the triage/charge nurse had no
+        in-app button to file the FIRST triage for a patient who bypassed the desk queue. */}
+    {!latestTriage && visit.status === 'AWAITING_TRIAGE' && (
+      <div
+        className="rounded-2xl p-4 border border-amber-500/40 flex items-start gap-3 animate-fade-up"
+        style={{ background: 'rgba(245,158,11,0.08)' }}
+      >
+        <Stethoscope className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-amber-600">Awaiting ED triage</p>
+          <p className={`text-xs mt-0.5 ${text.body}`}>
+            No formal ED triage has been filed yet{visit.currentEdZone ? <> — provisionally placed in <span className="font-bold">{visit.currentEdZone}</span></> : ''}.
+            {' '}Filing the triage starts the care pathway.
+          </p>
+          <button
+            onClick={goToInitialTriage}
+            disabled={!canTriage}
+            title={canTriage
+              ? 'Open the triage form for this patient'
+              : 'Your current shift does not authorise triage. The Triage Nurse or Charge Nurse on duty will pick this up.'}
+            className={`mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg shadow-md transition-all ${
+              canTriage
+                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white hover:-translate-y-0.5'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            }`}
+          >
+            <Stethoscope className="w-3 h-3" />
+            {canTriage ? 'Perform triage' : 'Triage authority required'}
+          </button>
+        </div>
+      </div>
+    )}
     {showRetriageBanner && (
       <div
         className={`rounded-2xl p-4 border ${bannerCatColor.border} flex items-start gap-3 animate-fade-up`}

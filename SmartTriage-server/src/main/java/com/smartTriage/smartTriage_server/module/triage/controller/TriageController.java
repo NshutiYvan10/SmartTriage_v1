@@ -4,6 +4,8 @@ import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.module.triage.dto.PerformTriageRequest;
 import com.smartTriage.smartTriage_server.module.triage.dto.TriageRecordResponse;
 import com.smartTriage.smartTriage_server.module.triage.service.TriageService;
+import com.smartTriage.smartTriage_server.module.visit.dto.VisitResponse;
+import com.smartTriage.smartTriage_server.module.visit.service.VisitService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -26,6 +28,7 @@ import java.util.UUID;
 public class TriageController {
 
     private final TriageService triageService;
+    private final VisitService visitService;
 
     /**
      * RBAC fix — Triage write authority is intentionally narrow.
@@ -71,5 +74,21 @@ public class TriageController {
             @PathVariable UUID visitId) {
         TriageRecordResponse response = triageService.getLatestTriage(visitId);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    /**
+     * The "placed but not yet formally triaged" worklist — acuity-split RED/ORANGE ambulance
+     * arrivals (and Direct Resus admissions) that bypass the pre-triage desk queue yet still owe
+     * a formal ED triage. Gated to the SAME authority that performs triage (triage nurse / charge
+     * nurse / shift-lead) so the person who can act on it is exactly who sees it.
+     */
+    @GetMapping("/hospital/{hospitalId}/awaiting-ed-triage")
+    @PreAuthorize("@clinicalAuthz.callerCanPerformTriage(authentication) "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    public ResponseEntity<ApiResponse<Page<VisitResponse>>> awaitingEdTriage(
+            @PathVariable UUID hospitalId,
+            @PageableDefault(size = 50) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.success(
+                visitService.getPlacedAwaitingEdTriage(hospitalId, pageable)));
     }
 }

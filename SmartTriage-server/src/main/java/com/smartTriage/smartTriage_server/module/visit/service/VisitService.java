@@ -117,6 +117,18 @@ public class VisitService {
     }
 
     /**
+     * The "placed but not yet formally triaged" worklist — patients routed straight into a
+     * treatment zone (acuity-split RED/ORANGE ambulance arrivals, Direct Resus) who bypass the
+     * pre-triage desk queue yet still owe a formal ED triage. Returned hospital-wide (no per-zone
+     * scoping): the endpoint is gated to the triage authorities (triage nurse / charge nurse /
+     * shift-lead), who coordinate the whole floor and are the ones who file the triage.
+     */
+    public Page<VisitResponse> getPlacedAwaitingEdTriage(UUID hospitalId, Pageable pageable) {
+        return visitRepository.findPlacedAwaitingEdTriage(hospitalId, pageable)
+                .map(VisitMapper::toResponse);
+    }
+
+    /**
      * Populate the shift-handoff aggregate fields on a list of
      * {@link VisitResponse} rows in three batched queries:
      * pending-meds, pending+critical-resulted labs, open ICU

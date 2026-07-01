@@ -153,6 +153,41 @@ interface PatientState {
   findByNationalId: (nationalId: string) => Patient | undefined;
 }
 
+/**
+ * Map a backend VisitResponse into the store's Patient shape. Exported so entry points that
+ * hold a VisitResponse but not a store Patient — the chart's "Perform triage" action and the
+ * "awaiting ED triage" worklist — can hydrate the store (via ensurePatient) before opening the
+ * triage form, which resolves its patient from the store by visitId. Single source of truth for
+ * the mapping (fetchActiveVisits uses it too).
+ */
+export function visitResponseToPatient(v: VisitResponse): Patient {
+  return {
+    id: v.id,
+    patientId: v.patientId,
+    fullName: v.patientName || 'Unknown',
+    age: ageInYearsFromDob(v.patientDateOfBirth),
+    gender: (v.patientGender as Patient['gender']) || 'MALE',
+    dateOfBirth: v.patientDateOfBirth ?? undefined,
+    chiefComplaint: v.chiefComplaint || '',
+    arrivalMode: (v.arrivalMode as Patient['arrivalMode']) || 'WALK_IN',
+    arrivalTimestamp: new Date(v.arrivalTime),
+    isPediatric: v.isPediatric ?? false,
+    triageStatus: mapVisitStatus(v.status),
+    category: v.currentTriageCategory as TriageCategory | undefined,
+    tewsScore: v.currentTewsScore ?? undefined,
+    aiAlerts: [],
+    overrideHistory: [],
+    registrationCompletedAt: new Date(v.arrivalTime),
+    visitNumber: v.visitNumber ?? undefined,
+    currentEdZone: v.currentEdZone ?? null,
+    currentBedLabel: v.currentBedLabel ?? null,
+    pendingInvestigationsCount: v.pendingInvestigationsCount ?? undefined,
+    unacknowledgedCriticalResultsCount: v.unacknowledgedCriticalResultsCount ?? undefined,
+    pendingMedicationsCount: v.pendingMedicationsCount ?? undefined,
+    hasOpenIcuEscalation: v.hasOpenIcuEscalation ?? undefined,
+  } as Patient;
+}
+
 export const usePatientStore = create<PatientState>((set, get) => ({
   patients: [],
   isLoading: false,
@@ -181,41 +216,7 @@ export const usePatientStore = create<PatientState>((set, get) => ({
       const visitsPage = await visitApi.getActiveForCallerByHospital(hospitalId, 0, 200);
       const visits: VisitResponse[] = visitsPage.content;
 
-      const mapped: Patient[] = visits.map((v) => ({
-        id: v.id,
-        // Real backing patient row id so PatientDetailView can lazy-
-        // hydrate the full record without a second list lookup.
-        patientId: v.patientId,
-        fullName: v.patientName || 'Unknown',
-        // Derive age in years (with fractional months for infants) from
-        // the DOB carried on the visit response. Previously hardcoded to
-        // 0, which made every adult render as "0mo · M" in the queue.
-        // Falls back to 0 only when DOB is genuinely missing — display
-        // sites tolerate that (renders as "0mo").
-        age: ageInYearsFromDob(v.patientDateOfBirth),
-        gender: (v.patientGender as Patient['gender']) || 'MALE',
-        dateOfBirth: v.patientDateOfBirth ?? undefined,
-        chiefComplaint: v.chiefComplaint || '',
-        arrivalMode: (v.arrivalMode as Patient['arrivalMode']) || 'WALK_IN',
-        arrivalTimestamp: new Date(v.arrivalTime),
-        isPediatric: v.isPediatric ?? false,
-        triageStatus: mapVisitStatus(v.status),
-        category: v.currentTriageCategory as TriageCategory | undefined,
-        tewsScore: v.currentTewsScore ?? undefined,
-        aiAlerts: [],
-        overrideHistory: [],
-        registrationCompletedAt: new Date(v.arrivalTime),
-        // Current location + visit number so patient cards show WHERE to
-        // go (zone/bed) without opening the chart.
-        visitNumber: v.visitNumber ?? undefined,
-        currentEdZone: v.currentEdZone ?? null,
-        currentBedLabel: v.currentBedLabel ?? null,
-        // Shift-handoff aggregate signals already on the visit response.
-        pendingInvestigationsCount: v.pendingInvestigationsCount ?? undefined,
-        unacknowledgedCriticalResultsCount: v.unacknowledgedCriticalResultsCount ?? undefined,
-        pendingMedicationsCount: v.pendingMedicationsCount ?? undefined,
-        hasOpenIcuEscalation: v.hasOpenIcuEscalation ?? undefined,
-      } as Patient));
+      const mapped: Patient[] = visits.map(visitResponseToPatient);
 
       set({ patients: mapped, isLoading: false });
     } catch (err) {

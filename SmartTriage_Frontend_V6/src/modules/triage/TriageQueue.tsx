@@ -5,9 +5,10 @@ import {
   Activity, ChevronRight, Siren,
   Timer, UserPlus, HeartPulse, ShieldAlert, Leaf, Droplets, BedDouble,
 } from 'lucide-react';
-import { usePatientStore } from '@/store/patientStore';
+import { usePatientStore, visitResponseToPatient } from '@/store/patientStore';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
+import { triageApi } from '@/api/triage';
 import type { Patient, TriageCategory } from '@/types';
 import type { VisitResponse } from '@/api/types';
 import { PlacePatientDialog } from '@/modules/beds/PlacePatientDialog';
@@ -578,6 +579,9 @@ export function TriageQueue() {
           </div>
         </div>
 
+        {/* ── Placed, awaiting ED triage (acuity-split arrivals that bypass the desk queue) ── */}
+        <PlacedAwaitingEdTriageSection glassCard={glassCard} isDark={isDark} text={text} />
+
         {/* ── Queue List ── */}
         <div className="rounded-2xl overflow-hidden animate-fade-up" style={{ ...glassCard, animationDelay: '0.15s' }}>
           {/* Header */}
@@ -797,6 +801,95 @@ export function TriageQueue() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Placed — awaiting ED triage (acuity-split arrivals that bypass the desk queue)
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * The worklist of patients who were routed straight into a treatment zone (a field-RED/ORANGE
+ * ambulance arrival, or a Direct Resus admission) and so never entered the pre-triage desk queue,
+ * yet still owe a formal ED triage. Without this they'd be reachable only via an alert. Self-hides
+ * when empty. "Perform triage" hydrates the store from the visit (the form resolves its patient
+ * from the store by visitId) then opens the triage form.
+ */
+function PlacedAwaitingEdTriageSection({ glassCard, isDark, text }: { glassCard: any; isDark: boolean; text: any }) {
+  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const hospitalId = user?.hospitalId || '';
+  const ensurePatient = usePatientStore((s) => s.ensurePatient);
+  const [rows, setRows] = useState<VisitResponse[]>([]);
+  const [error, setError] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!hospitalId) return;
+    try {
+      const page = await triageApi.awaitingEdTriage(hospitalId, 0, 50);
+      setRows(page.content || []);
+      setError(false);
+    } catch (e) {
+      console.error('[triage] awaiting-ED-triage load failed:', e);
+      setError(true);
+    }
+  }, [hospitalId]);
+
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 30_000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  // A load failure must NOT masquerade as "no placed-untriaged patients" on a safety worklist:
+  // self-hide only when genuinely empty; if the fetch errored, keep the section visible with a
+  // retry so a placed RESUS/ACUTE patient can't silently disappear behind a network/auth blip.
+  if (rows.length === 0 && !error) return null;
+
+  const startTriage = (v: VisitResponse) => {
+    ensurePatient(visitResponseToPatient(v));
+    const path = v.isPediatric ? '/pediatric-triage' : '/adult-triage';
+    navigate(`${path}/${v.id}?visitId=${v.id}`);
+  };
+
+  return (
+    <div className="rounded-2xl overflow-hidden animate-fade-up mb-4" style={{ ...glassCard }}>
+      <div className="px-5 py-3.5 flex items-center gap-2 bg-gradient-to-r from-rose-600 to-rose-500 text-white">
+        <Siren className="w-4 h-4" />
+        <span className="text-[11px] font-bold uppercase tracking-wider">Placed — awaiting ED triage</span>
+        <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-lg bg-white/20">{rows.length}</span>
+        <span className="hidden sm:inline text-[10px] text-white/80 ml-auto">Ambulance / Direct-Resus arrivals that bypassed the queue</span>
+      </div>
+      {error && (
+        <div className="px-5 py-2.5 flex items-center gap-2 text-[11px] font-semibold bg-rose-500/10 text-rose-600">
+          <span className="flex-1">Couldn't load the awaiting-triage list — a load error, NOT confirmation that none are waiting.</span>
+          <button onClick={() => load()} className="px-2.5 py-1 rounded-lg bg-rose-500 text-white font-bold hover:bg-rose-600">Retry</button>
+        </div>
+      )}
+      <div className={isDark ? 'divide-y divide-white/10' : 'divide-y divide-slate-200/70'}>
+        {rows.map((v) => (
+          <div key={v.id} className="px-5 py-3 flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className={`text-sm font-bold ${text.heading} truncate`}>
+                {v.patientName || 'Unidentified patient'}
+                {v.visitNumber && <span className={`ml-2 text-[11px] font-normal ${text.muted}`}>{v.visitNumber}</span>}
+              </div>
+              <div className={`text-[11px] ${text.muted} flex flex-wrap gap-x-2`}>
+                {v.currentEdZone && <span className="font-semibold text-rose-500">{v.currentEdZone}</span>}
+                {v.currentTriageCategory && <span>· field {v.currentTriageCategory}</span>}
+                {v.chiefComplaint && <span className="truncate">· {v.chiefComplaint}</span>}
+              </div>
+            </div>
+            <button
+              onClick={() => startTriage(v)}
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold text-white bg-cyan-600 hover:bg-cyan-700"
+            >
+              <Stethoscope className="w-3.5 h-3.5" /> Perform triage
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

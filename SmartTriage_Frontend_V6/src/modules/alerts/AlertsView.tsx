@@ -231,6 +231,19 @@ export function AlertsView() {
       navigate(`${formBase}/${alert.visitId}?${qs}`);
       return;
     }
+    // A field-triaged ambulance arrival still owes a formal ED triage — route the responder
+    // straight to the triage FORM instead of a dead-end chart, IF we hold the patient in the
+    // store (the triage form resolves its patient from the store by visitId). If not (rare), fall
+    // through to the chart, which now carries its own "Perform triage" button that hydrates first.
+    if (alert.alertType === 'FIELD_TRIAGED_AWAITING_REVIEW' && alert.visitId) {
+      const patient = usePatientStore.getState().getPatient(alert.visitId);
+      if (patient) {
+        const formBase = patient.isPediatric ? '/pediatric-triage' : '/adult-triage';
+        const qs = new URLSearchParams({ visitId: alert.visitId, fromAlert: alert.id }).toString();
+        navigate(`${formBase}/${alert.visitId}?${qs}`);
+        return;
+      }
+    }
     navigate(chartPath(alert.visitId));
   }, [navigate]);
 
