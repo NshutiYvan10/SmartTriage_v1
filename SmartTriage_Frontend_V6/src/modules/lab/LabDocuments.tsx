@@ -11,7 +11,7 @@
    can list + download.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
 import {
   Paperclip, Upload, Download, Trash2, Loader2, FileText, AlertTriangle, FileCheck2,
 } from 'lucide-react';
@@ -29,13 +29,25 @@ function humanSize(bytes: number): string {
 }
 
 /**
+ * Imperative handle so a PARENT modal's "Save" can flush a selected-but-not-yet-
+ * attached file before it saves + closes. Without this, picking a file and then
+ * hitting the modal's Save silently discarded the file (the exact "attached a
+ * report but it never showed up" failure) — one Save must persist EVERYTHING.
+ */
+export interface LabDocumentsHandle {
+  /** Upload any pending (selected, unattached) file. True = nothing pending or
+   *  upload succeeded; false = upload failed (error shown inside the panel). */
+  flushPending: () => Promise<boolean>;
+}
+
+/**
  * Report-document attachments for EITHER a lab order (labOrderId) or an
  * imaging/ECG investigation (investigationId) — exactly one is provided. Same
  * UI + upload/download/delete for both; only the API namespace differs.
  */
-export function LabDocuments({
-  labOrderId, investigationId, canManage = false,
-}: { labOrderId?: string; investigationId?: string; canManage?: boolean }) {
+export const LabDocuments = forwardRef<LabDocumentsHandle, {
+  labOrderId?: string; investigationId?: string; canManage?: boolean;
+}>(function LabDocuments({ labOrderId, investigationId, canManage = false }, ref) {
   const { glassInner, isDark, text } = useTheme();
   // Bind to the right endpoint set based on which owner id was passed. Memoised
   // on the ids so the load callback below has a stable dependency.
@@ -77,9 +89,9 @@ export function LabDocuments({
 
   useEffect(() => { void load(); }, [load]);
 
-  const doUpload = async () => {
-    if (!file) return;
-    if (file.size > MAX_BYTES) { setErr('File is too large (max 15 MB).'); return; }
+  const doUpload = useCallback(async (): Promise<boolean> => {
+    if (!file) return true;
+    if (file.size > MAX_BYTES) { setErr('File is too large (max 15 MB).'); return false; }
     setUploading(true);
     setErr(null);
     try {
@@ -87,12 +99,20 @@ export function LabDocuments({
       setFile(null); setDescription('');
       if (fileInput.current) fileInput.current.value = '';
       await load();
+      return true;
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Upload failed');
+      return false;
     } finally {
       setUploading(false);
     }
-  };
+  }, [file, description, doc, load]);
+
+  // Parent-save integration: flush the pending file (if any) before the parent
+  // persists + closes, so a selected report can never be silently discarded.
+  useImperativeHandle(ref, () => ({
+    flushPending: () => doUpload(),
+  }), [doUpload]);
 
   const doDownload = async (d: LabReportDocument) => {
     setBusyId(d.id);
@@ -164,6 +184,11 @@ export function LabDocuments({
               className={`w-full px-2 py-1.5 rounded-lg text-[11px] focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
               style={glassInner} />
           )}
+          {file && !uploading && (
+            <p className="text-[10px] font-bold text-amber-500 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" /> Selected but NOT attached yet — click "Attach report" (or Save, which attaches it for you).
+            </p>
+          )}
           <button type="button" onClick={doUpload} disabled={!file || uploading}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white transition-colors disabled:opacity-50">
             {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
@@ -176,6 +201,6 @@ export function LabDocuments({
       )}
     </div>
   );
-}
+});
 
 export default LabDocuments;

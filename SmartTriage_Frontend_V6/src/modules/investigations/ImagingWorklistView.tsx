@@ -31,7 +31,7 @@ import { subscribeToDiagnostics } from '@/api/websocket';
 import { useTheme } from '@/hooks/useTheme';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPathForRole } from '@/lib/chartNav';
-import { LabDocuments } from '@/modules/lab/LabDocuments';
+import { LabDocuments, type LabDocumentsHandle } from '@/modules/lab/LabDocuments';
 
 /** Minutes since order, with a soft target so overdue studies stand out. */
 const PRIORITY_TARGET_MIN: Record<string, number> = { STAT: 30, URGENT: 120, ROUTINE: 1440 };
@@ -301,6 +301,7 @@ function ReportModal({
   const [critical, setCritical] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const docsRef = useRef<LabDocumentsHandle>(null);
 
   const canSave = report.trim().length > 0 && !saving;
 
@@ -308,6 +309,15 @@ function ReportModal({
     if (!canSave) return;
     setSaving(true);
     setError(null);
+    // A file that was SELECTED but not yet attached must be uploaded as part of
+    // Save — otherwise it would be silently discarded when the modal closes
+    // (the "attached a report but the doctor never saw it" failure).
+    const flushed = await docsRef.current?.flushPending();
+    if (flushed === false) {
+      setError('The report document failed to attach — fix or remove it, then save again.');
+      setSaving(false);
+      return;
+    }
     // Keep the critical write separate from the post-save close/reload: if the
     // report fails to save we MUST keep the modal open with the error so the
     // technician can retry; only once it is safely persisted do we close.
@@ -375,8 +385,9 @@ function ReportModal({
         </div>
 
         {/* Attach the full report document (film/scan/PDF) — the interim standard:
-            structured findings above + the full report here. */}
-        <LabDocuments investigationId={investigation.id} canManage />
+            structured findings above + the full report here. Save flushes any
+            selected-but-unattached file via docsRef. */}
+        <LabDocuments ref={docsRef} investigationId={investigation.id} canManage />
 
         <div className="flex items-center gap-4">
           <label className={`inline-flex items-center gap-2 text-xs font-semibold ${text.body} cursor-pointer`}>

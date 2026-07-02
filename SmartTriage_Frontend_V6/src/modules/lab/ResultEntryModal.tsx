@@ -10,13 +10,13 @@
    the AcknowledgeCriticalModal — this one just files the result.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Beaker, Loader2, X, AlertOctagon, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { labApi } from '@/api/lab';
 import type { LabOrder, RecordLabResultRequest, LabPanelComponent } from '@/api/lab';
 import { labCatalogApi, type LabTestCatalogResponse } from '@/api/labCatalog';
-import { LabDocuments } from './LabDocuments';
+import { LabDocuments, type LabDocumentsHandle } from './LabDocuments';
 
 /** Normalize a unit for comparison: lowercase, strip spaces, µ/μ → u. */
 const normUnit = (u: string) => u.trim().toLowerCase().replace(/\s+/g, '').replace(/[µμ]/g, 'u');
@@ -60,6 +60,19 @@ export function ResultEntryModal({ order, enteredByName, onClose, onSaved }: Pro
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<LabTestCatalogResponse | null>(null);
+  const docsRef = useRef<LabDocumentsHandle>(null);
+
+  /** Upload any selected-but-unattached report file as part of Save — a picked
+   *  file must never be silently discarded when the modal closes. False = the
+   *  upload failed (block the save; the docs panel shows the error). */
+  async function flushPendingDocument(): Promise<boolean> {
+    const ok = await docsRef.current?.flushPending();
+    if (ok === false) {
+      setError('The report document failed to attach — fix or remove it, then save again.');
+      return false;
+    }
+    return true;
+  }
 
   // Detect whether this order's test is a multi-analyte panel and, if so, seed one row
   // per analyte (unit pre-filled from the definition). On FAILURE we deliberately do NOT
@@ -131,6 +144,7 @@ export function ResultEntryModal({ order, enteredByName, onClose, onSaved }: Pro
     }
     setSubmitting(true);
     setError(null);
+    if (!(await flushPendingDocument())) { setSubmitting(false); return; }
     try {
       await labApi.recordResult(order.id, {
         ...form,
@@ -165,6 +179,7 @@ export function ResultEntryModal({ order, enteredByName, onClose, onSaved }: Pro
     }
     setSubmitting(true);
     setError(null);
+    if (!(await flushPendingDocument())) { setSubmitting(false); return; }
     try {
       await labApi.recordPanelResult(order.id, {
         components,
