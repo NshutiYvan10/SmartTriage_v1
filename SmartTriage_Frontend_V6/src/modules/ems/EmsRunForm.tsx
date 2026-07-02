@@ -210,8 +210,25 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
     return Number.isNaN(n) ? undefined : n;
   };
 
+  // A brand-new run must carry at least ONE real detail before we create a
+  // record — otherwise tapping "New run" and backing out silently persists a
+  // blank DISPATCHED run that clutters the crew's list, the inbound board and
+  // the transport log. (Destination + service are auto-filled, so they don't
+  // count.) An existing run is already real, so edits are always allowed.
+  const hasMinimalStep1Data = !!(
+    (draft.unitCallsign || '').trim() ||
+    (draft.mechanism || '').trim() ||
+    (draft.incidentLocation || '').trim() ||
+    (draft.historySummary || '').trim() ||
+    (draft.patientSex || '').trim() ||
+    num(draft.patientAgeYears) != null
+  );
+
   async function saveStep1() {
     if (!current) {
+      if (!hasMinimalStep1Data) {
+        throw new Error('Enter at least one detail (unit, mechanism, location, age or sex) before continuing.');
+      }
       const created = await emsApi.create({
         hospitalId: draft.destinationHospitalId || hospitalId,
         service: draft.service || undefined,
@@ -449,7 +466,12 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
             <ChevronLeft className="w-4 h-4" /> Back
           </button>
           {step < 5 ? (
-            <button onClick={next} disabled={submitting}
+            <button
+              onClick={next}
+              disabled={submitting || (step === 1 && !current && !hasMinimalStep1Data)}
+              title={step === 1 && !current && !hasMinimalStep1Data
+                ? 'Enter at least one detail (unit, mechanism, location, age or sex) first'
+                : undefined}
               className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50">
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
               Save &amp; continue <ChevronRight className="w-4 h-4" />

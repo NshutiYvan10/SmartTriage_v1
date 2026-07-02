@@ -447,16 +447,32 @@ public class EmsRunService {
                         .orElseThrow(() -> new ResourceNotFoundException("Patient", "id", req.getPatientId()));
             } else {
                 UnidentifiedPatientNameService.PlaceholderLabel claimed = nameService.claimNext(hospital.getId());
-                patient = Patient.builder()
+                Patient.PatientBuilder pb = Patient.builder()
                         .firstName("Unknown")
                         .lastName(claimed.label())
                         .hospital(hospital)
                         .isUnidentified(true)
                         .placeholderLabel(claimed.label())
-                        .placeholderAssignedAt(Instant.now())
-                        .build();
+                        .placeholderAssignedAt(Instant.now());
+                // Carry the crew's captured age + sex onto the placeholder so the
+                // hospital sees the real demographics, not "0mo / paediatric".
+                // Age has no dedicated column — it lives as an APPROXIMATE
+                // dateOfBirth (1 Jan of the birth year), which is the standard
+                // way to hold an age-only value and drives isPediatric() + the
+                // age display correctly. The ED corrects it on registration.
+                if (run.getPatientAgeYears() != null && run.getPatientAgeYears() > 0) {
+                    pb.dateOfBirth(java.time.LocalDate.now()
+                            .minusYears(run.getPatientAgeYears())
+                            .withDayOfYear(1));
+                }
+                Gender g = parseGender(run.getPatientSex());
+                if (g != null) {
+                    pb.gender(g);
+                }
+                patient = pb.build();
                 patient = patientRepository.save(patient);
-                log.info("[ems] Created placeholder patient '{}' for run {}", claimed.label(), runId);
+                log.info("[ems] Created placeholder patient '{}' for run {} (age={}, sex={})",
+                        claimed.label(), runId, run.getPatientAgeYears(), run.getPatientSex());
             }
 
             Instant now = Instant.now();
@@ -970,7 +986,21 @@ public class EmsRunService {
                     })
                     .collect(Collectors.toList());
         }
-        return runs.stream().map(EmsRunMapper::toResponse).collect(Collectors.toList());
+        return runs.stream().map(this::toResponseWithInterventions).collect(Collectors.toList());
+    }
+
+    /**
+     * Map a run to its response WITH its interventions attached. The list
+     * endpoints (my-runs, inbound board) must include interventions: the
+     * paramedic run form and the InboundEmsBoard render straight off these list
+     * snapshots, so the bare toResponse(run) (interventions=null) made logged
+     * interventions vanish when a run was reopened, and made the charge-nurse
+     * inbound board always read "0 interventions logged". Small per-crew /
+     * per-hospital lists, so the per-run fetch is fine.
+     */
+    private EmsRunResponse toResponseWithInterventions(EmsRun r) {
+        return EmsRunMapper.toResponse(r,
+                interventionRepository.findByEmsRunIdAndIsActiveTrueOrderByGivenAtAsc(r.getId()));
     }
 
     /**
@@ -1007,11 +1037,15 @@ public class EmsRunService {
         return zones;
     }
 
+    // readOnly tx like getInbound: toResponseWithInterventions issues a per-run
+    // intervention query, so keep the whole map in one open session (matches the
+    // sibling list endpoint; guards against lazy access surfacing outside a tx).
+    @Transactional(readOnly = true)
     public List<EmsRunResponse> getMyRuns() {
         User caller = currentUser().orElse(null);
         if (caller == null) return List.of();
         return emsRunRepository.findByParamedic(caller.getId())
-                .stream().map(EmsRunMapper::toResponse).collect(Collectors.toList());
+                .stream().map(this::toResponseWithInterventions).collect(Collectors.toList());
     }
 
     public Optional<EmsRunResponse> getByVisitId(UUID visitId) {
@@ -1344,5 +1378,19 @@ public class EmsRunService {
 
     private static String safe(String s, String fallback) {
         return s == null || s.isBlank() ? fallback : s;
+    }
+
+    /**
+     * Parse the run's free-string patientSex ("MALE"/"FEMALE"/"UNKNOWN", any case)
+     * into a Gender enum for the placeholder patient. Returns null when absent or
+     * unrecognised so we leave the field unset rather than guessing.
+     */
+    private static Gender parseGender(String sex) {
+        if (sex == null || sex.isBlank()) return null;
+        try {
+            return Gender.valueOf(sex.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }
