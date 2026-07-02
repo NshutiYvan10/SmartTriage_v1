@@ -20,6 +20,7 @@ import java.util.UUID;
 public class LabReportDocumentResponse {
     private UUID id;
     private UUID labOrderId;
+    private UUID investigationId;
     private String fileName;
     private String contentType;
     private long sizeBytes;

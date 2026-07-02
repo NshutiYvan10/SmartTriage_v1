@@ -34,6 +34,7 @@ import { useAuthStore } from '@/store/authStore';
 import { UnidentifiedBadge } from '@/modules/admission/UnidentifiedBadge';
 import { IdentityResolutionModal } from '@/modules/admission/IdentityResolutionModal';
 import { LabTestDetailModal } from '@/modules/lab/LabTestDetailModal';
+import { LabDocuments } from '@/modules/lab/LabDocuments';
 import { visitApi } from '@/api/visits';
 import type { DispositionRequest } from '@/api/visits';
 import { vitalApi } from '@/api/vitals';
@@ -1922,6 +1923,14 @@ function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, on
                 {inv.status === 'ORDERED' && <button onClick={() => onAction(inv.id, 'specimen')} className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 transition-colors">Specimen Collected</button>}
                 {inv.status === 'SPECIMEN_COLLECTED' && <button onClick={() => onAction(inv.id, 'progress')} className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20 transition-colors">Mark In Progress</button>}
                 {inv.status === 'IN_PROGRESS' && <button onClick={() => setResultForm({ id: inv.id, result: '', isAbnormal: false, isCritical: false, notes: '' })} className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors">Record Result</button>}
+              </div>
+            )}
+            {/* Imaging/ECG report document (film/scan/PDF) — attach + view. The
+                report IS the deliverable for these, and the lab worklist only
+                exposes it while in-progress, so surface it on the chart too. */}
+            {['XRAY', 'CT_SCAN', 'MRI', 'ULTRASOUND', 'RADIOLOGY', 'ECG'].includes(inv.investigationType) && (
+              <div className="mt-3">
+                <LabDocuments investigationId={inv.id} canManage />
               </div>
             )}
             <p className={`text-[10px] mt-2 ${text.muted}`}>Ordered by: {inv.orderedByName}</p>

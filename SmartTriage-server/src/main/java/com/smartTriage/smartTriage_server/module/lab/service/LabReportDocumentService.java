@@ -5,6 +5,8 @@ import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundExcep
 import com.smartTriage.smartTriage_server.module.lab.dto.LabReportDocumentResponse;
 import com.smartTriage.smartTriage_server.module.lab.entity.LabOrder;
 import com.smartTriage.smartTriage_server.module.lab.entity.LabReportDocument;
+import com.smartTriage.smartTriage_server.module.clinical.entity.Investigation;
+import com.smartTriage.smartTriage_server.module.clinical.repository.InvestigationRepository;
 import com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository;
 import com.smartTriage.smartTriage_server.module.lab.repository.LabReportDocumentRepository;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
@@ -43,28 +45,91 @@ public class LabReportDocumentService {
 
     private final LabReportDocumentRepository documentRepository;
     private final LabOrderRepository labOrderRepository;
+    private final InvestigationRepository investigationRepository;
 
+    // ── Lab-order documents ──
     public List<LabReportDocumentResponse> listForOrder(UUID labOrderId) {
         return documentRepository.findMetadataByLabOrder(labOrderId);
     }
 
     /**
-     * Full entity (incl. bytes) for streaming a download. Verifies the document
-     * belongs to {@code labOrderId} — the endpoint is authorised on the ORDER,
-     * so a mismatched (order, document) pair must not resolve (defense-in-depth
-     * against IDOR through a swapped id).
+     * Full entity (incl. bytes) for streaming a lab-order document's download.
+     * Verifies the document belongs to {@code labOrderId} — the endpoint is
+     * authorised on the ORDER, so a mismatched (order, document) pair must not
+     * resolve (defense-in-depth against IDOR through a swapped id).
      */
     public LabReportDocument getForDownload(UUID labOrderId, UUID documentId) {
+        return requireOwned(documentId, labOrderId, null);
+    }
+
+    @Transactional
+    public LabReportDocumentResponse upload(UUID labOrderId, MultipartFile file, String description) {
+        LabOrder order = labOrderRepository.findById(labOrderId)
+                .orElseThrow(() -> new ResourceNotFoundException("LabOrder", "id", labOrderId));
+        UUID visitId = (order.getVisit() != null) ? order.getVisit().getId() : null;
+        if (visitId == null) {
+            throw new ClinicalBusinessException("Lab order is not linked to a visit.");
+        }
+        return persist(visitId, labOrderId, null, file, description, "lab order " + labOrderId);
+    }
+
+    @Transactional
+    public void softDelete(UUID labOrderId, UUID documentId) {
+        LabReportDocument doc = requireOwned(documentId, labOrderId, null);
+        doc.softDelete();
+        documentRepository.save(doc);
+        log.info("[lab-doc] Soft-deleted report document {} (order {})", documentId, labOrderId);
+    }
+
+    // ── Imaging/ECG investigation documents ──
+    public List<LabReportDocumentResponse> listForInvestigation(UUID investigationId) {
+        return documentRepository.findMetadataByInvestigation(investigationId);
+    }
+
+    public LabReportDocument getForDownloadByInvestigation(UUID investigationId, UUID documentId) {
+        return requireOwned(documentId, null, investigationId);
+    }
+
+    @Transactional
+    public LabReportDocumentResponse uploadForInvestigation(UUID investigationId, MultipartFile file, String description) {
+        Investigation inv = investigationRepository.findByIdAndIsActiveTrue(investigationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Investigation", "id", investigationId));
+        UUID visitId = (inv.getVisit() != null) ? inv.getVisit().getId() : null;
+        if (visitId == null) {
+            throw new ClinicalBusinessException("Investigation is not linked to a visit.");
+        }
+        return persist(visitId, null, investigationId, file, description, "investigation " + investigationId);
+    }
+
+    @Transactional
+    public void softDeleteByInvestigation(UUID investigationId, UUID documentId) {
+        LabReportDocument doc = requireOwned(documentId, null, investigationId);
+        doc.softDelete();
+        documentRepository.save(doc);
+        log.info("[lab-doc] Soft-deleted report document {} (investigation {})", documentId, investigationId);
+    }
+
+    // ── Shared core ──
+
+    /**
+     * Load an active document and verify it belongs to the expected owner (lab
+     * order OR investigation, whichever is non-null). A mismatch resolves as
+     * not-found — the endpoint is authorised on the owner, so a swapped id must
+     * not leak another owner's document (IDOR defense).
+     */
+    private LabReportDocument requireOwned(UUID documentId, UUID labOrderId, UUID investigationId) {
         LabReportDocument doc = documentRepository.findByIdAndIsActiveTrue(documentId)
                 .orElseThrow(() -> new ResourceNotFoundException("LabReportDocument", "id", documentId));
-        if (!doc.getLabOrderId().equals(labOrderId)) {
+        boolean ok = (labOrderId != null && labOrderId.equals(doc.getLabOrderId()))
+                || (investigationId != null && investigationId.equals(doc.getInvestigationId()));
+        if (!ok) {
             throw new ResourceNotFoundException("LabReportDocument", "id", documentId);
         }
         return doc;
     }
 
-    @Transactional
-    public LabReportDocumentResponse upload(UUID labOrderId, MultipartFile file, String description) {
+    private LabReportDocumentResponse persist(UUID visitId, UUID labOrderId, UUID investigationId,
+                                              MultipartFile file, String description, String ownerLabel) {
         if (file == null || file.isEmpty()) {
             throw new ClinicalBusinessException("No file was uploaded.");
         }
@@ -78,13 +143,6 @@ public class LabReportDocumentService {
                     "Unsupported file type. Attach a PDF or an image (PNG/JPEG/TIFF).");
         }
 
-        LabOrder order = labOrderRepository.findById(labOrderId)
-                .orElseThrow(() -> new ResourceNotFoundException("LabOrder", "id", labOrderId));
-        UUID visitId = (order.getVisit() != null) ? order.getVisit().getId() : null;
-        if (visitId == null) {
-            throw new ClinicalBusinessException("Lab order is not linked to a visit.");
-        }
-
         byte[] bytes;
         try {
             bytes = file.getBytes();
@@ -95,6 +153,7 @@ public class LabReportDocumentService {
         User actor = currentUser();
         LabReportDocument doc = LabReportDocument.builder()
                 .labOrderId(labOrderId)
+                .investigationId(investigationId)
                 .visitId(visitId)
                 .fileName(sanitizeFileName(file.getOriginalFilename()))
                 .contentType(contentType)
@@ -106,12 +165,13 @@ public class LabReportDocumentService {
                 .build();
         doc = documentRepository.save(doc);
 
-        log.info("[lab-doc] Attached report '{}' ({} bytes, {}) to lab order {} by {}",
-                doc.getFileName(), doc.getSizeBytes(), doc.getContentType(), labOrderId, doc.getUploadedByName());
+        log.info("[lab-doc] Attached report '{}' ({} bytes, {}) to {} by {}",
+                doc.getFileName(), doc.getSizeBytes(), doc.getContentType(), ownerLabel, doc.getUploadedByName());
 
         return LabReportDocumentResponse.builder()
                 .id(doc.getId())
                 .labOrderId(doc.getLabOrderId())
+                .investigationId(doc.getInvestigationId())
                 .fileName(doc.getFileName())
                 .contentType(doc.getContentType())
                 .sizeBytes(doc.getSizeBytes())
@@ -119,18 +179,6 @@ public class LabReportDocumentService {
                 .description(doc.getDescription())
                 .uploadedAt(doc.getCreatedAt())
                 .build();
-    }
-
-    @Transactional
-    public void softDelete(UUID labOrderId, UUID documentId) {
-        LabReportDocument doc = documentRepository.findByIdAndIsActiveTrue(documentId)
-                .orElseThrow(() -> new ResourceNotFoundException("LabReportDocument", "id", documentId));
-        if (!doc.getLabOrderId().equals(labOrderId)) {
-            throw new ResourceNotFoundException("LabReportDocument", "id", documentId);
-        }
-        doc.softDelete();
-        documentRepository.save(doc);
-        log.info("[lab-doc] Soft-deleted report document {} (order {})", documentId, labOrderId);
     }
 
     private User currentUser() {

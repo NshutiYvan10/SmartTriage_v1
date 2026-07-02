@@ -20,10 +20,16 @@ public interface LabReportDocumentRepository extends JpaRepository<LabReportDocu
      * merely listing (they stream only from the download endpoint).
      */
     @Query("SELECT new com.smartTriage.smartTriage_server.module.lab.dto.LabReportDocumentResponse("
-            + "d.id, d.labOrderId, d.fileName, d.contentType, d.sizeBytes, d.uploadedByName, d.description, d.createdAt) "
+            + "d.id, d.labOrderId, d.investigationId, d.fileName, d.contentType, d.sizeBytes, d.uploadedByName, d.description, d.createdAt) "
             + "FROM LabReportDocument d WHERE d.labOrderId = :labOrderId AND d.isActive = true "
             + "ORDER BY d.createdAt DESC")
     List<LabReportDocumentResponse> findMetadataByLabOrder(@Param("labOrderId") UUID labOrderId);
+
+    @Query("SELECT new com.smartTriage.smartTriage_server.module.lab.dto.LabReportDocumentResponse("
+            + "d.id, d.labOrderId, d.investigationId, d.fileName, d.contentType, d.sizeBytes, d.uploadedByName, d.description, d.createdAt) "
+            + "FROM LabReportDocument d WHERE d.investigationId = :investigationId AND d.isActive = true "
+            + "ORDER BY d.createdAt DESC")
+    List<LabReportDocumentResponse> findMetadataByInvestigation(@Param("investigationId") UUID investigationId);
 
     Optional<LabReportDocument> findByIdAndIsActiveTrue(UUID id);
 }

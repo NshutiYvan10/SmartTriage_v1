@@ -11,11 +11,12 @@
    can list + download.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Paperclip, Upload, Download, Trash2, Loader2, FileText, AlertTriangle, FileCheck2,
 } from 'lucide-react';
 import { labApi, type LabReportDocument } from '@/api/lab';
+import { investigationApi } from '@/api/investigations';
 import { useTheme } from '@/hooks/useTheme';
 
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,.tif,.tiff,application/pdf,image/png,image/jpeg,image/tiff';
@@ -27,8 +28,30 @@ function humanSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function LabDocuments({ orderId, canManage = false }: { orderId: string; canManage?: boolean }) {
+/**
+ * Report-document attachments for EITHER a lab order (labOrderId) or an
+ * imaging/ECG investigation (investigationId) — exactly one is provided. Same
+ * UI + upload/download/delete for both; only the API namespace differs.
+ */
+export function LabDocuments({
+  labOrderId, investigationId, canManage = false,
+}: { labOrderId?: string; investigationId?: string; canManage?: boolean }) {
   const { glassInner, isDark, text } = useTheme();
+  // Bind to the right endpoint set based on which owner id was passed. Memoised
+  // on the ids so the load callback below has a stable dependency.
+  const doc = useMemo(() => (investigationId
+    ? {
+        list: () => investigationApi.listDocuments(investigationId),
+        upload: (f: File, d?: string) => investigationApi.uploadDocument(investigationId, f, d),
+        download: (id: string, name: string) => investigationApi.downloadDocument(investigationId, id, name),
+        remove: (id: string) => investigationApi.deleteDocument(investigationId, id),
+      }
+    : {
+        list: () => labApi.listDocuments(labOrderId!),
+        upload: (f: File, d?: string) => labApi.uploadDocument(labOrderId!, f, d),
+        download: (id: string, name: string) => labApi.downloadDocument(labOrderId!, id, name),
+        remove: (id: string) => labApi.deleteDocument(labOrderId!, id),
+      }), [labOrderId, investigationId]);
   const [docs, setDocs] = useState<LabReportDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -39,10 +62,10 @@ export function LabDocuments({ orderId, canManage = false }: { orderId: string; 
   const fileInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
-    if (!orderId) return;
+    if (!labOrderId && !investigationId) return;
     setLoading(true);
     try {
-      const data = await labApi.listDocuments(orderId);
+      const data = await doc.list();
       setDocs(Array.isArray(data) ? data : []);
       setErr(null);
     } catch (e) {
@@ -50,7 +73,7 @@ export function LabDocuments({ orderId, canManage = false }: { orderId: string; 
     } finally {
       setLoading(false);
     }
-  }, [orderId]);
+  }, [doc, labOrderId, investigationId]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -60,7 +83,7 @@ export function LabDocuments({ orderId, canManage = false }: { orderId: string; 
     setUploading(true);
     setErr(null);
     try {
-      await labApi.uploadDocument(orderId, file, description);
+      await doc.upload(file, description);
       setFile(null); setDescription('');
       if (fileInput.current) fileInput.current.value = '';
       await load();
@@ -73,7 +96,7 @@ export function LabDocuments({ orderId, canManage = false }: { orderId: string; 
 
   const doDownload = async (d: LabReportDocument) => {
     setBusyId(d.id);
-    try { await labApi.downloadDocument(orderId, d.id, d.fileName); }
+    try { await doc.download(d.id, d.fileName); }
     catch (e) { setErr(e instanceof Error ? e.message : 'Download failed'); }
     finally { setBusyId(null); }
   };
@@ -81,7 +104,7 @@ export function LabDocuments({ orderId, canManage = false }: { orderId: string; 
   const doDelete = async (d: LabReportDocument) => {
     setBusyId(d.id);
     setErr(null);
-    try { await labApi.deleteDocument(orderId, d.id); await load(); }
+    try { await doc.remove(d.id); await load(); }
     catch (e) { setErr(e instanceof Error ? e.message : 'Remove failed'); }
     finally { setBusyId(null); }
   };

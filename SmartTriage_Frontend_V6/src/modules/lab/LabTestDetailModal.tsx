@@ -253,7 +253,7 @@ export function LabTestDetailModal({ visitId, investigationId, testName, onClose
               </div>
 
               {/* ── Attached report documents (view/download; lab tech manages) ── */}
-              <LabDocuments orderId={order.id} canManage={user?.role === 'LAB_TECHNICIAN'} />
+              <LabDocuments labOrderId={order.id} canManage={user?.role === 'LAB_TECHNICIAN'} />
 
               {/* ── Actions the clinician has to take ── */}
               <div>

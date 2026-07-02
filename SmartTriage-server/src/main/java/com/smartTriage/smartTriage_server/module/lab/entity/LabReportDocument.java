@@ -28,11 +28,16 @@ import java.util.UUID;
 @Builder
 public class LabReportDocument extends BaseEntity {
 
-    /** The lab order this report belongs to (FK enforced in the DB). */
-    @Column(name = "lab_order_id", nullable = false)
+    /** The lab order this report belongs to — set for a lab-order document; null for an
+     *  imaging/ECG one. Exactly one of labOrderId / investigationId is set (DB CHECK). */
+    @Column(name = "lab_order_id")
     private UUID labOrderId;
 
-    /** Denormalised visit id for scoped queries/authz without dereferencing the order. */
+    /** The imaging/ECG investigation this report belongs to — set for an imaging document. */
+    @Column(name = "investigation_id")
+    private UUID investigationId;
+
+    /** Denormalised visit id for scoped queries/authz without dereferencing the owner. */
     @Column(name = "visit_id", nullable = false)
     private UUID visitId;
 

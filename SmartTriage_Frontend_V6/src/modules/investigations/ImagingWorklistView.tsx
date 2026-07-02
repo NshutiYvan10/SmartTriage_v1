@@ -31,6 +31,7 @@ import { subscribeToDiagnostics } from '@/api/websocket';
 import { useTheme } from '@/hooks/useTheme';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPathForRole } from '@/lib/chartNav';
+import { LabDocuments } from '@/modules/lab/LabDocuments';
 
 /** Minutes since order, with a soft target so overdue studies stand out. */
 const PRIORITY_TARGET_MIN: Record<string, number> = { STAT: 30, URGENT: 120, ROUTINE: 1440 };
@@ -372,6 +373,10 @@ function ReportModal({
             style={glassInner}
           />
         </div>
+
+        {/* Attach the full report document (film/scan/PDF) — the interim standard:
+            structured findings above + the full report here. */}
+        <LabDocuments investigationId={investigation.id} canManage />
 
         <div className="flex items-center gap-4">
           <label className={`inline-flex items-center gap-2 text-xs font-semibold ${text.body} cursor-pointer`}>

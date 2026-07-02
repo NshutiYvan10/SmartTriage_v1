@@ -6,15 +6,21 @@ import com.smartTriage.smartTriage_server.module.clinical.dto.InvestigationRespo
 import com.smartTriage.smartTriage_server.module.clinical.dto.OrderInvestigationRequest;
 import com.smartTriage.smartTriage_server.module.clinical.dto.RecordInvestigationResultRequest;
 import com.smartTriage.smartTriage_server.module.clinical.service.InvestigationService;
+import com.smartTriage.smartTriage_server.module.lab.dto.LabReportDocumentResponse;
+import com.smartTriage.smartTriage_server.module.lab.entity.LabReportDocument;
+import com.smartTriage.smartTriage_server.module.lab.service.LabReportDocumentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -39,6 +45,7 @@ import java.util.UUID;
 public class InvestigationController {
 
     private final InvestigationService investigationService;
+    private final LabReportDocumentService labReportDocumentService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
@@ -186,5 +193,69 @@ public class InvestigationController {
             @PathVariable UUID hospitalId) {
         return ResponseEntity.ok(ApiResponse.success(
                 investigationService.getImagingWorklist(hospitalId)));
+    }
+
+    // ====================================================================
+    // IMAGING / ECG REPORT DOCUMENT ATTACHMENTS (interim standard)
+    // ====================================================================
+    // The "enter available structured data + attach the full report" standard
+    // applies to imaging/ECG too — often the report IS the document (film/scan).
+    // Reuses the shared lab report-document store, keyed by investigation.
+
+    /** Attach a report file (PDF/scan) to an imaging/ECG investigation. */
+    @PostMapping(value = "/{investigationId}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN', 'NURSE', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessInvestigation(authentication, #investigationId)")
+    public ResponseEntity<ApiResponse<LabReportDocumentResponse>> uploadDocument(
+            @PathVariable UUID investigationId,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "description", required = false) String description) {
+        LabReportDocumentResponse response =
+                labReportDocumentService.uploadForInvestigation(investigationId, file, description);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Report document attached", response));
+    }
+
+    /** List an investigation's attached report documents (metadata only). */
+    @GetMapping("/{investigationId}/documents")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN', 'NURSE', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessInvestigation(authentication, #investigationId)")
+    public ResponseEntity<ApiResponse<List<LabReportDocumentResponse>>> listDocuments(
+            @PathVariable UUID investigationId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                labReportDocumentService.listForInvestigation(investigationId)));
+    }
+
+    /** Stream an attached report document for viewing/download. */
+    @GetMapping("/{investigationId}/documents/{documentId}/download")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN', 'NURSE', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessInvestigation(authentication, #investigationId)")
+    public ResponseEntity<byte[]> downloadDocument(
+            @PathVariable UUID investigationId,
+            @PathVariable UUID documentId) {
+        LabReportDocument doc =
+                labReportDocumentService.getForDownloadByInvestigation(investigationId, documentId);
+        MediaType mediaType;
+        try {
+            mediaType = MediaType.parseMediaType(doc.getContentType());
+        } catch (Exception e) {
+            mediaType = MediaType.APPLICATION_OCTET_STREAM;
+        }
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"" + doc.getFileName().replace("\"", "") + "\"")
+                .body(doc.getContent());
+    }
+
+    /** Remove (soft-delete) an attached report document. */
+    @DeleteMapping("/{investigationId}/documents/{documentId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN', 'NURSE', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessInvestigation(authentication, #investigationId)")
+    public ResponseEntity<ApiResponse<Void>> deleteDocument(
+            @PathVariable UUID investigationId,
+            @PathVariable UUID documentId) {
+        labReportDocumentService.softDeleteByInvestigation(investigationId, documentId);
+        return ResponseEntity.ok(ApiResponse.success("Report document removed", null));
     }
 }

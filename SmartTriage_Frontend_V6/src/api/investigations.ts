@@ -1,5 +1,5 @@
 /* ── Investigations API ── */
-import { get, post, patch } from './client';
+import { get, post, patch, del, downloadBlob, saveBlob, uploadFile } from './client';
 import type {
   OrderInvestigationRequest,
   RecordInvestigationResultRequest,
@@ -7,6 +7,7 @@ import type {
   InvestigationType,
   Page,
 } from './types';
+import type { LabReportDocument } from './lab';
 
 export const investigationApi = {
   order: (data: OrderInvestigationRequest) =>
@@ -57,4 +58,23 @@ export const investigationApi = {
    */
   imagingWorklist: (hospitalId: string) =>
     get<InvestigationResponse[]>(`/investigations/hospital/${hospitalId}/imaging-worklist`),
+
+  // ── Imaging/ECG report document attachments (interim standard) ──
+  listDocuments: (investigationId: string) =>
+    get<LabReportDocument[]>(`/investigations/${investigationId}/documents`),
+
+  uploadDocument: (investigationId: string, file: File, description?: string) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (description && description.trim()) fd.append('description', description.trim());
+    return uploadFile<LabReportDocument>(`/investigations/${investigationId}/documents`, fd);
+  },
+
+  downloadDocument: async (investigationId: string, documentId: string, fallbackName = 'imaging-report') => {
+    const { blob, filename } = await downloadBlob(`/investigations/${investigationId}/documents/${documentId}/download`, fallbackName);
+    saveBlob(blob, filename);
+  },
+
+  deleteDocument: (investigationId: string, documentId: string) =>
+    del<void>(`/investigations/${investigationId}/documents/${documentId}`),
 };

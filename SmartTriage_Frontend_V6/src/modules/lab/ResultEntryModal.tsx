@@ -399,7 +399,7 @@ export function ResultEntryModal({ order, enteredByName, onClose, onSaved }: Pro
         {/* Report document attachment — interim standard: structured values above
             + the full report file here. Available once the order exists. */}
         <div className="mb-4">
-          <LabDocuments orderId={order.id} canManage />
+          <LabDocuments labOrderId={order.id} canManage />
         </div>
 
         {/* Critical heads-up */}

@@ -25,6 +25,7 @@ import type { InvestigationResponse } from '@/api/types';
 import { useTheme } from '@/hooks/useTheme';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { LabTestDetailModal } from './LabTestDetailModal';
+import { LabDocuments } from './LabDocuments';
 
 const IMAGING_TYPES = ['XRAY', 'CT_SCAN', 'MRI', 'ULTRASOUND', 'RADIOLOGY', 'ECG'];
 
@@ -144,6 +145,9 @@ export function LabPatientRecordView() {
                     <p className={`text-[12px] mt-1 ${text.body}`}>{i.result}</p>
                   )}
                   <div className={`text-[11px] mt-0.5 ${text.muted}`}>Ordered {fmt(i.orderedAt)}{i.resultedAt ? ` · Resulted ${fmt(i.resultedAt)}` : ''}</div>
+                  <div className="mt-2">
+                    <LabDocuments investigationId={i.id} canManage />
+                  </div>
                 </li>
               ))}
             </Section>
