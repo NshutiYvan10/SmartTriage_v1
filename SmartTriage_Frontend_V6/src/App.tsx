@@ -62,6 +62,7 @@ import { MedicationBoard } from './modules/medication/MedicationBoard';
 import { DoctorInvestigationsView } from './modules/investigations/DoctorInvestigationsView';
 import { ParamedicDashboard } from './modules/ems/ParamedicDashboard';
 import { MonitorManagementView } from './modules/ems/MonitorManagementView';
+import { ParamedicPatientsView } from './modules/ems/ParamedicPatientsView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 function AppContent() {
@@ -195,6 +196,8 @@ function AppContent() {
             <Route path="/ems" element={<RoleGuard page="ems"><ParamedicDashboard /></RoleGuard>} />
             {/* Paramedic-only Monitor Management — extracted from the Siren page. */}
             <Route path="/monitor" element={<RoleGuard page="monitor"><MonitorManagementView /></RoleGuard>} />
+            {/* Paramedic-only transport log — own transported patients, at-time details. */}
+            <Route path="/my-patients" element={<RoleGuard page="ems-patients"><ParamedicPatientsView /></RoleGuard>} />
             <Route path="/beds" element={<RoleGuard page="beds"><BedGridView /></RoleGuard>} />
             <Route path="/admin/hospitals" element={<RoleGuard page="admin-hospitals"><HospitalManagement /></RoleGuard>} />
             <Route path="/admin/users" element={<RoleGuard page="admin-users"><UserManagement /></RoleGuard>} />

@@ -75,6 +75,8 @@ export function ParamedicDashboard() {
   // True when the most recent load() rejected — so the connectivity pill
   // degrades on a failed sync, not only on a dropped socket.
   const [syncFailed, setSyncFailed] = useState<boolean>(false);
+  // Collapsed-by-default section for stale (>24h) active runs.
+  const [showOlderActive, setShowOlderActive] = useState(false);
   // Increments whenever the shared STOMP client reconnects — driving the
   // /topic/ems subscription effect below to re-subscribe, so the board does
   // not go deaf after a reconnect / covered-zone change.
@@ -135,8 +137,49 @@ export function ParamedicDashboard() {
     return () => clearInterval(id);
   }, []);
 
-  const active = runs.filter((r) => r.status !== 'HANDED_OFF' && r.status !== 'CANCELLED');
-  const history = runs.filter((r) => r.status === 'HANDED_OFF' || r.status === 'CANCELLED');
+  // Newest-first everywhere (defensive — the backend already orders
+  // dispatchedAt DESC) so today's work always sits at the top.
+  const byNewest = (a: EmsRun, b: EmsRun) =>
+    new Date(b.dispatchedAt).getTime() - new Date(a.dispatchedAt).getTime();
+  const active = runs
+    .filter((r) => r.status !== 'HANDED_OFF' && r.status !== 'CANCELLED')
+    .sort(byNewest);
+  // De-clutter: an "active" run dispatched more than 24h ago is almost always
+  // a run that was never handed off / cancelled. Keep the working view clean
+  // by COLLAPSING those — never hiding them (they're workflow debt that still
+  // needs closing), so they stay one tap away.
+  const RECENT_MS = 24 * 60 * 60 * 1000;
+  const recentActive = active.filter((r) => Date.now() - new Date(r.dispatchedAt).getTime() <= RECENT_MS);
+  const olderActive = active.filter((r) => Date.now() - new Date(r.dispatchedAt).getTime() > RECENT_MS);
+  const history = runs
+    .filter((r) => r.status === 'HANDED_OFF' || r.status === 'CANCELLED')
+    .sort((a, b) => new Date(b.handedOffAt ?? b.dispatchedAt).getTime()
+      - new Date(a.handedOffAt ?? a.dispatchedAt).getTime());
+
+  // One card renderer for both the recent grid and the collapsed older grid.
+  const renderRunCard = (run: EmsRun) => (
+    <RunCard
+      key={run.id} run={run} glassCard={glassCard} glassInner={glassInner} text={text} isDark={isDark}
+      canAct={canCreateRun}
+      onOpenChart={() => { if (run.visitId) navigate(chartPath(run.visitId)); }}
+      onOpen={() => { setEditing(run); setShowForm(true); }}
+      onPreregister={async () => {
+        try { await emsApi.preregister(run.id, {}); flash('ok', 'Pre-arrival sent to ED'); load(); }
+        catch (e: any) { flash('err', e?.message || 'Failed'); }
+      }}
+      onConfirmArrival={async () => {
+        try { await emsApi.confirmArrival(run.id); flash('ok', 'Arrival confirmed'); load(); }
+        catch (e: any) { flash('err', e?.message || 'Failed'); }
+      }}
+      onToggleLights={async () => {
+        try {
+          const updated = await emsApi.setLights(run.id, !run.lightsActive);
+          flash('ok', updated.lightsActive ? 'Lights activated — priority transport' : 'Lights cleared');
+          load();
+        } catch (e: any) { flash('err', e?.message || 'Failed'); }
+      }}
+    />
+  );
 
   return (
     <div className="min-h-full">
@@ -210,31 +253,40 @@ export function ParamedicDashboard() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {active.map((run) => (
-                <RunCard
-                  key={run.id} run={run} glassCard={glassCard} glassInner={glassInner} text={text} isDark={isDark}
-                  canAct={canCreateRun}
-                  onOpenChart={() => { if (run.visitId) navigate(chartPath(run.visitId)); }}
-                  onOpen={() => { setEditing(run); setShowForm(true); }}
-                  onPreregister={async () => {
-                    try { await emsApi.preregister(run.id, {}); flash('ok', 'Pre-arrival sent to ED'); load(); }
-                    catch (e: any) { flash('err', e?.message || 'Failed'); }
-                  }}
-                  onConfirmArrival={async () => {
-                    try { await emsApi.confirmArrival(run.id); flash('ok', 'Arrival confirmed'); load(); }
-                    catch (e: any) { flash('err', e?.message || 'Failed'); }
-                  }}
-                  onToggleLights={async () => {
-                    try {
-                      const updated = await emsApi.setLights(run.id, !run.lightsActive);
-                      flash('ok', updated.lightsActive ? 'Lights activated — priority transport' : 'Lights cleared');
-                      load();
-                    } catch (e: any) { flash('err', e?.message || 'Failed'); }
-                  }}
-                />
-              ))}
-            </div>
+            <>
+              {recentActive.length === 0 ? (
+                <p className={`text-sm ${text.muted}`}>No runs in the last 24 hours — older active runs are below.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {recentActive.map(renderRunCard)}
+                </div>
+              )}
+
+              {/* Stale active runs (>24h) — collapsed, never hidden. These are
+                  almost always runs that were never handed off / cancelled and
+                  need closing; burying them entirely would hide workflow debt. */}
+              {olderActive.length > 0 && (
+                <div className="space-y-3">
+                  <button
+                    onClick={() => setShowOlderActive((v) => !v)}
+                    className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-2xl text-sm font-bold text-amber-600 transition-colors hover:opacity-90"
+                    style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)' }}
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Clock className="w-4 h-4" />
+                      Older active runs ({olderActive.length}) — dispatched over 24h ago
+                      {canCreateRun && '; likely need closing or cancelling'}
+                    </span>
+                    {showOlderActive ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {showOlderActive && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {olderActive.map(renderRunCard)}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
 

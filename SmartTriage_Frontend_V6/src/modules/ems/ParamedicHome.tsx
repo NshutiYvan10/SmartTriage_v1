@@ -82,10 +82,24 @@ export function ParamedicHome() {
     return () => clearInterval(id);
   }, [load]);
 
-  const active = runs.filter((r) => r.status !== 'HANDED_OFF' && r.status !== 'CANCELLED');
+  // Newest-first (defensive — the backend already orders dispatchedAt DESC),
+  // and the home shows only RECENT active runs: an "active" run older than
+  // 24h is almost always one that was never closed. Those get a compact
+  // needs-attention pointer to the Siren page instead of cluttering the
+  // at-a-glance view.
+  const RECENT_MS = 24 * 60 * 60 * 1000;
+  const active = runs
+    .filter((r) => r.status !== 'HANDED_OFF' && r.status !== 'CANCELLED')
+    .sort((a, b) => new Date(b.dispatchedAt).getTime() - new Date(a.dispatchedAt).getTime());
+  const recentActive = active.filter((r) => Date.now() - new Date(r.dispatchedAt).getTime() <= RECENT_MS);
+  const olderActiveCount = active.length - recentActive.length;
+  const recentHandoffs = runs
+    .filter((r) => r.status === 'HANDED_OFF')
+    .sort((a, b) => new Date(b.handedOffAt ?? b.dispatchedAt).getTime()
+      - new Date(a.handedOffAt ?? a.dispatchedAt).getTime());
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const handedOffToday = runs.filter(
-    (r) => r.status === 'HANDED_OFF' && r.handedOffAt && new Date(r.handedOffAt) >= today,
+  const handedOffToday = recentHandoffs.filter(
+    (r) => r.handedOffAt && new Date(r.handedOffAt) >= today,
   ).length;
   const monitorsOnline = devices.filter((d) => d.status === 'ONLINE' || d.status === 'MONITORING').length;
 
@@ -129,12 +143,24 @@ export function ParamedicHome() {
           <Kpi icon={Radio} tone={monitorsOnline > 0 ? 'text-cyan-600' : 'text-slate-500'} label="Monitors online" value={`${monitorsOnline}/${devices.length}`} glassCard={glassCard} text={text} />
         </div>
 
-        {/* Active handoffs */}
+        {/* Active handoffs — recent (≤24h) only; older ones get a pointer */}
         <div className="space-y-3">
           <h2 className={`text-base font-bold ${text.heading}`}>
             <Activity className="w-5 h-5 inline mr-1.5 text-rose-500" />
-            Active handoffs ({active.length})
+            Active handoffs ({recentActive.length})
           </h2>
+          {/* Stale active runs are workflow debt, not glance material — point
+              at them without cluttering the home. */}
+          {olderActiveCount > 0 && (
+            <button
+              onClick={() => navigate('/ems')}
+              className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-2xl text-sm font-bold text-amber-600 transition-colors hover:opacity-90"
+              style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)' }}
+            >
+              <span>{olderActiveCount} older active run{olderActiveCount === 1 ? '' : 's'} (over 24h) need closing — review in Siren</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
           {loading && active.length === 0 ? (
             <div className="flex items-center justify-center py-8"><Loader2 className="w-7 h-7 animate-spin text-rose-500" /></div>
           ) : active.length === 0 ? (
@@ -143,9 +169,11 @@ export function ParamedicHome() {
               <p className={`text-base font-bold ${text.heading}`}>No active runs</p>
               <p className={`text-sm ${text.muted}`}>Start a new run from the Siren page when you're dispatched.</p>
             </div>
+          ) : recentActive.length === 0 ? (
+            <p className={`text-sm ${text.muted}`}>No runs in the last 24 hours.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {active.map((run) => (
+              {recentActive.map((run) => (
                 <button
                   key={run.id}
                   onClick={() => navigate('/ems')}
@@ -236,15 +264,16 @@ export function ParamedicHome() {
           </button>
         </div>
 
-        {/* Recent handoffs — compact, links to Siren for full history/PCR */}
-        {runs.some((r) => r.status === 'HANDED_OFF') && (
+        {/* Recent handoffs — newest first; the full at-the-time record lives
+            on the My Patients transport log. */}
+        {recentHandoffs.length > 0 && (
           <div className="space-y-3">
             <h2 className={`text-base font-bold ${text.heading}`}>
               <ClipboardList className="w-5 h-5 inline mr-1.5 text-slate-500" />
               Recent handoffs
             </h2>
             <div className="rounded-2xl p-2 space-y-1" style={glassCard}>
-              {runs.filter((r) => r.status === 'HANDED_OFF').slice(0, 5).map((r) => (
+              {recentHandoffs.slice(0, 5).map((r) => (
                 <div key={r.id} className={`px-3 py-2.5 rounded-xl flex items-center justify-between gap-2 ${isDark ? 'hover:bg-white/5' : 'hover:bg-slate-50'}`}>
                   <div className="min-w-0">
                     <PatientContextLine
@@ -259,6 +288,12 @@ export function ParamedicHome() {
                   </span>
                 </div>
               ))}
+              <button
+                onClick={() => navigate('/my-patients')}
+                className="w-full px-3 py-2 rounded-xl text-sm font-bold text-rose-500 inline-flex items-center gap-1 hover:opacity-80"
+              >
+                Full transport log — My Patients <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
         )}

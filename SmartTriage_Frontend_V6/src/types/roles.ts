@@ -50,6 +50,11 @@ export type AppPage =
    *  Extracted from the Siren (/ems) page so device management no longer
    *  hides inside the run workflow. */
   | 'monitor'
+  /** Paramedic-only transport log — the patients THIS crew member
+   *  transported, with details as recorded at the time (field triage,
+   *  vitals, handover outcome, PCR). Own-run-scoped (emsApi.myRuns);
+   *  deliberately NOT the hospital Patients registry. */
+  | 'ems-patients'
   | 'pathways'
   | 'icu'
   | 'safety-incidents'
@@ -301,8 +306,12 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   //    workflow: Transfer of Care + handover notes + the PCR PDF.
   //  - 'monitor': dedicated Monitor Management page (register/pair, power
   //    on/off, start/stop recording, status) — extracted from the Siren page.
+  //  - 'ems-patients': "My Patients" transport log — the patients THIS crew
+  //    member transported with details as recorded AT THE TIME (field triage,
+  //    vitals, handover outcome, PCR). Own-run-scoped; NOT the hospital
+  //    registry.
   PARAMEDIC: [
-    'dashboard', 'ems', 'monitor',
+    'dashboard', 'ems', 'ems-patients', 'monitor',
     'notifications', 'profile',
   ],
 

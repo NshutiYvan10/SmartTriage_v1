@@ -149,6 +149,9 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         // no longer needs its own sidebar entry.
         { id: 'med-board', label: 'Med Board', icon: Pill, pageId: 'med-board' as AppPage },
         { id: 'ems', label: 'Siren', icon: Siren, pageId: 'ems' as AppPage },
+        // Paramedic-only transport log — own transported patients with the
+        // details as recorded at the time. NOT the hospital registry.
+        { id: 'my-patients', label: 'My Patients', icon: Users, pageId: 'ems-patients' as AppPage },
         // Paramedic-only Monitor Management — register/pair, power on/off,
         // start/stop recording, live status. Extracted from the Siren page.
         { id: 'monitor', label: 'Monitor', icon: Monitor, pageId: 'monitor' as AppPage },
