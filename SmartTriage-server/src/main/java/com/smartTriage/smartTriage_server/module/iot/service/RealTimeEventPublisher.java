@@ -238,6 +238,20 @@ public class RealTimeEventPublisher {
         log.debug("Published lab-order event to {}", topic);
     }
 
+    /**
+     * Push an imaging/ECG diagnostics-worklist event to the hospital's
+     * diagnostics topic. Fired when a non-lab diagnostic (X-ray/CT/MRI/US/
+     * radiology/ECG) is ordered or transitions, so the technician's
+     * Imaging &amp; Diagnostics worklist stays live without polling — the
+     * lab-inbox equivalent for orders the lab pipeline does not own.
+     * Payload is a compact hint; subscribers re-fetch the worklist.
+     */
+    public void publishDiagnosticsEvent(UUID hospitalId, Object payload) {
+        String topic = "/topic/diagnostics/" + hospitalId;
+        messagingTemplate.convertAndSend(topic, payload);
+        log.debug("Published diagnostics event to {}", topic);
+    }
+
     // ====================================================================
     // MEDICATION TOPICS (Workflow 3)
     // ====================================================================

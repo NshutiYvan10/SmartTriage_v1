@@ -6,6 +6,7 @@ import {
   BarChart3,
   Stethoscope,
   Monitor,
+  ScanLine,
   ChevronRight,
   ChevronLeft,
   Sun,
@@ -137,6 +138,11 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
       label: 'Lab & Docs',
       items: [
         { id: 'lab', label: 'Lab Orders', icon: FlaskConical, pageId: 'lab' as AppPage },
+        // Imaging & Diagnostics worklist — the technician surface for ordered
+        // imaging/ECG studies (X-ray/CT/MRI/US/radiology/ECG). These do NOT route
+        // to the lab inbox, so without this worklist an ordered X-ray reaches no
+        // technician. Visible to LAB_TECHNICIAN + NURSE (per ROLE_PAGES).
+        { id: 'imaging', label: 'Imaging & Diagnostics', icon: ScanLine, pageId: 'imaging' as AppPage },
         // Workflow 2 refinement — doctor-only aggregate view of every
         // investigation they've ordered. Read-only (tech drives the
         // status transitions on /lab). RoleGuard hides it from non-

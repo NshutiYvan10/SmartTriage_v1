@@ -84,4 +84,28 @@ public interface InvestigationRepository extends JpaRepository<Investigation, UU
     List<Investigation> findByOrderedByIdOrLegacyName(
             @org.springframework.data.repository.query.Param("doctorId") UUID doctorId,
             @org.springframework.data.repository.query.Param("doctorName") String doctorName);
+
+    /**
+     * Imaging &amp; Diagnostics worklist — every ACTIVE imaging/ECG investigation at a
+     * hospital that still needs a technician to act (status in {@code statuses},
+     * e.g. ORDERED / IN_PROGRESS), across all patients. Hospital-scoped via
+     * {@code v.hospital.id}. STAT first, then URGENT, then by age (oldest first)
+     * so the queue mirrors the lab inbox ordering. JOIN FETCHes visit + patient +
+     * bed so the mapper can hydrate patient context without a lazy-load per row
+     * (OSIV is off — a lazy access outside the tx would throw).
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT i FROM Investigation i " +
+            "JOIN FETCH i.visit v JOIN FETCH v.patient " +
+            "LEFT JOIN FETCH v.currentBed " +
+            "WHERE i.isActive = true " +
+            "AND v.hospital.id = :hospitalId " +
+            "AND i.investigationType IN :types " +
+            "AND i.status IN :statuses " +
+            "ORDER BY CASE UPPER(i.priority) WHEN 'STAT' THEN 0 WHEN 'URGENT' THEN 1 ELSE 2 END, " +
+            "         i.orderedAt ASC")
+    List<Investigation> findDiagnosticsWorklist(
+            @org.springframework.data.repository.query.Param("hospitalId") UUID hospitalId,
+            @org.springframework.data.repository.query.Param("types") java.util.Collection<InvestigationType> types,
+            @org.springframework.data.repository.query.Param("statuses") java.util.Collection<InvestigationStatus> statuses);
 }

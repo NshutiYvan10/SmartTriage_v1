@@ -48,4 +48,13 @@ export const investigationApi = {
    */
   getMyOrders: () =>
     get<InvestigationResponse[]>(`/investigations/doctor/me`),
+
+  /**
+   * Imaging & Diagnostics worklist — every active imaging/ECG order at the
+   * hospital that still needs a technician (ORDERED / IN_PROGRESS), across all
+   * patients. The technician surface for orders the lab pipeline does NOT own,
+   * so an ordered X-ray/CT/US/ECG can't silently vanish. Zone-scoped server-side.
+   */
+  imagingWorklist: (hospitalId: string) =>
+    get<InvestigationResponse[]>(`/investigations/hospital/${hospitalId}/imaging-worklist`),
 };

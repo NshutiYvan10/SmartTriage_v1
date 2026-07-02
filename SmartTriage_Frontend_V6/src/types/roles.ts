@@ -40,6 +40,11 @@ export type AppPage =
    *  refinement). Read-only — doctors track their orders but don't
    *  manage the lab queue. */
   | 'investigations'
+  /** Imaging & Diagnostics worklist — the technician surface for ordered
+   *  imaging/ECG studies (X-ray/CT/MRI/US/radiology/ECG), which do NOT route
+   *  to the lab inbox. Without it an ordered X-ray reaches no technician.
+   *  Tech + nurse worklist; cross-patient, hospital-scoped. */
+  | 'imaging'
   | 'med-queue'
   /** V67 — zone medication board: due/overdue doses, PRN quick-give,
    *  infusions, high-alert approvals. The nurse's main dose surface. */
@@ -246,7 +251,11 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'sepsis', 'fast-track', 'hypoglycemia', 'isolation',
     'pathways',
     // Documentation & handover
-    'documentation', 'handover', 'lab', 'ems',
+    'documentation', 'handover', 'lab',
+    // Imaging & Diagnostics worklist — ordered imaging/ECG studies to perform
+    // & report (the technician surface for non-lab diagnostics).
+    'imaging',
+    'ems',
     // Medication administration queue (Workflow 3) — the main
     // surface for the nurse: every PRESCRIBED med across the
     // hospital, STAT first, real-time push.
@@ -322,6 +331,9 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   // would show an empty schedule.
   LAB_TECHNICIAN: [
     'dashboard', 'patients', 'lab',
+    // The lab tech is the whole-diagnostics hub — imaging/ECG orders (no
+    // radiographer role exists) land on this worklist so they can't vanish.
+    'imaging',
     'notifications', 'profile',
   ],
 

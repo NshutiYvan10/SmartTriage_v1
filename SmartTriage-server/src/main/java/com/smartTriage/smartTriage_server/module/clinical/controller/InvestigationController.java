@@ -59,8 +59,13 @@ public class InvestigationController {
         return ResponseEntity.ok(ApiResponse.success("Specimen collected", response));
     }
 
+    // LAB_TECHNICIAN is included so the diagnostics technician can drive an
+    // imaging/ECG study through its worklist (perform → report). It stays SAFE:
+    // requireNotLabManaged() still blocks any lab-routed investigation that has an
+    // active LabOrder (that lifecycle belongs to the lab workflow), and
+    // canAccessInvestigation() keeps it hospital-scoped.
     @PatchMapping("/{id}/in-progress")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN') "
             + "and @clinicalAuthz.canAccessInvestigation(authentication, #id)")
     public ResponseEntity<ApiResponse<InvestigationResponse>> markInProgress(
             @PathVariable UUID id) {
@@ -69,7 +74,8 @@ public class InvestigationController {
     }
 
     @PatchMapping("/{id}/result")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN') "
+            + "and @clinicalAuthz.canAccessInvestigation(authentication, #id)")
     public ResponseEntity<ApiResponse<InvestigationResponse>> recordResult(
             @PathVariable UUID id,
             @Valid @RequestBody RecordInvestigationResultRequest request) {
@@ -160,5 +166,25 @@ public class InvestigationController {
         if (fullName.isEmpty()) fullName = user.getEmail();
         return ResponseEntity.ok(ApiResponse.success(
                 investigationService.getInvestigationsForDoctor(user.getId(), fullName)));
+    }
+
+    /**
+     * Imaging &amp; Diagnostics worklist — every active imaging/ECG order at the
+     * hospital that still needs a technician (ORDERED / IN_PROGRESS), across all
+     * patients. The technician surface for orders the lab pipeline does NOT own,
+     * so an ordered X-ray/CT/US/ECG can't silently vanish.
+     *
+     * <p>Same audience + hospital gate as the lab inbox
+     * ({@code GET /lab/hospital/{hospitalId}/inbox}); results are further
+     * zone-scoped server-side (tech + oversight see all; a zone nurse sees only
+     * their covered zones).
+     */
+    @GetMapping("/hospital/{hospitalId}/imaging-worklist")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN', 'NURSE', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    public ResponseEntity<ApiResponse<List<InvestigationResponse>>> getImagingWorklist(
+            @PathVariable UUID hospitalId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                investigationService.getImagingWorklist(hospitalId)));
     }
 }

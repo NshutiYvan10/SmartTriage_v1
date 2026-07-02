@@ -241,6 +241,19 @@ export function subscribeToLabOrders(
 }
 
 /**
+ * Subscribe to imaging/ECG diagnostics-worklist events for a hospital.
+ * Dedicated topic (/topic/diagnostics/{hospitalId}) — the imaging-worklist
+ * equivalent of the lab inbox stream. Payload is a compact hint
+ * ({type, investigationId, status, …}); the view re-fetches on any message.
+ */
+export function subscribeToDiagnostics(
+  hospitalId: string,
+  callback: (event: any) => void
+): () => void {
+  return subscribeToTopic(`/topic/diagnostics/${hospitalId}`, callback);
+}
+
+/**
  * Subscribe to sepsis events for a hospital. Uses a DEDICATED topic
  * (/topic/sepsis/{hospitalId}) rather than the alert topics, because the
  * subscription map allows only one subscriber per topic string and the

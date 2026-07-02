@@ -60,6 +60,7 @@ import { QualityDashboard } from './modules/quality/QualityDashboard';
 import { LabOrdersView } from './modules/lab/LabOrdersView';
 import { MedicationBoard } from './modules/medication/MedicationBoard';
 import { DoctorInvestigationsView } from './modules/investigations/DoctorInvestigationsView';
+import { ImagingWorklistView } from './modules/investigations/ImagingWorklistView';
 import { ParamedicDashboard } from './modules/ems/ParamedicDashboard';
 import { MonitorManagementView } from './modules/ems/MonitorManagementView';
 import { ParamedicPatientsView } from './modules/ems/ParamedicPatientsView';
@@ -189,6 +190,7 @@ function AppContent() {
             <Route path="/alert-dashboard" element={<Navigate to="/alerts" replace />} />
             <Route path="/iot-devices" element={<RoleGuard page="iot-devices"><IoTDeviceManagement /></RoleGuard>} />
             <Route path="/lab" element={<RoleGuard page="lab"><LabOrdersView /></RoleGuard>} />
+            <Route path="/imaging" element={<RoleGuard page="imaging"><ImagingWorklistView /></RoleGuard>} />
             {/* Med Queue merged into the Med Board as its "New Orders" tab */}
             <Route path="/med-queue" element={<Navigate to="/med-board" replace />} />
             <Route path="/med-board" element={<RoleGuard page="med-board"><MedicationBoard /></RoleGuard>} />

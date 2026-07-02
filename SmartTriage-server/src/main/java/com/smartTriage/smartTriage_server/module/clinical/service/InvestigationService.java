@@ -6,6 +6,7 @@ import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.InvestigationStatus;
 import com.smartTriage.smartTriage_server.common.enums.InvestigationType;
 import com.smartTriage.smartTriage_server.common.enums.LabPriority;
+import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
@@ -16,10 +17,13 @@ import com.smartTriage.smartTriage_server.module.clinical.dto.RecordInvestigatio
 import com.smartTriage.smartTriage_server.module.clinical.entity.Investigation;
 import com.smartTriage.smartTriage_server.module.clinical.mapper.ClinicalMapper;
 import com.smartTriage.smartTriage_server.module.clinical.repository.InvestigationRepository;
+import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher;
 import com.smartTriage.smartTriage_server.module.lab.service.LabOrderService;
+import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.visit.service.VisitService;
+import com.smartTriage.smartTriage_server.security.ClinicalAuthz;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import lombok.RequiredArgsConstructor;
@@ -28,10 +32,15 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -55,6 +64,18 @@ public class InvestigationService {
         private final VisitService visitService;
         private final ClinicalAlertRepository clinicalAlertRepository;
         private final LabOrderService labOrderService;
+        private final ClinicalAuthz clinicalAuthz;
+        private final ShiftAssignmentService shiftAssignmentService;
+        private final RealTimeEventPublisher realTimeEventPublisher;
+
+        /** Types shown on the Imaging &amp; Diagnostics worklist (imaging + ECG). */
+        private static final Set<InvestigationType> DIAGNOSTIC_WORKLIST_TYPES = EnumSet.of(
+                        InvestigationType.XRAY, InvestigationType.CT_SCAN, InvestigationType.MRI,
+                        InvestigationType.ULTRASOUND, InvestigationType.RADIOLOGY, InvestigationType.ECG);
+
+        /** The states in which a diagnostic still needs a technician — the actionable queue. */
+        private static final Set<InvestigationStatus> DIAGNOSTIC_WORKLIST_STATUSES = EnumSet.of(
+                        InvestigationStatus.ORDERED, InvestigationStatus.IN_PROGRESS);
 
         // Lab-routable investigation types (LABORATORY/BLOOD_GAS/URINALYSIS/RAPID_TEST)
         // are defined on InvestigationType.isLabRoutable() — the single source of truth
@@ -116,7 +137,17 @@ public class InvestigationService {
                                         null);
                 }
 
-                return ClinicalMapper.toResponse(investigation);
+                InvestigationResponse response = ClinicalMapper.toResponse(investigation);
+
+                // Imaging/ECG orders reach NO lab and there is no radiographer role, so
+                // without this they'd sit only on the patient's chart — a silent failure.
+                // Surface them on the shared Imaging & Diagnostics worklist, pushed live
+                // AFTER COMMIT (so a rolled-back order never appears on a technician's queue).
+                if (investigation.getInvestigationType() != null
+                                && investigation.getInvestigationType().needsDiagnosticsWorklist()) {
+                        publishDiagnosticsEventAfterCommit(visit, response, "IMAGING_ORDERED");
+                }
+                return response;
         }
 
         /**
@@ -196,7 +227,12 @@ public class InvestigationService {
                 log.info("Investigation in progress — id:{} test:'{}'",
                                 investigation.getId(), investigation.getTestName());
 
-                return ClinicalMapper.toResponse(investigation);
+                InvestigationResponse response = ClinicalMapper.toResponse(investigation);
+                if (investigation.getInvestigationType() != null
+                                && investigation.getInvestigationType().needsDiagnosticsWorklist()) {
+                        publishDiagnosticsEventAfterCommit(investigation.getVisit(), response, "IMAGING_UPDATED");
+                }
+                return response;
         }
 
         @Transactional
@@ -239,7 +275,14 @@ public class InvestigationService {
                                 investigation.getId(), investigation.getTestName(),
                                 investigation.getIsAbnormal(), investigation.getIsCritical());
 
-                return ClinicalMapper.toResponse(investigation);
+                InvestigationResponse response = ClinicalMapper.toResponse(investigation);
+                // Push so the worklist drops the now-resulted study; the ordering doctor is
+                // separately notified via the INVESTIGATION_RESULTED alert above.
+                if (investigation.getInvestigationType() != null
+                                && investigation.getInvestigationType().needsDiagnosticsWorklist()) {
+                        publishDiagnosticsEventAfterCommit(investigation.getVisit(), response, "IMAGING_RESULTED");
+                }
+                return response;
         }
 
         @Transactional
@@ -268,7 +311,12 @@ public class InvestigationService {
                 log.info("Investigation cancelled — id:{} test:'{}' reason:'{}'",
                                 investigation.getId(), investigation.getTestName(), reason);
 
-                return ClinicalMapper.toResponse(investigation);
+                InvestigationResponse response = ClinicalMapper.toResponse(investigation);
+                if (investigation.getInvestigationType() != null
+                                && investigation.getInvestigationType().needsDiagnosticsWorklist()) {
+                        publishDiagnosticsEventAfterCommit(investigation.getVisit(), response, "IMAGING_CANCELLED");
+                }
+                return response;
         }
 
         // ====================================================================
@@ -309,6 +357,109 @@ public class InvestigationService {
                                 .stream()
                                 .map(ClinicalMapper::toResponse)
                                 .collect(Collectors.toList());
+        }
+
+        // ====================================================================
+        // IMAGING & DIAGNOSTICS WORKLIST
+        // ====================================================================
+
+        /**
+         * The Imaging &amp; Diagnostics worklist for one hospital — every active
+         * imaging/ECG investigation that still needs a technician (ORDERED or
+         * IN_PROGRESS), across all patients, STAT-first. This is the technician
+         * surface for orders the lab pipeline deliberately does NOT own; without
+         * it an ordered X-ray reaches nobody.
+         *
+         * <p>Scoped exactly like the lab inbox ({@code LabOrderService.getInboxForLab}):
+         * a LAB_TECHNICIAN (serves the whole diagnostics unit) and oversight
+         * (charge nurse / shift lead / super-admin) see every study; a zone-bound
+         * nurse sees only studies for patients in a zone they currently cover. No
+         * authenticated principal → empty (fail closed).
+         */
+        @Transactional(readOnly = true)
+        public List<InvestigationResponse> getImagingWorklist(UUID hospitalId) {
+                List<InvestigationResponse> all = investigationRepository
+                                .findDiagnosticsWorklist(hospitalId, DIAGNOSTIC_WORKLIST_TYPES, DIAGNOSTIC_WORKLIST_STATUSES)
+                                .stream()
+                                .map(ClinicalMapper::toResponse)
+                                .collect(Collectors.toList());
+                return scopeToCoveredZones(hospitalId, all);
+        }
+
+        /**
+         * Zone-scope a diagnostics worklist for the CURRENT caller. Mirrors the lab
+         * inbox policy: LAB_TECHNICIAN + oversight see all; a zone clinician sees only
+         * rows whose patient is in a zone they currently cover. Enforced server-side.
+         */
+        private List<InvestigationResponse> scopeToCoveredZones(UUID hospitalId, List<InvestigationResponse> all) {
+                Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+                User caller = (auth != null && auth.getPrincipal() instanceof User u) ? u : null;
+                if (caller == null) {
+                        return List.of();
+                }
+                if (caller.getRole() == Role.LAB_TECHNICIAN
+                                || clinicalAuthz.canSeeAllZonesAtHospital(auth, hospitalId)) {
+                        return all;
+                }
+                Set<EdZone> covered = currentCoveredZones(caller.getId(), hospitalId);
+                return all.stream()
+                                .filter(r -> r.getCurrentZone() != null && covered.contains(r.getCurrentZone()))
+                                .collect(Collectors.toList());
+        }
+
+        /** The caller's currently-covered zones (active shift's primary ∪ additional). */
+        private Set<EdZone> currentCoveredZones(UUID userId, UUID hospitalId) {
+                Set<EdZone> zones = new HashSet<>();
+                shiftAssignmentService.getCurrentShiftForUser(userId).ifPresent(sa -> {
+                        if (sa.getHospitalId() == null || sa.getHospitalId().equals(hospitalId)) {
+                                if (sa.getZone() != null) {
+                                        zones.add(sa.getZone());
+                                }
+                                if (sa.getAdditionalZones() != null) {
+                                        zones.addAll(sa.getAdditionalZones());
+                                }
+                        }
+                });
+                return zones;
+        }
+
+        /**
+         * Publish a lightweight diagnostics-worklist event to
+         * {@code /topic/diagnostics/{hospitalId}} AFTER the enclosing transaction
+         * commits — so a rolled-back order/transition never appears on a
+         * technician's live queue (the phantom-on-rollback trap). The frontend
+         * just re-fetches the worklist on any message, so the payload is a compact
+         * hint, not the whole row.
+         */
+        private void publishDiagnosticsEventAfterCommit(Visit visit, InvestigationResponse response, String eventType) {
+                final UUID hospitalId = (visit != null && visit.getHospital() != null)
+                                ? visit.getHospital().getId() : null;
+                if (hospitalId == null) return;
+
+                Map<String, Object> payload = new LinkedHashMap<>();
+                payload.put("type", eventType);
+                payload.put("investigationId", response.getId());
+                payload.put("visitId", response.getVisitId());
+                payload.put("investigationType",
+                                response.getInvestigationType() != null ? response.getInvestigationType().name() : null);
+                payload.put("status", response.getStatus() != null ? response.getStatus().name() : null);
+                payload.put("priority", response.getPriority());
+
+                Runnable fire = () -> {
+                        try {
+                                realTimeEventPublisher.publishDiagnosticsEvent(hospitalId, payload);
+                        } catch (Exception e) {
+                                log.warn("Failed to broadcast diagnostics event for investigation {}: {}",
+                                                response.getId(), e.getMessage());
+                        }
+                };
+                if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                                @Override public void afterCommit() { fire.run(); }
+                        });
+                } else {
+                        fire.run();
+                }
         }
 
         public InvestigationResponse getInvestigation(UUID investigationId) {

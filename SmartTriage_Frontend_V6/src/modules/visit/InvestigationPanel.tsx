@@ -39,6 +39,67 @@ const URGENCIES: Array<{ value: 'STAT' | 'URGENT' | 'ROUTINE'; label: string; he
   { value: 'ROUTINE', label: 'ROUTINE', helper: 'Standard turnaround',        color: 'bg-emerald-500 text-white' },
 ];
 
+const LAB_TYPES: InvestigationType[] = ['LABORATORY', 'BLOOD_GAS', 'URINALYSIS', 'RAPID_TEST'];
+const IMAGING_TYPES: InvestigationType[] = ['XRAY', 'CT_SCAN', 'MRI', 'ULTRASOUND', 'RADIOLOGY', 'ECG'];
+
+/**
+ * Where does an order of this type actually GO? The doctor must know before
+ * submitting — an imaging order does NOT reach the lab, so silently framing the
+ * whole form as "lab" (as it used to) misled the ordering clinician. Each type
+ * is routed to a real worklist / owner; this surfaces it honestly.
+ */
+type Routing = {
+  destination: 'lab' | 'imaging' | 'bedside' | 'other';
+  label: string;
+  hint: string;
+  notesLabel: string;
+  notesAudience: string;
+};
+
+function routingFor(type: InvestigationType): Routing {
+  if (LAB_TYPES.includes(type)) {
+    return {
+      destination: 'lab',
+      label: 'Laboratory worklist',
+      hint: 'Goes to the Lab worklist — a lab technician processes the specimen and reports the result.',
+      notesLabel: 'Notes for Lab Technician',
+      notesAudience: 'lab technician',
+    };
+  }
+  if (IMAGING_TYPES.includes(type)) {
+    return {
+      destination: 'imaging',
+      label: 'Imaging & Diagnostics worklist',
+      hint: 'Goes to the Imaging & Diagnostics worklist — a technician performs the study and records the report.',
+      notesLabel: 'Notes for Imaging Technician',
+      notesAudience: 'imaging technician',
+    };
+  }
+  if (type === 'POINT_OF_CARE') {
+    return {
+      destination: 'bedside',
+      label: 'Point-of-care (bedside)',
+      hint: 'Performed at the bedside — record the result on the chart. No separate worklist.',
+      notesLabel: 'Notes',
+      notesAudience: 'the care team',
+    };
+  }
+  return {
+    destination: 'other',
+    label: 'Tracked on the chart',
+    hint: 'No dedicated worklist for this type — it is tracked on the patient chart and must be coordinated manually.',
+    notesLabel: 'Notes',
+    notesAudience: 'the care team',
+  };
+}
+
+const ROUTING_STYLE: Record<Routing['destination'], { text: string; bg: string; border: string }> = {
+  lab:     { text: 'text-cyan-600',   bg: 'rgba(6,182,212,0.08)',  border: '1px solid rgba(6,182,212,0.25)' },
+  imaging: { text: 'text-violet-600', bg: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.25)' },
+  bedside: { text: 'text-emerald-600',bg: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' },
+  other:   { text: 'text-amber-600',  bg: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)' },
+};
+
 interface Props {
   onSubmit: (req: Partial<OrderInvestigationRequest>) => Promise<void>;
   onClose: () => void;
@@ -115,6 +176,11 @@ export function InvestigationPanel({ onSubmit, onClose, formLoading, glassCard, 
   }, []);
 
   const canSubmit = !!query.trim() && !formLoading;
+
+  // Honest routing — tell the doctor WHERE this order goes. An imaging order
+  // does NOT reach the lab; framing the whole form as "lab" used to mislead.
+  const route = routingFor(investigationType);
+  const routeStyle = ROUTING_STYLE[route.destination];
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit) return;
@@ -268,6 +334,21 @@ export function InvestigationPanel({ onSubmit, onClose, formLoading, glassCard, 
         )}
       </div>
 
+      {/* Routing — where this order actually goes. Shown as soon as a test
+          is chosen so an imaging order is never mistaken for a lab order. */}
+      {selected && (
+        <div
+          className={`rounded-xl px-3 py-2 flex items-start gap-2 ${routeStyle.text}`}
+          style={{ background: routeStyle.bg, border: routeStyle.border }}
+        >
+          <Send className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-wider">Routes to: {route.label}</p>
+            <p className={`text-[11px] ${text.body}`}>{route.hint}</p>
+          </div>
+        </div>
+      )}
+
       {/* Urgency chips */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
@@ -316,13 +397,13 @@ export function InvestigationPanel({ onSubmit, onClose, formLoading, glassCard, 
       {/* Lab tech notes */}
       <div>
         <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
-          Notes for Lab Technician
+          {selected ? route.notesLabel : 'Notes'}
           <span className={`ml-2 font-normal normal-case ${text.muted}`}>(special handling, optional)</span>
         </label>
         <textarea
           value={labNotes}
           onChange={(e) => setLabNotes(e.target.value)}
-          placeholder="e.g. Patient on warfarin — process on priority. Specimen drawn at 14:00."
+          placeholder={selected ? `Special handling instructions for ${route.notesAudience}…` : 'Pick a test first to see where this order routes…'}
           rows={2}
           className={`w-full px-3 py-2.5 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
           style={glassInner}
