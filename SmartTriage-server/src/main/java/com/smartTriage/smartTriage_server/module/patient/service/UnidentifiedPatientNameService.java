@@ -5,13 +5,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
- * Generates per-hospital, per-day NATO-phonetic placeholder names for
- * unidentified patients (Direct Resus Admission, V28).
+ * Generates NATO-phonetic placeholder names for unidentified patients
+ * (Direct Resus Admission, V28; EMS unknown arrivals).
  *
  * <p>Why phonetic? Because in a noisy resus bay a doctor calling for
  * "Charlie's chart" cannot be confused with "Bravo's chart". Numeric
@@ -20,18 +20,24 @@ import java.util.UUID;
  * is the standard for life-or-death verbal communication in ATLS,
  * military, and aviation.
  *
- * <p>Why daily reset? Charts file per day. Tomorrow's first unidentified
- * patient is Alpha again. Visit IDs (UUIDs) are still globally unique,
- * so no record collision occurs.
+ * <p>Why "lowest free among active" (NOT a daily reset)? The label must be
+ * unique among the unidentified patients who are IN THE DEPARTMENT RIGHT NOW.
+ * A daily counter reset broke this: an unidentified patient who lingered past
+ * midnight kept "Unknown Alpha" while today's first arrival ALSO became
+ * "Alpha" — two live Alphas, the exact confusion phonetic names prevent. So we
+ * assign the lowest phonetic label not currently held by an active
+ * unidentified patient, and reuse a name only once its holder is identified or
+ * discharged. Visit IDs (UUIDs) remain globally unique regardless.
  *
- * <p>What about >26 in one day? Mass-casualty events on Rwandan roads
- * are real. After Zulu the service yields "Alpha-2", "Bravo-2", ...
- * still phonetically distinct from "Alpha"/"Bravo".
+ * <p>What about >26 active at once? Mass-casualty events on Rwandan roads are
+ * real. Once Alpha..Zulu are all in use the service yields "Alpha-2",
+ * "Bravo-2", ... still phonetically distinct — bounded by the number
+ * SIMULTANEOUSLY active, so names stay short in normal operation.
  *
- * <p>Adult and pediatric admissions share the counter — the "(child)"
- * marker comes from {@code Visit.isPediatric} at display time, not
- * from the placeholder. So an adult Alpha and a pediatric Alpha cannot
- * co-exist on the same day, which is exactly the disambiguation we want.
+ * <p>Adult and pediatric admissions share the label pool — the "(child)"
+ * marker comes from {@code Visit.isPediatric} at display time, not from the
+ * placeholder. So an adult Alpha and a pediatric Alpha cannot co-exist, which
+ * is exactly the disambiguation we want.
  */
 @Slf4j
 @Service
@@ -51,29 +57,40 @@ public class UnidentifiedPatientNameService {
     );
 
     /**
-     * Atomically claim the next placeholder label for the hospital today.
-     * The returned label is the short form ("Alpha", "Bravo-2"). The
-     * full display name ("Unknown Alpha (child)") is composed at the
-     * presentation layer, since the (child) marker depends on the
-     * visit's isPediatric flag, not the patient.
+     * Claim the lowest phonetic placeholder label NOT currently held by an
+     * active unidentified patient at this hospital ("Alpha", then "Bravo", …,
+     * "Zulu", "Alpha-2", …). The full display name ("Unknown Alpha (child)")
+     * is composed at the presentation layer, since the (child) marker depends
+     * on the visit's isPediatric flag, not the patient.
      *
-     * <p>Must run inside the caller's transaction.
+     * <p>The repository takes a per-hospital advisory lock for the caller's
+     * transaction before reading the live set, so two simultaneous unidentified
+     * admissions can't both claim the same free label. Must run inside the
+     * caller's transaction (both callers are {@code @Transactional}).
      */
     public PlaceholderLabel claimNext(UUID hospitalId) {
-        LocalDate today = LocalDate.now();
-        int index = counterRepository.claimNextIndex(hospitalId, today);
+        Set<String> inUse = counterRepository.lockActivePlaceholderLabels(hospitalId);
 
-        int letterIndex = index % NATO_PHONETIC.size();
-        int cycle = index / NATO_PHONETIC.size();   // 0 first time round, 1 second, ...
+        int index = 0;
+        String label = labelForIndex(index);
+        while (inUse.contains(label)) {
+            index++;
+            label = labelForIndex(index);
+        }
 
-        String label = cycle == 0
-                ? NATO_PHONETIC.get(letterIndex)
-                : NATO_PHONETIC.get(letterIndex) + "-" + (cycle + 1);
-
-        log.info("[unidentified] Claimed placeholder '{}' (index {}) for hospital {} on {}",
-                label, index, hospitalId, today);
+        log.info("[unidentified] Claimed placeholder '{}' (index {}, {} already active) for hospital {}",
+                label, index, inUse.size(), hospitalId);
 
         return new PlaceholderLabel(label, index);
+    }
+
+    /** Phonetic label for a 0-based slot: 0→Alpha … 25→Zulu, 26→Alpha-2, … */
+    private static String labelForIndex(int index) {
+        int letterIndex = index % NATO_PHONETIC.size();
+        int cycle = index / NATO_PHONETIC.size();
+        return cycle == 0
+                ? NATO_PHONETIC.get(letterIndex)
+                : NATO_PHONETIC.get(letterIndex) + "-" + (cycle + 1);
     }
 
     /**

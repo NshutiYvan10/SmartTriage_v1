@@ -4,57 +4,63 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Repository;
 
-import java.sql.Date;
-import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
- * Hands out the next per-hospital, per-day phonetic placeholder index for
- * an unidentified patient (Direct Resus Admission, V28).
+ * Supports phonetic placeholder-name assignment for unidentified patients
+ * (Direct Resus + EMS unknown arrivals).
  *
- * <p>The counter table is a thin row per (hospital, date). The increment
- * uses Postgres's native {@code INSERT ... ON CONFLICT ... DO UPDATE
- * RETURNING} pattern so two simultaneous Direct Resus admissions cannot
- * race into the same placeholder name — the database serialises them.
- *
- * <p>This repo deliberately has no JPA entity behind it; the counter
- * table has a composite primary key (hospital_id, sequence_date) and the
- * only operation we ever perform on it is "upsert + return new value".
- * A native query through {@link EntityManager} is the simplest correct
- * expression of that.
+ * <p>Naming is now driven by "which phonetic labels are held by an ACTIVE
+ * unidentified patient at this hospital RIGHT NOW", not a per-day counter.
+ * The old daily-reset counter produced duplicate LIVE names when an
+ * unidentified patient lingered past midnight (yesterday's "Unknown Alpha"
+ * still admitted while today's first arrival also became "Alpha") — defeating
+ * the whole point of phonetic disambiguation. Reading the live set lets the
+ * naming service pick the lowest FREE label and reuse a name only once its
+ * previous holder has been identified or discharged.
  */
 @Repository
 public class UnidentifiedPatientCounterRepository {
+
+    /** Advisory-lock namespace for unidentified-placeholder claims (arbitrary, fixed). */
+    private static final int ADVISORY_NAMESPACE = 8274;
 
     @PersistenceContext
     private EntityManager entityManager;
 
     /**
-     * Atomically reserves the next placeholder index for the given hospital
-     * and date. Returns the index just claimed (0-based: 0 → "Alpha",
-     * 1 → "Bravo", ... 25 → "Zulu", 26 → "Alpha-2", ...).
+     * Serialise placeholder claims for one hospital, then return the set of
+     * phonetic labels currently held by its ACTIVE unidentified patients.
      *
-     * <p>Concurrency model: {@code INSERT ... ON CONFLICT ... DO UPDATE SET
-     * next_index = ... + 1 RETURNING next_index - 1} runs in a single SQL
-     * statement; Postgres takes a row lock for the duration. Two concurrent
-     * admissions each get a distinct index, never the same one.
+     * <p>The {@code pg_advisory_xact_lock} is held until the caller's
+     * transaction commits/rolls back, so two simultaneous unidentified
+     * admissions at the same hospital cannot both read an empty set and both
+     * claim "Alpha" — the second waits, then sees the first's label. Both
+     * callers ({@code EmsRunService.preregister},
+     * {@code DirectResusService.admit}) are {@code @Transactional}, so the
+     * lock spans the subsequent patient insert.
      *
-     * <p>Must run inside a transaction (the caller's {@code @Transactional}).
+     * <p>Must run inside the caller's transaction.
      */
-    public int claimNextIndex(UUID hospitalId, LocalDate date) {
-        Object result = entityManager.createNativeQuery("""
-                INSERT INTO unidentified_patient_counters (hospital_id, sequence_date, next_index, updated_at)
-                VALUES (?1, ?2, 1, CURRENT_TIMESTAMP)
-                ON CONFLICT (hospital_id, sequence_date) DO UPDATE
-                    SET next_index = unidentified_patient_counters.next_index + 1,
-                        updated_at = CURRENT_TIMESTAMP
-                RETURNING next_index - 1
-                """)
-                .setParameter(1, hospitalId)
-                .setParameter(2, Date.valueOf(date))
+    public Set<String> lockActivePlaceholderLabels(UUID hospitalId) {
+        entityManager.createNativeQuery("SELECT pg_advisory_xact_lock(?1, ?2)")
+                .setParameter(1, ADVISORY_NAMESPACE)
+                .setParameter(2, hospitalId.hashCode())
                 .getSingleResult();
 
-        // Postgres returns INTEGER which JPA surfaces as java.lang.Integer.
-        return ((Number) result).intValue();
+        @SuppressWarnings("unchecked")
+        List<String> labels = entityManager.createNativeQuery("""
+                SELECT placeholder_label FROM patients
+                WHERE hospital_id = ?1
+                  AND is_unidentified = true
+                  AND is_active = true
+                  AND placeholder_label IS NOT NULL
+                """)
+                .setParameter(1, hospitalId)
+                .getResultList();
+        return new HashSet<>(labels);
     }
 }
