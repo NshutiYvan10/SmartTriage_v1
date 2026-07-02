@@ -124,6 +124,24 @@ class DeviceServiceParamedicTest {
     }
 
     @Test
+    void regeneratePairingKey_issuesFreshKey_andReturnsItOnce() {
+        UUID id = UUID.randomUUID();
+        Hospital hospital = new Hospital();
+        hospital.setId(UUID.randomUUID());
+        IoTDevice device = IoTDevice.builder()
+                .serialNumber("SN-1").deviceName("m").apiKey("old-key").hospital(hospital).build();
+        device.setId(id);
+        when(deviceRepository.findByIdAndIsActiveTrue(id)).thenReturn(Optional.of(device));
+        when(deviceRepository.save(any(IoTDevice.class))).thenAnswer(i -> i.getArgument(0));
+
+        var resp = deviceService.regeneratePairingKey(id);
+
+        assertThat(device.getApiKey()).isNotEqualTo("old-key");   // old key invalidated
+        assertThat(resp.getApiKey()).isEqualTo(device.getApiKey()); // new key returned once
+        assertThat(resp.getApiKey()).isNotBlank();
+    }
+
+    @Test
     void setRecording_togglesFlag_andIsIdempotent() {
         UUID id = UUID.randomUUID();
         Hospital hospital = new Hospital();

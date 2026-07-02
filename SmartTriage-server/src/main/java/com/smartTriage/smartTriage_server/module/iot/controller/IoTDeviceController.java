@@ -163,6 +163,21 @@ public class IoTDeviceController {
     }
 
     /**
+     * V99 — re-issue the device's pairing key (owner-first via
+     * canOperateDevice; admins retained). The key is shown once at
+     * registration and never retrievable; this is the recovery path when
+     * it's lost (or rotation when it may have leaked). The OLD key stops
+     * authenticating immediately — the monitor must be re-paired.
+     */
+    @PostMapping("/devices/{id}/regenerate-key")
+    @PreAuthorize("@clinicalAuthz.canOperateDevice(authentication, #id)")
+    public ResponseEntity<ApiResponse<DeviceResponse>> regeneratePairingKey(@PathVariable UUID id) {
+        DeviceResponse response = deviceService.regeneratePairingKey(id);
+        return ResponseEntity.ok(ApiResponse.success(
+                "New pairing key issued — re-pair the monitor with it", response));
+    }
+
+    /**
      * V54 — admin toggles a device's triage-zone flag.
      * Body: { "triageMonitor": true | false }
      */

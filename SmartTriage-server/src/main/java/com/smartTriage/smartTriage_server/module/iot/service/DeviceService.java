@@ -185,6 +185,26 @@ public class DeviceService {
         return response;
     }
 
+    /**
+     * Re-issue a device's pairing key (V99 — Monitor Management). The key is
+     * shown ONCE at registration and never retrievable afterwards; a crew that
+     * lost it (or suspects it leaked) gets a fresh one here. The OLD key stops
+     * authenticating immediately — the physical monitor / simulator must be
+     * re-paired with the new key. Returned once, exactly like at registration.
+     */
+    @Transactional
+    public DeviceResponse regeneratePairingKey(UUID deviceId) {
+        IoTDevice device = findDeviceOrThrow(deviceId);
+        String apiKey = generateApiKey();
+        device.setApiKey(apiKey);
+        device = deviceRepository.save(device);
+        log.info("Pairing key regenerated for device {} ({}) — old key invalidated",
+                device.getSerialNumber(), device.getId());
+        DeviceResponse response = IoTMapper.toResponse(device);
+        response.setApiKey(apiKey);
+        return response;
+    }
+
     /** The caller's own self-registered devices (their field monitors) — no API key exposed. */
     @Transactional(readOnly = true)
     public java.util.List<DeviceResponse> getMyDevices(java.util.UUID callerId) {

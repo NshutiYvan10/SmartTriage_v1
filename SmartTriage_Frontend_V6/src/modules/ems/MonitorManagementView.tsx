@@ -103,6 +103,16 @@ export function MonitorManagementView() {
     } catch (e: any) { flash('err', e?.message || 'Recording toggle failed'); }
   });
 
+  // Lost / leaked pairing key → issue a fresh one. The OLD key stops working
+  // immediately; the new one shows once in the pairing panel below.
+  const regenerateKey = (d: DeviceResponse) => guardDevice(d.id, async () => {
+    try {
+      const updated = await iotApi.regenerateKey(d.id);
+      if (updated.apiKey) setPairingKey({ deviceName: updated.deviceName, apiKey: updated.apiKey });
+      flash('ok', 'New pairing key issued — enter it in the monitor (the old key no longer works)');
+    } catch (e: any) { flash('err', e?.message || 'Could not issue a new key'); }
+  });
+
   const register = async () => {
     const sn = serialNumber.trim();
     const name = deviceName.trim();
@@ -280,6 +290,12 @@ export function MonitorManagementView() {
                           : 'bg-rose-500 text-white hover:bg-rose-600'}`}>
                       {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : d.recordingEnabled ? <PauseCircle className="w-4 h-4" /> : <CircleDot className="w-4 h-4" />}
                       {d.recordingEnabled ? 'Stop recording' : 'Start recording'}
+                    </button>
+                    <button onClick={regenerateKey(d)} disabled={busy}
+                      title="Issue a fresh pairing key (the old one stops working immediately)"
+                      className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 ${
+                        isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                      <KeyRound className="w-4 h-4" /> New pairing key
                     </button>
                   </div>
                   {!d.recordingEnabled && (

@@ -29,6 +29,14 @@ export const iotApi = {
   latestVitals: (deviceId: string) =>
     get<DeviceLatestVitalsResponse>(`/iot/devices/${deviceId}/latest-vitals`),
 
+  /**
+   * V99 — re-issue the device's pairing key (lost / suspected leaked). The
+   * response carries the NEW key exactly once; the old key stops working
+   * immediately, so the physical monitor must be re-paired.
+   */
+  regenerateKey: (deviceId: string) =>
+    post<DeviceResponse>(`/iot/devices/${deviceId}/regenerate-key`, {}),
+
   getDevice: (id: string) =>
     get<DeviceResponse>(`/iot/devices/${id}`),
 

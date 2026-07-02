@@ -704,7 +704,10 @@ function PullFromMonitor({ setDraft, text, glassInner, isDark }: any) {
       </div>
       {error && <span className="text-xs font-semibold text-rose-500">{error}</span>}
       {pulledFrom && !pulledFrom.hasReading && (
-        <span className="text-xs font-semibold text-amber-600">No recent reading from {pulledFrom.deviceName}</span>
+        <span className="text-xs font-semibold text-amber-600">
+          No reading from {pulledFrom.deviceName} yet — the monitor hasn't transmitted any vitals.
+          Check it's paired with its key, powered on and recording (Monitor page), then pull again.
+        </span>
       )}
       {pulledFrom && pulledFrom.hasReading && (
         <span className={`text-xs ${pulledFrom.ageSeconds != null && pulledFrom.ageSeconds > 120 ? 'font-semibold text-amber-600' : text.muted}`}>
