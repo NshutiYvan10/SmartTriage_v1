@@ -22,6 +22,8 @@ import { PathwayPanel } from './PathwayPanel';
 import { HandoverPanel } from './HandoverPanel';
 import { CrossHospitalPanel } from './CrossHospitalPanel';
 import { PrehospitalTab } from '@/modules/ems/PrehospitalTab';
+import { emsApi } from '@/api/ems';
+import type { EmsRun } from '@/api/ems';
 import { DiagnosisPanel } from './DiagnosisPanel';
 import { InvestigationPanel } from './InvestigationPanel';
 import { MedicationPanel } from './MedicationPanel';
@@ -826,7 +828,7 @@ export function VisitDetailPage() {
         <div className="animate-fade-up" style={{ animationDelay: '0.05s' }}>
           {activeTab === 'overview' && <OverviewTab visit={visit} latestVitals={latestVitals} latestTriage={latestTriage} notes={notes} diagnoses={diagnoses} investigations={investigations} medications={medications} alerts={visitAlerts} pendingTransfer={pendingTransfer} reload={loadData} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'pre-hospital' && <PrehospitalTab visitId={visit.id} edTriageCategory={latestTriage?.triageCategory ?? null} />}
-          {activeTab === 'vitals' && <VitalsTab vitals={vitals} latestVitals={latestVitals} glassCard={glassCard} isDark={isDark} text={text} />}
+          {activeTab === 'vitals' && <VitalsTab visitId={visit.id} vitals={vitals} latestVitals={latestVitals} glassCard={glassCard} isDark={isDark} text={text} />}
           {activeTab === 'triage' && <TriageTab visit={visit} triageHistory={triageHistory} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'clinical-signs' && <ClinicalSignsTab visitId={visit.id} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} onVisitMayHaveChanged={loadData} />}
           {activeTab === 'notes' && <NotesTab notes={notes} showForm={showNoteForm} setShowForm={setShowNoteForm} onSubmit={handleCreateNote} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
@@ -1219,6 +1221,29 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
 }
 
 // ═══════ VITALS TAB ═══════
+/**
+ * EMS run linked to this visit (null when the patient didn't arrive by
+ * ambulance, or the caller can't read the run). Display-only source for the
+ * provenance-badged field-triage / field-vitals blocks in the Triage and
+ * Vitals tabs. DELIBERATE: field data STAYS on the EMS run — it is never
+ * copied into the hospital triage/vitals tables (different equipment +
+ * authorship; a copy would desync the moment the run is edited and would
+ * blur who-recorded-what in an audit). The Pre-hospital tab remains the
+ * full ambulance record; these blocks are contextual surfacing.
+ */
+function useEmsRunForVisit(visitId: string | undefined) {
+  const [run, setRun] = useState<EmsRun | null>(null);
+  useEffect(() => {
+    if (!visitId) { setRun(null); return; }
+    let cancelled = false;
+    emsApi.getByVisit(visitId)
+      .then((r) => { if (!cancelled) setRun(r ?? null); })
+      .catch(() => { if (!cancelled) setRun(null); }); // walk-in / no run — fine
+    return () => { cancelled = true; };
+  }, [visitId]);
+  return run;
+}
+
 // VitalsTab — READ-ONLY by design.
 //
 // Vitals are captured by the monitoring system (IoT devices, triage form,
@@ -1232,12 +1257,22 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
 // retrospective review (e.g. "what was their HR at 04:00?", "did
 // triage record an SpO2?"). The previously co-resident Monitor tab
 // inside this page was removed as a duplicate of that surface.
-function VitalsTab({ vitals, latestVitals, glassCard, isDark, text }: any) {
+function VitalsTab({ visitId, vitals, latestVitals, glassCard, isDark, text }: any) {
   const sorted = [...(vitals || [])].sort((a: VitalSignsResponse, b: VitalSignsResponse) => {
     const ta = a.recordedAt ? new Date(a.recordedAt).getTime() : 0;
     const tb = b.recordedAt ? new Date(b.recordedAt).getTime() : 0;
     return tb - ta;
   });
+
+  // Ambulance field vitals — surfaced here (provenance-badged) so the trend
+  // reads from the FIRST measurement, not just what the ED recorded. The data
+  // lives on the EMS run; this is display-only.
+  const emsRun = useEmsRunForVisit(visitId);
+  const hasFieldVitals = !!emsRun && (
+    emsRun.fieldHr != null || emsRun.fieldSbp != null || emsRun.fieldSpo2 != null
+    || emsRun.fieldRespRate != null || emsRun.fieldTemp != null
+    || emsRun.fieldGcs != null || emsRun.fieldGlucose != null
+  );
 
   const SOURCE_BADGE: Record<string, string> = {
     IOT_DEVICE: 'text-cyan-500 bg-cyan-500/10 border-cyan-500/20',
@@ -1284,7 +1319,7 @@ function VitalsTab({ vitals, latestVitals, glassCard, isDark, text }: any) {
           clinician where each reading came from, important when
           reconciling continuous IoT samples vs. one-off manual entries. */}
       <div className="space-y-3">
-        {sorted.length === 0 ? (
+        {sorted.length === 0 && !hasFieldVitals ? (
           <div className="rounded-2xl p-8 text-center" style={glassCard}>
             <Activity className="w-8 h-8 mx-auto mb-2 text-slate-400" />
             <p className={`text-sm ${text.heading}`}>No vital signs on record yet.</p>
@@ -1327,6 +1362,41 @@ function VitalsTab({ vitals, latestVitals, glassCard, isDark, text }: any) {
             )}
           </div>
         ))}
+
+        {/* Pre-hospital (ambulance) field vitals — the FIRST measurements in
+            this patient's trajectory, so they sit at the chronological end of
+            this newest-first list. Provenance-badged and read straight off the
+            EMS run (never copied into the vitals table). */}
+        {hasFieldVitals && emsRun && (
+          <div className="rounded-2xl p-4 border border-violet-500/30" style={glassCard}>
+            <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Siren className="w-4 h-4 text-violet-500" />
+                <span className={`text-xs font-bold ${text.heading}`}>
+                  On scene / en route
+                  {emsRun.dispatchedAt && <> · dispatched {format(new Date(emsRun.dispatchedAt), 'dd MMM yyyy HH:mm')}</>}
+                </span>
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg border text-violet-500 bg-violet-500/10 border-violet-500/20">
+                Field · Ambulance
+              </span>
+            </div>
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+              <MiniVital label="HR" value={emsRun.fieldHr != null ? `${emsRun.fieldHr}` : '—'} unit="bpm" isDark={isDark} />
+              <MiniVital label="SpO2" value={emsRun.fieldSpo2 != null ? `${emsRun.fieldSpo2}` : '—'} unit="%" isDark={isDark} />
+              <MiniVital label="RR" value={emsRun.fieldRespRate != null ? `${emsRun.fieldRespRate}` : '—'} unit="/min" isDark={isDark} />
+              <MiniVital label="BP" value={emsRun.fieldSbp != null ? `${emsRun.fieldSbp}/${emsRun.fieldDbp ?? '—'}` : '—'} unit="" isDark={isDark} />
+              <MiniVital label="Temp" value={emsRun.fieldTemp != null ? `${emsRun.fieldTemp}` : '—'} unit="°C" isDark={isDark} />
+              <MiniVital label="GCS" value={emsRun.fieldGcs != null ? `${emsRun.fieldGcs}` : '—'} unit="/15" isDark={isDark} />
+              {emsRun.fieldGlucose != null && (
+                <MiniVital label="Glucose" value={`${emsRun.fieldGlucose}`} unit="mmol/L" isDark={isDark} />
+              )}
+            </div>
+            <p className={`text-[10px] mt-2 ${text.muted}`}>
+              Recorded by the ambulance crew before arrival — full pre-hospital record in the Pre-hospital tab.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1347,6 +1417,15 @@ function VitalsTab({ vitals, latestVitals, glassCard, isDark, text }: any) {
 function TriageTab({ visit, triageHistory, latestTriage, glassCard, glassInner, isDark, text }: any) {
   const catColor = latestTriage ? CATEGORY_COLORS[latestTriage.triageCategory] : null;
 
+  // Ambulance field triage — advisory context shown alongside the formal ED
+  // record. Engine-computed from field vitals before arrival; it is NOT a
+  // TriageRecord (unless the ED confirmed it, in which case the confirmation
+  // appears below as the formal record). Read straight off the EMS run.
+  const emsRun = useEmsRunForVisit(visit?.id);
+  const fieldCatColor = emsRun?.fieldTriageCategory
+    ? CATEGORY_COLORS[emsRun.fieldTriageCategory as keyof typeof CATEGORY_COLORS]
+    : null;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -1355,6 +1434,32 @@ function TriageTab({ visit, triageHistory, latestTriage, glassCard, glassInner, 
           Read-only
         </span>
       </div>
+
+      {/* Field triage (ambulance) — advisory provenance card, not an ED record. */}
+      {emsRun?.fieldTriageCategory && (
+        <div className="rounded-2xl p-4 border border-violet-500/30" style={glassCard}>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Siren className="w-4 h-4 text-violet-500" />
+              <span className={`text-sm font-bold ${text.heading}`}>Field triage (ambulance)</span>
+              <span className={`w-3 h-3 rounded-full ${fieldCatColor?.dot || 'bg-slate-400'}`} />
+              <span className={`text-base font-extrabold ${fieldCatColor?.text || text.heading}`}>{emsRun.fieldTriageCategory}</span>
+              {emsRun.fieldTewsScore != null && (
+                <span className={`text-lg font-black ${text.accent}`}>TEWS {emsRun.fieldTewsScore}</span>
+              )}
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg border text-violet-500 bg-violet-500/10 border-violet-500/20">
+              Field · Ambulance
+            </span>
+          </div>
+          <p className={`text-[11px] mt-2 ${text.muted}`}>
+            Engine-computed from field vitals before arrival — advisory context.
+            {latestTriage
+              ? ' The ED triage below is the formal record.'
+              : ' Formal ED triage is still pending for this patient.'}
+          </p>
+        </div>
+      )}
 
       {latestTriage ? (
         <>
