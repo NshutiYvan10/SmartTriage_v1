@@ -247,6 +247,29 @@ export async function downloadBlob(
   return { blob, filename: match ? match[1] : fallbackName };
 }
 
+/**
+ * Authed multipart upload (FormData). Deliberately does NOT set Content-Type —
+ * the browser sets `multipart/form-data` with the correct boundary. Unwraps the
+ * standard ApiResponse and does a single 401 → refresh → retry like apiRequest.
+ */
+export async function uploadFile<T>(path: string, formData: FormData): Promise<T> {
+  const doFetch = () => {
+    const headers: Record<string, string> = {};
+    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+    return fetch(`${API_BASE}${path}`, { method: 'POST', headers, body: formData });
+  };
+  let response = await doFetch();
+  if (response.status === 401 && refreshToken) {
+    const refreshed = await refreshAccessToken();
+    if (!refreshed) {
+      window.location.href = '/';
+      throw new ApiError('Session expired', 401);
+    }
+    response = await doFetch();
+  }
+  return handleResponse<T>(response);
+}
+
 /** Trigger a browser download of a Blob with the given filename. */
 export function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);

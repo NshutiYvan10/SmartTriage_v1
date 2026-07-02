@@ -1,4 +1,4 @@
-import { get, post, put, downloadBlob } from './client';
+import { get, post, put, del, downloadBlob, saveBlob, uploadFile } from './client';
 
 export type LabOrderStatus =
   | 'ORDERED'
@@ -201,6 +201,18 @@ export interface LabPatientSummary {
   lastActivityAt: string | null;
 }
 
+/** Metadata for a report document attached to a lab order (bytes stream via download). */
+export interface LabReportDocument {
+  id: string;
+  labOrderId: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedByName: string | null;
+  description: string | null;
+  uploadedAt: string | null;
+}
+
 export const labApi = {
   order: (data: OrderLabRequest) => post<LabOrder>('/lab/order', data),
 
@@ -249,6 +261,26 @@ export const labApi = {
    */
   getLabPatients: (hospitalId: string) =>
     get<LabPatientSummary[]>(`/lab/hospital/${hospitalId}/patients`),
+
+  // ── Report document attachments (interim standard) ──
+  listDocuments: (orderId: string) =>
+    get<LabReportDocument[]>(`/lab/${orderId}/documents`),
+
+  uploadDocument: (orderId: string, file: File, description?: string) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (description && description.trim()) fd.append('description', description.trim());
+    return uploadFile<LabReportDocument>(`/lab/${orderId}/documents`, fd);
+  },
+
+  /** Download + save an attached report to the user's device. */
+  downloadDocument: async (orderId: string, documentId: string, fallbackName = 'lab-report') => {
+    const { blob, filename } = await downloadBlob(`/lab/${orderId}/documents/${documentId}/download`, fallbackName);
+    saveBlob(blob, filename);
+  },
+
+  deleteDocument: (orderId: string, documentId: string) =>
+    del<void>(`/lab/${orderId}/documents/${documentId}`),
 
   getInbox: (hospitalId: string) =>
     get<LabOrder[]>(`/lab/hospital/${hospitalId}/inbox`),

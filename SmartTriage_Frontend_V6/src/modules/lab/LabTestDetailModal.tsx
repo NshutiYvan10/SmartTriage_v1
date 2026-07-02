@@ -29,6 +29,7 @@ import type { LabOrder, LabOrderStatus } from '@/api/lab';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
 import { AcknowledgeCriticalModal } from './AcknowledgeCriticalModal';
+import { LabDocuments } from './LabDocuments';
 
 interface Props {
   visitId: string;
@@ -250,6 +251,9 @@ export function LabTestDetailModal({ visitId, investigationId, testName, onClose
                   {order.turnaroundMinutes != null && <Meta label="Turnaround" value={`${order.turnaroundMinutes} min`} text={text} />}
                 </div>
               </div>
+
+              {/* ── Attached report documents (view/download; lab tech manages) ── */}
+              <LabDocuments orderId={order.id} canManage={user?.role === 'LAB_TECHNICIAN'} />
 
               {/* ── Actions the clinician has to take ── */}
               <div>

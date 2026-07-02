@@ -16,6 +16,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { labApi } from '@/api/lab';
 import type { LabOrder, RecordLabResultRequest, LabPanelComponent } from '@/api/lab';
 import { labCatalogApi, type LabTestCatalogResponse } from '@/api/labCatalog';
+import { LabDocuments } from './LabDocuments';
 
 /** Normalize a unit for comparison: lowercase, strip spaces, µ/μ → u. */
 const normUnit = (u: string) => u.trim().toLowerCase().replace(/\s+/g, '').replace(/[µμ]/g, 'u');
@@ -394,6 +395,12 @@ export function ResultEntryModal({ order, enteredByName, onClose, onSaved }: Pro
             />
           </div>
         )}
+
+        {/* Report document attachment — interim standard: structured values above
+            + the full report file here. Available once the order exists. */}
+        <div className="mb-4">
+          <LabDocuments orderId={order.id} canManage />
+        </div>
 
         {/* Critical heads-up */}
         <div className="rounded-xl p-3 mb-4 bg-rose-500/10 ring-1 ring-rose-500/20 flex items-start gap-2">

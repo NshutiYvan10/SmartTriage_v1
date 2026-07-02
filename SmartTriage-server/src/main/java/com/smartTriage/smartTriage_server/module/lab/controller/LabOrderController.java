@@ -3,7 +3,10 @@ package com.smartTriage.smartTriage_server.module.lab.controller;
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.module.lab.dto.*;
 import com.smartTriage.smartTriage_server.module.lab.service.LabOrderService;
+import com.smartTriage.smartTriage_server.module.lab.service.LabReportDocumentService;
 import com.smartTriage.smartTriage_server.module.lab.entity.LabOrder;
+import com.smartTriage.smartTriage_server.module.lab.entity.LabReportDocument;
+import org.springframework.web.multipart.MultipartFile;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +59,7 @@ import java.util.UUID;
 public class LabOrderController {
 
     private final LabOrderService labOrderService;
+    private final LabReportDocumentService labReportDocumentService;
 
     // ====================================================================
     // CREATE ORDER (clinician-only)
@@ -337,6 +341,64 @@ public class LabOrderController {
     public ResponseEntity<ApiResponse<List<LabPatientSummaryResponse>>> getLabPatients(
             @PathVariable UUID hospitalId) {
         return ResponseEntity.ok(ApiResponse.success(labOrderService.getLabPatients(hospitalId)));
+    }
+
+    // ====================================================================
+    // LAB REPORT DOCUMENT ATTACHMENTS (interim standard)
+    // ====================================================================
+
+    /** Attach a full lab report file (PDF/scan) to an order. LAB_TECHNICIAN + SUPER_ADMIN. */
+    @PostMapping(value = "/{orderId}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN') "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
+    public ResponseEntity<ApiResponse<LabReportDocumentResponse>> uploadDocument(
+            @PathVariable UUID orderId,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "description", required = false) String description) {
+        LabReportDocumentResponse response = labReportDocumentService.upload(orderId, file, description);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Report document attached", response));
+    }
+
+    /** List a lab order's attached report documents (metadata only). */
+    @GetMapping("/{orderId}/documents")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
+    public ResponseEntity<ApiResponse<List<LabReportDocumentResponse>>> listDocuments(
+            @PathVariable UUID orderId) {
+        return ResponseEntity.ok(ApiResponse.success(labReportDocumentService.listForOrder(orderId)));
+    }
+
+    /** Stream an attached report document for viewing/download. */
+    @GetMapping("/{orderId}/documents/{documentId}/download")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
+    public ResponseEntity<byte[]> downloadDocument(
+            @PathVariable UUID orderId,
+            @PathVariable UUID documentId) {
+        LabReportDocument doc = labReportDocumentService.getForDownload(orderId, documentId);
+        MediaType mediaType;
+        try {
+            mediaType = MediaType.parseMediaType(doc.getContentType());
+        } catch (Exception e) {
+            mediaType = MediaType.APPLICATION_OCTET_STREAM;
+        }
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"" + doc.getFileName().replace("\"", "") + "\"")
+                .body(doc.getContent());
+    }
+
+    /** Remove (soft-delete) an attached report document. LAB_TECHNICIAN + SUPER_ADMIN. */
+    @DeleteMapping("/{orderId}/documents/{documentId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN') "
+            + "and @clinicalAuthz.canAccessLabOrder(authentication, #orderId)")
+    public ResponseEntity<ApiResponse<Void>> deleteDocument(
+            @PathVariable UUID orderId,
+            @PathVariable UUID documentId) {
+        labReportDocumentService.softDelete(orderId, documentId);
+        return ResponseEntity.ok(ApiResponse.success("Report document removed", null));
     }
 
     /** Lab-tech inbox: orders waiting for lab action, STAT first. */
