@@ -10,10 +10,14 @@ authenticated with the device's X-Device-API-Key. That snapshot is what a
 paramedic pulls into the EMS field-vitals via "Pull from my monitor".
 
 Flow to test end-to-end:
-  1. As a PARAMEDIC in the app, register your monitor
-     (Dashboard → My Field Monitor → Register) and copy the pairing API key.
-  2. Run this with that key:  python paramedic_monitor_simulator.py --api-key <KEY>
-  3. In an EMS run's Step 2 vitals, tap "Pull from my monitor" — the values
+  1. As a PARAMEDIC in the app, register your monitor (Monitor page → Register)
+     and copy the pairing API key it shows once. (Lost it? Use "New pairing key".)
+  2. Give the simulator that key by EITHER:
+       • pasting it into API_KEY below (easiest — then just run the script), OR
+       • exporting  ST_DEVICE_API_KEY=<KEY>  in your shell, OR
+       • passing    --api-key <KEY>  on the command line (wins over the others).
+  3. Run:  python paramedic_monitor_simulator.py
+  4. In an EMS run's Step 2 vitals, tap "Pull from my monitor" — the values
      posted here appear (editable).
 
 Scenarios: normal | tachy | hypoxic | shock  (shapes the posted numbers).
@@ -21,9 +25,17 @@ Scenarios: normal | tachy | hypoxic | shock  (shapes the posted numbers).
 Catches connection errors and prints an OFFLINE line (as the device screen would).
 """
 import argparse
+import os
 import random
 import sys
 import time
+
+# ── Paste your monitor's pairing key here to skip the --api-key flag ──────────
+# Get it from the app (Monitor page → Register, or "New pairing key"). Leaving it
+# blank is fine — the simulator will instead use the ST_DEVICE_API_KEY env var or
+# the --api-key flag. NOTE: this is a device credential; don't commit a real key.
+API_KEY = ""
+# ──────────────────────────────────────────────────────────────────────────────
 
 try:
     import requests
@@ -83,21 +95,31 @@ def post_snapshot(base_url: str, api_key: str, body: dict) -> bool:
 def main():
     p = argparse.ArgumentParser(description="Paramedic field-monitor telemetry simulator (V98)")
     p.add_argument("--server", default="http://localhost:8080", help="API base URL")
-    p.add_argument("--api-key", required=True, help="the monitor's pairing API key (from self-register)")
+    p.add_argument("--api-key", default=None,
+                   help="the monitor's pairing API key. Optional — falls back to the "
+                        "ST_DEVICE_API_KEY env var, then the API_KEY constant in this file.")
     p.add_argument("--scenario", default="normal", choices=["normal", "tachy", "hypoxic", "shock"])
     p.add_argument("--interval", type=float, default=5.0, help="seconds between snapshots")
     p.add_argument("--once", action="store_true", help="post a single snapshot and exit")
     args = p.parse_args()
 
+    # Resolve the key: --api-key flag > ST_DEVICE_API_KEY env var > pasted constant.
+    api_key = (args.api_key or os.environ.get("ST_DEVICE_API_KEY") or API_KEY).strip()
+    if not api_key:
+        print("No pairing key set. Paste it into API_KEY at the top of this file, "
+              "export ST_DEVICE_API_KEY=<KEY>, or pass --api-key <KEY>.\n"
+              "Get the key from the app: Monitor page → Register (or 'New pairing key').")
+        sys.exit(2)
+
     print(f"Paramedic monitor → {args.server}  scenario={args.scenario}")
     if args.once:
-        ok = post_snapshot(args.server, args.api_key, snapshot(args.scenario))
+        ok = post_snapshot(args.server, api_key, snapshot(args.scenario))
         sys.exit(0 if ok else 1)
 
     print("Posting snapshots (Ctrl-C to stop)…")
     try:
         while True:
-            post_snapshot(args.server, args.api_key, snapshot(args.scenario))
+            post_snapshot(args.server, api_key, snapshot(args.scenario))
             time.sleep(args.interval)
     except KeyboardInterrupt:
         print("\nStopped.")
