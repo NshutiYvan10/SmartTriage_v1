@@ -1232,7 +1232,7 @@ public class LabOrderService {
             LabOrderResponse r = LabOrderMapper.toResponse(o);
             if (r.getVisitId() == null) continue;
             LabPatientAccumulator a = byVisit.computeIfAbsent(r.getVisitId(),
-                    k -> new LabPatientAccumulator(r.getVisitId(), r.getPatientId(),
+                    k -> new LabPatientAccumulator(r.getVisitId(),
                             r.getPatientName(), r.getVisitNumber(), r.getCurrentZone(), r.getCurrentBedLabel()));
             boolean unackedCritical = o.isCritical()
                     && o.getResultedAt() != null
@@ -1255,7 +1255,7 @@ public class LabOrderService {
             InvestigationResponse r = ClinicalMapper.toResponse(inv);
             if (r.getVisitId() == null) continue;
             LabPatientAccumulator a = byVisit.computeIfAbsent(r.getVisitId(),
-                    k -> new LabPatientAccumulator(r.getVisitId(), null,
+                    k -> new LabPatientAccumulator(r.getVisitId(),
                             r.getPatientName(), r.getVisitNumber(), r.getCurrentZone(), r.getCurrentBedLabel()));
             a.activeImaging++;
             a.touch(inv.getOrderedAt());
@@ -1273,7 +1273,6 @@ public class LabOrderService {
     /** Mutable per-visit accumulator for {@link #getLabPatients}. */
     private static final class LabPatientAccumulator {
         final UUID visitId;
-        final UUID patientId;
         final String patientName;
         final String visitNumber;
         final EdZone currentZone;
@@ -1283,10 +1282,9 @@ public class LabOrderService {
         int criticalUnack = 0;
         Instant lastActivityAt = null;
 
-        LabPatientAccumulator(UUID visitId, UUID patientId, String patientName,
+        LabPatientAccumulator(UUID visitId, String patientName,
                               String visitNumber, EdZone currentZone, String currentBedLabel) {
             this.visitId = visitId;
-            this.patientId = patientId;
             this.patientName = patientName;
             this.visitNumber = visitNumber;
             this.currentZone = currentZone;
@@ -1302,7 +1300,6 @@ public class LabOrderService {
         LabPatientSummaryResponse toResponse() {
             return LabPatientSummaryResponse.builder()
                     .visitId(visitId)
-                    .patientId(patientId)
                     .patientName(patientName)
                     .visitNumber(visitNumber)
                     .currentZone(currentZone)

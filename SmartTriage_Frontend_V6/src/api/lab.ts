@@ -190,7 +190,6 @@ export interface AcknowledgeCriticalRequest {
 /** A patient the lab is actively working — row shape for the scoped Lab Patients view. */
 export interface LabPatientSummary {
   visitId: string;
-  patientId: string | null;
   patientName: string | null;
   visitNumber: string | null;
   currentZone: string | null;

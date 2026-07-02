@@ -28,7 +28,8 @@ import java.util.UUID;
 public class LabPatientSummaryResponse {
 
     private UUID visitId;
-    private UUID patientId;
+    // NB: no patientId — the scoped view keys navigation by visitId only. Exposing the
+    // patient UUID would hand a lab tech an enumeration key into the by-id endpoints.
     /** Display name (or "Unknown Alpha" style placeholder for an unidentified patient). */
     private String patientName;
     private String visitNumber;

@@ -26,8 +26,10 @@ public class PatientChronicConditionController {
 
     private final PatientChronicConditionService conditionService;
 
+    // LAB_TECHNICIAN removed: scoped to their Lab Patients view; must not read a
+    // patient's chronic-condition history via an enumerated patientId.
     @GetMapping("/api/v1/patients/{patientId}/structured-conditions")
-    @PreAuthorize("hasAnyRole('NURSE', 'DOCTOR', 'LAB_TECHNICIAN', 'HOSPITAL_ADMIN', 'SUPER_ADMIN') "
+    @PreAuthorize("hasAnyRole('NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN') "
             + "and @clinicalAuthz.canAccessPatient(authentication, #patientId)")
     public ResponseEntity<ApiResponse<List<PatientChronicConditionResponse>>> listForPatient(
             @PathVariable UUID patientId) {

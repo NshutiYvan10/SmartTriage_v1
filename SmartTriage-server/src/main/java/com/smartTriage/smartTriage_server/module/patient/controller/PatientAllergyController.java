@@ -38,8 +38,10 @@ public class PatientAllergyController {
     // LIST  /api/v1/patients/{patientId}/structured-allergies
     // ====================================================================
 
+    // LAB_TECHNICIAN removed: they are scoped to their Lab Patients view and must
+    // not read a patient's allergy history via an enumerated patientId.
     @GetMapping("/api/v1/patients/{patientId}/structured-allergies")
-    @PreAuthorize("hasAnyRole('NURSE', 'DOCTOR', 'LAB_TECHNICIAN', 'HOSPITAL_ADMIN', 'SUPER_ADMIN') "
+    @PreAuthorize("hasAnyRole('NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN') "
             + "and @clinicalAuthz.canAccessPatient(authentication, #patientId)")
     public ResponseEntity<ApiResponse<List<PatientAllergyResponse>>> listForPatient(
             @PathVariable UUID patientId) {

@@ -68,8 +68,13 @@ public class PatientController {
                 .body(ApiResponse.success("Patient and visit created successfully", response));
     }
 
+    // Full patient record (national ID, phone, address, emergency contacts…). Role-
+    // gated to EXCLUDE LAB_TECHNICIAN + PARAMEDIC — they get scoped surfaces (Lab
+    // Patients / EMS runs), not full-registry PHI. Mirrors the list/search allowlist,
+    // closing the enumerate-then-read IDOR (scoped lists must never become a PHI key).
     @GetMapping("/{id}")
-    @PreAuthorize("@clinicalAuthz.canAccessPatient(authentication, #id)")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR', 'READ_ONLY') "
+            + "and @clinicalAuthz.canAccessPatient(authentication, #id)")
     public ResponseEntity<ApiResponse<PatientResponse>> getPatient(@PathVariable UUID id) {
         PatientResponse response = patientService.getPatientById(id);
         return ResponseEntity.ok(ApiResponse.success(response));

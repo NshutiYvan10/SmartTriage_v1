@@ -27,7 +27,7 @@ import { useAuthStore } from '@/store/authStore';
 import { labApi } from '@/api/lab';
 import type { LabOrder, LabOrderStatus } from '@/api/lab';
 import { PatientContextLine } from '@/components/PatientContextLine';
-import { chartPath } from '@/lib/chartNav';
+import { chartPathForRole } from '@/lib/chartNav';
 import { AcknowledgeCriticalModal } from './AcknowledgeCriticalModal';
 import { LabDocuments } from './LabDocuments';
 
@@ -310,10 +310,10 @@ export function LabTestDetailModal({ visitId, investigationId, testName, onClose
 
                 <div className="flex items-center gap-2 flex-wrap">
                   <Link
-                    to={chartPath(order.visitId ?? visitId)}
+                    to={chartPathForRole(user?.role, order.visitId ?? visitId)}
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-bold text-white bg-cyan-600 hover:bg-cyan-700"
                   >
-                    <ExternalLink className="w-3.5 h-3.5" /> Open full chart
+                    <ExternalLink className="w-3.5 h-3.5" /> {user?.role === 'LAB_TECHNICIAN' ? 'Open lab record' : 'Open full chart'}
                   </Link>
                   <button onClick={onClose} className={`px-4 py-2 rounded-xl text-[11px] font-bold ${text.muted} hover:bg-white/5`}>Close</button>
                 </div>

@@ -98,6 +98,7 @@ public interface InvestigationRepository extends JpaRepository<Investigation, UU
             "SELECT i FROM Investigation i " +
             "JOIN FETCH i.visit v JOIN FETCH v.patient " +
             "LEFT JOIN FETCH v.currentBed " +
+            "LEFT JOIN FETCH i.orderedBy " +
             "WHERE i.isActive = true " +
             "AND v.hospital.id = :hospitalId " +
             "AND i.investigationType IN :types " +
