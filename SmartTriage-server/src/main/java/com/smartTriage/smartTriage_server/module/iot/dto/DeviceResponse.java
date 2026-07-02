@@ -37,6 +37,8 @@ public class DeviceResponse {
     private boolean inService;
     /** V54 — admin triage-zone flag. true = surfaces in triage form's monitor picker. */
     private boolean triageMonitor;
+    /** V99 — operator recording toggle. false = vitals snapshot frozen (device stays paired/online). */
+    private boolean recordingEnabled;
     private int heartbeatTimeoutSeconds;
     private int dataIntervalSeconds;
     private String notes;

@@ -119,11 +119,18 @@ public class IoTDeviceController {
     }
 
     /**
-     * V53 — admin toggles a device's inventory status.
+     * V53 — toggle a device's inventory status ("power on/off").
      * Body: { "inService": true | false }
+     *
+     * <p>V99 (Monitor Management): authz widened from admin-only to
+     * {@code canOperateDevice} so a paramedic can power their OWN
+     * self-registered field monitor on/off. The helper is owner-first and
+     * still admits SUPER_ADMIN and the device-hospital's HOSPITAL_ADMIN,
+     * so hospital-pool devices (registeredByUserId = null) remain
+     * admin-operable exactly as before.
      */
     @org.springframework.web.bind.annotation.PatchMapping("/devices/{id}/service-status")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
+    @PreAuthorize("@clinicalAuthz.canOperateDevice(authentication, #id)")
     public ResponseEntity<ApiResponse<DeviceResponse>> setServiceStatus(
             @PathVariable UUID id,
             @org.springframework.web.bind.annotation.RequestBody java.util.Map<String, Boolean> body) {
@@ -131,6 +138,27 @@ public class IoTDeviceController {
         DeviceResponse response = deviceService.setInService(id, inService);
         return ResponseEntity.ok(ApiResponse.success(
                 inService ? "Device returned to service" : "Device taken out of service",
+                response));
+    }
+
+    /**
+     * V99 — Monitor Management: toggle the device's recording state.
+     * Body: { "recording": true | false }
+     *
+     * <p>Recording OFF freezes the device's vitals snapshot (the device
+     * stays paired and visibly online); used by the crew between patients
+     * so a later "Pull from my monitor" can't grab stale readings. Owner
+     * first (paramedic's own monitor), admins retained via the helper.
+     */
+    @org.springframework.web.bind.annotation.PatchMapping("/devices/{id}/recording")
+    @PreAuthorize("@clinicalAuthz.canOperateDevice(authentication, #id)")
+    public ResponseEntity<ApiResponse<DeviceResponse>> setRecording(
+            @PathVariable UUID id,
+            @org.springframework.web.bind.annotation.RequestBody java.util.Map<String, Boolean> body) {
+        boolean recording = Boolean.TRUE.equals(body.get("recording"));
+        DeviceResponse response = deviceService.setRecording(id, recording);
+        return ResponseEntity.ok(ApiResponse.success(
+                recording ? "Recording started" : "Recording stopped",
                 response));
     }
 

@@ -101,6 +101,20 @@ public class IoTDevice extends BaseEntity {
     @Column(name = "last_vitals_at")
     private Instant lastVitalsAt;
 
+    /**
+     * Operator-controlled recording toggle (V99 — Monitor Management).
+     * TRUE (default) = device telemetry updates the last_* vitals snapshot
+     * above. FALSE = the device stays paired and its heartbeats/metadata
+     * keep flowing (status remains honest), but vitals are NOT recorded —
+     * the crew pauses recording between patients so a later
+     * "Pull from my monitor" can never grab the previous patient's numbers.
+     * Softer than {@link #inService} (which removes the device from the
+     * active pool entirely and stops sessions).
+     */
+    @Column(name = "recording_enabled", nullable = false)
+    @Builder.Default
+    private boolean recordingEnabled = true;
+
     /** Current device status */
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)

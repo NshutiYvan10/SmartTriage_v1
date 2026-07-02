@@ -207,6 +207,17 @@ public class DeviceService {
             com.smartTriage.smartTriage_server.module.iot.dto.DeviceTelemetryRequest req) {
         IoTDevice device = deviceRepository.findByApiKeyAndIsActiveTrue(apiKey)
                 .orElseThrow(() -> new ResourceNotFoundException("IoTDevice", "apiKey", "***"));
+        // Recording gate (V99 — Monitor Management): a paused or out-of-service
+        // monitor must NOT overwrite the vitals snapshot. The device keeps
+        // posting (its own display is unaffected) and lastDataAt still advances
+        // so the status page shows it online — but the last_* values freeze, so
+        // a later "Pull from my monitor" can never grab readings taken AFTER
+        // the crew stopped recording (e.g. the next patient's numbers).
+        if (!device.isRecordingEnabled() || !device.isInService()) {
+            device.setLastDataAt(Instant.now());
+            deviceRepository.save(device);
+            return;
+        }
         if (req.getHeartRate() != null) device.setLastHeartRate(req.getHeartRate());
         if (req.getRespiratoryRate() != null) device.setLastRespRate(req.getRespiratoryRate());
         if (req.getSpo2() != null) device.setLastSpo2(req.getSpo2());
@@ -292,6 +303,29 @@ public class DeviceService {
             log.info("Device {} taken out of service by admin", device.getSerialNumber());
         }
 
+        device = deviceRepository.save(device);
+        publishDeviceStatus(device);
+        return IoTMapper.toResponse(device);
+    }
+
+    /**
+     * Operator toggles the device's recording state (V99 — Monitor
+     * Management). Recording OFF freezes the last_* vitals snapshot
+     * (telemetry still arrives, keeping the online status honest) so a
+     * "Pull from my monitor" can never grab readings taken after the crew
+     * stopped recording — e.g. the previous patient's numbers bleeding
+     * into the next run. Softer than {@link #setInService}: the device
+     * stays in the active pool and keeps its runtime status.
+     */
+    @Transactional
+    public DeviceResponse setRecording(UUID deviceId, boolean recording) {
+        IoTDevice device = findDeviceOrThrow(deviceId);
+        if (recording == device.isRecordingEnabled()) {
+            // Idempotent — a double-tap on the toggle isn't an error.
+            return IoTMapper.toResponse(device);
+        }
+        device.setRecordingEnabled(recording);
+        log.info("Device {} recording {}", device.getSerialNumber(), recording ? "started" : "stopped");
         device = deviceRepository.save(device);
         publishDeviceStatus(device);
         return IoTMapper.toResponse(device);

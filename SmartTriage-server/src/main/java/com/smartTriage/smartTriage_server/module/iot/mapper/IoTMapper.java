@@ -35,6 +35,7 @@ public final class IoTMapper {
                 .location(device.getLocation())
                 .inService(device.isInService())
                 .triageMonitor(device.isTriageMonitor())
+                .recordingEnabled(device.isRecordingEnabled())
                 .heartbeatTimeoutSeconds(device.getHeartbeatTimeoutSeconds())
                 .dataIntervalSeconds(device.getDataIntervalSeconds())
                 .notes(device.getNotes())

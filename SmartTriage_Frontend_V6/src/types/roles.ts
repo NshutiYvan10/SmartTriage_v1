@@ -45,6 +45,11 @@ export type AppPage =
    *  infusions, high-alert approvals. The nurse's main dose surface. */
   | 'med-board'
   | 'ems'
+  /** Paramedic-only Monitor Management — register/pair a field vitals
+   *  monitor, power it on/off, start/stop recording, view its status.
+   *  Extracted from the Siren (/ems) page so device management no longer
+   *  hides inside the run workflow. */
+  | 'monitor'
   | 'pathways'
   | 'icu'
   | 'safety-incidents'
@@ -280,12 +285,25 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   // this entry the moment a PARAMEDIC ShiftFunction is introduced.
   // Paramedics must NOT see the hospital-wide Patients page / registry — that
   // is other clinicians' patients (a PHI leak). Their patients are the ones
-  // they transported, surfaced by their own EMS runs on the 'ems' dashboard
-  // (emsApi.myRuns, own-run-scoped) + 'entry' to register a new arrival.
+  // they transported, surfaced by their own EMS runs on the 'ems' (Siren) page
+  // (emsApi.myRuns, own-run-scoped).
+  //
+  // Paramedic scope (deliberate, keep it tight):
+  //  - 'dashboard' renders the paramedic-scoped home (ParamedicHome): their
+  //    active runs/handoffs + monitor status — NOT the hospital census/zones.
+  //  - NO 'entry': hospital patient registration is a front-desk surface
+  //    (the backend /patients/register authz already excludes PARAMEDIC).
+  //    Their arrival flow is the purpose-built EMS pre-arrival + temp-
+  //    identifier workflow on the Siren page.
+  //  - NO 'handover': the hospital Handover Reports page is a Charge-Nurse /
+  //    shift-lead governance surface (it only ever showed paramedics an
+  //    off-shift lock message). The paramedic's handover lives IN the run
+  //    workflow: Transfer of Care + handover notes + the PCR PDF.
+  //  - 'monitor': dedicated Monitor Management page (register/pair, power
+  //    on/off, start/stop recording, status) — extracted from the Siren page.
   PARAMEDIC: [
-    'dashboard', 'ems', 'entry',
+    'dashboard', 'ems', 'monitor',
     'notifications', 'profile',
-    'handover',
   ],
 
   // ── Lab-focused ──

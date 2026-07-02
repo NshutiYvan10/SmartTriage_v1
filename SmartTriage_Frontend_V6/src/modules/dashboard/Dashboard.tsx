@@ -30,8 +30,24 @@ import { InboundEmsBoard } from '@/modules/ems/InboundEmsBoard';
 import { subscribeToVisits } from '@/api/websocket';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
+import { ParamedicHome } from '@/modules/ems/ParamedicHome';
 
+/**
+ * '/dashboard' entry point — branches by role BEFORE the hospital dashboard
+ * mounts. A PARAMEDIC gets their own scoped home (active runs/handoffs +
+ * monitor status); rendering the hospital dashboard for them would show
+ * hospital-wide census/zone surfaces that are not their scope (and, since
+ * the backend rightly returns them no roster, mostly empty tiles). Branching
+ * here also means none of the hospital data subscriptions/fetches below ever
+ * start for a paramedic session.
+ */
 export function Dashboard() {
+  const role = useAuthStore((s) => s.user?.role);
+  if (role === 'PARAMEDIC') return <ParamedicHome />;
+  return <HospitalDashboard />;
+}
+
+function HospitalDashboard() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);

@@ -37,20 +37,26 @@ import type { UserRole } from '@/types/roles';
 /**
  * Roles that can plausibly trigger a Direct Resus admission. We err
  * on the side of inclusion — in a Rwandan ED the first staff member
- * a critical patient encounters is often the registration clerk or a
- * paramedic, not a nurse or doctor. Blocking them would defeat the
- * whole point of this pathway.
+ * a critical patient encounters is often the registration clerk,
+ * not a nurse or doctor. Blocking them would defeat the whole point
+ * of this pathway.
  */
 // SUPER_ADMIN deliberately excluded — the system administrator is a
 // cross-tenant national role with no operational floor duties; they
 // should never be opening a resus admission. Direct Resus is a
 // floor-level emergency surface for clinical / front-desk staff.
+//
+// PARAMEDIC deliberately excluded — Direct Resus is a HOSPITAL-side
+// door-to-resus admission action. The paramedic equivalent is the
+// purpose-built EMS pre-arrival flow (field triage RED + lights →
+// pre-arrival alert → placed on arrival), which reaches resus without
+// bypassing the ED's own placement authority. Mirrored in the backend
+// @PreAuthorize on POST /admissions/direct-resus.
 const CLINICAL_ROLES: UserRole[] = [
   'HOSPITAL_ADMIN',
   'DOCTOR',
   'NURSE',
   'REGISTRAR',
-  'PARAMEDIC',
 ];
 // V29 note: TRIAGE_NURSE was previously listed here. It's no longer a Role
 // — triage nurses are NURSE-role users with Designation.TRIAGE_NURSE, so

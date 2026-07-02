@@ -89,6 +89,63 @@ class DeviceServiceParamedicTest {
     }
 
     @Test
+    void recordDeviceTelemetry_freezesSnapshot_whenRecordingStopped() {
+        // V99 — recording OFF: the device keeps posting (lastDataAt advances so
+        // status stays honest) but the vitals snapshot must NOT change, so a
+        // later "pull from my monitor" can't grab post-stop readings.
+        IoTDevice device = IoTDevice.builder().serialNumber("SN-1").deviceName("m").apiKey("k").build();
+        device.setRecordingEnabled(false);
+        device.setLastHeartRate(70);                       // last RECORDED value
+        when(deviceRepository.findByApiKeyAndIsActiveTrue("k")).thenReturn(Optional.of(device));
+        when(deviceRepository.save(any(IoTDevice.class))).thenAnswer(i -> i.getArgument(0));
+
+        deviceService.recordDeviceTelemetry("k", DeviceTelemetryRequest.builder()
+                .heartRate(120).spo2(80).build());          // next patient's numbers
+
+        assertThat(device.getLastHeartRate()).isEqualTo(70); // frozen
+        assertThat(device.getLastSpo2()).isNull();           // never stored
+        assertThat(device.getLastVitalsAt()).isNull();       // snapshot untouched
+        assertThat(device.getLastDataAt()).isNotNull();      // device still visibly online
+        verify(deviceRepository).save(device);
+    }
+
+    @Test
+    void recordDeviceTelemetry_freezesSnapshot_whenPoweredOff() {
+        // Powered-off (out-of-service) monitors must not record either.
+        IoTDevice device = IoTDevice.builder().serialNumber("SN-1").deviceName("m").apiKey("k").build();
+        device.setInService(false);
+        when(deviceRepository.findByApiKeyAndIsActiveTrue("k")).thenReturn(Optional.of(device));
+        when(deviceRepository.save(any(IoTDevice.class))).thenAnswer(i -> i.getArgument(0));
+
+        deviceService.recordDeviceTelemetry("k", DeviceTelemetryRequest.builder().heartRate(120).build());
+
+        assertThat(device.getLastHeartRate()).isNull();
+        assertThat(device.getLastVitalsAt()).isNull();
+    }
+
+    @Test
+    void setRecording_togglesFlag_andIsIdempotent() {
+        UUID id = UUID.randomUUID();
+        Hospital hospital = new Hospital();
+        hospital.setId(UUID.randomUUID());
+        IoTDevice device = IoTDevice.builder()
+                .serialNumber("SN-1").deviceName("m").apiKey("k").hospital(hospital).build();
+        device.setId(id);
+        when(deviceRepository.findByIdAndIsActiveTrue(id)).thenReturn(Optional.of(device));
+        when(deviceRepository.save(any(IoTDevice.class))).thenAnswer(i -> i.getArgument(0));
+
+        var stopped = deviceService.setRecording(id, false);
+        assertThat(stopped.isRecordingEnabled()).isFalse();
+
+        // Idempotent — toggling to the current state is a no-op, not an error.
+        var still = deviceService.setRecording(id, false);
+        assertThat(still.isRecordingEnabled()).isFalse();
+
+        var resumed = deviceService.setRecording(id, true);
+        assertThat(resumed.isRecordingEnabled()).isTrue();
+    }
+
+    @Test
     void getLatestVitals_returnsSnapshot_withAge_whenReadingExists() {
         UUID id = UUID.randomUUID();
         IoTDevice device = IoTDevice.builder().serialNumber("SN-1").deviceName("Crew 7 monitor").apiKey("k").build();

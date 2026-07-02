@@ -1325,6 +1325,8 @@ export interface DeviceResponse {
   inService: boolean;
   /** V54 — admin triage-zone flag. true = surfaces in triage form's monitor picker. */
   triageMonitor: boolean;
+  /** V99 — operator recording toggle. false = vitals snapshot frozen (device stays paired/online). */
+  recordingEnabled: boolean;
   firmwareVersion: string;
   macAddress: string;
   location: string;

@@ -39,12 +39,22 @@ export const iotApi = {
     get<DeviceResponse[]>(`/iot/devices/available/${hospitalId}`),
 
   /**
-   * V53 — admin toggles the device's inventory state.
+   * V53 — toggles the device's inventory state ("power on/off").
    * inService=true puts the device into the active monitor pool;
-   * inService=false takes it out (e.g. for repair / maintenance).
+   * inService=false takes it out (repair / maintenance / powered down).
+   * V99: owner-operable — a paramedic can power their OWN field monitor
+   * (admins retained via canOperateDevice on the backend).
    */
   setServiceStatus: (deviceId: string, inService: boolean) =>
     patch<DeviceResponse>(`/iot/devices/${deviceId}/service-status`, { inService }),
+
+  /**
+   * V99 — Monitor Management: start/stop recording. recording=false freezes
+   * the device's vitals snapshot (it stays paired + visibly online) so a
+   * later "Pull from my monitor" can't grab stale / previous-patient readings.
+   */
+  setRecording: (deviceId: string, recording: boolean) =>
+    patch<DeviceResponse>(`/iot/devices/${deviceId}/recording`, { recording }),
 
   /**
    * V54 — admin toggles the triage-zone monitor flag.
