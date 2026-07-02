@@ -130,14 +130,16 @@ public class PatientController {
         return ResponseEntity.ok(ApiResponse.success("Chronic conditions updated", response));
     }
 
-    // Registry list + search expose the whole hospital patient population, so
-    // they are NOT for paramedics — a paramedic's patients are the ones they
-    // transported (their own EMS runs), never the hospital-wide registry.
-    // Allowlist = every role that legitimately needs registry access EXCEPT
-    // PARAMEDIC (lab tech looks up a specimen's patient; read-only is
-    // governance) — mirrors the /lookup gate, minus paramedic.
+    // Registry list + search expose the whole hospital patient population with
+    // full demographics (national ID, phone, address, allergies…), so they are
+    // NOT for every clinical role. EXCLUDED:
+    //   - PARAMEDIC — sees only patients they transported (their own EMS runs).
+    //   - LAB_TECHNICIAN — sees only patients they have lab/diagnostic orders
+    //     for, via the scoped Lab Patients view (GET /lab/hospital/{id}/patients);
+    //     the full registry with full PHI is not the lab's business.
+    // Allowlist = the roles that legitimately need the full registry.
     @GetMapping("/hospital/{hospitalId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR', 'LAB_TECHNICIAN', 'READ_ONLY') "
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR', 'READ_ONLY') "
             + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<PatientResponse>>> getPatientsByHospital(
             @PathVariable UUID hospitalId,
@@ -147,7 +149,7 @@ public class PatientController {
     }
 
     @GetMapping("/hospital/{hospitalId}/search")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR', 'LAB_TECHNICIAN', 'READ_ONLY') "
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR', 'READ_ONLY') "
             + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<PatientResponse>>> searchPatients(
             @PathVariable UUID hospitalId,

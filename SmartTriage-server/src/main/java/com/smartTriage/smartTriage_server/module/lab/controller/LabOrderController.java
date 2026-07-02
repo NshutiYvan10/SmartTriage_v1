@@ -324,6 +324,21 @@ public class LabOrderController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    /**
+     * Scoped "Lab Patients" view — the patients the lab is actively working
+     * (pending orders, unacknowledged criticals, or imaging studies), replacing
+     * full hospital-registry access for the lab tech. Carries only safe
+     * connect-the-specimen fields, not full demographics. LAB_TECHNICIAN +
+     * SUPER_ADMIN only (it is the lab tech's own patient surface).
+     */
+    @GetMapping("/hospital/{hospitalId}/patients")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    public ResponseEntity<ApiResponse<List<LabPatientSummaryResponse>>> getLabPatients(
+            @PathVariable UUID hospitalId) {
+        return ResponseEntity.ok(ApiResponse.success(labOrderService.getLabPatients(hospitalId)));
+    }
+
     /** Lab-tech inbox: orders waiting for lab action, STAT first. */
     @GetMapping("/hospital/{hospitalId}/inbox")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'LAB_TECHNICIAN', 'DOCTOR', 'NURSE') "

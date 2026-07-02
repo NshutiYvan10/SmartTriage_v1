@@ -138,6 +138,10 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
       label: 'Lab & Docs',
       items: [
         { id: 'lab', label: 'Lab Orders', icon: FlaskConical, pageId: 'lab' as AppPage },
+        // Lab tech's SCOPED patient list (only patients they have lab/imaging
+        // work for) — replaces full-registry "Patients" access, which they no
+        // longer have. Only appears for roles granted the 'lab-patients' page.
+        { id: 'lab-patients', label: 'Lab Patients', icon: Users, pageId: 'lab-patients' as AppPage },
         // Imaging & Diagnostics worklist — the technician surface for ordered
         // imaging/ECG studies (X-ray/CT/MRI/US/radiology/ECG). These do NOT route
         // to the lab inbox, so without this worklist an ordered X-ray reaches no

@@ -31,19 +31,21 @@ import { subscribeToVisits } from '@/api/websocket';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
 import { ParamedicHome } from '@/modules/ems/ParamedicHome';
+import { LabHome } from '@/modules/dashboard/LabHome';
 
 /**
  * '/dashboard' entry point — branches by role BEFORE the hospital dashboard
- * mounts. A PARAMEDIC gets their own scoped home (active runs/handoffs +
- * monitor status); rendering the hospital dashboard for them would show
- * hospital-wide census/zone surfaces that are not their scope (and, since
- * the backend rightly returns them no roster, mostly empty tiles). Branching
- * here also means none of the hospital data subscriptions/fetches below ever
- * start for a paramedic session.
+ * mounts. A PARAMEDIC gets their own scoped home; a LAB_TECHNICIAN gets the
+ * lab-scoped home (their inbox/in-progress/criticals/imaging + lab-patient
+ * count) instead of the hospital dashboard — which showed them ER triage
+ * metrics, arrival charts and, since they have no zone, the WHOLE hospital
+ * census (a PHI over-share). Branching here also means none of the hospital
+ * data subscriptions/fetches below ever start for those sessions.
  */
 export function Dashboard() {
   const role = useAuthStore((s) => s.user?.role);
   if (role === 'PARAMEDIC') return <ParamedicHome />;
+  if (role === 'LAB_TECHNICIAN') return <LabHome />;
   return <HospitalDashboard />;
 }
 

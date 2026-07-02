@@ -6,7 +6,9 @@ import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundExcep
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
 import com.smartTriage.smartTriage_server.module.alert.mapper.ClinicalAlertMapper;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
+import com.smartTriage.smartTriage_server.module.clinical.dto.InvestigationResponse;
 import com.smartTriage.smartTriage_server.module.clinical.entity.Investigation;
+import com.smartTriage.smartTriage_server.module.clinical.mapper.ClinicalMapper;
 import com.smartTriage.smartTriage_server.module.clinical.repository.InvestigationRepository;
 import com.smartTriage.smartTriage_server.module.lab.dto.*;
 import com.smartTriage.smartTriage_server.module.lab.engine.CriticalValueEngine;
@@ -40,9 +42,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -1205,6 +1211,108 @@ public class LabOrderService {
                 .stream()
                 .map(LabOrderMapper::toResponse)
                 .collect(Collectors.toList()));
+    }
+
+    /**
+     * The scoped "Lab Patients" view — the ONLY patient list a LAB_TECHNICIAN
+     * gets (they are locked out of the full hospital registry). Returns the
+     * distinct patients the lab/diagnostics unit is actively working: those with
+     * a pending/in-progress lab order, an unacknowledged critical result, or an
+     * ordered/in-progress imaging/ECG study — never the whole hospital census.
+     *
+     * <p>Privacy: each row is a {@link LabPatientSummaryResponse} carrying only
+     * name / visit number / location / outstanding-work counts — none of the
+     * full-registry PHI. Critical-first, then newest activity.
+     */
+    @Transactional(readOnly = true)
+    public List<LabPatientSummaryResponse> getLabPatients(UUID hospitalId) {
+        Map<UUID, LabPatientAccumulator> byVisit = new LinkedHashMap<>();
+
+        for (LabOrder o : labOrderRepository.findActiveOrdersForLabPatients(hospitalId)) {
+            LabOrderResponse r = LabOrderMapper.toResponse(o);
+            if (r.getVisitId() == null) continue;
+            LabPatientAccumulator a = byVisit.computeIfAbsent(r.getVisitId(),
+                    k -> new LabPatientAccumulator(r.getVisitId(), r.getPatientId(),
+                            r.getPatientName(), r.getVisitNumber(), r.getCurrentZone(), r.getCurrentBedLabel()));
+            boolean unackedCritical = o.isCritical()
+                    && o.getResultedAt() != null
+                    && o.getCriticalValueAcknowledgedAt() == null;
+            if (unackedCritical) {
+                a.criticalUnack++;
+            } else {
+                a.activeLab++;
+            }
+            a.touch(o.getOrderedAt());
+        }
+
+        Set<InvestigationType> imagingTypes = Arrays.stream(InvestigationType.values())
+                .filter(InvestigationType::needsDiagnosticsWorklist)
+                .collect(Collectors.toCollection(() -> EnumSet.noneOf(InvestigationType.class)));
+        List<Investigation> imaging = investigationRepository.findDiagnosticsWorklist(
+                hospitalId, imagingTypes,
+                EnumSet.of(InvestigationStatus.ORDERED, InvestigationStatus.IN_PROGRESS));
+        for (Investigation inv : imaging) {
+            InvestigationResponse r = ClinicalMapper.toResponse(inv);
+            if (r.getVisitId() == null) continue;
+            LabPatientAccumulator a = byVisit.computeIfAbsent(r.getVisitId(),
+                    k -> new LabPatientAccumulator(r.getVisitId(), null,
+                            r.getPatientName(), r.getVisitNumber(), r.getCurrentZone(), r.getCurrentBedLabel()));
+            a.activeImaging++;
+            a.touch(inv.getOrderedAt());
+        }
+
+        return byVisit.values().stream()
+                .sorted(Comparator
+                        .comparingInt((LabPatientAccumulator a) -> a.criticalUnack > 0 ? 0 : 1)
+                        .thenComparing(a -> a.lastActivityAt,
+                                Comparator.nullsLast(Comparator.reverseOrder())))
+                .map(LabPatientAccumulator::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    /** Mutable per-visit accumulator for {@link #getLabPatients}. */
+    private static final class LabPatientAccumulator {
+        final UUID visitId;
+        final UUID patientId;
+        final String patientName;
+        final String visitNumber;
+        final EdZone currentZone;
+        final String currentBedLabel;
+        int activeLab = 0;
+        int activeImaging = 0;
+        int criticalUnack = 0;
+        Instant lastActivityAt = null;
+
+        LabPatientAccumulator(UUID visitId, UUID patientId, String patientName,
+                              String visitNumber, EdZone currentZone, String currentBedLabel) {
+            this.visitId = visitId;
+            this.patientId = patientId;
+            this.patientName = patientName;
+            this.visitNumber = visitNumber;
+            this.currentZone = currentZone;
+            this.currentBedLabel = currentBedLabel;
+        }
+
+        void touch(Instant t) {
+            if (t != null && (lastActivityAt == null || t.isAfter(lastActivityAt))) {
+                lastActivityAt = t;
+            }
+        }
+
+        LabPatientSummaryResponse toResponse() {
+            return LabPatientSummaryResponse.builder()
+                    .visitId(visitId)
+                    .patientId(patientId)
+                    .patientName(patientName)
+                    .visitNumber(visitNumber)
+                    .currentZone(currentZone)
+                    .currentBedLabel(currentBedLabel)
+                    .activeLabCount(activeLab)
+                    .activeImagingCount(activeImaging)
+                    .criticalUnackCount(criticalUnack)
+                    .lastActivityAt(lastActivityAt)
+                    .build();
+        }
     }
 
     /** Lab-tech inbox — orders waiting on lab action. */

@@ -26,7 +26,7 @@ import { subscribeToLabOrders } from '@/api/websocket';
 import { formatDistanceToNow } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
 import { PatientContextLine } from '@/components/PatientContextLine';
-import { chartPath } from '@/lib/chartNav';
+import { chartPathForRole } from '@/lib/chartNav';
 import { ResultEntryModal } from './ResultEntryModal';
 import { RejectSpecimenModal } from './RejectSpecimenModal';
 import { AcknowledgeCriticalModal } from './AcknowledgeCriticalModal';
@@ -451,7 +451,7 @@ export function LabOrdersView() {
             totalPages={historyTotalPages}
             total={historyTotal}
             onRefresh={loadHistory}
-            onOpenChart={(visitId) => visitId && navigate(chartPath(visitId))}
+            onOpenChart={(visitId) => visitId && navigate(chartPathForRole(user?.role, visitId))}
             glassCard={glassCard}
             glassInner={glassInner}
             text={text}
@@ -487,7 +487,7 @@ export function LabOrdersView() {
                 text={text}
                 isLoading={actionLoading === order.id}
                 isHeadLabTech={isHeadLabTech}
-                onOpenChart={() => order.visitId && navigate(chartPath(order.visitId))}
+                onOpenChart={() => order.visitId && navigate(chartPathForRole(user?.role, order.visitId))}
                 onReceive={() => handleReceive(order)}
                 onReject={() => setRejectTarget(order)}
                 onAckOrder={() => handleAcknowledge(order)}

@@ -45,6 +45,14 @@ export type AppPage =
    *  to the lab inbox. Without it an ordered X-ray reaches no technician.
    *  Tech + nurse worklist; cross-patient, hospital-scoped. */
   | 'imaging'
+  /** Scoped Lab Patients list — the lab tech's ONLY patient surface (they are
+   *  locked out of the full hospital registry): patients they have lab/imaging
+   *  orders for, with safe fields only. */
+  | 'lab-patients'
+  /** Scoped Lab Record — a lab tech's per-patient view (orders/results/imaging/
+   *  attachments + safe header), NOT the full clinical chart. Replaces the
+   *  triage-gated /visit chart for the lab tech's "Chart" button. */
+  | 'lab-chart'
   | 'med-queue'
   /** V67 — zone medication board: due/overdue doses, PRN quick-give,
    *  infusions, high-alert approvals. The nurse's main dose surface. */
@@ -330,10 +338,15 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   // ShiftFunction enum has no LAB_TECHNICIAN value, so the page
   // would show an empty schedule.
   LAB_TECHNICIAN: [
-    'dashboard', 'patients', 'lab',
+    'dashboard', 'lab',
     // The lab tech is the whole-diagnostics hub — imaging/ECG orders (no
     // radiographer role exists) land on this worklist so they can't vanish.
     'imaging',
+    // SECURITY: the lab tech is LOCKED OUT of the full hospital registry
+    // ('patients' removed). Their patient surface is the SCOPED Lab Patients
+    // list (only patients they have lab/imaging orders for) + the scoped Lab
+    // Record (lab data only, not the full clinical chart).
+    'lab-patients', 'lab-chart',
     'notifications', 'profile',
   ],
 

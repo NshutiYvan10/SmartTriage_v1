@@ -164,6 +164,21 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
     List<LabOrder> findInboxForLab(@Param("hospitalId") UUID hospitalId);
 
     /**
+     * Every lab order the lab is still concerned with for a hospital, across all
+     * patients — the source for the scoped "Lab Patients" view. Includes orders
+     * that are NOT yet resulted (pending/in-progress) PLUS resulted orders whose
+     * CRITICAL value is still unacknowledged (the lab must chase those). Excludes
+     * cancelled and rejected. Fetches visit+patient(+bed) so the caller can build
+     * the patient summary without a lazy load (OSIV is off).
+     */
+    @Query("SELECT o FROM LabOrder o JOIN FETCH o.visit v JOIN FETCH v.patient LEFT JOIN FETCH v.currentBed " +
+            "WHERE v.hospital.id = :hospitalId " +
+            "AND o.isActive = true " +
+            "AND o.cancelledAt IS NULL AND o.rejectedAt IS NULL " +
+            "AND (o.resultedAt IS NULL OR (o.isCritical = true AND o.criticalValueAcknowledgedAt IS NULL))")
+    List<LabOrder> findActiveOrdersForLabPatients(@Param("hospitalId") UUID hospitalId);
+
+    /**
      * Orders the tech has accessioned and is actively processing —
      * waiting for a result.
      */

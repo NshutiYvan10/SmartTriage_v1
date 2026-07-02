@@ -187,6 +187,20 @@ export interface AcknowledgeCriticalRequest {
   acknowledgedByName?: string;
 }
 
+/** A patient the lab is actively working — row shape for the scoped Lab Patients view. */
+export interface LabPatientSummary {
+  visitId: string;
+  patientId: string | null;
+  patientName: string | null;
+  visitNumber: string | null;
+  currentZone: string | null;
+  currentBedLabel: string | null;
+  activeLabCount: number;
+  activeImagingCount: number;
+  criticalUnackCount: number;
+  lastActivityAt: string | null;
+}
+
 export const labApi = {
   order: (data: OrderLabRequest) => post<LabOrder>('/lab/order', data),
 
@@ -227,6 +241,14 @@ export const labApi = {
 
   getForVisit: (visitId: string, page = 0, size = 20) =>
     get<{ content: LabOrder[]; totalElements: number }>(`/lab/visit/${visitId}?page=${page}&size=${size}`),
+
+  /**
+   * Scoped Lab Patients — the lab tech's ONLY patient list (they are locked out
+   * of the full hospital registry). Patients with pending orders / unacked
+   * criticals / imaging studies; safe fields + outstanding-work counts only.
+   */
+  getLabPatients: (hospitalId: string) =>
+    get<LabPatientSummary[]>(`/lab/hospital/${hospitalId}/patients`),
 
   getInbox: (hospitalId: string) =>
     get<LabOrder[]>(`/lab/hospital/${hospitalId}/inbox`),

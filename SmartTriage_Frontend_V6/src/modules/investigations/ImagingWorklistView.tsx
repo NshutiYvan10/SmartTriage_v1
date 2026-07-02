@@ -30,7 +30,7 @@ import type { InvestigationResponse } from '@/api/types';
 import { subscribeToDiagnostics } from '@/api/websocket';
 import { useTheme } from '@/hooks/useTheme';
 import { PatientContextLine } from '@/components/PatientContextLine';
-import { chartPath } from '@/lib/chartNav';
+import { chartPathForRole } from '@/lib/chartNav';
 
 /** Minutes since order, with a soft target so overdue studies stand out. */
 const PRIORITY_TARGET_MIN: Record<string, number> = { STAT: 30, URGENT: 120, ROUTINE: 1440 };
@@ -167,6 +167,7 @@ export function ImagingWorklistView() {
               title="To perform" helper="Ordered — study not yet started"
               icon={Clock} rows={toPerform}
               glassCard={glassCard} isDark={isDark} text={text}
+              chartHref={(vid) => chartPathForRole(user?.role, vid)}
               renderActions={(r) => (
                 <button
                   type="button"
@@ -183,6 +184,7 @@ export function ImagingWorklistView() {
               title="In progress" helper="Being performed — enter the report"
               icon={Activity} rows={inProgress}
               glassCard={glassCard} isDark={isDark} text={text}
+              chartHref={(vid) => chartPathForRole(user?.role, vid)}
               renderActions={(r) => (
                 <button
                   type="button"
@@ -209,7 +211,7 @@ export function ImagingWorklistView() {
 }
 
 function WorklistColumn({
-  title, helper, icon: Icon, rows, glassCard, isDark, text, renderActions,
+  title, helper, icon: Icon, rows, glassCard, isDark, text, renderActions, chartHref,
 }: {
   title: string;
   helper: string;
@@ -219,6 +221,7 @@ function WorklistColumn({
   isDark: boolean;
   text: { heading: string; muted: string; body: string; label: string };
   renderActions: (r: InvestigationResponse) => React.ReactNode;
+  chartHref: (visitId: string) => string;
 }) {
   return (
     <div className="rounded-2xl overflow-hidden" style={glassCard}>
@@ -268,7 +271,7 @@ function WorklistColumn({
                   <div className="flex flex-col items-end gap-2 flex-shrink-0">
                     {renderActions(r)}
                     <Link
-                      to={chartPath(r.visitId)}
+                      to={chartHref(r.visitId)}
                       className={`inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg transition-colors ${isDark ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
                     >
                       Chart <ChevronRight className="w-3 h-3" />
