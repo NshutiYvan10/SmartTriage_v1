@@ -17,6 +17,9 @@ function mapAlertType(t: AlertType): AIAlert['type'] {
     case 'EMS_ARRIVAL_ACKNOWLEDGED':
     case 'EMS_HANDOVER_COMPLETE':
     case 'EMS_FIELD_TRIAGE_CONFIRMED':
+    // Registrar identity-reconciliation reminders (tier 1 + charge-nurse escalation)
+    case 'IDENTITY_UNRESOLVED':
+    case 'IDENTITY_UNRESOLVED_ESCALATED':
       return 'DOCTOR_NOTIFICATION';
     case 'VITAL_SIGN_ABNORMAL':
     case 'CRITICAL_LAB_RESULT':

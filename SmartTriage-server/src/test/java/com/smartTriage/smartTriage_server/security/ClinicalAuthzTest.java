@@ -680,6 +680,83 @@ class ClinicalAuthzTest {
                 authFor(user(Role.REGISTRAR, null, hospitalId)), null));
     }
 
+    // ── canSearchGlobalRegistry (the ONE unscoped patient search — registrar-only) ──
+
+    @Test
+    void canSearchGlobalRegistry_allowsRegistrarAndSuperAdmin() {
+        assertTrue(authz.canSearchGlobalRegistry(authFor(user(Role.REGISTRAR, null, hospitalId))));
+        assertTrue(authz.canSearchGlobalRegistry(authFor(user(Role.SUPER_ADMIN, null, null))));
+    }
+
+    @Test
+    void canSearchGlobalRegistry_deniesClinicalAndAdminRoles() {
+        // A system-wide patient search is a registration-desk tool only — no
+        // cross-hospital patient browsing for clinical staff or the hospital admin.
+        assertFalse(authz.canSearchGlobalRegistry(authFor(user(Role.DOCTOR, null, hospitalId))));
+        assertFalse(authz.canSearchGlobalRegistry(authFor(user(Role.NURSE, null, hospitalId))));
+        assertFalse(authz.canSearchGlobalRegistry(authFor(user(Role.LAB_TECHNICIAN, null, hospitalId))));
+        assertFalse(authz.canSearchGlobalRegistry(authFor(user(Role.PARAMEDIC, null, hospitalId))));
+        assertFalse(authz.canSearchGlobalRegistry(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId))));
+        assertFalse(authz.canSearchGlobalRegistry(authFor(user(Role.READ_ONLY, null, hospitalId))));
+    }
+
+    @Test
+    void canSearchGlobalRegistry_deniesNullAuthOrPrincipal() {
+        assertFalse(authz.canSearchGlobalRegistry(null));
+        assertFalse(authz.canSearchGlobalRegistry(
+                new UsernamePasswordAuthenticationToken("not-a-user", null)));
+    }
+
+    // ── canAckAlertForRole (CATEGORY-AWARE acknowledge — a scoped role can only ack its own alerts) ──
+
+    /** Wire an alert at the caller's hospital with the given type + optional target doctor. */
+    private UUID alertOfType(AlertType type, UUID targetDoctorId) {
+        UUID alertId = UUID.randomUUID();
+        UUID visitId = UUID.randomUUID();
+        when(clinicalAlertRepository.findVisitIdById(alertId)).thenReturn(Optional.of(visitId));
+        when(visitRepository.findHospitalIdByVisitId(visitId)).thenReturn(Optional.of(hospitalId));
+        when(clinicalAlertRepository.findAlertTypeById(alertId)).thenReturn(Optional.of(type));
+        when(clinicalAlertRepository.findTargetDoctorIdById(alertId))
+                .thenReturn(Optional.ofNullable(targetDoctorId));
+        return alertId;
+    }
+
+    @Test
+    void canAckAlertForRole_registrarDeniedClinicalAlert_allowedIdentityReminder() {
+        // A registrar must NOT be able to silence a life-critical clinical alert by id…
+        UUID crit = alertOfType(AlertType.CRITICAL_LAB_RESULT, null);
+        assertFalse(authz.canAckAlertForRole(authFor(user(Role.REGISTRAR, null, hospitalId)), crit));
+        // …but MAY ack their own identity-reconciliation reminders.
+        UUID reminder = alertOfType(AlertType.IDENTITY_UNRESOLVED, null);
+        assertTrue(authz.canAckAlertForRole(authFor(user(Role.REGISTRAR, null, hospitalId)), reminder));
+    }
+
+    @Test
+    void canAckAlertForRole_labTechDeniedClinicalAlert_allowedLabAlert() {
+        UUID sepsis = alertOfType(AlertType.SEPSIS_BUNDLE_NOT_STARTED, null);
+        assertFalse(authz.canAckAlertForRole(authFor(user(Role.LAB_TECHNICIAN, null, hospitalId)), sepsis));
+        UUID lab = alertOfType(AlertType.CRITICAL_LAB_RESULT, null);
+        assertTrue(authz.canAckAlertForRole(authFor(user(Role.LAB_TECHNICIAN, null, hospitalId)), lab));
+    }
+
+    @Test
+    void canAckAlertForRole_paramedicOnlyOwnPersonalAlert() {
+        User medic = user(Role.PARAMEDIC, null, hospitalId);
+        UUID mine = alertOfType(AlertType.EMS_HANDOVER_COMPLETE, medic.getId());
+        assertTrue(authz.canAckAlertForRole(authFor(medic), mine));
+        // Same type, but addressed to a different crew member — denied.
+        UUID other = alertOfType(AlertType.EMS_HANDOVER_COMPLETE, UUID.randomUUID());
+        assertFalse(authz.canAckAlertForRole(authFor(medic), other));
+    }
+
+    @Test
+    void canAckAlertForRole_clinicalRolesKeepHospitalScopedAck() {
+        // A doctor keeps the plain hospital-scoped behaviour for any alert type at their hospital.
+        UUID crit = alertOfType(AlertType.CRITICAL_LAB_RESULT, null);
+        assertTrue(authz.canAckAlertForRole(authFor(user(Role.DOCTOR, null, hospitalId)), crit));
+        assertTrue(authz.canAckAlertForRole(authFor(user(Role.NURSE, null, hospitalId)), crit));
+    }
+
     // ── canOperateRfidDevice (V95 — scopes the RFID bind-mode endpoint to the device's hospital) ──
 
     @Test

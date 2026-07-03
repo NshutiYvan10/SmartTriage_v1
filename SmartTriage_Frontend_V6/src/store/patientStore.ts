@@ -127,6 +127,9 @@ interface PatientState {
     bloodType?: string;
     knownAllergies?: string;
     chronicConditions?: string;
+    /** V102 — structured history rows (preferred over the free-text fields above). */
+    allergies?: { allergenName: string; severity?: string; reaction?: string }[];
+    conditions?: { conditionName: string; conditionCode?: string; status?: string; notes?: string }[];
     /** S8 — optional body weight in kg, captured at registration. */
     weightKg?: number;
     guardianName?: string;
@@ -253,6 +256,8 @@ export const usePatientStore = create<PatientState>((set, get) => ({
         bloodType: data.bloodType,
         knownAllergies: data.knownAllergies,
         chronicConditions: data.chronicConditions,
+        allergies: data.allergies as any,
+        conditions: data.conditions as any,
         weightKg: data.weightKg,
         guardianName: data.guardianName,
         guardianPhone: data.guardianPhone,

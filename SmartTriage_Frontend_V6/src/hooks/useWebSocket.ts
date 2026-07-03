@@ -23,7 +23,7 @@ import type { ClinicalAlertResponse, AlertType, EdZone } from '@/api/types';
 import type { AIAlert } from '@/types';
 
 /** Roles with a server-published /topic/alerts/{hospital}/role/{ROLE} channel. */
-const ROLE_CHANNEL_ROLES = new Set<string>(['LAB_TECHNICIAN']);
+const ROLE_CHANNEL_ROLES = new Set<string>(['LAB_TECHNICIAN', 'REGISTRAR']);
 
 // ── Map helper (duplicated from alertStore to avoid coupling) ──
 function mapAlertType(t: AlertType | string): AIAlert['type'] {
@@ -39,6 +39,9 @@ function mapAlertType(t: AlertType | string): AIAlert['type'] {
     case 'EMS_ARRIVAL_ACKNOWLEDGED':
     case 'EMS_HANDOVER_COMPLETE':
     case 'EMS_FIELD_TRIAGE_CONFIRMED':
+    // Registrar identity-reconciliation reminders (tier 1 + charge-nurse escalation)
+    case 'IDENTITY_UNRESOLVED':
+    case 'IDENTITY_UNRESOLVED_ESCALATED':
       return 'DOCTOR_NOTIFICATION';
     case 'VITAL_SIGN_ABNORMAL':
     case 'CRITICAL_LAB_RESULT':

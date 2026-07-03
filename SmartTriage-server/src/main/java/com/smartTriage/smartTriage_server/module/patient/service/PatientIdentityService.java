@@ -79,11 +79,14 @@ public class PatientIdentityService {
                     request.getResolutionNote());
         }
 
-        // Rename path
-        if (request.getFirstName() == null || request.getFirstName().isBlank()
-                || request.getLastName() == null || request.getLastName().isBlank()) {
+        // Rename path — a real name (or a card anchor, e.g. an unconscious patient
+        // identified by their card before a name is known) is required.
+        boolean hasName = request.getFirstName() != null && !request.getFirstName().isBlank()
+                && request.getLastName() != null && !request.getLastName().isBlank();
+        boolean hasCard = request.getRfidCardId() != null && !request.getRfidCardId().isBlank();
+        if (!hasName && !hasCard) {
             throw new ClinicalBusinessException(
-                    "Either mergeIntoPatientId, or both firstName and lastName, are required");
+                    "Either mergeIntoPatientId, both firstName and lastName, or an RFID card, are required");
         }
 
         return renamePlaceholderInPlace(placeholder, request, actor, now);
@@ -100,35 +103,89 @@ public class PatientIdentityService {
         String oldDisplay = "Unknown " + (placeholder.getPlaceholderLabel() != null
                 ? placeholder.getPlaceholderLabel() : placeholder.getLastName());
 
-        placeholder.setFirstName(request.getFirstName().trim());
-        placeholder.setLastName(request.getLastName().trim());
+        // A name may be absent when the patient is identified by CARD ALONE (e.g. an
+        // unconscious patient whose card resolves before anyone can give a name) — keep
+        // the placeholder display name in that case rather than blanking it.
+        boolean nameCaptured = request.getFirstName() != null && !request.getFirstName().isBlank()
+                && request.getLastName() != null && !request.getLastName().isBlank();
+        if (request.getFirstName() != null && !request.getFirstName().isBlank()) {
+            placeholder.setFirstName(request.getFirstName().trim());
+        }
+        if (request.getLastName() != null && !request.getLastName().isBlank()) {
+            placeholder.setLastName(request.getLastName().trim());
+        }
         if (request.getDateOfBirth() != null)  placeholder.setDateOfBirth(request.getDateOfBirth());
         if (request.getGender() != null)       placeholder.setGender(request.getGender());
-        if (request.getNationalId() != null) {
-            placeholder.setNationalId(request.getNationalId().trim());
-            // Now that the patient has a national ID, link them to the shared cross-hospital identity.
-            placeholder.setPersonIdentity(personIdentityService.findOrCreate(placeholder.getNationalId()));
+        String nid = request.getNationalId() != null && !request.getNationalId().isBlank()
+                ? request.getNationalId().trim() : null;
+        String card = request.getRfidCardId() != null && !request.getRfidCardId().isBlank()
+                ? request.getRfidCardId().trim() : null;
+        if (nid != null) placeholder.setNationalId(nid);
+        if (nid != null || card != null) {
+            // A card that ALREADY belongs to another patient is that person's identity —
+            // attaching this placeholder to it via findOrCreate would silently graft the
+            // wrong person's cross-hospital record (allergies, deep-record reads) onto them.
+            // That is a MERGE decision, not a rename: reject and route the registrar to the
+            // merge path. (findOrCreate only 409s on a CONFLICTING second key, so it would
+            // NOT catch a card-only resolve onto an existing owner — we guard it here.)
+            if (card != null) {
+                rejectIfCardBelongsToAnotherPatient(card, placeholder.getId());
+            }
+            // Link to the shared cross-hospital identity by whichever anchor(s) the
+            // registrar supplied. Two-key resolve-or-merge: a national ID resolving to a
+            // DIFFERENT identity than the card throws IdentityConflictException (409).
+            placeholder.setPersonIdentity(personIdentityService.findOrCreate(nid, card));
         }
         if (request.getPhoneNumber() != null)  placeholder.setPhoneNumber(request.getPhoneNumber().trim());
         if (request.getAddress() != null)      placeholder.setAddress(request.getAddress().trim());
 
-        placeholder.setUnidentified(false);
-        placeholder.setIdentifiedAt(now);
-        placeholder.setIdentifiedBy(actor);
-        placeholder.setResolutionNote(request.getResolutionNote());
+        // Only flip the patient to IDENTIFIED when a real human name was actually captured.
+        // A card-anchor-only resolve records the card + keeps the patient findable, but the
+        // patient still has no name on the chart — leave isUnidentified=true so the overdue
+        // reminders + reconciliation queue keep chasing a real identity (medico-legal req).
+        boolean fullyIdentified = nameCaptured
+                || (placeholder.getFirstName() != null && !placeholder.getFirstName().isBlank()
+                    && !"Unknown".equalsIgnoreCase(placeholder.getFirstName())
+                    && placeholder.getLastName() != null && !placeholder.getLastName().isBlank());
+        if (fullyIdentified) {
+            placeholder.setUnidentified(false);
+            placeholder.setIdentifiedAt(now);
+            placeholder.setIdentifiedBy(actor);
+        }
+        if (request.getResolutionNote() != null) placeholder.setResolutionNote(request.getResolutionNote());
 
         Patient saved = patientRepository.save(placeholder);
 
-        log.info("[identity] Resolved patient {}: '{}' → '{} {}' by {} at {} (note: {})",
+        log.info("[identity] Resolved patient {}: '{}' → '{} {}' (identified={}) by {} at {} (note: {})",
                 saved.getId(),
                 oldDisplay,
                 saved.getFirstName(),
                 saved.getLastName(),
+                fullyIdentified,
                 actor != null ? formatActorName(actor) : "system",
                 now,
                 request.getResolutionNote() != null ? request.getResolutionNote() : "—");
 
         return saved;
+    }
+
+    /**
+     * Guard against grafting: a card already carried by a DIFFERENT active patient must
+     * not be silently attached to this placeholder's identity — that would cross-link two
+     * people's cross-hospital records. Such a case is a deliberate, audited MERGE, not a
+     * rename. Throws {@link com.smartTriage.smartTriage_server.common.exception.IdentityConflictException}.
+     */
+    private void rejectIfCardBelongsToAnotherPatient(String card, UUID placeholderId) {
+        personIdentityService.findByRfidCardId(card).ifPresent(existing -> {
+            boolean ownedByOther = patientRepository
+                    .findByPersonIdentityIdAndIsActiveTrue(existing.getId()).stream()
+                    .anyMatch(p -> !p.getId().equals(placeholderId));
+            if (ownedByOther) {
+                throw new com.smartTriage.smartTriage_server.common.exception.IdentityConflictException(
+                        "That RFID card already belongs to a registered patient. If this is the same "
+                                + "person, use 'Merge into existing patient' instead of typing an identity.");
+            }
+        });
     }
 
     /**

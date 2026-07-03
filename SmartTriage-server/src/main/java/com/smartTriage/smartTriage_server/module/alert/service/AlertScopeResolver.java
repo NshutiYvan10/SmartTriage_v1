@@ -36,8 +36,11 @@ import java.util.UUID;
  *   <li><b>Paramedic</b> → personal-only: alerts addressed to them as the run's
  *       crew (ED arrival ack, handover complete, field-triage confirmed) — no
  *       hospital/zone clinical noise.</li>
- *   <li><b>Registrar, Hospital-Admin</b> → NONE (the clinical Alert Center is
- *       not their surface; the endpoint already denies Hospital-Admin).</li>
+ *   <li><b>Registrar</b> → identity-reconciliation reminders only
+ *       (IDENTITY_UNRESOLVED + its escalation), hospital-wide; the desk owns
+ *       chasing down unidentified patients. No clinical/zone noise.</li>
+ *   <li><b>Hospital-Admin</b> → NONE (the clinical Alert Center is not their
+ *       surface; the endpoint already denies Hospital-Admin).</li>
  * </ul>
  */
 @Slf4j
@@ -47,6 +50,14 @@ public class AlertScopeResolver {
 
     private final ClinicalAuthz clinicalAuthz;
     private final ShiftAssignmentService shiftAssignmentService;
+
+    /**
+     * Registrar visibility: identity-reconciliation reminders only (the desk owns
+     * chasing down unidentified patients). Hospital-wide, no clinical/zone noise.
+     */
+    private static final Set<AlertType> REGISTRAR_ALERT_TYPES = EnumSet.of(
+            AlertType.IDENTITY_UNRESOLVED,
+            AlertType.IDENTITY_UNRESOLVED_ESCALATED);
 
     /** Lab-tech visibility: laboratory/diagnostics alerts only, hospital-wide. */
     private static final Set<AlertType> LAB_ALERT_TYPES = EnumSet.of(
@@ -63,6 +74,16 @@ public class AlertScopeResolver {
             AlertType.NEW_LAB_ORDER,
             AlertType.LAB_ORDER_CANCELLED,
             AlertType.NEW_IMAGING_ORDER);
+
+    /** Single source of truth for "is this alert type inside the lab tech's scope?" (ack gate reuse). */
+    public static boolean isLabScopedType(AlertType type) {
+        return type != null && LAB_ALERT_TYPES.contains(type);
+    }
+
+    /** Single source of truth for "is this alert type inside the registrar's scope?" (ack gate reuse). */
+    public static boolean isRegistrarScopedType(AlertType type) {
+        return type != null && REGISTRAR_ALERT_TYPES.contains(type);
+    }
 
     public enum Kind { ALL, ZONE, CATEGORY, NONE }
 
@@ -130,6 +151,10 @@ public class AlertScopeResolver {
                 return AlertScope.all();
             case LAB_TECHNICIAN:
                 return AlertScope.category(LAB_ALERT_TYPES);
+            case REGISTRAR:
+                // Desk role: identity-reconciliation reminders only (their job to
+                // chase down unidentified patients), hospital-wide, no clinical noise.
+                return AlertScope.category(REGISTRAR_ALERT_TYPES);
             case PARAMEDIC:
                 // Personal-only: alerts addressed to THIS crew member (targetDoctor
                 // = them — ED ack of their inbound, handover complete, field-triage
@@ -141,7 +166,7 @@ public class AlertScopeResolver {
                 // Zone-scoped: covered zone(s) + personally-targeted + acked.
                 return AlertScope.zone(currentCoveredZones(user.getId(), hospitalId), user.getId());
             default:
-                // REGISTRAR (front desk) — no clinical alert surface.
+                // Any other role — no clinical alert surface.
                 return AlertScope.none();
         }
     }

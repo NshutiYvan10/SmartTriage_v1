@@ -45,6 +45,7 @@ class VisitServiceTest {
             visitRepository,
             visitSequenceCounterRepository,
             mock(PatientService.class),
+            mock(com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository.class),
             mock(HospitalService.class),
             deviceSessionRepository,
             bedService,

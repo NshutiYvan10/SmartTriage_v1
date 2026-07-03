@@ -15,12 +15,14 @@
  * common case. MPI search lives behind a toggle so the interface
  * doesn't overwhelm a nurse who just wants to type "Marie Uwimana".
  */
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import {
-  AlertTriangle, Check, Link2, Loader2, Search, UserCheck, X,
+  AlertTriangle, Check, Link2, Loader2, Search, UserCheck, X, ScanLine,
 } from 'lucide-react';
 import { directResusApi } from '@/api/directResus';
 import { patientApi } from '@/api/patients';
+import { rfidApi, type RfidDevice, type RfidEvent } from '@/api/rfid';
+import { subscribeToRfidEvents } from '@/api/websocket';
 import type { Gender, PatientResponse, ResolveIdentityRequest } from '@/api/types';
 import { useTheme } from '@/hooks/useTheme';
 import { formatPatientDisplayName } from './displayName';
@@ -43,8 +45,44 @@ export function IdentityResolutionModal({ patient, hospitalId, onClose, onResolv
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [gender, setGender] = useState<Gender | ''>('');
   const [nationalId, setNationalId] = useState('');
+  const [rfidCardId, setRfidCardId] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [resolutionNote, setResolutionNote] = useState('');
+
+  // ── RFID tap-to-capture (attach a card anchor while resolving, goal 3) ──
+  const [rfidDeviceId, setRfidDeviceId] = useState<string>(() => localStorage.getItem('st-rfid-device') || '');
+  const [capturingCard, setCapturingCard] = useState(false);
+  // Holds the current capture teardown so it runs on unmount too (backdrop/X/onResolved) —
+  // otherwise closing the modal mid-capture leaks the STOMP subscription + the 32s timer,
+  // and a card tapped after close is silently swallowed by a dead callback.
+  const captureStopRef = useRef<null | (() => void)>(null);
+  useEffect(() => {
+    if (!hospitalId) return;
+    rfidApi.listDevices(hospitalId)
+      .then((d: RfidDevice[]) => setRfidDeviceId((cur) => (cur && d.some((x) => x.id === cur)) ? cur : (d.length === 1 ? d[0].id : cur)))
+      .catch(() => { /* no readers — manual entry only */ });
+  }, [hospitalId]);
+  // Run any in-flight capture teardown when the modal unmounts.
+  useEffect(() => () => { captureStopRef.current?.(); }, []);
+  const captureCard = useCallback(() => {
+    if (!rfidDeviceId || !hospitalId) return;
+    localStorage.setItem('st-rfid-device', rfidDeviceId);
+    setCapturingCard(true);
+    let unsub: (() => void) | null = null;
+    let timer = 0;
+    const stop = () => {
+      if (unsub) unsub(); unsub = null;
+      if (timer) window.clearTimeout(timer);
+      captureStopRef.current = null;
+      setCapturingCard(false);
+    };
+    captureStopRef.current = stop;
+    timer = window.setTimeout(stop, 32000);
+    unsub = subscribeToRfidEvents(hospitalId, (e: RfidEvent) => {
+      if (e?.type === 'CARD_BIND' && e.cardId) { setRfidCardId(e.cardId); stop(); }
+    });
+    rfidApi.armBindMode(rfidDeviceId).catch(() => stop());
+  }, [rfidDeviceId, hospitalId]);
 
   // Merge-mode state
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,8 +95,11 @@ export function IdentityResolutionModal({ patient, hospitalId, onClose, onResolv
 
   const placeholderName = formatPatientDisplayName(patient);
 
+  // Rename resolves with a real name, OR with a card alone (an unconscious patient
+  // identified by their card before a name is known — the card becomes the anchor).
   const renameValid =
-    mode === 'rename' && firstName.trim().length >= 1 && lastName.trim().length >= 1;
+    mode === 'rename'
+    && ((firstName.trim().length >= 1 && lastName.trim().length >= 1) || rfidCardId.trim().length >= 1);
   const mergeValid =
     mode === 'merge' && selectedTarget != null && selectedTarget.id !== patient.id;
   const canSubmit = (renameValid || mergeValid) && !submitting;
@@ -91,11 +132,12 @@ export function IdentityResolutionModal({ patient, hospitalId, onClose, onResolv
       const body: ResolveIdentityRequest =
         mode === 'rename'
           ? {
-              firstName: firstName.trim(),
-              lastName: lastName.trim(),
+              firstName: firstName.trim() || undefined,
+              lastName: lastName.trim() || undefined,
               dateOfBirth: dateOfBirth || undefined,
               gender: gender || undefined,
               nationalId: nationalId.trim() || undefined,
+              rfidCardId: rfidCardId.trim() || undefined,
               phoneNumber: phoneNumber.trim() || undefined,
               resolutionNote: resolutionNote.trim() || undefined,
             }
@@ -186,6 +228,9 @@ export function IdentityResolutionModal({ patient, hospitalId, onClose, onResolv
               dateOfBirth={dateOfBirth} setDateOfBirth={setDateOfBirth}
               gender={gender} setGender={setGender}
               nationalId={nationalId} setNationalId={setNationalId}
+              rfidCardId={rfidCardId} setRfidCardId={setRfidCardId}
+              onCaptureCard={rfidDeviceId ? captureCard : undefined}
+              capturingCard={capturingCard}
               phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber}
               resolutionNote={resolutionNote} setResolutionNote={setResolutionNote}
             />
@@ -251,6 +296,10 @@ interface RenameFormProps {
   setGender: (v: Gender | '') => void;
   nationalId: string;
   setNationalId: (v: string) => void;
+  rfidCardId: string;
+  setRfidCardId: (v: string) => void;
+  onCaptureCard?: () => void;
+  capturingCard: boolean;
   phoneNumber: string;
   setPhoneNumber: (v: string) => void;
   resolutionNote: string;
@@ -330,6 +379,33 @@ function RenameForm(p: RenameFormProps) {
           />
         </Field>
       </div>
+
+      {/* RFID card — tap-to-capture, attaches the card to the patient's shared identity
+          so they're findable by card at any hospital. A card already on someone else is
+          rejected (409). A card alone can resolve identity when no name is known yet. */}
+      <Field label="RFID card (optional)">
+        <div className="flex items-center gap-2">
+          <input
+            value={p.rfidCardId}
+            onChange={(e) => p.setRfidCardId(e.target.value)}
+            maxLength={64}
+            placeholder="Tap card or type UID"
+            style={glassInner}
+            className={`${inputCls} flex-1 font-mono`}
+          />
+          {p.onCaptureCard && (
+            <button
+              type="button"
+              onClick={p.onCaptureCard}
+              disabled={p.capturingCard}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-cyan-700 bg-cyan-500/10 hover:bg-cyan-500/20 transition-colors disabled:opacity-60 whitespace-nowrap"
+            >
+              {p.capturingCard ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanLine className="w-3.5 h-3.5" />}
+              {p.capturingCard ? 'Tap now…' : 'Tap card'}
+            </button>
+          )}
+        </div>
+      </Field>
 
       <Field label="Resolution note (optional)">
         <input

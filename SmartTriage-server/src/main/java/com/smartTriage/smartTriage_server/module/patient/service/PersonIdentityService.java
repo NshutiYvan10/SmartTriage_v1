@@ -42,6 +42,14 @@ public class PersonIdentityService {
         return findOrCreate(nationalId, null);
     }
 
+    /** Active shared identity carrying the given RFID card, if any (read-only lookup, no create). */
+    @Transactional(readOnly = true)
+    public java.util.Optional<PersonIdentity> findByRfidCardId(String rfidCardId) {
+        String card = normalize(rfidCardId);
+        if (card == null) return java.util.Optional.empty();
+        return personIdentityRepository.findByRfidCardIdAndIsActiveTrue(card);
+    }
+
     /**
      * Resolve (and if needed create / extend) the shared identity for the given anchors.
      * Returns null when neither anchor is present. See class javadoc for the full rule set.

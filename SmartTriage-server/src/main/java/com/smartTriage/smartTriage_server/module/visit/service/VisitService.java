@@ -50,6 +50,8 @@ public class VisitService {
     /** Restart-proof, DB-backed per-(hospital,day) visit-number sequence (replaces the old in-memory counter). */
     private final com.smartTriage.smartTriage_server.module.visit.repository.VisitSequenceCounterRepository visitSequenceCounterRepository;
     private final PatientService patientService;
+    /** Registrar open-visit-here: resolve an identity-linked local record for a cross-hospital patient. */
+    private final com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository patientRepository;
     private final HospitalService hospitalService;
     private final DeviceSessionRepository deviceSessionRepository;
     private final BedService bedService;
@@ -73,6 +75,22 @@ public class VisitService {
     public VisitResponse createVisit(CreateVisitRequest request) {
         Patient patient = patientService.findPatientOrThrow(request.getPatientId());
         Hospital hospital = hospitalService.findHospitalOrThrow(request.getHospitalId());
+
+        // Duplicate-visit guard: one OPEN encounter per patient per hospital. A
+        // second concurrent visit would split the clinical record (orders on one,
+        // meds on the other) — the registrar should be sent to the existing visit
+        // instead. Terminal statuses (discharged/admitted/…) don't block a fresh
+        // return visit.
+        List<Visit> open = visitRepository.findOpenVisitsForPatientAtHospital(
+                patient.getId(), hospital.getId());
+        if (!open.isEmpty()) {
+            throw new ClinicalBusinessException(
+                    patient.getFirstName() + " " + patient.getLastName()
+                            + " already has an open visit at this hospital ("
+                            + open.get(0).getVisitNumber()
+                            + ", status " + open.get(0).getStatus()
+                            + ") — open that visit instead of starting a second one.");
+        }
 
         Visit visit = Visit.builder()
                 .patient(patient)
@@ -102,6 +120,87 @@ public class VisitService {
                         "hospitalId", hospital.getId().toString()));
 
         return VisitMapper.toResponse(visit);
+    }
+
+    /**
+     * Registrar "start a visit HERE" for a patient found in the global registry —
+     * the manual-search twin of the RFID tap's open-visit flow (V95).
+     *
+     * <ul>
+     *   <li>Patient is local to this hospital → open a fresh visit directly.</li>
+     *   <li>Patient belongs to ANOTHER hospital → resolve their shared
+     *       {@code PersonIdentity}; reuse the local record linked to that identity
+     *       if one exists here, else register a returning-patient copy from the
+     *       source demographics (linked to the same identity) + open the visit.
+     *       A cross-hospital patient with NO shared identity (no national ID or
+     *       card on record anywhere) cannot be trusted as "the same person" —
+     *       the registrar is told to register them locally instead.</li>
+     * </ul>
+     * The duplicate-visit guard in {@link #createVisit} applies on every path.
+     */
+    @Transactional
+    public com.smartTriage.smartTriage_server.module.patient.dto.RegisterPatientResponse openVisitHereForPatient(
+            UUID sourcePatientId, UUID hospitalId,
+            com.smartTriage.smartTriage_server.common.enums.ArrivalMode arrivalMode,
+            String chiefComplaint) {
+        Patient source = patientService.findPatientOrThrow(sourcePatientId);
+
+        // Local record (same hospital) — straight to a new visit.
+        if (source.getHospital() != null && source.getHospital().getId().equals(hospitalId)) {
+            VisitResponse visit = createVisit(CreateVisitRequest.builder()
+                    .patientId(source.getId())
+                    .hospitalId(hospitalId)
+                    .arrivalMode(arrivalMode)
+                    .chiefComplaint(chiefComplaint)
+                    .build());
+            return com.smartTriage.smartTriage_server.module.patient.dto.RegisterPatientResponse.builder()
+                    .patient(com.smartTriage.smartTriage_server.module.patient.mapper.PatientMapper.toResponse(source))
+                    .visit(visit)
+                    .build();
+        }
+
+        // Cross-hospital: only a shared identity proves this is the same person.
+        var identity = source.getPersonIdentity();
+        if (identity == null) {
+            throw new ClinicalBusinessException(
+                    "This record belongs to another hospital and has no shared identity "
+                            + "(no national ID or RFID card on file), so it cannot be reused here safely. "
+                            + "Register the patient at this hospital via the registration form.");
+        }
+
+        List<Patient> localHere = patientRepository
+                .findByPersonIdentityIdAndHospitalIdAndIsActiveTrue(identity.getId(), hospitalId);
+        if (!localHere.isEmpty()) {
+            Patient local = localHere.get(0);
+            VisitResponse visit = createVisit(CreateVisitRequest.builder()
+                    .patientId(local.getId())
+                    .hospitalId(hospitalId)
+                    .arrivalMode(arrivalMode)
+                    .chiefComplaint(chiefComplaint)
+                    .build());
+            return com.smartTriage.smartTriage_server.module.patient.dto.RegisterPatientResponse.builder()
+                    .patient(com.smartTriage.smartTriage_server.module.patient.mapper.PatientMapper.toResponse(local))
+                    .visit(visit)
+                    .build();
+        }
+
+        // Returning patient, first time at THIS hospital — register a local copy
+        // from the source demographics, linked to the same shared identity
+        // (mirrors RfidService.openVisitForCard's returning-patient branch).
+        return patientService.registerPatientWithVisit(
+                com.smartTriage.smartTriage_server.module.patient.dto.RegisterPatientRequest.builder()
+                        .firstName(source.getFirstName())
+                        .lastName(source.getLastName())
+                        .dateOfBirth(source.getDateOfBirth())
+                        .gender(source.getGender())
+                        .nationalId(identity.getNationalId())
+                        .rfidCardId(identity.getRfidCardId())
+                        .bloodType(source.getBloodType())
+                        .phoneNumber(source.getPhoneNumber())
+                        .hospitalId(hospitalId)
+                        .arrivalMode(arrivalMode)
+                        .chiefComplaint(chiefComplaint)
+                        .build());
     }
 
     public VisitResponse getVisitById(UUID id) {

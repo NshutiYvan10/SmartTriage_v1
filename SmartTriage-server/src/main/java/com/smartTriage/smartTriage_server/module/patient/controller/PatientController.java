@@ -38,6 +38,7 @@ public class PatientController {
 
     private final PatientService patientService;
     private final PatientLookupService patientLookupService;
+    private final com.smartTriage.smartTriage_server.module.visit.service.VisitService visitService;
 
     @PostMapping
     // B9 — exclude the on-shift TRIAGE_NURSE from registration: their job is
@@ -205,5 +206,46 @@ public class PatientController {
                 .build();
         List<PatientLookupCandidate> candidates = patientLookupService.lookup(hospitalId, q);
         return ResponseEntity.ok(ApiResponse.success(candidates));
+    }
+
+    /**
+     * GLOBAL patient registry search — REGISTRAR-only, system-wide across ALL hospitals.
+     * The deliberate exception to hospital scoping (a King Faisal registrar finds a
+     * CHUK-registered patient). {@code myHospitalId} is the registrar's own hospital,
+     * used only to flag which rows are local / already have an open visit here — never
+     * to filter. Clinical roles are excluded: they use /hospital/{id}/search.
+     */
+    @GetMapping("/registry/search")
+    @PreAuthorize("@clinicalAuthz.canSearchGlobalRegistry(authentication)")
+    public ResponseEntity<ApiResponse<Page<com.smartTriage.smartTriage_server.module.patient.dto.GlobalPatientRow>>> globalRegistrySearch(
+            @RequestParam String query,
+            @RequestParam(required = false) UUID myHospitalId,
+            @PageableDefault(size = 20) Pageable pageable) {
+        Page<com.smartTriage.smartTriage_server.module.patient.dto.GlobalPatientRow> response =
+                patientService.globalRegistrySearch(myHospitalId, query, pageable);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    /**
+     * Registrar "start a visit HERE" for a patient found in the global registry — the
+     * manual-search twin of the RFID open-visit flow. Reuses / registers-a-local-copy of
+     * a cross-hospital patient (linked by shared identity) and opens a fresh visit; the
+     * duplicate-visit guard rejects a second open visit for the same patient here.
+     */
+    // Cross-hospital reuse (registering a local copy of a patient first seen elsewhere) is a
+    // REGISTRATION-DESK action — same gate as the global registry search that yields these
+    // patient ids (canSearchGlobalRegistry = SUPER_ADMIN/REGISTRAR). Clinical roles are
+    // deliberately NOT here: the source patient is loaded system-wide (not hospital-scoped),
+    // so admitting a DOCTOR/NURSE would leak another hospital's demographics into their tenant.
+    @PostMapping("/{patientId}/open-visit-here")
+    @PreAuthorize("@clinicalAuthz.canSearchGlobalRegistry(authentication) "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #request.hospitalId)")
+    public ResponseEntity<ApiResponse<RegisterPatientResponse>> openVisitHere(
+            @PathVariable UUID patientId,
+            @Valid @RequestBody com.smartTriage.smartTriage_server.module.patient.dto.OpenVisitHereRequest request) {
+        RegisterPatientResponse response = visitService.openVisitHereForPatient(
+                patientId, request.getHospitalId(), request.getArrivalMode(), request.getChiefComplaint());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Visit opened", response));
     }
 }

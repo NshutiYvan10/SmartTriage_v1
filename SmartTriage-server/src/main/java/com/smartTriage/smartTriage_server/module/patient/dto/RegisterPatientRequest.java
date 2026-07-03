@@ -61,8 +61,49 @@ public class RegisterPatientRequest {
     private String emergencyContactName;
     private String emergencyContactPhone;
     private String bloodType;
+
+    /** Legacy free-text (kept for back-compat + display). Prefer the structured {@link #allergies} below. */
     private String knownAllergies;
+    /** Legacy free-text (kept for back-compat + display). Prefer the structured {@link #conditions} below. */
     private String chronicConditions;
+
+    /**
+     * STRUCTURED allergies captured at the desk (V102). When present, each entry becomes a
+     * {@code PatientAllergy} row the medication-safety engine reads by FK/severity — no more
+     * typo misses on a comma-joined string. Optional; the free-text field above still populates
+     * for display and un-migrated flows. {@code @Valid} cascades the per-element size limits so
+     * an over-length allergen/reaction is a clean 400 at the boundary — never a constraint
+     * violation that surfaces at commit and rolls back the whole registration.
+     */
+    @jakarta.validation.Valid
+    private java.util.List<StructuredAllergy> allergies;
+
+    /** STRUCTURED chronic conditions captured at the desk (V102) → {@code PatientChronicCondition} rows. */
+    @jakarta.validation.Valid
+    private java.util.List<StructuredCondition> conditions;
+
+    /** One desk-recorded allergy. allergenName is the only hard requirement; severity defaults to UNKNOWN. */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class StructuredAllergy {
+        @Size(max = 200) private String allergenName;
+        private com.smartTriage.smartTriage_server.common.enums.AllergySeverity severity;
+        @Size(max = 500) private String reaction;
+    }
+
+    /** One desk-recorded chronic condition. conditionName is the only hard requirement; status defaults to ACTIVE. */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class StructuredCondition {
+        @Size(max = 200) private String conditionName;
+        @Size(max = 40)  private String conditionCode;
+        private com.smartTriage.smartTriage_server.common.enums.ChronicConditionStatus status;
+        @Size(max = 500) private String notes;
+    }
 
     /**
      * S8 — optional body weight in kg, captured at registration. Used as a

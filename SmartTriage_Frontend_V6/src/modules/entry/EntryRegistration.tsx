@@ -530,6 +530,17 @@ export function EntryRegistration() {
       const allergiesText = formData.allergies.length > 0 ? formData.allergies.join(', ') : undefined;
       const conditionsText = formData.existingConditions.length > 0 ? formData.existingConditions.join(', ') : undefined;
 
+      // V102 — also send STRUCTURED history rows (the medication-safety engine reads
+      // these by name/severity, not by substring-matching a comma-joined string). The
+      // free-text fields above stay for display/back-compat. Severity/status default
+      // server-side (UNKNOWN / ACTIVE) since the checkbox picker doesn't capture them.
+      const structuredAllergies = formData.allergies.length > 0
+        ? formData.allergies.map((allergenName) => ({ allergenName }))
+        : undefined;
+      const structuredConditions = formData.existingConditions.length > 0
+        ? formData.existingConditions.map((conditionName) => ({ conditionName }))
+        : undefined;
+
       // DOB resolution: if the nurse picked an exact DOB, use it; otherwise
       // derive a synthetic DOB from the entered age so the backend can still
       // compute Patient.isPediatric correctly. Without this, an age-only
@@ -571,6 +582,8 @@ export function EntryRegistration() {
         bloodType: formData.bloodType || undefined,
         knownAllergies: allergiesText,
         chronicConditions: conditionsText,
+        allergies: structuredAllergies,
+        conditions: structuredConditions,
         // S8 — weight is collected on the form (mandatory for paediatric
         // patients) but was previously dropped at submit; now persisted on
         // the patient. Only send a positive parsed value, else leave it null.

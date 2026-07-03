@@ -102,4 +102,37 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
             "AND p.placeholderAssignedAt IS NOT NULL " +
             "AND p.placeholderAssignedAt <= :threshold")
     java.util.List<Patient> findUnidentifiedOlderThan(@Param("threshold") java.time.Instant threshold);
+
+    // ── Global patient registry (REGISTRAR surface — deliberately NOT hospital-scoped) ──
+
+    /**
+     * System-wide registry search across ALL hospitals: name (contains),
+     * national ID / MRN / phone (contains), or exact RFID card UID via the
+     * shared identity. The ONLY unscoped patient search in the system — its
+     * endpoint is gated to SUPER_ADMIN + REGISTRAR (the registration desk finds
+     * a returning CHUK patient at King Faisal without re-registering them);
+     * clinical roles keep the hospital-scoped searches above.
+     * Hospital + identity are fetch-joined for the row mapping (source-hospital
+     * column) without an N+1.
+     */
+    @Query(value = "SELECT p FROM Patient p JOIN FETCH p.hospital LEFT JOIN FETCH p.personIdentity " +
+            "WHERE p.isActive = true " +
+            "AND (LOWER(p.firstName) LIKE LOWER(CONCAT('%', :query, '%')) " +
+            "OR LOWER(p.lastName) LIKE LOWER(CONCAT('%', :query, '%')) " +
+            "OR LOWER(CONCAT(p.firstName, ' ', p.lastName)) LIKE LOWER(CONCAT('%', :query, '%')) " +
+            "OR p.nationalId LIKE CONCAT('%', :query, '%') " +
+            "OR p.medicalRecordNumber LIKE CONCAT('%', :query, '%') " +
+            "OR p.phoneNumber LIKE CONCAT('%', :query, '%') " +
+            "OR (p.personIdentity IS NOT NULL AND p.personIdentity.rfidCardId = :query)) " +
+            "ORDER BY p.lastName ASC, p.firstName ASC, p.createdAt ASC",
+            countQuery = "SELECT COUNT(p) FROM Patient p " +
+            "WHERE p.isActive = true " +
+            "AND (LOWER(p.firstName) LIKE LOWER(CONCAT('%', :query, '%')) " +
+            "OR LOWER(p.lastName) LIKE LOWER(CONCAT('%', :query, '%')) " +
+            "OR LOWER(CONCAT(p.firstName, ' ', p.lastName)) LIKE LOWER(CONCAT('%', :query, '%')) " +
+            "OR p.nationalId LIKE CONCAT('%', :query, '%') " +
+            "OR p.medicalRecordNumber LIKE CONCAT('%', :query, '%') " +
+            "OR p.phoneNumber LIKE CONCAT('%', :query, '%') " +
+            "OR (p.personIdentity IS NOT NULL AND p.personIdentity.rfidCardId = :query))")
+    Page<Patient> globalRegistrySearch(@Param("query") String query, Pageable pageable);
 }

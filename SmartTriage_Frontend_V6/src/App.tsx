@@ -14,6 +14,7 @@ import { ConstantMonitoring } from './modules/monitoring/ConstantMonitoring';
 import { AlertsView } from './modules/alerts/AlertsView';
 import { ReportsView } from './modules/reports/ReportsView';
 import { RegistrarReportsView } from './modules/registrar-reports/RegistrarReportsView';
+import { GlobalRegistryView } from './modules/registry/GlobalRegistryView';
 import { SettingsView } from './modules/settings/SettingsView';
 import { NotificationsPage } from './modules/notifications/NotificationsPage';
 import { ProfilePage } from './modules/profile/ProfilePage';
@@ -172,6 +173,8 @@ function AppContent() {
             <Route path="/entry" element={<RoleGuard page="entry"><EntryRegistration /></RoleGuard>} />
             <Route path="/patients" element={<RoleGuard page="patients"><PatientsList /></RoleGuard>} />
             <Route path="/patients/:patientId" element={<RoleGuard page="patients"><PatientDetailView /></RoleGuard>} />
+            {/* REGISTRAR-only global (cross-hospital) patient registry search. */}
+            <Route path="/registry" element={<RoleGuard page="registry"><GlobalRegistryView /></RoleGuard>} />
             {/* RBAC fix — triage routes require an active TRIAGE_NURSE shift
                 function. Charge Nurse authority (designation or shift-lead
                 badge) bypasses this gate as the documented override path.

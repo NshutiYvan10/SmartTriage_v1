@@ -161,7 +161,7 @@ export type AlertType =
   | 'EMS_PRE_ARRIVAL' | 'EMS_ARRIVED' | 'EMS_HANDOVER_PENDING' | 'FIELD_TRIAGED_AWAITING_REVIEW'
   | 'SYSTEM_OFFLINE' | 'SYSTEM_ONLINE' | 'SAFETY_INCIDENT_CRITICAL'
   | 'ICU_ESCALATION_REQUESTED' | 'ICU_BED_UNAVAILABLE'
-  | 'DIRECT_RESUS_ADMISSION' | 'RESUS_OVERFLOW' | 'IDENTITY_UNRESOLVED' | 'BED_AVAILABLE'
+  | 'DIRECT_RESUS_ADMISSION' | 'RESUS_OVERFLOW' | 'IDENTITY_UNRESOLVED' | 'IDENTITY_UNRESOLVED_ESCALATED' | 'BED_AVAILABLE'
   | 'SEPSIS_BUNDLE_NOT_STARTED' | 'SEPSIS_BUNDLE_OVERDUE'
   | 'FAST_TRACK_ACTIVATED' | 'FAST_TRACK_SLA_BREACH'
   | 'HYPOGLYCEMIA_CRITICAL' | 'HYPOGLYCEMIA_RECHECK_OVERDUE'
@@ -365,6 +365,21 @@ export interface CreatePatientRequest {
   villageId?: string;
 }
 
+/** One structured allergy captured at registration (→ PatientAllergy row). */
+export interface StructuredAllergyInput {
+  allergenName: string;
+  severity?: AllergySeverity;
+  reaction?: string;
+}
+
+/** One structured chronic condition captured at registration (→ PatientChronicCondition row). */
+export interface StructuredConditionInput {
+  conditionName: string;
+  conditionCode?: string;
+  status?: ChronicConditionStatus;
+  notes?: string;
+}
+
 /** Combined registration request — creates Patient + Visit atomically */
 export interface RegisterPatientRequest extends CreatePatientRequest {
   arrivalMode?: ArrivalMode;
@@ -372,12 +387,46 @@ export interface RegisterPatientRequest extends CreatePatientRequest {
   referringFacility?: string;
   /** RFID card UID (V95) — stored on the shared cross-hospital identity, not this local row. */
   rfidCardId?: string;
+  /** Structured history (V102) — preferred over the free-text knownAllergies/chronicConditions. */
+  allergies?: StructuredAllergyInput[];
+  conditions?: StructuredConditionInput[];
 }
 
 /** Combined registration response */
 export interface RegisterPatientResponse {
   patient: PatientResponse;
   visit: VisitResponse;
+}
+
+/**
+ * One row of the REGISTRAR global patient registry (system-wide search).
+ * Rows sharing `identityId` are the same person at several hospitals.
+ */
+export interface GlobalPatientRow {
+  patientId: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string | null;
+  gender: Gender | null;
+  nationalId: string | null;
+  phoneNumber: string | null;
+  medicalRecordNumber: string | null;
+  hospitalId: string | null;
+  hospitalName: string | null;
+  hospitalCode: string | null;
+  registeredAt: string | null;
+  identityId: string | null;
+  hasRfidCard: boolean;
+  unidentified: boolean;
+  localToMyHospital: boolean;
+  hasOpenVisitAtMyHospital: boolean;
+}
+
+/** Registrar "open a visit here" for a global-registry patient (identified by path). */
+export interface OpenVisitHereRequest {
+  hospitalId: string;
+  arrivalMode?: ArrivalMode;
+  chiefComplaint?: string;
 }
 
 export interface PatientResponse {
@@ -653,6 +702,9 @@ export interface ResolveIdentityRequest {
   dateOfBirth?: string;
   gender?: Gender;
   nationalId?: string;
+  /** RFID card captured at resolution — attached to the shared identity so the now-identified
+   *  patient is findable by card at any hospital. Rejected (409) if the card belongs to someone else. */
+  rfidCardId?: string;
   phoneNumber?: string;
   address?: string;
   /** Set to merge the placeholder into an existing patient record. */

@@ -142,13 +142,18 @@ public enum AlertType {
     // - RESUS_OVERFLOW:          CRITICAL alert when the new admission has
     //                            no available RESUS bed; carries the
     //                            transfer-candidate ranking in the message.
-    // - IDENTITY_UNRESOLVED:     HIGH alert raised by the scheduled job
-    //                            when an unidentified patient has been in
-    //                            the system >= 2h without identity being
-    //                            resolved. Targets the charge nurse.
+    // - IDENTITY_UNRESOLVED:     tier-1 reminder to the REGISTRAR when an
+    //                            unidentified patient has been in the system
+    //                            past the reminder window without identity
+    //                            resolved (their desk job to chase down).
+    // - IDENTITY_UNRESOLVED_ESCALATED: tier-2 escalation to the CHARGE NURSE
+    //                            (resus zone) when it's STILL unresolved past
+    //                            the longer window — the registrar reminder
+    //                            didn't land, so oversight is pulled in.
     DIRECT_RESUS_ADMISSION(AlertCategory.CLINICAL, true),
     RESUS_OVERFLOW(AlertCategory.CLINICAL, true),
     IDENTITY_UNRESOLVED(AlertCategory.OPERATIONAL, false),
+    IDENTITY_UNRESOLVED_ESCALATED(AlertCategory.OPERATIONAL, false),
 
     /**
      * High-acuity zone bed transitioned to AVAILABLE — triggered when a

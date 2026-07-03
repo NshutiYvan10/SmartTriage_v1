@@ -104,6 +104,13 @@ public class RfidService {
         long hospitalCount = linked.stream()
                 .map(p -> p.getHospital() != null ? p.getHospital().getId() : null)
                 .filter(java.util.Objects::nonNull).distinct().count();
+        // A card that resolves to a STILL-unidentified placeholder at THIS hospital (a
+        // card was bound before a name was known) — steer the registrar to confirm +
+        // resolve that temporary record rather than open a brand-new visit (goal 4.4).
+        Patient localUnidentified = linked.stream()
+                .filter(p -> p.isUnidentified() && p.getHospital() != null
+                        && p.getHospital().getId().equals(hospitalId))
+                .findFirst().orElse(null);
 
         Map<String, Object> evt = new HashMap<>();
         evt.put("type", "CARD_FOUND");
@@ -112,6 +119,10 @@ public class RfidService {
         evt.put("patientName", name);
         evt.put("linkedHospitalCount", hospitalCount);
         if (identity.getNationalId() != null) evt.put("nationalId", identity.getNationalId());
+        if (localUnidentified != null) {
+            evt.put("unidentified", true);
+            evt.put("unidentifiedPatientId", localUnidentified.getId().toString());
+        }
         realTimeEventPublisher.publishRfidEvent(hospitalId, evt);
 
         return RfidTapResponse.builder()

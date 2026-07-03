@@ -26,6 +26,14 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
         @Query("SELECT a.visit.id FROM ClinicalAlert a WHERE a.id = :id")
         Optional<UUID> findVisitIdById(@Param("id") UUID id);
 
+        /** Projection for category-aware ack authz — the alert's type. */
+        @Query("SELECT a.alertType FROM ClinicalAlert a WHERE a.id = :id")
+        Optional<com.smartTriage.smartTriage_server.common.enums.AlertType> findAlertTypeById(@Param("id") UUID id);
+
+        /** Projection for personal ack authz (PARAMEDIC) — the alert's target doctor/crew id. */
+        @Query("SELECT a.targetDoctor.id FROM ClinicalAlert a WHERE a.id = :id")
+        Optional<UUID> findTargetDoctorIdById(@Param("id") UUID id);
+
         Page<ClinicalAlert> findByVisitIdAndIsActiveTrueOrderByCreatedAtDesc(UUID visitId, Pageable pageable);
 
         /**

@@ -54,6 +54,15 @@ public class ResolveIdentityRequest {
     @Size(max = 30)
     private String nationalId;
 
+    /**
+     * RFID card UID captured at resolution (tap-to-capture). Attached to the patient's
+     * shared identity so the now-identified patient is findable by card at any hospital.
+     * If the card already belongs to a DIFFERENT person the resolve is rejected (409) —
+     * a wrong card must never silently graft one patient's identity onto another.
+     */
+    @Size(max = 64)
+    private String rfidCardId;
+
     @Size(max = 20)
     private String phoneNumber;
 

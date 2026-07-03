@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -127,11 +128,19 @@ class AlertScopeResolverTest {
     }
 
     @Test
-    void registrar_seesNothingInClinicalCenter() {
+    void registrar_seesIdentityReconciliationRemindersOnly() {
+        // REGISTRAR gets a CATEGORY scope limited to identity-reconciliation reminders
+        // (their desk job) — hospital-wide, no clinical/zone noise.
+        User u = user(Role.REGISTRAR);
         when(authz.canSeeAllZonesAtHospital(any(), any())).thenReturn(false);
         when(authz.canAccessHospital(any(), any())).thenReturn(true);
-        assertEquals(AlertScopeResolver.Kind.NONE,
-                resolver.resolve(authFor(user(Role.REGISTRAR)), hospitalId).kind());
+
+        AlertScopeResolver.AlertScope s = resolver.resolve(authFor(u), hospitalId);
+        assertEquals(AlertScopeResolver.Kind.CATEGORY, s.kind());
+        assertTrue(s.alertTypes().contains(AlertType.IDENTITY_UNRESOLVED));
+        assertTrue(s.alertTypes().contains(AlertType.IDENTITY_UNRESOLVED_ESCALATED));
+        // No clinical noise leaks into the desk feed.
+        assertFalse(s.alertTypes().contains(AlertType.CRITICAL_LAB_RESULT));
     }
 
     @Test

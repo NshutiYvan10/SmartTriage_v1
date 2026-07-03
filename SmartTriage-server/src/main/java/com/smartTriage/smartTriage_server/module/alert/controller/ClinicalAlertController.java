@@ -92,10 +92,13 @@ public class ClinicalAlertController {
 
     @PatchMapping("/{alertId}/acknowledge")
     // LAB_TECHNICIAN + PARAMEDIC ack their own role-scoped work-queue alerts
-    // (new lab/imaging orders; ED-ack/handover confirmations). canAccessAlert
-    // still walks alert→visit→hospital, so neither can ack cross-tenant.
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN', 'PARAMEDIC') "
-            + "and @clinicalAuthz.canAccessAlert(authentication, #alertId)")
+    // (new lab/imaging orders; ED-ack/handover confirmations); REGISTRAR acks
+    // their identity-reconciliation reminders. canAckAlertForRole is CATEGORY-AWARE:
+    // it walks alert→visit→hospital (no cross-tenant) AND restricts a scoped desk/field
+    // role to its own alert scope, so a registrar/lab-tech/paramedic cannot enumerate a
+    // visit's alerts and silence a life-critical clinical alert out of the escalation loop.
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN', 'PARAMEDIC', 'REGISTRAR') "
+            + "and @clinicalAuthz.canAckAlertForRole(authentication, #alertId)")
     public ResponseEntity<ApiResponse<ClinicalAlertResponse>> acknowledgeAlert(
             @PathVariable UUID alertId,
             // B5 — optional acknowledge/dismiss comment. Previously the

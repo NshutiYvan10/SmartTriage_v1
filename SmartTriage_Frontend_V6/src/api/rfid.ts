@@ -15,6 +15,10 @@ export interface RfidEvent {
   patientName?: string;
   nationalId?: string | null;
   linkedHospitalCount?: number;
+  /** The tapped card resolves to a STILL-unidentified placeholder at this hospital —
+   *  steer the registrar to confirm + resolve that temporary record (goal 4.4). */
+  unidentified?: boolean;
+  unidentifiedPatientId?: string;
 }
 
 export interface RfidDevice {

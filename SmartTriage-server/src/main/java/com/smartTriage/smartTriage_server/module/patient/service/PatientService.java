@@ -48,6 +48,10 @@ public class PatientService {
     private final HospitalService hospitalService;
     /** Phase 1 — links this hospital's local patient row to the shared cross-hospital identity. */
     private final PersonIdentityService personIdentityService;
+    /** Registration captures STRUCTURED history rows (not just the legacy free-text columns)
+     *  so the medication-safety engine sees desk-recorded allergies from minute one. */
+    private final com.smartTriage.smartTriage_server.module.patient.repository.PatientAllergyRepository patientAllergyRepository;
+    private final com.smartTriage.smartTriage_server.module.patient.repository.PatientChronicConditionRepository patientChronicConditionRepository;
     /** B4 — pushes a visit event after commit so dashboards refresh live when a
      *  new patient is admitted. */
     private final com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher realTimeEventPublisher;
@@ -155,6 +159,7 @@ public class PatientService {
                 request.getProvinceId(), request.getDistrictId(),
                 request.getSectorId(), request.getCellId(), request.getVillageId());
         patient = patientRepository.save(patient);
+        persistStructuredHistory(patient, request.getAllergies(), request.getConditions());
 
         // 2. Create Visit (same transaction — atomic with the patient)
         Visit visit = Visit.builder()
@@ -203,6 +208,136 @@ public class PatientService {
     public Page<PatientResponse> searchPatients(UUID hospitalId, String query, Pageable pageable) {
         return patientRepository.searchPatients(hospitalId, query, pageable)
                 .map(PatientMapper::toResponse);
+    }
+
+    /**
+     * REGISTRAR-only GLOBAL patient registry search — system-wide across ALL hospitals
+     * (the deliberate exception to hospital scoping). A registrar at King Faisal finds a
+     * patient first registered at CHUK and reuses that record instead of re-registering.
+     * Clinical roles keep the hospital-scoped {@link #searchPatients}.
+     *
+     * <p>{@code myHospitalId} is the searching registrar's hospital — used only to compute
+     * the per-row {@code localToMyHospital} + {@code hasOpenVisitAtMyHospital} badges (via
+     * ONE batched visit lookup), never to filter results. A blank query returns an empty
+     * page (no accidental whole-registry dump).
+     */
+    public Page<com.smartTriage.smartTriage_server.module.patient.dto.GlobalPatientRow> globalRegistrySearch(
+            UUID myHospitalId, String query, Pageable pageable) {
+        String q = query == null ? "" : query.trim();
+        if (q.isEmpty()) {
+            return Page.empty(pageable);
+        }
+        Page<Patient> page = patientRepository.globalRegistrySearch(q, pageable);
+        java.util.List<UUID> ids = page.getContent().stream().map(Patient::getId).toList();
+        java.util.Set<UUID> withOpenVisit = ids.isEmpty() || myHospitalId == null
+                ? java.util.Set.of()
+                : new java.util.HashSet<>(visitRepository.findPatientIdsWithOpenVisitAtHospital(ids, myHospitalId));
+        return page.map(p -> toGlobalRow(p, myHospitalId, withOpenVisit));
+    }
+
+    private com.smartTriage.smartTriage_server.module.patient.dto.GlobalPatientRow toGlobalRow(
+            Patient p, UUID myHospitalId, java.util.Set<UUID> withOpenVisit) {
+        var identity = p.getPersonIdentity();
+        boolean local = p.getHospital() != null && p.getHospital().getId().equals(myHospitalId);
+        return com.smartTriage.smartTriage_server.module.patient.dto.GlobalPatientRow.builder()
+                .patientId(p.getId())
+                .firstName(p.getFirstName())
+                .lastName(p.getLastName())
+                .dateOfBirth(p.getDateOfBirth())
+                .gender(p.getGender())
+                .nationalId(p.getNationalId())
+                .phoneNumber(p.getPhoneNumber())
+                .medicalRecordNumber(p.getMedicalRecordNumber())
+                .hospitalId(p.getHospital() != null ? p.getHospital().getId() : null)
+                .hospitalName(p.getHospital() != null ? p.getHospital().getName() : null)
+                .hospitalCode(p.getHospital() != null ? p.getHospital().getHospitalCode() : null)
+                .registeredAt(p.getCreatedAt())
+                .identityId(identity != null ? identity.getId() : null)
+                .hasRfidCard(identity != null && identity.getRfidCardId() != null)
+                .unidentified(p.isUnidentified())
+                .localToMyHospital(local)
+                .hasOpenVisitAtMyHospital(withOpenVisit.contains(p.getId()))
+                .build();
+    }
+
+    /**
+     * Persist STRUCTURED allergy / chronic-condition rows captured at registration (V102).
+     * Best-effort per row (a bad entry logs + skips; it must never fail the registration).
+     * The allergen/condition name is the only hard requirement; blank entries are dropped.
+     * Idempotency (duplicate allergen) is handled by the dedicated services elsewhere; at
+     * fresh registration the patient has no prior rows, so we insert directly.
+     */
+    private void persistStructuredHistory(
+            Patient patient,
+            java.util.List<com.smartTriage.smartTriage_server.module.patient.dto.RegisterPatientRequest.StructuredAllergy> allergies,
+            java.util.List<com.smartTriage.smartTriage_server.module.patient.dto.RegisterPatientRequest.StructuredCondition> conditions) {
+        String actor = currentUsername();
+        Instant now = Instant.now();
+        if (allergies != null) {
+            for (var a : allergies) {
+                if (a == null || a.getAllergenName() == null || a.getAllergenName().isBlank()) continue;
+                try {
+                    patientAllergyRepository.save(
+                            com.smartTriage.smartTriage_server.module.patient.entity.PatientAllergy.builder()
+                                    .patient(patient)
+                                    // Defensively cap to the column widths so a stray over-length value
+                                    // can never surface as a commit-time constraint violation that rolls
+                                    // back the whole registration (the @Valid cascade is the primary guard).
+                                    .allergenName(trunc(a.getAllergenName().trim().toLowerCase(), 200))
+                                    .severity(a.getSeverity() != null ? a.getSeverity()
+                                            : com.smartTriage.smartTriage_server.common.enums.AllergySeverity.UNKNOWN)
+                                    .reaction(trunc(a.getReaction(), 500))
+                                    .verificationStatus(
+                                            com.smartTriage.smartTriage_server.common.enums.AllergyVerificationStatus.PATIENT_REPORTED)
+                                    .recordedByName(actor)
+                                    .build());
+                } catch (Exception e) {
+                    log.warn("[register] Skipped structured allergy '{}' for patient {}: {}",
+                            a.getAllergenName(), patient.getId(), e.getMessage());
+                }
+            }
+        }
+        if (conditions != null) {
+            for (var c : conditions) {
+                if (c == null || c.getConditionName() == null || c.getConditionName().isBlank()) continue;
+                try {
+                    patientChronicConditionRepository.save(
+                            com.smartTriage.smartTriage_server.module.patient.entity.PatientChronicCondition.builder()
+                                    .patient(patient)
+                                    .conditionName(trunc(c.getConditionName().trim(), 200))
+                                    .conditionCode(trunc(c.getConditionCode(), 40))
+                                    .status(c.getStatus() != null ? c.getStatus()
+                                            : com.smartTriage.smartTriage_server.common.enums.ChronicConditionStatus.ACTIVE)
+                                    .notes(trunc(c.getNotes(), 500))
+                                    .recordedByName(actor)
+                                    .recordedAt(now)
+                                    .build());
+                } catch (Exception e) {
+                    log.warn("[register] Skipped structured condition '{}' for patient {}: {}",
+                            c.getConditionName(), patient.getId(), e.getMessage());
+                }
+            }
+        }
+    }
+
+    /** Null-safe truncate to a max column width (defensive against commit-time length violations). */
+    private static String trunc(String v, int max) {
+        if (v == null) return null;
+        return v.length() <= max ? v : v.substring(0, max);
+    }
+
+    /** Authenticated username for audit attribution, or "registration desk" when no context. */
+    private String currentUsername() {
+        try {
+            Object principal = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication().getPrincipal();
+            if (principal instanceof com.smartTriage.smartTriage_server.module.user.entity.User u) {
+                String full = ((u.getFirstName() != null ? u.getFirstName() : "") + " "
+                        + (u.getLastName() != null ? u.getLastName() : "")).trim();
+                return full.isEmpty() ? u.getUsername() : full;
+            }
+        } catch (Exception ignored) { /* no context (tests / background) */ }
+        return "registration desk";
     }
 
     public Patient findPatientOrThrow(UUID id) {

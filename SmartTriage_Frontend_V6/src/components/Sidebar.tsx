@@ -38,6 +38,7 @@ import {
   FileBarChart,
   Scale,
   UserX,
+  Globe,
 } from 'lucide-react';
 import { useThemeStore } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
@@ -92,6 +93,9 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
       items: [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, pageId: 'dashboard' as AppPage },
         { id: 'entry', label: 'Registration', icon: UserPlus, pageId: 'entry' as AppPage },
+        // REGISTRAR-only global (cross-hospital) patient registry — gated by
+        // ROLE_PAGES so only the registrar sees it; clinical staff keep 'patients'.
+        { id: 'registry', label: 'Patient Registry', icon: Globe, pageId: 'registry' as AppPage },
         { id: 'patients', label: 'Patients', icon: ClipboardList, pageId: 'patients' as AppPage },
       ],
     },

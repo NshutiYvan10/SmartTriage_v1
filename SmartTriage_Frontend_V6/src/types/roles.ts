@@ -83,7 +83,10 @@ export type AppPage =
   | 'delegations'
   | 'my-schedule'
   | 'beds'
-  | 'admin-beds';
+  | 'admin-beds'
+  /** Global patient registry — REGISTRAR-only system-wide (cross-hospital) search
+   *  to find a returning patient and start a visit here without re-registering. */
+  | 'registry';
 
 /** Feature-level permissions (things that can be toggled inside a page) */
 export type AppFeature =
@@ -292,6 +295,15 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   // an empty schedule and only mislead the user.
   REGISTRAR: [
     'dashboard', 'entry', 'patients',
+    // Global patient registry — system-wide (cross-hospital) search so a
+    // returning patient (first registered elsewhere) is found and reused,
+    // not re-registered. REGISTRAR-only; clinical staff keep the
+    // hospital-scoped Patients list.
+    'registry',
+    // Alert Center — CATEGORY-scoped server-side to identity-reconciliation
+    // reminders only (the desk owns chasing down unidentified patients);
+    // escalates to the charge nurse if unresolved. No clinical noise.
+    'alerts',
     'notifications', 'profile',
     // Operational front-desk reporting (R11): intake log, the
     // unidentified-patient reconciliation queue (a safety follow-up

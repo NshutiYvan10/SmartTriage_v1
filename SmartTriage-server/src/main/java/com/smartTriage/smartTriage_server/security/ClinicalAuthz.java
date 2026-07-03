@@ -1,6 +1,7 @@
 package com.smartTriage.smartTriage_server.security;
 
 import com.smartTriage.smartTriage_server.common.enums.AlertType;
+import com.smartTriage.smartTriage_server.module.alert.service.AlertScopeResolver;
 import com.smartTriage.smartTriage_server.common.enums.Designation;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.ReportLevel;
@@ -180,6 +181,45 @@ public class ClinicalAuthz {
             return canAccessVisit(authentication, visitId.get());
         } catch (Exception e) {
             log.error("canAccessAlert error for alert {}: {}", alertId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * CATEGORY-AWARE acknowledge gate. Hospital scope ({@link #canAccessAlert}) alone is not enough:
+     * a SCOPED desk/field role (REGISTRAR / LAB_TECHNICIAN / PARAMEDIC) must only be able to
+     * acknowledge alerts inside its own {@link AlertScopeResolver} scope — otherwise a non-clinical
+     * role could enumerate a visit's alerts and silence a life-critical clinical alert (e.g. a
+     * CRITICAL_LAB_RESULT), dropping it out of the escalation re-page loop. Oversight/clinical roles
+     * (SUPER_ADMIN / DOCTOR / NURSE and the like) keep the plain hospital-scoped behaviour.
+     */
+    @Transactional(readOnly = true)
+    public boolean canAckAlertForRole(Authentication authentication, UUID alertId) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null || alertId == null) return false;
+            // Must first be at the alert's hospital (closes cross-tenant).
+            if (!canAccessAlert(authentication, alertId)) return false;
+
+            Role role = user.getRole();
+            // Scoped roles: restrict to their own alert scope.
+            if (role == Role.LAB_TECHNICIAN) {
+                return clinicalAlertRepository.findAlertTypeById(alertId)
+                        .map(AlertScopeResolver::isLabScopedType).orElse(false);
+            }
+            if (role == Role.REGISTRAR) {
+                return clinicalAlertRepository.findAlertTypeById(alertId)
+                        .map(AlertScopeResolver::isRegistrarScopedType).orElse(false);
+            }
+            if (role == Role.PARAMEDIC) {
+                // Personal scope: only alerts addressed to this crew member.
+                return clinicalAlertRepository.findTargetDoctorIdById(alertId)
+                        .map(id -> id.equals(user.getId())).orElse(false);
+            }
+            // Oversight / clinical roles keep hospital-scoped ack (already checked above).
+            return true;
+        } catch (Exception e) {
+            log.error("canAckAlertForRole error for alert {}: {}", alertId, e.getMessage(), e);
             return false;
         }
     }
@@ -403,6 +443,25 @@ public class ClinicalAuthz {
             return user.getRole() == Role.REGISTRAR || user.getRole() == Role.HOSPITAL_ADMIN;
         } catch (Exception e) {
             log.error("canAccessRegistrarReports error for hospital {}: {}", hospitalId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * The GLOBAL patient registry search is the ONE deliberately un-hospital-scoped patient
+     * lookup: a REGISTRAR (or SUPER_ADMIN) may find a patient first registered at ANY hospital
+     * so a returning patient is reused, not re-registered. NOT a clinical surface — doctors,
+     * nurses, lab techs and paramedics keep the hospital-scoped searches (no cross-hospital
+     * patient browsing for clinical staff). Hospital-Admin is a governance role, not a desk role.
+     */
+    @Transactional(readOnly = true)
+    public boolean canSearchGlobalRegistry(Authentication authentication) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null) return false;
+            return user.getRole() == Role.SUPER_ADMIN || user.getRole() == Role.REGISTRAR;
+        } catch (Exception e) {
+            log.error("canSearchGlobalRegistry error: {}", e.getMessage(), e);
             return false;
         }
     }

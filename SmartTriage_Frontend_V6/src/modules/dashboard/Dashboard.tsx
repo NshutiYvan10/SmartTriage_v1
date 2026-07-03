@@ -32,6 +32,7 @@ import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
 import { ParamedicHome } from '@/modules/ems/ParamedicHome';
 import { LabHome } from '@/modules/dashboard/LabHome';
+import { RegistrarHome } from '@/modules/dashboard/RegistrarHome';
 
 /**
  * '/dashboard' entry point — branches by role BEFORE the hospital dashboard
@@ -46,6 +47,9 @@ export function Dashboard() {
   const role = useAuthStore((s) => s.user?.role);
   if (role === 'PARAMEDIC') return <ParamedicHome />;
   if (role === 'LAB_TECHNICIAN') return <LabHome />;
+  // REGISTRAR gets the desk-scoped home (intake / identity resolution / lookup),
+  // not the hospital-wide clinical census + arrival charts.
+  if (role === 'REGISTRAR') return <RegistrarHome />;
   return <HospitalDashboard />;
 }
 

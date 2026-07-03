@@ -67,6 +67,29 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
                         "AND v.status NOT IN ('DISCHARGED', 'ADMITTED', 'TRANSFERRED', 'ICU_ADMITTED', 'DECEASED', 'LEFT_WITHOUT_BEING_SEEN')")
         Page<Visit> findActiveVisits(@Param("hospitalId") UUID hospitalId, Pageable pageable);
 
+        /**
+         * OPEN (non-terminal) visits for one patient at one hospital — the
+         * duplicate-visit guard. Same "active" definition as findActiveVisits.
+         */
+        @Query("SELECT v FROM Visit v WHERE v.patient.id = :patientId AND v.hospital.id = :hospitalId " +
+                        "AND v.isActive = true " +
+                        "AND v.status NOT IN ('DISCHARGED', 'ADMITTED', 'TRANSFERRED', 'ICU_ADMITTED', 'DECEASED', 'LEFT_WITHOUT_BEING_SEEN')")
+        List<Visit> findOpenVisitsForPatientAtHospital(
+                        @Param("patientId") UUID patientId,
+                        @Param("hospitalId") UUID hospitalId);
+
+        /**
+         * Which of the given patients currently have an OPEN visit at the given
+         * hospital — one query for a whole registry-search page ("already has an
+         * open visit here" badge) instead of one lookup per row.
+         */
+        @Query("SELECT DISTINCT v.patient.id FROM Visit v WHERE v.patient.id IN :patientIds " +
+                        "AND v.hospital.id = :hospitalId AND v.isActive = true " +
+                        "AND v.status NOT IN ('DISCHARGED', 'ADMITTED', 'TRANSFERRED', 'ICU_ADMITTED', 'DECEASED', 'LEFT_WITHOUT_BEING_SEEN')")
+        List<UUID> findPatientIdsWithOpenVisitAtHospital(
+                        @Param("patientIds") List<UUID> patientIds,
+                        @Param("hospitalId") UUID hospitalId);
+
         @Query("SELECT v FROM Visit v WHERE v.hospital.id = :hospitalId AND v.isActive = true " +
                         "AND v.currentTriageCategory = :category " +
                         "AND v.status NOT IN ('DISCHARGED', 'ADMITTED', 'TRANSFERRED', 'ICU_ADMITTED', 'DECEASED', 'LEFT_WITHOUT_BEING_SEEN')")
