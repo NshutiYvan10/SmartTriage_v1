@@ -9,11 +9,13 @@ import lombok.NoArgsConstructor;
 /**
  * Doctor's acknowledgement of a critical lab value.
  *
- * Phase 1 captures the read-back text as free-form (the doctor types
- * what they understood the value to be) and the contact method, so
- * the ack is a JCI-aligned attestation rather than a one-click "I saw
- * it". The fields are optional on the API so a covering ack with no
- * details is still possible, but the UI should always collect them.
+ * Captures the read-back text as free-form (the doctor types what they
+ * understood the value to be) and the contact method, so the ack is a
+ * JCI-aligned attestation rather than a one-click "I saw it". The service
+ * enforces the contract server-side: contactMethod is always required, and
+ * readbackText is required for the VERBAL channels (PHONE / IN_PERSON, per
+ * record-and-read-back); for IN_APP the displayed value + the ack itself is
+ * the confirmation and readbackText is an optional note.
  */
 @Data
 @Builder

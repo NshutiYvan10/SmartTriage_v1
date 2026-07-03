@@ -13,10 +13,16 @@ import { useTheme } from '@/hooks/useTheme';
 import { labApi } from '@/api/lab';
 import type { LabOrder, CriticalContactMethod } from '@/api/lab';
 
+// The three ways a critical value reaches a doctor here: the lab's phone call
+// (the required practice for panic values — the in-app alert supplements it,
+// see ResultEntryModal's instruction to the tech), a verbal in-person handover
+// (lab-next-door EDs), or the in-app alert alone. JCI's record-and-read-back
+// applies to VERBAL channels (phone + in-person); for in-app the displayed
+// value + this acknowledgement is itself the confirmation.
 const METHODS: { value: CriticalContactMethod; label: string }[] = [
-  { value: 'PHONE',     label: 'Phone call (read-back required)' },
-  { value: 'IN_PERSON', label: 'In-person handover' },
-  { value: 'IN_APP',    label: 'In-app alert' },
+  { value: 'PHONE',     label: 'Phone call from the lab (read-back required)' },
+  { value: 'IN_PERSON', label: 'In-person verbal handover (read-back required)' },
+  { value: 'IN_APP',    label: 'In-app alert only — no call received' },
 ];
 
 interface Props {
@@ -28,14 +34,25 @@ interface Props {
 
 export function AcknowledgeCriticalModal({ order, acknowledgedByName, onClose, onSaved }: Props) {
   const { glassCard, glassInner, isDark, text } = useTheme();
-  const [method, setMethod] = useState<CriticalContactMethod>('PHONE');
+  // NO default method: this is an audit attestation, so the doctor must state
+  // explicitly how they were notified. Pre-selecting "Phone" let a doctor who
+  // was only alerted in-app click through and file a false "the lab called me"
+  // record.
+  const [method, setMethod] = useState<CriticalContactMethod | null>(null);
   const [readback, setReadback] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // JCI record-and-read-back applies to VERBAL notification (phone or in person).
+  const verbal = method === 'PHONE' || method === 'IN_PERSON';
+
   async function submit() {
-    if (method === 'PHONE' && !readback.trim()) {
-      setError('Phone read-back text is required for phone notifications');
+    if (!method) {
+      setError('Select how you were notified — this is part of the audit record.');
+      return;
+    }
+    if (verbal && !readback.trim()) {
+      setError('Read-back text is required for phone / in-person notifications.');
       return;
     }
     setSubmitting(true);
@@ -43,7 +60,7 @@ export function AcknowledgeCriticalModal({ order, acknowledgedByName, onClose, o
     try {
       await labApi.acknowledgeCritical(order.id, {
         contactMethod: method,
-        readbackText: readback || undefined,
+        readbackText: readback.trim() || undefined,
         acknowledgedByName: acknowledgedByName || undefined,
       });
       onSaved();
@@ -111,23 +128,30 @@ export function AcknowledgeCriticalModal({ order, acknowledgedByName, onClose, o
           </div>
         </div>
 
-        {/* Read-back */}
-        <div className="mb-3">
-          <label className={`text-[10px] font-bold uppercase tracking-wider mb-1 block ${text.label}`}>
-            Read-back {method === 'PHONE' && <span className="text-rose-500">*</span>}
-          </label>
-          <textarea
-            value={readback}
-            onChange={(e) => setReadback(e.target.value)}
-            rows={3}
-            placeholder='Type back the value as you understood it. e.g. "Potassium six point eight, repeat six point eight"'
-            className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
-            style={glassInner}
-          />
-          <p className={`text-[10px] mt-1 ${text.muted}`}>
-            JCI NPSG.02.03.01 — for phone notifications, document what you read back to the lab.
-          </p>
-        </div>
+        {/* Read-back (verbal channels) / optional note (in-app) — rendered once a
+            method is chosen so the field's meaning matches the channel. */}
+        {method && (
+          <div className="mb-3">
+            <label className={`text-[10px] font-bold uppercase tracking-wider mb-1 block ${text.label}`}>
+              {verbal ? <>Read-back <span className="text-rose-500">*</span></> : 'Note (optional)'}
+            </label>
+            <textarea
+              value={readback}
+              onChange={(e) => setReadback(e.target.value)}
+              rows={3}
+              placeholder={verbal
+                ? 'Type back the value as you understood it. e.g. "Potassium six point eight, repeat six point eight"'
+                : 'Optional — e.g. action you are taking, or why no call was received.'}
+              className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+              style={glassInner}
+            />
+            <p className={`text-[10px] mt-1 ${text.muted}`}>
+              {verbal
+                ? 'JCI NPSG.02.03.01 — for verbal (phone or in-person) notification, document what you read back to the lab.'
+                : 'Acknowledging here confirms you have seen the value shown above. For panic values the lab should still call — flag it with the lab if no call came.'}
+            </p>
+          </div>
+        )}
 
         {error && (
           <div className="rounded-xl px-3 py-2 mb-3 text-xs font-semibold bg-rose-500/10 text-rose-500">
@@ -139,7 +163,7 @@ export function AcknowledgeCriticalModal({ order, acknowledgedByName, onClose, o
           <button onClick={onClose} disabled={submitting} className={`px-4 py-2 rounded-xl text-xs font-bold ${text.muted} hover:bg-white/5 disabled:opacity-50`}>Cancel</button>
           <button
             onClick={submit}
-            disabled={submitting}
+            disabled={submitting || !method || (verbal && !readback.trim())}
             className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50"
           >
             {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />}

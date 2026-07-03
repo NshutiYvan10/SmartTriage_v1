@@ -991,6 +991,22 @@ public class LabOrderService {
             throw new ClinicalBusinessException("Critical value already acknowledged for order " + order.getOrderNumber());
         }
 
+        // The ack is a JCI attestation, not a one-click dismiss — enforce it
+        // SERVER-side so a direct API call can't file an empty record. The
+        // contact method is always required; read-back text is required for the
+        // VERBAL channels (phone / in-person), per record-and-read-back. In-app
+        // needs no read-back: the displayed value + this ack is the confirmation.
+        if (request == null || request.getContactMethod() == null) {
+            throw new ClinicalBusinessException(
+                    "Acknowledgement must state how the critical value was communicated (phone, in person, or in-app).");
+        }
+        boolean verbal = request.getContactMethod() == CriticalContactMethod.PHONE
+                || request.getContactMethod() == CriticalContactMethod.IN_PERSON;
+        if (verbal && (request.getReadbackText() == null || request.getReadbackText().isBlank())) {
+            throw new ClinicalBusinessException(
+                    "Read-back text is required when a critical value is communicated verbally (phone or in person).");
+        }
+
         order.setCriticalValueAcknowledgedAt(Instant.now());
         order.setCriticalValueNotifiedTo(
                 resolveActor(request != null ? request.getAcknowledgedByName() : null));
