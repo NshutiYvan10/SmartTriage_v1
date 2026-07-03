@@ -143,6 +143,48 @@ public class RealTimeEventPublisher {
     /**
      * Push an alert to a specific user — for targeted doctor notifications.
      */
+    /**
+     * Role-scoped alert delivery: {@code /topic/alerts/{hospitalId}/role/{ROLE}}.
+     * The live channel for roles that are neither zone-bound nor oversight (a
+     * LAB_TECHNICIAN has no zone and may not subscribe to the hospital firehose).
+     * SUBSCRIBE is gated by StompAuthChannelInterceptor: caller's role must equal
+     * the topic role AND they must belong to the hospital.
+     */
+    public void publishRoleAlert(UUID hospitalId,
+            com.smartTriage.smartTriage_server.common.enums.Role role,
+            ClinicalAlertResponse alertResponse) {
+        String topic = "/topic/alerts/" + hospitalId + "/role/" + role.name();
+        messagingTemplate.convertAndSend(topic, (Object) alertResponse);
+        log.debug("Published role alert to {}", topic);
+    }
+
+    /**
+     * After-commit variant of {@link #publishRoleAlert} — also mirrors to the
+     * hospital firehose so oversight (charge nurse / shift lead) stays aware,
+     * matching {@link #publishOwnedAlertAfterCommit}'s shape. Build {@code resp}
+     * BEFORE calling (lazy associations are unreadable post-commit).
+     */
+    public void publishRoleAlertAfterCommit(UUID hospitalId,
+            com.smartTriage.smartTriage_server.common.enums.Role role,
+            ClinicalAlertResponse resp) {
+        if (hospitalId == null || role == null || resp == null) return;
+        Runnable fire = () -> {
+            try {
+                publishHospitalAlert(hospitalId, resp);
+                publishRoleAlert(hospitalId, role, resp);
+            } catch (Exception e) {
+                log.warn("Failed to publish role alert {}: {}", resp.getId(), e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { fire.run(); }
+            });
+        } else {
+            fire.run();
+        }
+    }
+
     public void publishUserAlert(UUID userId, ClinicalAlertResponse alertResponse) {
         String topic = "/topic/alerts/user/" + userId;
         messagingTemplate.convertAndSend(topic, (Object) alertResponse);

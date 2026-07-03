@@ -388,6 +388,19 @@ export function subscribeToUserAlerts(
   return subscribeToTopic(`/topic/alerts/user/${userId}`, callback);
 }
 
+/**
+ * Role-scoped alert channel (e.g. lab work-queue notices for LAB_TECHNICIAN).
+ * Server-side SUBSCRIBE authz only admits callers whose OWN role matches the
+ * topic role at their own hospital, so pass the logged-in user's role verbatim.
+ */
+export function subscribeToRoleAlerts(
+  hospitalId: string,
+  role: string,
+  callback: (alert: ClinicalAlertResponse) => void
+): () => void {
+  return subscribeToTopic(`/topic/alerts/${hospitalId}/role/${role}`, callback);
+}
+
 export function subscribeToDevices(
   hospitalId: string,
   callback: (event: unknown) => void

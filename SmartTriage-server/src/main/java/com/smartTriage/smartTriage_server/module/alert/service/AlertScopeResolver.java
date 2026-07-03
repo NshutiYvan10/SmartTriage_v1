@@ -30,11 +30,14 @@ import java.util.UUID;
  *   <li><b>Zone Nurse + Doctor</b> → only their covered zone(s), PLUS alerts
  *       targeted to them personally (escalations) and alerts they acknowledged.
  *       So scoping narrows the start and escalation widens it — they complement.</li>
- *   <li><b>Lab Technician</b> → laboratory alerts only (critical results / lab SLA),
+ *   <li><b>Lab Technician</b> → laboratory/diagnostics alerts only (critical
+ *       results / lab SLA / new+cancelled orders / imaging worklist orders),
  *       hospital-wide; no triage/EMS/zone clinical noise.</li>
- *   <li><b>Paramedic, Registrar, Hospital-Admin</b> → NONE (the clinical Alert
- *       Center is not their surface; paramedics use the EMS board, and the
- *       endpoint already denies Hospital-Admin).</li>
+ *   <li><b>Paramedic</b> → personal-only: alerts addressed to them as the run's
+ *       crew (ED arrival ack, handover complete, field-triage confirmed) — no
+ *       hospital/zone clinical noise.</li>
+ *   <li><b>Registrar, Hospital-Admin</b> → NONE (the clinical Alert Center is
+ *       not their surface; the endpoint already denies Hospital-Admin).</li>
  * </ul>
  */
 @Slf4j
@@ -45,7 +48,7 @@ public class AlertScopeResolver {
     private final ClinicalAuthz clinicalAuthz;
     private final ShiftAssignmentService shiftAssignmentService;
 
-    /** Lab-tech visibility: laboratory alerts only, hospital-wide. */
+    /** Lab-tech visibility: laboratory/diagnostics alerts only, hospital-wide. */
     private static final Set<AlertType> LAB_ALERT_TYPES = EnumSet.of(
             AlertType.CRITICAL_LAB_RESULT,
             AlertType.CRITICAL_VALUE_UNACKNOWLEDGED,
@@ -54,7 +57,12 @@ public class AlertScopeResolver {
             AlertType.ROUTINE_LAB_OVERDUE,
             AlertType.LAB_NOT_RECEIVED,
             AlertType.LAB_SPECIMEN_REJECTED,
-            AlertType.LAB_VERIFICATION_OVERRIDDEN);
+            AlertType.LAB_VERIFICATION_OVERRIDDEN,
+            // Work-queue notifications: new/cancelled lab orders + imaging orders
+            // onto the diagnostics worklist the lab technician owns.
+            AlertType.NEW_LAB_ORDER,
+            AlertType.LAB_ORDER_CANCELLED,
+            AlertType.NEW_IMAGING_ORDER);
 
     public enum Kind { ALL, ZONE, CATEGORY, NONE }
 
@@ -122,12 +130,18 @@ public class AlertScopeResolver {
                 return AlertScope.all();
             case LAB_TECHNICIAN:
                 return AlertScope.category(LAB_ALERT_TYPES);
+            case PARAMEDIC:
+                // Personal-only: alerts addressed to THIS crew member (targetDoctor
+                // = them — ED ack of their inbound, handover complete, field-triage
+                // confirmed). Empty zone set routes to the personal-only query, so
+                // a paramedic never sees zone/hospital clinical noise.
+                return AlertScope.zone(Set.of(), user.getId());
             case DOCTOR:
             case NURSE:
                 // Zone-scoped: covered zone(s) + personally-targeted + acked.
                 return AlertScope.zone(currentCoveredZones(user.getId(), hospitalId), user.getId());
             default:
-                // PARAMEDIC (EMS board is their surface), REGISTRAR (front desk).
+                // REGISTRAR (front desk) — no clinical alert surface.
                 return AlertScope.none();
         }
     }

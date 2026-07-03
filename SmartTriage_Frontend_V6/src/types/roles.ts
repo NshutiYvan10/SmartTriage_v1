@@ -327,9 +327,13 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   //    member transported with details as recorded AT THE TIME (field triage,
   //    vitals, handover outcome, PCR). Own-run-scoped; NOT the hospital
   //    registry.
+  //  - 'alerts': the Alert Center, PERSONAL-scoped server-side
+  //    (AlertScopeResolver: only alerts targeted at THIS paramedic — ED
+  //    receipt ack, handover complete, field-triage confirmed). No
+  //    hospital/zone clinical noise reaches them.
   PARAMEDIC: [
     'dashboard', 'ems', 'ems-patients', 'monitor',
-    'notifications', 'profile',
+    'alerts', 'notifications', 'profile',
   ],
 
   // ── Lab-focused ──
@@ -347,7 +351,10 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     // list (only patients they have lab/imaging orders for) + the scoped Lab
     // Record (lab data only, not the full clinical chart).
     'lab-patients', 'lab-chart',
-    'notifications', 'profile',
+    // Alert Center, CATEGORY-scoped server-side (AlertScopeResolver): only
+    // laboratory/diagnostics alerts (critical results, SLA breaches, new/
+    // cancelled lab + imaging orders) — no triage/EMS/zone clinical noise.
+    'alerts', 'notifications', 'profile',
   ],
 
   // ── View-only ──

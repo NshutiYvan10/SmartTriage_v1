@@ -97,11 +97,39 @@ class AlertScopeResolverTest {
     }
 
     @Test
-    void paramedicAndRegistrar_seeNothingInClinicalCenter() {
+    void labTech_seesWorkQueueOrderTypes() {
+        // ROLE-ALERTS: new/cancelled lab + imaging orders are lab-bench work-queue
+        // notices — part of the lab category scope, invisible to zone clinicians.
+        User u = user(Role.LAB_TECHNICIAN);
         when(authz.canSeeAllZonesAtHospital(any(), any())).thenReturn(false);
         when(authz.canAccessHospital(any(), any())).thenReturn(true);
-        assertEquals(AlertScopeResolver.Kind.NONE,
-                resolver.resolve(authFor(user(Role.PARAMEDIC)), hospitalId).kind());
+
+        AlertScopeResolver.AlertScope s = resolver.resolve(authFor(u), hospitalId);
+        assertEquals(AlertScopeResolver.Kind.CATEGORY, s.kind());
+        assertTrue(s.alertTypes().contains(AlertType.NEW_LAB_ORDER));
+        assertTrue(s.alertTypes().contains(AlertType.LAB_ORDER_CANCELLED));
+        assertTrue(s.alertTypes().contains(AlertType.NEW_IMAGING_ORDER));
+    }
+
+    @Test
+    void paramedic_isPersonalOnlyScoped() {
+        // ROLE-ALERTS: a paramedic sees ONLY alerts addressed to them as the run's
+        // crew (targetDoctor = them) — the empty zone set routes the Alert Center
+        // query to findPersonalScopedAlerts, so no hospital/zone clinical noise.
+        when(authz.canSeeAllZonesAtHospital(any(), any())).thenReturn(false);
+        when(authz.canAccessHospital(any(), any())).thenReturn(true);
+
+        User medic = user(Role.PARAMEDIC);
+        AlertScopeResolver.AlertScope s = resolver.resolve(authFor(medic), hospitalId);
+        assertEquals(AlertScopeResolver.Kind.ZONE, s.kind());
+        assertTrue(s.zones().isEmpty());
+        assertEquals(medic.getId(), s.userId());
+    }
+
+    @Test
+    void registrar_seesNothingInClinicalCenter() {
+        when(authz.canSeeAllZonesAtHospital(any(), any())).thenReturn(false);
+        when(authz.canAccessHospital(any(), any())).thenReturn(true);
         assertEquals(AlertScopeResolver.Kind.NONE,
                 resolver.resolve(authFor(user(Role.REGISTRAR)), hospitalId).kind());
     }

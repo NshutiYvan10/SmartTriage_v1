@@ -10,6 +10,13 @@ function mapAlertType(t: AlertType): AIAlert['type'] {
       return 'DETERIORATION';
     case 'DOCTOR_NOTIFICATION':
     case 'DOCTOR_ESCALATION':
+    // Role-scoped work-queue notices (lab bench / paramedic personal feed)
+    case 'NEW_LAB_ORDER':
+    case 'LAB_ORDER_CANCELLED':
+    case 'NEW_IMAGING_ORDER':
+    case 'EMS_ARRIVAL_ACKNOWLEDGED':
+    case 'EMS_HANDOVER_COMPLETE':
+    case 'EMS_FIELD_TRIAGE_CONFIRMED':
       return 'DOCTOR_NOTIFICATION';
     case 'VITAL_SIGN_ABNORMAL':
     case 'CRITICAL_LAB_RESULT':

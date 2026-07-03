@@ -130,6 +130,38 @@ class StompAuthChannelInterceptorTest {
         assertThat(allowed("/topic/alerts/user/" + OTHER_ID, a)).isFalse();
     }
 
+    // ── Role-scoped (ROLE-ALERTS: /topic/alerts/{hospital}/role/{ROLE}) ──
+
+    @Test
+    void allowsOwnRoleTopicAtOwnHospital() {
+        Authentication a = auth(user(Role.LAB_TECHNICIAN, MY_ID));
+        when(clinicalAuthz.canAccessHospital(eq(a), eq(MY_HOSPITAL))).thenReturn(true);
+        assertThat(allowed("/topic/alerts/" + MY_HOSPITAL + "/role/LAB_TECHNICIAN", a)).isTrue();
+    }
+
+    @Test
+    void deniesAnotherRolesTopic() {
+        // A doctor may not listen on the lab technicians' work-queue channel.
+        Authentication a = auth(user(Role.DOCTOR, MY_ID));
+        when(clinicalAuthz.canAccessHospital(eq(a), eq(MY_HOSPITAL))).thenReturn(true);
+        assertThat(allowed("/topic/alerts/" + MY_HOSPITAL + "/role/LAB_TECHNICIAN", a)).isFalse();
+    }
+
+    @Test
+    void deniesRoleTopicAtAnotherHospital() {
+        Authentication a = auth(user(Role.LAB_TECHNICIAN, MY_ID));
+        when(clinicalAuthz.canAccessHospital(eq(a), eq(OTHER_HOSPITAL))).thenReturn(false);
+        assertThat(allowed("/topic/alerts/" + OTHER_HOSPITAL + "/role/LAB_TECHNICIAN", a)).isFalse();
+    }
+
+    @Test
+    void deniesMalformedRoleTopic() {
+        // "/role" with no role segment must not fall through to the zone parser.
+        Authentication a = auth(user(Role.LAB_TECHNICIAN, MY_ID));
+        when(clinicalAuthz.canAccessHospital(eq(a), eq(MY_HOSPITAL))).thenReturn(true);
+        assertThat(allowed("/topic/alerts/" + MY_HOSPITAL + "/role", a)).isFalse();
+    }
+
     // ── Visit-scoped ──
 
     @Test

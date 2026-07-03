@@ -91,7 +91,10 @@ public class ClinicalAlertController {
     }
 
     @PatchMapping("/{alertId}/acknowledge")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+    // LAB_TECHNICIAN + PARAMEDIC ack their own role-scoped work-queue alerts
+    // (new lab/imaging orders; ED-ack/handover confirmations). canAccessAlert
+    // still walks alert→visit→hospital, so neither can ack cross-tenant.
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN', 'PARAMEDIC') "
             + "and @clinicalAuthz.canAccessAlert(authentication, #alertId)")
     public ResponseEntity<ApiResponse<ClinicalAlertResponse>> acknowledgeAlert(
             @PathVariable UUID alertId,

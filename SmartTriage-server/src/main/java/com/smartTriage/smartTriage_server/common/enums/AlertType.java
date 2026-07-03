@@ -229,7 +229,39 @@ public enum AlertType {
      * up by the time-critical re-escalation loop.
      */
     PATHWAY_ACTIVATED(AlertCategory.CLINICAL, true),
-    PATHWAY_STEP_OVERDUE(AlertCategory.CLINICAL, true);
+    PATHWAY_STEP_OVERDUE(AlertCategory.CLINICAL, true),
+
+    /**
+     * Lab-technician work-queue notifications (role-filtered: delivered on
+     * /topic/alerts/{hospitalId}/role/LAB_TECHNICIAN and included in the lab
+     * CATEGORY scope of AlertScopeResolver — never pushed to zone clinicians).
+     *  - NEW_LAB_ORDER: a clinician placed a lab order (severity mirrors
+     *    priority: STAT→HIGH, URGENT→MEDIUM, ROUTINE→LOW).
+     *  - LAB_ORDER_CANCELLED: an order still in the lab pipeline was cancelled —
+     *    stop processing the specimen.
+     *  - NEW_IMAGING_ORDER: an imaging/ECG study was ordered onto the diagnostics
+     *    worklist the lab technician owns (no radiographer role exists).
+     * Deliberately NOT time-critical: escalation for a STAT order nobody actions
+     * is owned by the existing STAT_LAB_OVERDUE SLA monitor, not the re-page loop.
+     */
+    NEW_LAB_ORDER(AlertCategory.OPERATIONAL, false),
+    LAB_ORDER_CANCELLED(AlertCategory.OPERATIONAL, false),
+    NEW_IMAGING_ORDER(AlertCategory.OPERATIONAL, false),
+
+    /**
+     * Paramedic notifications (role-filtered: persisted with targetDoctor = the
+     * run's paramedic and delivered on /topic/alerts/user/{paramedicId}; surfaced
+     * in their Alert Center via the personal scope — never to zone clinicians).
+     *  - EMS_ARRIVAL_ACKNOWLEDGED: the ED acknowledged receipt of the crew's
+     *    inbound patient at the door.
+     *  - EMS_HANDOVER_COMPLETE: the receiving nurse completed transfer of care —
+     *    the patient is formally the hospital's responsibility.
+     *  - EMS_FIELD_TRIAGE_CONFIRMED: a receiving clinician confirmed the crew's
+     *    field triage category (closes the field-triage loop).
+     */
+    EMS_ARRIVAL_ACKNOWLEDGED(AlertCategory.OPERATIONAL, false),
+    EMS_HANDOVER_COMPLETE(AlertCategory.OPERATIONAL, false),
+    EMS_FIELD_TRIAGE_CONFIRMED(AlertCategory.OPERATIONAL, false);
 
     private final AlertCategory category;
     private final boolean timeCritical;

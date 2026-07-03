@@ -149,6 +149,10 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         //                                       Read-Only). A zone-bound nurse's SUBSCRIBE here
         //                                       is silently dropped — that is how the General
         //                                       nurse stops seeing Acute / inbound alerts live.
+        //   /topic/alerts/{hospitalId}/role/{ROLE} → role-scoped channel for zone-less roles
+        //                                       (e.g. LAB_TECHNICIAN work-queue alerts): the
+        //                                       caller's own role must MATCH the topic role and
+        //                                       they must belong to the hospital.
         //   /topic/alerts/{hospitalId}/{ZONE} → caller must currently cover that zone (or be
         //                                       oversight).
         // No missed alerts: publishHospitalAlert fans every zoned alert out to its zone topic,
@@ -160,6 +164,14 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             }
             if (seg.length == 2) {
                 return clinicalAuthz.canSeeAllZonesAtHospital(auth, hospitalId);
+            }
+            if ("role".equals(seg[2])) {
+                if (seg.length < 4 || !(auth.getPrincipal() instanceof User u)) {
+                    return false;
+                }
+                return u.getRole() != null
+                        && u.getRole().name().equals(seg[3])
+                        && clinicalAuthz.canAccessHospital(auth, hospitalId);
             }
             EdZone zone = parseZone(seg[2]);
             return zone != null && clinicalAuthz.canReceiveZoneAlerts(auth, hospitalId, zone);

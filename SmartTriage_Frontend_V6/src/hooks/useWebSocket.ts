@@ -13,6 +13,7 @@ import {
   subscribeToAlerts,
   subscribeToZoneAlerts,
   subscribeToUserAlerts,
+  subscribeToRoleAlerts,
   subscribeToVitals,
   subscribeConnectionState,
   getConnectionGeneration,
@@ -21,6 +22,9 @@ import { ensureAccessToken } from '@/api/client';
 import type { ClinicalAlertResponse, AlertType, EdZone } from '@/api/types';
 import type { AIAlert } from '@/types';
 
+/** Roles with a server-published /topic/alerts/{hospital}/role/{ROLE} channel. */
+const ROLE_CHANNEL_ROLES = new Set<string>(['LAB_TECHNICIAN']);
+
 // ── Map helper (duplicated from alertStore to avoid coupling) ──
 function mapAlertType(t: AlertType | string): AIAlert['type'] {
   switch (t) {
@@ -28,6 +32,13 @@ function mapAlertType(t: AlertType | string): AIAlert['type'] {
       return 'DETERIORATION';
     case 'DOCTOR_NOTIFICATION':
     case 'DOCTOR_ESCALATION':
+    // Role-scoped work-queue notices (lab bench / paramedic personal feed)
+    case 'NEW_LAB_ORDER':
+    case 'LAB_ORDER_CANCELLED':
+    case 'NEW_IMAGING_ORDER':
+    case 'EMS_ARRIVAL_ACKNOWLEDGED':
+    case 'EMS_HANDOVER_COMPLETE':
+    case 'EMS_FIELD_TRIAGE_CONFIRMED':
       return 'DOCTOR_NOTIFICATION';
     case 'VITAL_SIGN_ABNORMAL':
     case 'CRITICAL_LAB_RESULT':
@@ -148,12 +159,24 @@ export function useWebSocket(myZone?: EdZone | null) {
         unsubFns.current.push(unsubAlerts);
       }
 
-      // Subscribe to user-targeted alerts (for zone-routed doctor notifications)
+      // Subscribe to user-targeted alerts (for zone-routed doctor notifications
+      // and the paramedic's personal run notices — ED ack / handover / triage confirm)
       if (user.id) {
         const unsubUser = subscribeToUserAlerts(user.id, (alert: ClinicalAlertResponse) => {
           dedupeAndAdd(alert);
         });
         unsubFns.current.push(unsubUser);
+      }
+
+      // Role-scoped channel for zone-less roles. Only LAB_TECHNICIAN has one
+      // today (new/cancelled lab + imaging order work-queue notices); the
+      // firehose SUBSCRIBE above is silently dropped for them by the backend
+      // authz, so without this the lab bench would get no live alerts at all.
+      if (hospitalId && ROLE_CHANNEL_ROLES.has(user.role)) {
+        const unsubRole = subscribeToRoleAlerts(hospitalId, user.role, (alert: ClinicalAlertResponse) => {
+          dedupeAndAdd(alert);
+        });
+        unsubFns.current.push(unsubRole);
       }
 
       // Workflow 4 — one /topic/alerts/{hospital}/{zone} subscription
