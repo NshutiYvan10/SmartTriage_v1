@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, User, Calendar, MapPin, Phone, CreditCard,
   Stethoscope, FileText, Baby, Clock, Siren, Building2,
-  Users, Shield, Footprints,
+  Users, Shield, Footprints, Pencil,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { Badge } from '@/components/ui/Badge';
@@ -11,10 +11,14 @@ import { usePatientStore } from '@/store/patientStore';
 import { useAuthStore } from '@/store/authStore';
 import { patientApi } from '@/api/patients';
 import { ReplaceCardModal } from './ReplaceCardModal';
+import { EditPatientModal } from './EditPatientModal';
+import { PatientHistoryPanel } from '@/modules/entry/PatientHistoryPanel';
 import type { Patient } from '@/types';
 import type { UserRole } from '@/types/roles';
 
 const CARD_ADMIN_ROLES: UserRole[] = ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR'];
+/** Roles that may correct patient demographics (mirrors the PUT /patients/{id} @PreAuthorize). */
+const EDIT_ROLES: UserRole[] = ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR'];
 
 /* ─── Reusable info row ─── */
 const InfoRow = ({ label, value }: { label: string; value?: string | number | null }) => {
@@ -73,10 +77,12 @@ export function PatientDetailView() {
   const updatePatient = usePatientStore((s) => s.updatePatient);
   const role = useAuthStore((s) => s.user?.role);
   const [showReplaceCard, setShowReplaceCard] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   // The replace endpoint is keyed on the real patient id; the visit projection carries it on
   // `patientId`, otherwise the route param IS the patient id.
   const realPatientId = (patient as any)?.patientId || patientId || '';
   const canManageCard = role != null && CARD_ADMIN_ROLES.includes(role);
+  const canEdit = role != null && EDIT_ROLES.includes(role);
 
   // Lazy hydrate the full patient record. The bulk list-view fetch
   // (fetchActiveVisits) skips per-patient detail to avoid the N+1
@@ -241,6 +247,14 @@ export function PatientDetailView() {
 
               {/* Badges */}
               <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {canEdit && realPatientId && (
+                  <button
+                    onClick={() => setShowEdit(true)}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 px-3 py-1.5 rounded-xl transition-colors"
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> Edit details
+                  </button>
+                )}
                 {catCfg && (
                   <Badge category={patient.category} size="sm" />
                 )}
@@ -400,7 +414,24 @@ export function PatientDetailView() {
             )}
           </SectionCard>
         </div>
+
+        {/* Visit history — which hospitals, dates, status. Reachable here so a registrar
+            looking up a returning patient sees "last visit 3 days ago, triaged Red, discharged". */}
+        {realPatientId && (
+          <PatientHistoryPanel
+            patientId={realPatientId}
+            emptyMessage="No prior visits on record for this patient."
+          />
+        )}
       </div>
+
+      {showEdit && realPatientId && (
+        <EditPatientModal
+          patient={patient}
+          realPatientId={realPatientId}
+          onClose={() => setShowEdit(false)}
+        />
+      )}
 
       {showReplaceCard && realPatientId && (
         <ReplaceCardModal

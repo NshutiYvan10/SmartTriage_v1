@@ -1,5 +1,5 @@
 /* ── Patients API ── */
-import { get, patch, post } from './client';
+import { get, patch, post, put } from './client';
 import type {
   CreatePatientRequest,
   PatientResponse,
@@ -10,6 +10,7 @@ import type {
   PatientLookupCandidate,
   GlobalPatientRow,
   OpenVisitHereRequest,
+  UpdatePatientRequest,
   Page,
 } from './types';
 
@@ -79,6 +80,15 @@ export const patientApi = {
   /** Replace the patient's free-text chronic conditions. Pass null to clear. */
   updateChronicConditions: (id: string, chronicConditions: string | null) =>
     patch<PatientResponse>(`/patients/${id}/chronic-conditions`, { chronicConditions }),
+
+  /**
+   * Registrar demographic correction — fix data-entry errors (name/DOB/gender/national
+   * ID/passport/birth-cert/phone/address/emergency contact/blood type). PARTIAL update:
+   * only fields present in `data` are applied. A duplicate national ID at this hospital
+   * is rejected (409). RFID card reassignment is a separate endpoint (rfidApi.replaceCard).
+   */
+  updateDemographics: (id: string, data: UpdatePatientRequest) =>
+    put<PatientResponse>(`/patients/${id}`, data),
 
   /**
    * GLOBAL registry search — REGISTRAR-only, system-wide across ALL hospitals.

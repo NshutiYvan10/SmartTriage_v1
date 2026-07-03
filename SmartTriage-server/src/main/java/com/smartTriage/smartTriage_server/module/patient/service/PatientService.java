@@ -413,6 +413,65 @@ public class PatientService {
         return PatientMapper.toResponse(patient);
     }
 
+    /**
+     * Registrar demographic correction — fix data-entry errors on an existing patient
+     * (misspelled name, wrong DOB, transposed national ID, updated phone/address).
+     * PARTIAL update: only non-null request fields are applied. A changed national ID is
+     * (a) dedup-checked against other active patients at this hospital and (b) re-links the
+     * shared cross-hospital identity so a corrected NID makes the patient findable system-wide.
+     * Attributed in the log for the medico-legal edit trail. RFID card is NOT touched here
+     * (separate audited replace-card endpoint).
+     */
+    @Transactional
+    public PatientResponse updateDemographics(UUID patientId,
+            com.smartTriage.smartTriage_server.module.patient.dto.UpdatePatientRequest request) {
+        Patient patient = findPatientOrThrow(patientId);
+        String before = patient.getFirstName() + " " + patient.getLastName()
+                + " (NID " + (patient.getNationalId() != null ? patient.getNationalId() : "—") + ")";
+
+        // National ID change: dedup against OTHER active patients at this hospital before applying.
+        String newNid = blankToNull(request.getNationalId());
+        boolean nidChanged = request.getNationalId() != null
+                && !java.util.Objects.equals(newNid, patient.getNationalId());
+        if (nidChanged && newNid != null) {
+            UUID hid = patient.getHospital() != null ? patient.getHospital().getId() : null;
+            final UUID selfId = patient.getId();       // patient is reassigned below → capture for the lambda
+            final String checkNid = newNid;
+            patientRepository.findByNationalIdAndHospitalIdAndIsActiveTrue(newNid, hid)
+                    .filter(other -> !other.getId().equals(selfId))
+                    .ifPresent(other -> { throw new DuplicateResourceException("Patient", "nationalId", checkNid); });
+        }
+
+        if (request.getFirstName() != null && !request.getFirstName().isBlank())
+            patient.setFirstName(request.getFirstName().trim());
+        if (request.getLastName() != null && !request.getLastName().isBlank())
+            patient.setLastName(request.getLastName().trim());
+        if (request.getDateOfBirth() != null) patient.setDateOfBirth(request.getDateOfBirth());
+        if (request.getGender() != null) patient.setGender(request.getGender());
+        if (request.getNationalId() != null) patient.setNationalId(newNid);
+        if (request.getPassportNumber() != null) patient.setPassportNumber(blankToNull(request.getPassportNumber()));
+        if (request.getBirthCertificateNumber() != null) patient.setBirthCertificateNumber(blankToNull(request.getBirthCertificateNumber()));
+        if (request.getPhoneNumber() != null) patient.setPhoneNumber(blankToNull(request.getPhoneNumber()));
+        if (request.getAddress() != null) patient.setAddress(request.getAddress().trim());
+        if (request.getEmergencyContactName() != null) patient.setEmergencyContactName(request.getEmergencyContactName().trim());
+        if (request.getEmergencyContactPhone() != null) patient.setEmergencyContactPhone(blankToNull(request.getEmergencyContactPhone()));
+        if (request.getBloodType() != null) patient.setBloodType(blankToNull(request.getBloodType()));
+
+        // A corrected national ID must re-link the shared identity (keep the existing card anchor).
+        if (nidChanged) {
+            String existingCard = patient.getPersonIdentity() != null
+                    ? patient.getPersonIdentity().getRfidCardId() : null;
+            patient.setPersonIdentity(personIdentityService.findOrCreate(patient.getNationalId(), existingCard));
+        }
+
+        patient = patientRepository.save(patient);
+        log.info("[patient-edit] Demographics corrected for patient {} (MRN {}) by {}: '{}' → '{} {}' (NID {})",
+                patient.getId(), patient.getMedicalRecordNumber(), currentUsername(), before,
+                patient.getFirstName(), patient.getLastName(),
+                patient.getNationalId() != null ? patient.getNationalId() : "—");
+        return PatientMapper.toResponse(patient);
+    }
+
     private String generateMRN(String hospitalCode) {
         return hospitalCode + "-" + mrnCounter.incrementAndGet();
     }

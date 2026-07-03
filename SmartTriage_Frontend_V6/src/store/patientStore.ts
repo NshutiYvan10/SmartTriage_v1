@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { Patient, TriageCategory, EmergencySigns, TEWSInput, Override } from '@/types';
 import { patientApi } from '@/api/patients';
 import { visitApi } from '@/api/visits';
-import type { PatientResponse, VisitResponse, VisitStatus } from '@/api/types';
+import type { PatientResponse, VisitResponse, VisitStatus, UpdatePatientRequest } from '@/api/types';
 
 /**
  * Compute a patient's display age from an ISO DOB string.
@@ -145,6 +145,9 @@ interface PatientState {
   fetchActiveVisits: (hospitalId: string) => Promise<void>;
   ensurePatient: (patient: Patient) => void;
   updatePatient: (id: string, updates: Partial<Patient>) => void;
+  /** Persist a registrar demographic correction (PUT /patients/{realPatientId}), then merge the
+   *  response into the store row keyed by `storeId` (the list/visit id). Throws on API error. */
+  updatePatientApi: (storeId: string, realPatientId: string, data: UpdatePatientRequest) => Promise<PatientResponse>;
   getPatient: (id: string) => Patient | undefined;
   setTriageStatus: (id: string, status: Patient['triageStatus']) => void;
   setEmergencySigns: (id: string, signs: EmergencySigns) => void;
@@ -314,6 +317,36 @@ export const usePatientStore = create<PatientState>((set, get) => ({
         p.id === id ? { ...p, ...updates } : p
       ),
     }));
+  },
+
+  updatePatientApi: async (storeId, realPatientId, data) => {
+    // Persist the demographic correction, then merge the authoritative response back
+    // into the store row (keyed by the store id, which is the visit id in the list).
+    const res = await patientApi.updateDemographics(realPatientId, data);
+    const fullName = `${res.firstName ?? ''} ${res.lastName ?? ''}`.trim();
+    set((state) => ({
+      patients: state.patients.map((p) => {
+        if (p.id !== storeId) return p;
+        const cur = p as Patient & Record<string, any>;
+        return {
+          ...cur,
+          firstName: res.firstName ?? cur.firstName,
+          lastName: res.lastName ?? cur.lastName,
+          name: fullName || cur.name,
+          fullName: fullName || cur.fullName,
+          gender: (res.gender as Patient['gender']) ?? cur.gender,
+          dateOfBirth: res.dateOfBirth ?? cur.dateOfBirth,
+          nationalId: res.nationalId ?? undefined,
+          phone: res.phoneNumber ?? undefined,
+          phoneNumber: res.phoneNumber ?? undefined,
+          address: res.address ?? undefined,
+          emergencyContactName: res.emergencyContactName ?? undefined,
+          emergencyContactPhone: res.emergencyContactPhone ?? undefined,
+          bloodType: res.bloodType ?? undefined,
+        } as unknown as Patient;
+      }),
+    }));
+    return res;
   },
 
   getPatient: (id) => {

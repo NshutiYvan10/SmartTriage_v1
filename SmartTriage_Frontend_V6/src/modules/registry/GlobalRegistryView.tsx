@@ -200,6 +200,11 @@ export function GlobalRegistryView() {
                         </span>
                       )}
                       {row.hasRfidCard && <ScanLine className="w-3.5 h-3.5 text-slate-400" aria-label="Has RFID card" />}
+                      {row.hasOpenVisitAtMyHospital && (
+                        <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-cyan-500/15 text-cyan-600">
+                          Open visit here
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
                       {row.nationalId && <span className="inline-flex items-center gap-1"><CreditCard className="w-3 h-3" /> {row.nationalId}</span>}

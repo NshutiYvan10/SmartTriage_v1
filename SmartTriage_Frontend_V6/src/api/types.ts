@@ -429,6 +429,25 @@ export interface OpenVisitHereRequest {
   chiefComplaint?: string;
 }
 
+/**
+ * Registrar demographic correction (PUT /patients/{id}). PARTIAL — only the fields you
+ * send are applied. Card reassignment is separate (rfidApi.replaceCard).
+ */
+export interface UpdatePatientRequest {
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string;
+  gender?: Gender;
+  nationalId?: string;
+  passportNumber?: string;
+  birthCertificateNumber?: string;
+  phoneNumber?: string;
+  address?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  bloodType?: string;
+}
+
 export interface PatientResponse {
   id: string;
   firstName: string;

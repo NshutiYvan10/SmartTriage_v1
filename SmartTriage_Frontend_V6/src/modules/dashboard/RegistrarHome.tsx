@@ -12,15 +12,19 @@
    Everything is hospital-scoped desk data — no clinical PHI over-share.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UserPlus, Globe, ClipboardList, UserX, Loader2, RefreshCw,
-  Users, Activity, AlertTriangle, ChevronRight, ScanLine,
+  Users, Activity, AlertTriangle, ChevronRight, ScanLine, Clock,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
 import { registrarApi, type CensusResponse, type UnidentifiedPatientRow } from '@/api/registrar';
+import { visitApi } from '@/api/visits';
+import { subscribeToVisits } from '@/api/websocket';
+import type { VisitResponse } from '@/api/types';
+import { safeFormatDistanceToNow } from '@/utils/safeDate';
 import { format } from 'date-fns';
 import { RfidPatientFoundBanner } from './RfidPatientFoundBanner';
 
@@ -43,6 +47,7 @@ export function RegistrarHome() {
   const [census, setCensus] = useState<CensusResponse | null>(null);
   const [unidentified, setUnidentified] = useState<UnidentifiedPatientRow[]>([]);
   const [todayCount, setTodayCount] = useState<number | null>(null);
+  const [awaiting, setAwaiting] = useState<VisitResponse[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -53,18 +58,35 @@ export function RegistrarHome() {
       registrarApi.getCensus(hospitalId),
       registrarApi.getUnidentified(hospitalId),
       registrarApi.getIntakeLog(hospitalId, today, today),
+      // Full active roster (registrar is a desk role → gets the whole hospital), filtered
+      // client-side to the patients who've registered but aren't yet triaged.
+      visitApi.getActiveForCallerByHospital(hospitalId, 0, 100),
     ]);
     if (results[0].status === 'fulfilled') setCensus(results[0].value);
     if (results[1].status === 'fulfilled') setUnidentified(results[1].value ?? []);
     if (results[2].status === 'fulfilled') setTodayCount((results[2].value ?? []).length);
+    if (results[3].status === 'fulfilled') {
+      const rows = (results[3].value?.content ?? []).filter(
+        (v) => v.status === 'REGISTERED' || v.status === 'AWAITING_TRIAGE');
+      // Longest-waiting first — the registrar should chase the patient waiting the longest.
+      rows.sort((a, b) => new Date(a.arrivalTime).getTime() - new Date(b.arrivalTime).getTime());
+      setAwaiting(rows);
+    }
     setLoading(false);
   }, [hospitalId]);
 
   useEffect(() => { void load(); }, [load]);
 
-  const awaitingTriage = census
-    ? (census.byStatus['AWAITING_TRIAGE'] ?? 0) + (census.byStatus['REGISTERED'] ?? 0)
-    : 0;
+  // Live: a new registration / arrival pushes a visit event → refresh the queue.
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  useEffect(() => {
+    if (!hospitalId) return;
+    const unsub = subscribeToVisits(hospitalId, () => { void loadRef.current(); });
+    return unsub;
+  }, [hospitalId]);
+
+  const awaitingTriage = awaiting.length;
 
   const tiles = [
     { key: 'today', label: 'Registered today', value: todayCount ?? '—', icon: UserPlus,
@@ -142,6 +164,48 @@ export function RegistrarHome() {
               </button>
             );
           })}
+        </div>
+
+        {/* Live queue — patients registered but not yet triaged (updates on new admissions). */}
+        <div className={`${cardClass} overflow-hidden`} style={glassCard}>
+          <div className="px-4 py-2.5 flex items-center gap-2" style={{ borderBottom: borderStyle }}>
+            <Clock className="w-4 h-4 text-violet-500" />
+            <span className={`text-sm font-bold ${text.heading}`}>Awaiting triage</span>
+            <span className={`text-[11px] ${text.muted}`}>Registered patients the triage nurse hasn't seen yet — longest wait first</span>
+          </div>
+          {loading && awaiting.length === 0 ? (
+            <div className={`text-center py-10 ${text.muted}`}><Loader2 className="w-6 h-6 animate-spin mx-auto opacity-50" /></div>
+          ) : awaiting.length === 0 ? (
+            <p className={`px-4 py-8 text-center text-sm ${text.muted}`}>
+              <Activity className="w-6 h-6 mx-auto mb-2 opacity-50" />
+              No one is waiting for triage — the queue is clear.
+            </p>
+          ) : (
+            <ul>
+              {awaiting.map((v) => (
+                <li key={v.id}
+                    className={`px-4 py-2.5 flex items-center gap-3 border-b last:border-0 ${isDark ? 'border-white/5 hover:bg-white/5' : 'border-slate-100 hover:bg-slate-50'} cursor-pointer`}
+                    onClick={() => navigate(`/patients/${v.patientId}`)}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-sm font-bold ${text.heading}`}>{v.patientName || 'Unidentified patient'}</span>
+                      <span className="font-mono text-[10px] text-slate-400">{v.visitNumber}</span>
+                      {v.arrivalMode && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-sky-500/10 text-sky-600">
+                          {v.arrivalMode === 'WALK_IN' ? 'Walk-in' : v.arrivalMode === 'AMBULANCE' ? 'Ambulance' : 'Referral'}
+                        </span>
+                      )}
+                    </div>
+                    {v.chiefComplaint && <p className={`text-[11px] mt-0.5 truncate ${text.muted}`}>{v.chiefComplaint}</p>}
+                  </div>
+                  <span className={`text-[11px] font-semibold ${text.muted} whitespace-nowrap`}>
+                    {safeFormatDistanceToNow(v.arrivalTime)}
+                  </span>
+                  <ChevronRight className={`w-4 h-4 ${text.muted}`} />
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {/* Unresolved identities — prominent, never buried (goal item 3/6) */}

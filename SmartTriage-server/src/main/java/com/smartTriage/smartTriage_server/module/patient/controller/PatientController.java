@@ -114,6 +114,23 @@ public class PatientController {
      * The new value REPLACES the existing free-text. Pass null to clear
      * (e.g. when a previously-recorded allergy turns out to be wrong).
      */
+    /**
+     * Registrar demographic correction — fix data-entry errors on an existing patient
+     * (name / DOB / gender / national ID / passport / birth-cert / phone / address /
+     * emergency contact / blood type). PARTIAL update: only non-null fields apply.
+     * Object-level gate: canAccessPatient scopes to the patient's OWN hospital (no
+     * cross-tenant edit). LAB_TECHNICIAN / PARAMEDIC excluded — not their surface.
+     */
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessPatient(authentication, #id)")
+    public ResponseEntity<ApiResponse<PatientResponse>> updatePatient(
+            @PathVariable UUID id,
+            @Valid @RequestBody com.smartTriage.smartTriage_server.module.patient.dto.UpdatePatientRequest request) {
+        PatientResponse response = patientService.updateDemographics(id, request);
+        return ResponseEntity.ok(ApiResponse.success("Patient updated", response));
+    }
+
     @PatchMapping("/{id}/allergies")
     @PreAuthorize("hasAnyRole('NURSE', 'DOCTOR') "
             + "and @clinicalAuthz.canAccessPatient(authentication, #id)")
