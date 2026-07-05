@@ -171,6 +171,15 @@ public class TriageService {
                     .spo2(request.getSpo2())
                     .painScore(request.getPainScore())
                     .source(com.smartTriage.smartTriage_server.common.enums.VitalSource.MANUAL_ENTRY)
+                    // Attribute the reading to the triaging clinician (the form's
+                    // nurse name if supplied, else the authenticated user) so the
+                    // chart's "recorded by" line is populated for manual entries.
+                    .recordedByName(
+                            request.getTriageNurseName() != null && !request.getTriageNurseName().isBlank()
+                                    ? request.getTriageNurseName().trim()
+                                    : (currentUser != null
+                                            ? (currentUser.getFirstName() + " " + currentUser.getLastName()).trim()
+                                            : null))
                     .build();
             vitals = vitalSignsRepository.save(vitals);
         } else {

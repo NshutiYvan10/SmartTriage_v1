@@ -87,4 +87,7 @@ public class RecordVitalsRequest {
 
     private String deviceId;
     private String notes;
+
+    /** Display name of the recording clinician (manual entry). Optional. */
+    private String recordedByName;
 }

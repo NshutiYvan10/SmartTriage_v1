@@ -94,4 +94,14 @@ public class VitalSigns extends BaseEntity {
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
+
+    /**
+     * Display name of the clinician who recorded this reading, denormalised at
+     * write time (same pattern as ClinicalNote / ClinicalSignEvent). Nullable:
+     * device/IoT-sourced readings have no human recorder, and pre-V105 rows
+     * predate the column. Auditing's created_by still holds the login identity
+     * for the medico-legal trail; this is purely the human-readable attribution.
+     */
+    @Column(name = "recorded_by_name", length = 255)
+    private String recordedByName;
 }

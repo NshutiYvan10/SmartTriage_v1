@@ -39,5 +39,6 @@ public class VitalSignsResponse {
     private VitalSource source;
     private String deviceId;
     private String notes;
+    private String recordedByName;
     private Instant createdAt;
 }

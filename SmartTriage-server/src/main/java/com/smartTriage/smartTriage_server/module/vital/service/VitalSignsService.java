@@ -82,6 +82,7 @@ public class VitalSignsService {
                 .source(request.getSource())
                 .deviceId(request.getDeviceId())
                 .notes(request.getNotes())
+                .recordedByName(request.getRecordedByName())
                 .build();
 
         vitals = vitalSignsRepository.save(vitals);

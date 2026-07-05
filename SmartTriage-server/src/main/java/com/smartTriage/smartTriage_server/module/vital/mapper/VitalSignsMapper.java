@@ -26,6 +26,7 @@ public final class VitalSignsMapper {
                 .source(vitals.getSource())
                 .deviceId(vitals.getDeviceId())
                 .notes(vitals.getNotes())
+                .recordedByName(vitals.getRecordedByName())
                 .createdAt(vitals.getCreatedAt())
                 .build();
     }

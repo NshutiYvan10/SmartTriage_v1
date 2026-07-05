@@ -753,6 +753,8 @@ export interface RecordVitalsRequest {
   source?: VitalSource;
   deviceId?: string;
   notes?: string;
+  /** Display name of the recording clinician (manual entry). */
+  recordedByName?: string;
 }
 
 export interface VitalSignsResponse {
@@ -773,8 +775,8 @@ export interface VitalSignsResponse {
   source: VitalSource;
   deviceId: string | null;
   notes: string;
-  recordedById: string;
-  recordedByName: string;
+  /** Display name of the recording clinician; null for device/IoT or pre-V105 rows. */
+  recordedByName: string | null;
   recordedAt: string;
   createdAt: string;
 }

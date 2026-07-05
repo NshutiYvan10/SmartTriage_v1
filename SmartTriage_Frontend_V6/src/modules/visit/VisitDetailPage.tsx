@@ -405,7 +405,7 @@ export function VisitDetailPage() {
   const handleRecordVitals = async (data: Partial<RecordVitalsRequest>) => {
     setFormLoading(true);
     try {
-      await vitalApi.record({ visitId: visit.id, ...data } as RecordVitalsRequest);
+      await vitalApi.record({ visitId: visit.id, recordedByName: userName, ...data } as RecordVitalsRequest);
       setShowVitalsForm(false);
       loadData();
     } catch (err) {

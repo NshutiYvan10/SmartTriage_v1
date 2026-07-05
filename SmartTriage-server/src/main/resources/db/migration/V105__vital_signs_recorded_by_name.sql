@@ -1,0 +1,14 @@
+-- V105 — clinician attribution on vital-signs rows.
+--
+-- Vitals rows carried no human-readable "recorded by" attribution: the
+-- VitalSignsResponse never surfaced one, so the UI's "by {name}" line was
+-- dead. Auditing (created_by) already stores WHO wrote the row, but as the
+-- login identity (email), not a display name — and inconsistent with the
+-- rest of the clinical hub (notes, clinical signs, allergies) which all
+-- denormalise a display name onto the row at write time.
+--
+-- Mirror that established pattern: store the recording clinician's display
+-- name alongside the reading. Nullable — pre-existing rows and device/IoT-
+-- sourced readings (which have no human recorder) simply carry no name, and
+-- the UI already guards on its presence.
+ALTER TABLE vital_signs ADD COLUMN recorded_by_name VARCHAR(255);
