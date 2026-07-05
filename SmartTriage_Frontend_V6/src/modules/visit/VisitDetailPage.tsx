@@ -356,6 +356,13 @@ export function VisitDetailPage() {
   useEffect(() => {
     if (!visit?.patientId) return;
     let cancelled = false;
+    // Clear the previous patient's identity data BEFORE fetching this one's. Without this, a visit
+    // change leaves the prior patient's allergies/conditions in state until the refetch resolves —
+    // and the prescribe-time safety dialog would check the wrong patient's allergies in that window.
+    // Empty is the safe default (no false "no allergy" match against another patient).
+    setPatient(null);
+    setStructuredAllergies([]);
+    setStructuredChronicConditions([]);
     patientApi
       .getById(visit.patientId)
       .then((p) => { if (!cancelled) setPatient(p); })
@@ -372,7 +379,7 @@ export function VisitDetailPage() {
       .then((rows) => { if (!cancelled) setStructuredChronicConditions(Array.isArray(rows) ? rows : []); })
       .catch(() => { /* swallow — non-critical, legacy fallback covers */ });
     return () => { cancelled = true; };
-  }, [visit?.patientId]);
+  }, [visit?.patientId, visitId]);
 
   const category = visit?.currentTriageCategory || latestTriage?.triageCategory;
   const catColor = CATEGORY_COLORS[category || 'GREEN'] || CATEGORY_COLORS.GREEN;
@@ -401,7 +408,12 @@ export function VisitDetailPage() {
       await vitalApi.record({ visitId: visit.id, ...data } as RecordVitalsRequest);
       setShowVitalsForm(false);
       loadData();
-    } catch (err) { console.error(err); } finally { setFormLoading(false); }
+    } catch (err) {
+      // Surface the failure and keep the form open (setShow..(false) above is skipped on throw),
+      // so the clinician can correct + retry rather than believe stale/absent data was recorded.
+      window.alert(err instanceof Error ? err.message : 'Could not record vitals');
+      console.error(err);
+    } finally { setFormLoading(false); }
   };
 
   const handleCreateNote = async (data: Partial<CreateClinicalNoteRequest>) => {
@@ -410,7 +422,10 @@ export function VisitDetailPage() {
       await clinicalNoteApi.create({ visitId: visit.id, recordedByName: userName, ...data } as CreateClinicalNoteRequest);
       setShowNoteForm(false);
       loadData();
-    } catch (err) { console.error(err); } finally { setFormLoading(false); }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not save the note');
+      console.error(err);
+    } finally { setFormLoading(false); }
   };
 
   const handleCreateDiagnosis = async (data: Partial<CreateDiagnosisRequest>) => {
@@ -419,7 +434,10 @@ export function VisitDetailPage() {
       await diagnosisApi.create({ visitId: visit.id, diagnosedByName: userName, ...data } as CreateDiagnosisRequest);
       setShowDiagnosisForm(false);
       loadData();
-    } catch (err) { console.error(err); } finally { setFormLoading(false); }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not save the diagnosis');
+      console.error(err);
+    } finally { setFormLoading(false); }
   };
 
   const handleOrderInvestigation = async (data: Partial<OrderInvestigationRequest>) => {
@@ -428,7 +446,10 @@ export function VisitDetailPage() {
       await investigationApi.order({ visitId: visit.id, orderedByName: userName, ...data } as OrderInvestigationRequest);
       setShowInvestigationForm(false);
       loadData();
-    } catch (err) { console.error(err); } finally { setFormLoading(false); }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not order the investigation');
+      console.error(err);
+    } finally { setFormLoading(false); }
   };
 
   // Actually issue the prescribe. Split out so the override path
@@ -678,11 +699,17 @@ export function VisitDetailPage() {
     await submitPrescribe(data);
   };
 
-  const handleAcknowledgeAlert = async (alertId: string, note?: string) => {
+  const handleAcknowledgeAlert = async (alertId: string, note?: string): Promise<boolean> => {
     try {
       await alertApi.acknowledge(alertId, note);
       loadData();
-    } catch (err) { console.error(err); }
+      return true;
+    } catch (err) {
+      // A failed acknowledge must NOT read as "cleared" — surface it so the clinician retries.
+      window.alert(err instanceof Error ? err.message : 'Could not acknowledge the alert');
+      console.error(err);
+      return false;
+    }
   };
 
   // 1b: acknowledging a CRITICAL alert removes it from every escalation reminder, so require a
@@ -702,9 +729,13 @@ export function VisitDetailPage() {
         case 'specimen': await investigationApi.specimenCollected(id); break;
         case 'progress': await investigationApi.markInProgress(id); break;
         case 'result': await investigationApi.recordResult(id, data as Parameters<typeof investigationApi.recordResult>[1]); break;
+        case 'cancel': await investigationApi.cancel(id, data as string); break;
       }
       loadData();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not update the investigation');
+      console.error(err);
+    }
   };
 
   const handleMedicationAction = async (id: string, action: string, reason?: string) => {
@@ -743,7 +774,10 @@ export function VisitDetailPage() {
     try {
       await visitApi.recordDisposition(visit.id, data);
       loadData();
-    } catch (err) { console.error(err); } finally { setFormLoading(false); }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not record the disposition');
+      console.error(err);
+    } finally { setFormLoading(false); }
   };
 
   // ────────── RENDER ──────────
@@ -906,9 +940,11 @@ export function VisitDetailPage() {
           onConfirm={async () => {
             const id = ackModalAlert.id;
             const reason = ackModalReason.trim();
-            setAckModalAlert(null);
-            setAckModalReason('');
-            await handleAcknowledgeAlert(id, reason);
+            // Acknowledge FIRST; only dismiss the modal if it actually succeeded, so a failed
+            // acknowledge (which surfaces its own error) keeps the modal + typed reason for retry
+            // instead of closing as if a CRITICAL alert had been cleared.
+            const ok = await handleAcknowledgeAlert(id, reason);
+            if (ok) { setAckModalAlert(null); setAckModalReason(''); }
           }}
           onCancel={() => { setAckModalAlert(null); setAckModalReason(''); }}
         />
@@ -1340,11 +1376,13 @@ function VitalsTab({ visitId, vitals, latestVitals, glassCard, isDark, text }: a
             </span>
           </div>
           <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-xs">
-            <MiniVital label="HR" value={latestVitals.heartRate ? `${latestVitals.heartRate}` : '—'} unit="bpm" isDark={isDark} />
-            <MiniVital label="SpO2" value={latestVitals.spo2 ? `${latestVitals.spo2}` : '—'} unit="%" isDark={isDark} />
-            <MiniVital label="RR" value={latestVitals.respiratoryRate ? `${latestVitals.respiratoryRate}` : '—'} unit="/min" isDark={isDark} />
-            <MiniVital label="BP" value={latestVitals.systolicBp ? `${latestVitals.systolicBp}/${latestVitals.diastolicBp}` : '—'} unit="" isDark={isDark} />
-            <MiniVital label="Temp" value={latestVitals.temperature ? `${latestVitals.temperature}` : '—'} unit="°C" isDark={isDark} />
+            {/* != null (not truthy) so a genuine 0 — HR 0 asystole, RR 0 apnoea — shows as the
+                critical reading it is, not as "—" (missing data). */}
+            <MiniVital label="HR" value={latestVitals.heartRate != null ? `${latestVitals.heartRate}` : '—'} unit="bpm" isDark={isDark} />
+            <MiniVital label="SpO2" value={latestVitals.spo2 != null ? `${latestVitals.spo2}` : '—'} unit="%" isDark={isDark} />
+            <MiniVital label="RR" value={latestVitals.respiratoryRate != null ? `${latestVitals.respiratoryRate}` : '—'} unit="/min" isDark={isDark} />
+            <MiniVital label="BP" value={latestVitals.systolicBp != null ? `${latestVitals.systolicBp}/${latestVitals.diastolicBp}` : '—'} unit="" isDark={isDark} />
+            <MiniVital label="Temp" value={latestVitals.temperature != null ? `${latestVitals.temperature}` : '—'} unit="°C" isDark={isDark} />
             <MiniVital label="AVPU" value={latestVitals.avpu || '—'} unit="" isDark={isDark} />
           </div>
         </div>
@@ -1378,11 +1416,11 @@ function VitalsTab({ visitId, vitals, latestVitals, glassCard, isDark, text }: a
               </span>
             </div>
             <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-xs">
-              <MiniVital label="HR" value={v.heartRate ? `${v.heartRate}` : '—'} unit="bpm" isDark={isDark} />
-              <MiniVital label="SpO2" value={v.spo2 ? `${v.spo2}` : '—'} unit="%" isDark={isDark} />
-              <MiniVital label="RR" value={v.respiratoryRate ? `${v.respiratoryRate}` : '—'} unit="/min" isDark={isDark} />
-              <MiniVital label="BP" value={v.systolicBp ? `${v.systolicBp}/${v.diastolicBp}` : '—'} unit="" isDark={isDark} />
-              <MiniVital label="Temp" value={v.temperature ? `${v.temperature}` : '—'} unit="°C" isDark={isDark} />
+              <MiniVital label="HR" value={v.heartRate != null ? `${v.heartRate}` : '—'} unit="bpm" isDark={isDark} />
+              <MiniVital label="SpO2" value={v.spo2 != null ? `${v.spo2}` : '—'} unit="%" isDark={isDark} />
+              <MiniVital label="RR" value={v.respiratoryRate != null ? `${v.respiratoryRate}` : '—'} unit="/min" isDark={isDark} />
+              <MiniVital label="BP" value={v.systolicBp != null ? `${v.systolicBp}/${v.diastolicBp}` : '—'} unit="" isDark={isDark} />
+              <MiniVital label="Temp" value={v.temperature != null ? `${v.temperature}` : '—'} unit="°C" isDark={isDark} />
               <MiniVital label="AVPU" value={v.avpu || '—'} unit="" isDark={isDark} />
               {v.weightKg != null && (
                 <MiniVital label="Weight" value={`${v.weightKg}`} unit="kg" isDark={isDark} />
@@ -1892,7 +1930,7 @@ function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, on
             </div>
           </div>
           <div className="flex items-center gap-3 mt-4">
-            <button onClick={() => { onAction(resultForm.id, 'result', { investigationId: resultForm.id, result: resultForm.result, resultNumeric: resultForm.resultNumeric, resultUnit: resultForm.resultUnit, isAbnormal: resultForm.isAbnormal, isCritical: resultForm.isCritical, notes: resultForm.notes }); setResultForm(null); }} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all">
+            <button disabled={!resultForm.result.trim()} onClick={() => { if (!resultForm.result.trim()) return; onAction(resultForm.id, 'result', { investigationId: resultForm.id, result: resultForm.result, resultNumeric: resultForm.resultNumeric, resultUnit: resultForm.resultUnit, isAbnormal: resultForm.isAbnormal, isCritical: resultForm.isCritical, notes: resultForm.notes }); setResultForm(null); }} className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0">
               <CheckCircle2 className="w-3.5 h-3.5" /> Save Result
             </button>
             <button onClick={() => setResultForm(null)} className={`px-4 py-2.5 text-xs font-bold rounded-xl ${text.muted}`}>Cancel</button>
