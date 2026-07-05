@@ -299,12 +299,65 @@ export function subscribeToGovernance(
  * did NOT find a patient, or a tap-to-capture CARD_BIND for the registration form. Dedicated
  * topic, hospital-scoped (SUBSCRIBE authz = canAccessHospital). Payload is a small
  * { type, cardId, patientName?, identityId?, nationalId?, linkedHospitalCount? } map.
+ *
+ * ── Fan-out multiplexer ──
+ * The RFID topic uniquely has MANY concurrent UI consumers: the always-on desk listener
+ * mounted at the app root, PLUS the page/modal card-capture flows (registration form,
+ * identity resolution, replace-card). The generic subscribeToTopic enforces
+ * one-subscriber-per-topic — a new subscribe drops the prior one — so a naive shared
+ * subscription would let whichever component mounted last silently steal the channel, and
+ * unmounting it would leave the topic with NO subscriber (the desk goes deaf). We multiplex
+ * here instead: ONE underlying topic subscription fanned out to every registered listener.
+ * First listener opens it; last listener closes it; a reconnect (connection-generation bump)
+ * re-establishes it centrally, so no consumer has to track the generation itself.
  */
+let rfidTopic: string | null = null;
+let rfidUnsub: (() => void) | null = null;
+let rfidConnUnsub: (() => void) | null = null;
+const rfidListeners = new Set<(event: any) => void>();
+
+function openRfidSubscription() {
+  if (!rfidTopic) return;
+  rfidUnsub = subscribeToTopic(rfidTopic, (event: any) => {
+    // Snapshot the set — a listener may unsubscribe during dispatch.
+    for (const listener of [...rfidListeners]) {
+      try { listener(event); } catch (e) { console.error('[WS] rfid listener threw', e); }
+    }
+  });
+}
+
 export function subscribeToRfidEvents(
   hospitalId: string,
   callback: (event: any) => void
 ): () => void {
-  return subscribeToTopic(`/topic/rfid/${hospitalId}`, callback);
+  const topic = `/topic/rfid/${hospitalId}`;
+  // Hospital changed (e.g. re-login as a different hospital's user): tear the whole
+  // fan-out down before rebuilding for the new topic.
+  if (rfidTopic && rfidTopic !== topic) {
+    rfidUnsub?.(); rfidUnsub = null;
+    rfidConnUnsub?.(); rfidConnUnsub = null;
+    rfidListeners.clear();
+    rfidTopic = null;
+  }
+  rfidListeners.add(callback);
+  if (!rfidTopic) {
+    rfidTopic = topic;
+    openRfidSubscription();
+    // Re-establish the single underlying subscription after any reconnect / client rebuild
+    // (the generic layer drops live subs then), so every fan-out consumer survives it.
+    rfidConnUnsub = subscribeConnectionState(() => {
+      rfidUnsub?.();
+      openRfidSubscription();
+    });
+  }
+  return () => {
+    rfidListeners.delete(callback);
+    if (rfidListeners.size === 0) {
+      rfidUnsub?.(); rfidUnsub = null;
+      rfidConnUnsub?.(); rfidConnUnsub = null;
+      rfidTopic = null;
+    }
+  };
 }
 
 /**

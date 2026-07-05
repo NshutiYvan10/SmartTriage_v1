@@ -197,6 +197,14 @@ public class PatientService {
 
     public PatientResponse getPatientById(UUID id) {
         Patient patient = findPatientOrThrow(id);
+        // The RFID card lives on the LAZY personIdentity association (Patient.personIdentity,
+        // @ManyToOne(FetchType.LAZY)). findByIdAndIsActiveTrue does not fetch it, so the mapper's
+        // rfidCardIfLoaded would see an uninitialized proxy and return null even when a card
+        // exists. Initialize it here — inside this class's read-only transaction — so the mapper
+        // returns the real card UID. Hibernate.initialize(null) is a no-op, so unidentified
+        // patients (no linked identity) are unaffected. Scoped to this single-row detail read;
+        // list/search paths stay lazy to avoid an N+1 over person_identities.
+        org.hibernate.Hibernate.initialize(patient.getPersonIdentity());
         return PatientMapper.toResponse(patient);
     }
 

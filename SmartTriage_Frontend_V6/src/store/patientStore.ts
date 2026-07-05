@@ -99,6 +99,10 @@ function mapToPatient(p: PatientResponse, v?: VisitResponse): Patient & Record<s
     chronicConditions: p.chronicConditions || undefined,
     medicalRecordNumber: p.medicalRecordNumber || undefined,
     dateOfBirth: p.dateOfBirth || undefined,
+    // System-wide RFID card (on the shared identity). Carry it so a patient resolved directly
+    // from a PatientResponse (e.g. the detail view's fetch-by-id fallback) shows the card +
+    // "Replace" instead of a misleading "Assign".
+    rfidCardId: (p as { rfidCardId?: string | null }).rfidCardId || undefined,
     referringFacility: v?.referringFacility || undefined,
     // Shift-handoff aggregate signals — backend populates these on
     // active-visits list endpoints. Carry them through so patient-card
@@ -110,6 +114,17 @@ function mapToPatient(p: PatientResponse, v?: VisitResponse): Patient & Record<s
     pendingMedicationsCount: v?.pendingMedicationsCount ?? undefined,
     hasOpenIcuEscalation: v?.hasOpenIcuEscalation ?? undefined,
   };
+}
+
+/**
+ * Map a bare patient record (no visit context) into the store's Patient shape. Exported so the
+ * patient-detail view can resolve a patient FETCHED BY ID when it isn't in the visit-keyed store
+ * — e.g. a just-opened visit reached via the RFID desk "Open visit" or the registry "Start visit
+ * here", where the route param is the patient id and the active-visit list hasn't refreshed yet.
+ * The resulting row keys by patient id (v is absent, so `id` falls back to `p.id`).
+ */
+export function patientResponseToPatient(p: PatientResponse): Patient & Record<string, any> {
+  return mapToPatient(p);
 }
 
 interface PatientState {

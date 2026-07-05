@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { Badge } from '@/components/ui/Badge';
-import { usePatientStore } from '@/store/patientStore';
+import { usePatientStore, patientResponseToPatient } from '@/store/patientStore';
 import { useAuthStore } from '@/store/authStore';
 import { patientApi } from '@/api/patients';
 import { ReplaceCardModal } from './ReplaceCardModal';
@@ -72,12 +72,39 @@ export function PatientDetailView() {
   const { glassCard, isDark, text } = useTheme();
   const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
 
-  const patient: (Patient & Record<string, any>) | undefined =
+  const storePatient: (Patient & Record<string, any>) | undefined =
     usePatientStore((s) => s.getPatient(patientId || ''));
   const updatePatient = usePatientStore((s) => s.updatePatient);
   const role = useAuthStore((s) => s.user?.role);
   const [showReplaceCard, setShowReplaceCard] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+
+  // ── Fetch-by-id fallback ──
+  // The active-visit store keys rows by VISIT id, but the registrar flows navigate here by
+  // PATIENT id (RFID desk "Open visit", registry "Start visit here", registry/dashboard row
+  // clicks) — and a just-opened visit hasn't refreshed into the store yet. So the store lookup
+  // misses and the page would show "Patient Not Found". When that happens, fetch the record by
+  // id and hold it in LOCAL state (not the store, to avoid phantom rows in the visit-keyed
+  // lists), so the page resolves. `reloadKey` forces a re-fetch after an edit.
+  const [fetched, setFetched] = useState<(Patient & Record<string, any>) | null>(null);
+  const [resolving, setResolving] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    if (storePatient) { setFetched(null); setLoadFailed(false); return; }
+    if (!patientId) return;
+    let cancelled = false;
+    setResolving(true);
+    setLoadFailed(false);
+    patientApi.getById(patientId)
+      .then((p) => { if (!cancelled) setFetched(patientResponseToPatient(p)); })
+      .catch(() => { if (!cancelled) { setFetched(null); setLoadFailed(true); } })
+      .finally(() => { if (!cancelled) setResolving(false); });
+    return () => { cancelled = true; };
+  }, [storePatient, patientId, reloadKey]);
+
+  const patient: (Patient & Record<string, any>) | undefined = storePatient || fetched || undefined;
   // The replace endpoint is keyed on the real patient id; the visit projection carries it on
   // `patientId`, otherwise the route param IS the patient id.
   const realPatientId = (patient as any)?.patientId || patientId || '';
@@ -129,7 +156,18 @@ export function PatientDetailView() {
     return () => { cancelled = true; };
   }, [patient, updatePatient]);
 
-  if (!patient || !patientId) {
+  if (!patient) {
+    // Still fetching the record by id — show a spinner rather than a premature "Not Found".
+    if (patientId && resolving && !loadFailed) {
+      return (
+        <div className="min-h-full flex items-center justify-center p-4">
+          <div className="text-center rounded-2xl p-8 animate-fade-in" style={glassCard}>
+            <div className="w-10 h-10 mx-auto mb-4 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+            <p className={`${text.body}`}>Loading patient record…</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-full flex items-center justify-center p-4">
         <div className="text-center rounded-2xl p-8 animate-fade-in" style={glassCard}>
@@ -429,7 +467,12 @@ export function PatientDetailView() {
         <EditPatientModal
           patient={patient}
           realPatientId={realPatientId}
-          onClose={() => setShowEdit(false)}
+          onClose={() => {
+            setShowEdit(false);
+            // A fetched-by-id record isn't in the store, so the modal's store merge is a no-op
+            // for it — re-fetch to reflect the saved demographics locally.
+            if (!storePatient) setReloadKey((k) => k + 1);
+          }}
         />
       )}
 
@@ -441,6 +484,8 @@ export function PatientDetailView() {
           onClose={() => setShowReplaceCard(false)}
           onReplaced={(newCard) => {
             updatePatient(patient.id, { rfidCardId: newCard } as Partial<Patient> & { rfidCardId?: string });
+            // Reflect the new card on a fetched-by-id record too (not in the store).
+            setFetched((prev) => (prev ? { ...prev, rfidCardId: newCard } : prev));
             setShowReplaceCard(false);
           }}
         />

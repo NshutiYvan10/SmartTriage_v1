@@ -86,7 +86,8 @@ export type AppPage =
   | 'admin-beds'
   /** Global patient registry — REGISTRAR-only system-wide (cross-hospital) search
    *  to find a returning patient and start a visit here without re-registering. */
-  | 'registry';
+  | 'registry'
+  | 'registration-desk';
 
 /** Feature-level permissions (things that can be toggled inside a page) */
 export type AppFeature =
@@ -213,6 +214,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   // pages are intentionally not surfaced in the admin sidebar.
   HOSPITAL_ADMIN: [
     'dashboard', 'admin', 'admin-users', 'iot-devices', 'admin-beds',
+    'registration-desk',
     'settings', 'notifications', 'profile',
     'audit-trail', 'reports', 'quality', 'registrar-reports',
     'safety-incidents', 'med-safety-overrides', 'moh-reports',
@@ -300,6 +302,8 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     // not re-registered. REGISTRAR-only; clinical staff keep the
     // hospital-scoped Patients list.
     'registry',
+    // Dedicated RFID tap station — live reader status, tap-to-identify, start-visit.
+    'registration-desk',
     // Alert Center — CATEGORY-scoped server-side to identity-reconciliation
     // reminders only (the desk owns chasing down unidentified patients);
     // escalates to the charge nurse if unresolved. No clinical noise.
