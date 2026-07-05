@@ -861,6 +861,11 @@ export interface PerformTriageRequest {
   urgModeratePain?: boolean;
   urgLacerationAbscess?: boolean;
   urgForeignBodyAspiration?: boolean;
+  // Additional (non-national-form) signs the assessor checked — each drives the triage
+  // colour at its tier and is persisted. Emergency → RED, very-urgent → ORANGE, urgent → YELLOW.
+  additionalEmergencySigns?: string[];
+  additionalVeryUrgentSigns?: string[];
+  additionalUrgentSigns?: string[];
   // V38 — KFH peds form Very Urgent (peds-only)
   vuPedsMoreSleepyThanNormal?: boolean;
   vuPedsInconsolableSeverePain?: boolean;

@@ -42,13 +42,17 @@ import {
   type AdultCategoryResult,
 } from '@/utils/adultTEWS';
 import {
-  VERY_URGENT_DISCRIMINATORS,
-  URGENT_DISCRIMINATORS,
   hasCheckedDiscriminators,
   getCheckedDiscriminatorLabels,
   isDiscriminatorRequired,
   type DiscriminatorGroup,
 } from '@/utils/discriminators';
+import {
+  // Unified adult VU/URG lists = national signs (1:1 to backend flags) + kept extras.
+  ADULT_VU_DISCRIMINATORS as VERY_URGENT_DISCRIMINATORS,
+  ADULT_URG_DISCRIMINATORS as URGENT_DISCRIMINATORS,
+  routeDiscriminators,
+} from '@/utils/adultTriageSigns';
 
 // ════════════════════════════════════════════════════════════
 // Emergency Signs definitions - Adult-specific
@@ -79,6 +83,7 @@ const EMERGENCY_SIGN_GROUPS: EmergencySignGroup[] = [
     color: 'text-red-600',
     bgColor: 'bg-red-50',
     signs: [
+      { id: 'not_breathing', label: 'Not breathing' },
       { id: 'patent_airway', label: 'Patent airway' },
       { id: 'cervical_immobilization', label: 'Cervical spine immobilization (if indicated)' },
       { id: 'obstruction_stridor', label: 'Obstruction / Stridor' },
@@ -106,6 +111,8 @@ const EMERGENCY_SIGN_GROUPS: EmergencySignGroup[] = [
     color: 'text-rose-600',
     bgColor: 'bg-rose-50',
     signs: [
+      { id: 'cardiac_arrest', label: 'Cardiac arrest' },
+      { id: 'stab_gun_neck_chest', label: 'Stab / gunshot wound to neck or chest' },
       { id: 'heart_rate', label: 'Heart rate', hasField: true, fieldLabel: 'HR', fieldUnit: 'bpm', fieldType: 'number' },
       { id: 'central_pulses', label: 'Central pulses present' },
       { id: 'peripheral_pulses', label: 'Peripheral pulses present' },
@@ -139,6 +146,7 @@ const EMERGENCY_SIGN_GROUPS: EmergencySignGroup[] = [
     color: 'text-amber-600',
     bgColor: 'bg-amber-50',
     signs: [
+      { id: 'burn_face_inhalation', label: 'Burn — face / inhalation injury' },
       { id: 'rash_petechiae', label: 'Rash / Petechiae / Purpura' },
       { id: 'fever_history', label: 'Fever (history)' },
       { id: 'hypothermia', label: 'Hypothermia' },
@@ -150,10 +158,19 @@ const EMERGENCY_SIGN_GROUPS: EmergencySignGroup[] = [
   },
 ];
 
+// Emergency-section sign ids that force RED. National-form emergency signs
+// (each wired 1:1 to a backend flag) + the kept extra signs. NOTE: focal
+// neurologic deficit is NOT here — the national form places it at ORANGE
+// (very urgent), so it routes to vuFocalNeurologicDeficit instead. Coma
+// (AVPU P/U) and hypoglycaemia (glucose < 3) also force RED and are folded
+// into hasAnyCriticalSign separately.
 const CRITICAL_SIGN_IDS = [
-  'obstruction_stridor', 'apnoea_gasping', 'central_cyanosis', 'accessory_muscles',
-  'increased_wob', 'cap_refill_gt3', 'cold_peripheries', 'posturing',
-  'neck_stiffness', 'tracheal_deviation', 'active_bleeding', 'focal_neuro_deficit',
+  // National-form emergency signs
+  'not_breathing', 'obstruction_stridor', 'apnoea_gasping', 'accessory_muscles', 'increased_wob',
+  'cardiac_arrest', 'active_bleeding', 'stab_gun_neck_chest', 'posturing', 'rash_petechiae',
+  'burn_face_inhalation',
+  // Extra (non-national) signs kept at RED — poor perfusion / airway threat
+  'central_cyanosis', 'cap_refill_gt3', 'cold_peripheries', 'tracheal_deviation', 'neck_stiffness',
 ];
 
 // ════════════════════════════════════════════════════════════
@@ -505,7 +522,21 @@ export function AdultTriageForm() {
   const normalRanges = useMemo(() => getAdultNormalRanges(), []);
   const tewsScoring = useMemo(() => calculateAdultTEWS(tewsInput), [tewsInput]);
   const tewsColumns = useMemo(() => getAdultTEWSColumns(tewsInput), [tewsInput]);
-  const hasAnyCriticalSign = useMemo(() => CRITICAL_SIGN_IDS.some((id) => checkedSigns[id]), [checkedSigns]);
+  const hasAnyCriticalSign = useMemo(() => {
+    if (CRITICAL_SIGN_IDS.some((id) => checkedSigns[id])) return true;
+    // Coma and hypoglycaemia are national EMERGENCY signs derived from AVPU / glucose (not
+    // checkboxes) — they force RED on the backend, so the preview must reflect them too.
+    if (tewsInput.avpu === 'PAIN' || tewsInput.avpu === 'UNRESPONSIVE') return true;
+    const rawGlucose = fieldValues['blood_glucose'] || bloodGlucose;
+    if (rawGlucose) {
+      const n = parseFloat(rawGlucose);
+      if (!isNaN(n)) {
+        const mmol = glucoseUnit === 'MG_DL' ? n / 18 : n;
+        if (mmol < 3) return true;
+      }
+    }
+    return false;
+  }, [checkedSigns, tewsInput.avpu, fieldValues, bloodGlucose, glucoseUnit]);
   const spo2Value = spo2 !== '' ? parseInt(spo2) : null;
 
   // Discriminator computed
@@ -621,77 +652,80 @@ export function AdultTriageForm() {
         };
         const glucoseMmol = toMmolGlucose(bloodGlucose);
         const dynGlucoseMmol = toMmolGlucose(fieldValues['blood_glucose']);
+        // Route discriminators: national signs set their 1:1 flags (explicit below); extra
+        // (non-national) signs go to the additional-signs channel (labels). Nothing dropped.
+        const vuRoute = routeDiscriminators(VERY_URGENT_DISCRIMINATORS, checkedVeryUrgent);
+        const urgRoute = routeDiscriminators(URGENT_DISCRIMINATORS, checkedUrgent);
+        // Extra EMERGENCY-section signs (not on the national form) → additional-emergency channel.
+        const EXTRA_EMERGENCY_SIGNS: Array<[string, string]> = [
+          ['central_cyanosis', 'Central cyanosis'],
+          ['cap_refill_gt3', 'Capillary refill > 3 s'],
+          ['cold_peripheries', 'Cold peripheries'],
+          ['tracheal_deviation', 'Tracheal deviation'],
+          ['neck_stiffness', 'Neck stiffness / meningism'],
+        ];
+        const additionalEmergencySigns = EXTRA_EMERGENCY_SIGNS
+          .filter(([id]) => checkedSigns[id]).map(([, label]) => label);
         const triageResponse = await triageApi.perform({
           visitId: targetPatientId,
           // B10 — persist the phone field (previously dropped: no DTO slot).
           // Sent only when the nurse entered/edited a value.
           phoneNumber: phoneNumber.trim() || undefined,
-          // Emergency signs
-          hasAirwayCompromise: !!checkedSigns['obstruction_stridor'],
+          // ── Emergency signs (national form) — each wired 1:1, nothing hard-coded ──
+          hasAirwayCompromise: !!checkedSigns['not_breathing'] || !!checkedSigns['obstruction_stridor'],
           hasBreathingDistress: !!checkedSigns['increased_wob'] || !!checkedSigns['accessory_muscles'],
           hasSevereRespiratoryDistress: !!checkedSigns['apnoea_gasping'],
-          hasCardiacArrest: false,
+          hasCardiacArrest: !!checkedSigns['cardiac_arrest'],
           hasUncontrolledHaemorrhage: !!checkedSigns['active_bleeding'],
+          hasStabGunWoundNeckChest: !!checkedSigns['stab_gun_neck_chest'],
           hasConvulsions: !!checkedSigns['posturing'],
           hasComa: tewsInput.avpu === 'PAIN' || tewsInput.avpu === 'UNRESPONSIVE',
           hasPurpuricRash: !!checkedSigns['rash_petechiae'],
-          hasBurnFaceInhalation: false,
+          hasBurnFaceInhalation: !!checkedSigns['burn_face_inhalation'],
           hasHypoglycaemia: dynGlucoseMmol != null && dynGlucoseMmol < 3.0,
-          hasStabGunWoundNeckChest: false,
           // TEWS components
           mobility: tewsInput.mobility as 'WALKING' | 'WITH_HELP' | 'STRETCHER',
           avpu: avpuMap[tewsInput.avpu] || 'ALERT',
           traumaStatus: tewsInput.trauma ? 'TRAUMA' : 'NO_TRAUMA',
-          // ── Discriminators — Very Urgent ──
-          //
-          // The adult VU/URG checkbox IDs in src/utils/discriminators.ts
-          // are prefixed (`vu_*` / `u_*`) and aligned to the clinical
-          // categories shown in the UI. The backend's
-          // PerformTriageRequest fields are the Rwanda-standard fixed
-          // discriminator set. We map each backend field to the closest
-          // semantic UI item; items in the rich UI list that have no
-          // backend slot are left unmapped for now (Option A scope).
-          // The emergency-signs section (`checkedSigns`) uses unprefixed
-          // IDs that match the EMERGENCY_SIGN_GROUPS definition and is
-          // OR'd in where the same flag appears in both places.
+          // ── Very Urgent discriminators (national form) — 1:1 from the unified list.
+          // Extra (non-national) VU signs go via additionalVeryUrgentSigns below. Focal
+          // neurologic deficit is ORANGE on the form, so the emergency-section checkbox is
+          // OR'd into the VU flag (not RED). ──
           vuFocalNeurologicDeficit:
-            !!checkedVeryUrgent['vu_acute_focal_deficit']
-            || !!checkedSigns['focal_neuro_deficit'],
-          vuAlteredMentalStatus: !!checkedVeryUrgent['vu_severe_headache'],
-          vuChestPain:
-            !!checkedSigns['chest_pain']
-            || !!checkedVeryUrgent['vu_chest_pain'],
-          vuPoisoningOverdose: false, // no UI source in adult discriminators
-          vuShortnessOfBreath: !!checkedVeryUrgent['vu_acute_asthma'],
-          vuAggression: false, // no UI source in adult discriminators
-          vuCoughingVomitingBlood:
-            !!checkedVeryUrgent['vu_haemoptysis']
-            || !!checkedVeryUrgent['vu_gi_haemorrhage'],
-          vuDiabeticHighGlucose: !!checkedVeryUrgent['vu_diabetic_emergency'],
-          vuPregnantAbdominalPain: false, // no UI source in adult VU
-          vuBurnOver20Percent: false, // no UI source in adult VU
+            !!checkedVeryUrgent['vu_focal_neurologic_deficit'] || !!checkedSigns['focal_neuro_deficit'],
+          vuAlteredMentalStatus: !!checkedVeryUrgent['vu_altered_mental_status'],
+          vuChestPain: !!checkedVeryUrgent['vu_chest_pain'] || !!checkedSigns['chest_pain'],
+          vuPoisoningOverdose: !!checkedVeryUrgent['vu_poisoning_overdose'],
+          vuPregnantAbdominalPain: !!checkedVeryUrgent['vu_pregnant_abdominal_pain'],
+          vuCoughingVomitingBlood: !!checkedVeryUrgent['vu_coughing_vomiting_blood'],
+          vuDiabeticHighGlucose: !!checkedVeryUrgent['vu_diabetic_high_glucose'],
+          vuAggression: !!checkedVeryUrgent['vu_aggression'],
+          vuShortnessOfBreath: !!checkedVeryUrgent['vu_shortness_of_breath'],
+          vuBurnOver20Percent: !!checkedVeryUrgent['vu_burn_over_20_percent'],
           vuOpenFracture: !!checkedVeryUrgent['vu_open_fracture'],
-          vuThreatenedLimb: !!checkedVeryUrgent['vu_limb_ischaemia'],
-          vuEyeInjury: !!checkedVeryUrgent['vu_eye_injury_vision'],
-          vuLargeJointDislocation: false, // no UI source in adult VU
-          vuSevereMechanismOfInjury: !!checkedVeryUrgent['vu_suspected_spinal'],
-          vuVerySeverePain: false, // no UI source in adult VU
-          vuPregnantAbdominalTrauma: false, // no UI source in adult VU
-          // ── Discriminators — Urgent ──
-          urgUnableToDrinkVomits: !!checkedUrgent['u_vomiting_dehydration'],
-          urgAbdominalPain: !!checkedUrgent['u_abdominal_pain_moderate'],
-          urgVeryPale: false, // no UI source in adult URG
-          urgPregnantVaginalBleeding: false, // no UI source in adult URG
-          urgDiabeticVeryHighGlucose: false, // no UI source in adult URG
-          urgFingerToeDislocation: !!checkedUrgent['u_joint_dislocation'],
-          urgClosedFracture: !!checkedUrgent['u_closed_fracture'],
-          urgBurnWithoutUrgentSigns: !!checkedUrgent['u_minor_burns'],
-          urgPregnantTraumaNonAbdominal: false, // no UI source in adult URG
-          urgModeratePain: !!checkedUrgent['u_moderate_pain'],
-          urgLacerationAbscess:
-            !!checkedUrgent['u_laceration_sutures']
-            || !!checkedUrgent['u_abscess_cellulitis'],
-          urgForeignBodyAspiration: false, // no UI source in adult URG
+          vuThreatenedLimb: !!checkedVeryUrgent['vu_threatened_limb'],
+          vuEyeInjury: !!checkedVeryUrgent['vu_eye_injury'],
+          vuLargeJointDislocation: !!checkedVeryUrgent['vu_large_joint_dislocation'],
+          vuSevereMechanismOfInjury: !!checkedVeryUrgent['vu_severe_mechanism_of_injury'],
+          vuVerySeverePain: !!checkedVeryUrgent['vu_very_severe_pain'],
+          vuPregnantAbdominalTrauma: !!checkedVeryUrgent['vu_pregnant_abdominal_trauma'],
+          // ── Urgent discriminators (national form) — 1:1. Extras via additionalUrgentSigns. ──
+          urgUnableToDrinkVomits: !!checkedUrgent['urg_unable_to_drink_vomits'],
+          urgAbdominalPain: !!checkedUrgent['urg_abdominal_pain'],
+          urgVeryPale: !!checkedUrgent['urg_very_pale'],
+          urgPregnantVaginalBleeding: !!checkedUrgent['urg_pregnant_vaginal_bleeding'],
+          urgDiabeticVeryHighGlucose: !!checkedUrgent['urg_diabetic_very_high_glucose'],
+          urgFingerToeDislocation: !!checkedUrgent['urg_finger_toe_dislocation'],
+          urgClosedFracture: !!checkedUrgent['urg_closed_fracture'],
+          urgBurnWithoutUrgentSigns: !!checkedUrgent['urg_burn_without_urgent_signs'],
+          urgPregnantTraumaNonAbdominal: !!checkedUrgent['urg_pregnant_trauma_non_abdominal'],
+          urgModeratePain: !!checkedUrgent['urg_moderate_pain'],
+          urgLacerationAbscess: !!checkedUrgent['urg_laceration_abscess'],
+          urgForeignBodyAspiration: !!checkedUrgent['urg_foreign_body_aspiration'],
+          // ── Additional (non-national) signs — kept, drive acuity, persisted ──
+          additionalEmergencySigns,
+          additionalVeryUrgentSigns: vuRoute.extraLabels,
+          additionalUrgentSigns: urgRoute.extraLabels,
           // Clinical metadata
           presentingComplaints: chiefComplaint,
           clinicalNotes: discriminatorNotes || undefined,
@@ -725,6 +759,18 @@ export function AdultTriageForm() {
             ? new Date(doctorAttendedAt).toISOString()
             : undefined,
         });
+
+        // 2a — the SERVER is the single source of truth for acuity. Reconcile the store with
+        // the category/score the backend actually computed (now reflecting the national signs
+        // AND the extra signs), so the displayed acuity can never diverge from the recorded
+        // medico-legal category.
+        if (triageResponse.triageCategory) {
+          assignCategory(
+            targetPatientId,
+            triageResponse.triageCategory,
+            triageResponse.tewsScore ?? tewsScoring.totalScore,
+          );
+        }
 
         // Option A — bed assignment now happens in the same transaction
         // as the triage on the backend. Three response shapes:
