@@ -54,6 +54,16 @@ public class AlertEscalationService {
     private static final int TIER_3_MINUTES = 5;
     /** A CRITICAL ambulance pre-arrival (RED / lights) unacknowledged this long is re-alarmed. */
     private static final int EMS_PREARRIVAL_REESCALATE_MINUTES = 2;
+    /**
+     * Once an alert has reached the top of its escalation path, an unacknowledged
+     * instance is RE-PAGED AGAIN every this-many minutes — a life-critical alert must
+     * NOT fall silent after a single top-tier page. Applies to the doctor Tier-3 loop
+     * and the generic time-critical re-broadcast loop. The re-page keeps widening/
+     * re-alarming until a human acknowledges (which, for CRITICAL alerts, now requires a
+     * documented reason — see ClinicalAlertService.acknowledgeAlert) or the alert/visit
+     * is closed (isActive=false), at which point the finders stop returning it.
+     */
+    private static final int TIER_REPEAT_MINUTES = 5;
 
     /**
      * Create and route a doctor notification alert for a triaged patient.
@@ -160,34 +170,45 @@ public class AlertEscalationService {
 
             long minutesSinceEscalation = ChronoUnit.MINUTES.between(alert.getEscalatedAt(), Instant.now());
             UUID hospitalId = alert.getVisit().getPatient().getHospital().getId();
+            int tier = alert.getEscalationTier();
 
-            if (alert.getEscalationTier() == 1 && minutesSinceEscalation >= TIER_2_MINUTES) {
+            if (tier == 1 && minutesSinceEscalation >= TIER_2_MINUTES) {
                 escalateToTier2(alert, hospitalId);
-            } else if (alert.getEscalationTier() == 2 && minutesSinceEscalation >= TIER_3_MINUTES) {
+            } else if (tier == 2 && minutesSinceEscalation >= TIER_3_MINUTES) {
+                escalateToTier3(alert, hospitalId);
+            } else if (tier >= 3 && minutesSinceEscalation >= TIER_REPEAT_MINUTES) {
+                // NO DEAD-END: an unacknowledged doctor alert that already reached the top
+                // tier keeps re-paging all-staff + audible every TIER_REPEAT_MINUTES until it
+                // is acknowledged. escalateToTier3 increments the tier so the client — which
+                // re-alarms on a tier INCREASE — beeps again each cycle.
                 escalateToTier3(alert, hospitalId);
             }
         }
 
-        // Time-critical clinical alerts (sepsis, ICU escalation, critical
-        // lab unack, deterioration) — separate pipeline because they don't
-        // share DOCTOR_NOTIFICATION's tier semantics, but they share the
-        // need for "if nobody ack'd this, re-broadcast to everyone".
-        // Single bump: if the alert has been unack'd for >= TIER_3_MINUTES
-        // (the most-aggressive threshold the existing pipeline uses), we
-        // re-publish hospital-wide with the audible-alarm flag so the
-        // CriticalAlertNotifier on every connected client beeps + flashes
-        // again. Idempotent — we only re-publish once per alert by
-        // tracking escalatedAt the same way the doctor pipeline does.
+        // Time-critical clinical alerts (sepsis, ICU escalation, critical lab unack,
+        // deterioration, hypoglycemia, missed dose, fast-track, …) — separate pipeline
+        // because they don't share DOCTOR_NOTIFICATION's tier semantics, but they share the
+        // need for "if nobody ack'd this, re-broadcast to everyone."
+        //
+        // NO DEAD-END (patient-safety fix): the first re-page fires once the ack window
+        // (TIER_3_MINUTES from creation) elapses, and then the alert is RE-PAGED AGAIN every
+        // TIER_REPEAT_MINUTES for as long as it stays unacknowledged. Previously this bumped
+        // exactly once (escalatedAt != null → skip forever), so a life-critical alert nobody
+        // acknowledged fell permanently silent after a single beep. rebroadcastTimeCriticalAlert
+        // increments the tier each cycle so the client re-alarms; escalatedAt is the
+        // "last paged" clock, and the finder still excludes acknowledged/inactive alerts.
         for (ClinicalAlert alert : clinicalAlertRepository
                 .findUnacknowledgedTimeCriticalAlerts(AlertType.timeCriticalTypes())) {
             try {
-                if (alert.getEscalatedAt() != null) {
-                    continue; // already re-paged once
-                }
-                long minutesSinceCreate = ChronoUnit.MINUTES
-                        .between(alert.getCreatedAt() != null ? alert.getCreatedAt() : Instant.now(), Instant.now());
-                if (minutesSinceCreate < TIER_3_MINUTES) {
-                    continue; // still inside the ack window
+                Instant reference = alert.getEscalatedAt() != null
+                        ? alert.getEscalatedAt()
+                        : (alert.getCreatedAt() != null ? alert.getCreatedAt() : Instant.now());
+                long minutesSinceReference = ChronoUnit.MINUTES.between(reference, Instant.now());
+                // First page: TIER_3_MINUTES after creation. Subsequent re-pages: every
+                // TIER_REPEAT_MINUTES after the previous page (escalatedAt).
+                long threshold = alert.getEscalatedAt() == null ? TIER_3_MINUTES : TIER_REPEAT_MINUTES;
+                if (minutesSinceReference < threshold) {
+                    continue; // still inside the current ack window
                 }
                 UUID hospitalId = alert.getVisit().getPatient().getHospital().getId();
                 rebroadcastTimeCriticalAlert(alert, hospitalId);
@@ -197,18 +218,17 @@ public class AlertEscalationService {
             }
         }
 
-        // Incoming CRITICAL ambulance pre-arrivals (RED / lights). These fire
-        // once on submit; if the receiving team doesn't acknowledge a crashing
-        // patient who may be only minutes out, re-alarm hospital-wide on a
-        // SHORT fuse (the ETA can be < 5 min, so we don't wait the full
-        // time-critical window). Idempotent via escalatedAt (the finder already
-        // filters escalatedAt IS NULL).
-        for (ClinicalAlert alert : clinicalAlertRepository.findUnescalatedCriticalEmsPreArrivals()) {
+        // Incoming CRITICAL ambulance pre-arrivals (RED / lights). These fire once on submit;
+        // if the receiving team doesn't acknowledge a crashing patient who may be only minutes
+        // out, re-alarm hospital-wide on a SHORT fuse (the ETA can be < 5 min). NO DEAD-END:
+        // re-paged every EMS_PREARRIVAL_REESCALATE_MINUTES until acknowledged, not just once.
+        for (ClinicalAlert alert : clinicalAlertRepository.findUnacknowledgedCriticalEmsPreArrivals()) {
             try {
-                long minutesSinceCreate = ChronoUnit.MINUTES
-                        .between(alert.getCreatedAt() != null ? alert.getCreatedAt() : Instant.now(), Instant.now());
-                if (minutesSinceCreate < EMS_PREARRIVAL_REESCALATE_MINUTES) {
-                    continue; // still inside the ack window
+                Instant reference = alert.getEscalatedAt() != null
+                        ? alert.getEscalatedAt()
+                        : (alert.getCreatedAt() != null ? alert.getCreatedAt() : Instant.now());
+                if (ChronoUnit.MINUTES.between(reference, Instant.now()) < EMS_PREARRIVAL_REESCALATE_MINUTES) {
+                    continue; // still inside the current ack window
                 }
                 UUID hospitalId = alert.getVisit().getPatient().getHospital().getId();
                 rebroadcastTimeCriticalAlert(alert, hospitalId);
@@ -233,19 +253,24 @@ public class AlertEscalationService {
                 ? ChronoUnit.MINUTES.between(alert.getCreatedAt(), Instant.now())
                 : 0;
         alert.setEscalatedAt(Instant.now());
-        // Bump the tier so the client recognises a NEW escalation event (the notifier keys
-        // on id+escalationTier and re-alarms on an increase). escalatedAt IS NULL in the
-        // finder still guarantees we only re-page once.
+        // Bump the tier on EVERY re-page so the client recognises a NEW escalation event (the
+        // notifier keys on id+escalationTier and re-alarms on an increase). This loop now runs
+        // repeatedly for an unacknowledged alert (escalatedAt is the "last paged" clock, not a
+        // one-shot latch), so the tier climbs 2, 3, 4, … each cycle and the client beeps again.
         alert.setEscalationTier(alert.getEscalationTier() + 1);
         // Escalation RAISES urgency: an unacknowledged time-critical alert nobody has
         // touched becomes CRITICAL so it triggers the audible re-alarm. (Lower-acuity
         // turnaround types like ROUTINE/URGENT_LAB_OVERDUE are deliberately NOT in the
         // time-critical set, so this never over-promotes a routine event.)
         alert.setSeverity(AlertSeverity.CRITICAL);
-        if (alert.getMessage() == null || !alert.getMessage().contains("[ESCALATED")) {
-            alert.setMessage((alert.getMessage() != null ? alert.getMessage() : "")
-                    + "  [ESCALATED — unacknowledged for " + unackedMin + " min]");
+        // Refresh the escalation suffix each cycle so the "unacknowledged for N min" count is
+        // current (strip any previous suffix first rather than appending repeatedly).
+        String base = alert.getMessage() != null ? alert.getMessage() : "";
+        int marker = base.indexOf("  [ESCALATED");
+        if (marker >= 0) {
+            base = base.substring(0, marker);
         }
+        alert.setMessage(base + "  [ESCALATED — unacknowledged for " + unackedMin + " min]");
         clinicalAlertRepository.save(alert);
 
         // Publish the TYPED ClinicalAlertResponse so every client parses it identically to
@@ -291,15 +316,19 @@ public class AlertEscalationService {
      * Tier 3 escalation — alert EVERYONE on shift + audible alarm flag.
      */
     private void escalateToTier3(ClinicalAlert alert, UUID hospitalId) {
-        alert.setEscalationTier(3);
+        // First arrival at the top tier sets 3; each subsequent unacknowledged repeat
+        // increments (4, 5, …) so the client notifier — which re-alarms on a tier INCREASE —
+        // beeps again every cycle instead of falling silent after a single tier-3 page.
+        int nextTier = alert.getEscalationTier() < 3 ? 3 : alert.getEscalationTier() + 1;
+        alert.setEscalationTier(nextTier);
         alert.setEscalatedAt(Instant.now());
         alert.setSeverity(AlertSeverity.CRITICAL);
         alert = clinicalAlertRepository.save(alert);
 
         String patientName = alert.getVisit().getPatient().getFirstName() + " "
                 + alert.getVisit().getPatient().getLastName();
-        log.error("TIER 3 ESCALATION: Alert {} for patient {} — alerting ALL STAFF + AUDIBLE ALARM",
-                alert.getId(), patientName);
+        log.error("TIER {} ESCALATION: Alert {} for patient {} — alerting ALL STAFF + AUDIBLE ALARM",
+                nextTier, alert.getId(), patientName);
 
         ClinicalAlertResponse response = ClinicalAlertMapper.toResponse(alert);
 

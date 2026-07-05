@@ -210,17 +210,21 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
         List<ClinicalAlert> findUnacknowledgedTimeCriticalAlerts(@Param("types") java.util.Collection<AlertType> types);
 
         /**
-         * Unacknowledged, not-yet-re-escalated CRITICAL ambulance pre-arrivals
-         * (RED / lights). Fed to the escalation scheduler so a crashing inbound
-         * that nobody acknowledged gets re-alarmed before the patient arrives.
-         * escalatedAt IS NULL ensures we re-page only once.
+         * Unacknowledged CRITICAL ambulance pre-arrivals (RED / lights). Fed to the
+         * escalation scheduler so a crashing inbound that nobody acknowledged gets
+         * re-alarmed before the patient arrives.
+         *
+         * <p>NB: this deliberately does NOT filter on {@code escalatedAt}. The scheduler
+         * now re-pages an unacknowledged pre-arrival REPEATEDLY on a short fuse (using
+         * {@code escalatedAt} as the "last paged" clock), so the finder must keep returning
+         * the alert until it is acknowledged or the visit/alert is closed (isActive=false).
+         * Previously an {@code escalatedAt IS NULL} filter here made it re-page exactly once.
          */
         @Query("SELECT a FROM ClinicalAlert a WHERE a.isActive = true AND a.isAcknowledged = false " +
-                        "AND a.escalatedAt IS NULL " +
                         "AND a.alertType = com.smartTriage.smartTriage_server.common.enums.AlertType.EMS_PRE_ARRIVAL " +
                         "AND a.severity = com.smartTriage.smartTriage_server.common.enums.AlertSeverity.CRITICAL " +
                         "ORDER BY a.createdAt ASC")
-        List<ClinicalAlert> findUnescalatedCriticalEmsPreArrivals();
+        List<ClinicalAlert> findUnacknowledgedCriticalEmsPreArrivals();
 
         /**
          * Unacknowledged alerts for a specific zone — for zone doctor dashboard.
