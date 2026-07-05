@@ -188,6 +188,14 @@ public class SepsisService {
         log.info("Sepsis screening completed: Visit={}, Status={}, qSOFA={}, SIRS={}",
                 visit.getVisitNumber(), status, result.qsofaScore(), sirsScore);
 
+        // The controller maps this entity to a DTO AFTER this @Transactional method commits (the
+        // Hibernate session is then closed). Initialise the lazy associations the response mapper
+        // reads — the patient (name) and the current bed (label) — while the session is still open,
+        // so mapping can't throw LazyInitializationException. Hibernate.initialize(null) is a no-op,
+        // so a patient with no assigned bed is unaffected.
+        org.hibernate.Hibernate.initialize(visit.getPatient());
+        org.hibernate.Hibernate.initialize(visit.getCurrentBed());
+
         return screening;
     }
 

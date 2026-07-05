@@ -73,15 +73,21 @@ public final class SepsisMapper {
                 .notes(screening.getNotes())
                 .createdAt(screening.getCreatedAt());
 
-        // Visit info
+        // Visit info. currentBed and patient are LAZY on Visit; when this mapper runs outside the
+        // loading transaction (controllers map after the @Transactional service returns) an
+        // uninitialised proxy would throw LazyInitializationException. Guard with isInitialized so
+        // mapping degrades to a null label instead of a 500 — the write paths initialise these
+        // in-service so the data is present there.
         if (screening.getVisit() != null) {
             builder.visitId(screening.getVisit().getId());
             builder.visitNumber(screening.getVisit().getVisitNumber());
             builder.currentZone(screening.getVisit().getCurrentEdZone());
-            if (screening.getVisit().getCurrentBed() != null) {
+            if (screening.getVisit().getCurrentBed() != null
+                    && org.hibernate.Hibernate.isInitialized(screening.getVisit().getCurrentBed())) {
                 builder.currentBedLabel(screening.getVisit().getCurrentBed().getCode());
             }
-            if (screening.getVisit().getPatient() != null) {
+            if (screening.getVisit().getPatient() != null
+                    && org.hibernate.Hibernate.isInitialized(screening.getVisit().getPatient())) {
                 builder.patientName(
                         screening.getVisit().getPatient().getFirstName() + " " +
                                 screening.getVisit().getPatient().getLastName());

@@ -12,6 +12,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
 import { handoverApi } from '@/api/handover';
 import type { HandoverReport } from '@/api/handover';
+import { saveBlob } from '@/api/client';
 import { format } from 'date-fns';
 
 const REPORT_TYPES: { value: string; label: string }[] = [
@@ -64,7 +65,8 @@ export function HandoverPanel({ visitId }: { visitId: string }) {
   const download = async (id: string) => {
     setBusy(id); setError(null);
     try {
-      await handoverApi.downloadPdf(id);
+      const { blob, filename } = await handoverApi.downloadPdf(id);
+      saveBlob(blob, filename);   // was silently discarded — the fetched PDF never reached disk
     } catch {
       setError('Failed to download the handover PDF.');
     } finally {
