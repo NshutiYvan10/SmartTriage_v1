@@ -47,6 +47,18 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
 
     Optional<Patient> findByMedicalRecordNumberAndHospitalIdAndIsActiveTrue(String mrn, UUID hospitalId);
 
+    /**
+     * MRN-generation collision guard (mirror of {@code visitRepository.existsByVisitNumber}): is this
+     * MRN already held by an ACTIVE patient at this hospital? Scoped exactly like the
+     * {@code uq_patient_mrn_per_hospital} partial-unique index (per hospital, {@code is_active = TRUE}),
+     * so the generator's notion of "taken" matches the constraint's.
+     */
+    @Query("SELECT COUNT(p) > 0 FROM Patient p " +
+            "WHERE p.hospital.hospitalCode = :hospitalCode " +
+            "AND p.medicalRecordNumber = :mrn " +
+            "AND p.isActive = true")
+    boolean existsActiveMrn(@Param("hospitalCode") String hospitalCode, @Param("mrn") String mrn);
+
     /** All local patient rows linked to one shared cross-hospital identity (safety-summary fan-out). */
     List<Patient> findByPersonIdentityIdAndIsActiveTrue(UUID personIdentityId);
 

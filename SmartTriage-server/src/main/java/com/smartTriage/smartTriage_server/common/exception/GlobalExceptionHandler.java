@@ -196,6 +196,17 @@ public class GlobalExceptionHandler {
         if (lower.contains("users_email_key") || lower.contains("idx_user_email")) {
             return "A user with that email already exists.";
         }
+        // Registration numbering collisions. With the durable per-hospital counters (V103 for MRN,
+        // V96 for visit numbers) these are unreachable in normal operation, but if one ever fires
+        // the registrar should get a useful hint, not the generic catch-all.
+        if (lower.contains("uq_patient_mrn_per_hospital")) {
+            return "Could not assign a medical record number — a conflicting record exists. "
+                    + "Please retry; if it recurs, the MRN sequence may need reseeding (contact support).";
+        }
+        if (lower.contains("visit_number")) {
+            return "Could not assign a visit number — a conflicting record exists. "
+                    + "Please retry; if it recurs, contact support.";
+        }
         return "The request conflicts with existing data. Please refresh and try again.";
     }
 }

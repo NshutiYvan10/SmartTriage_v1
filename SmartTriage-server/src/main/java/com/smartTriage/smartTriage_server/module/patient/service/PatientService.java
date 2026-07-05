@@ -13,10 +13,12 @@ import com.smartTriage.smartTriage_server.module.patient.dto.RegisterPatientResp
 import com.smartTriage.smartTriage_server.module.patient.dto.UpdatePregnancyStatusRequest;
 import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
 import com.smartTriage.smartTriage_server.module.patient.mapper.PatientMapper;
+import com.smartTriage.smartTriage_server.module.patient.repository.MrnSequenceCounterRepository;
 import com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.visit.mapper.VisitMapper;
 import com.smartTriage.smartTriage_server.module.visit.repository.VisitRepository;
+import com.smartTriage.smartTriage_server.module.visit.repository.VisitSequenceCounterRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -28,7 +30,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Patient service — manages patient registration and identity.
@@ -46,6 +47,11 @@ public class PatientService {
     private final PatientRepository patientRepository;
     private final VisitRepository visitRepository;
     private final HospitalService hospitalService;
+    /** Durable, per-hospital, restart-proof MRN + visit-number sequences. Replace the old static
+     *  in-memory AtomicLong counters that reset on restart and re-issued numbers that already
+     *  existed (the post-restart "conflicts with existing data" registration failure). */
+    private final MrnSequenceCounterRepository mrnSequenceCounterRepository;
+    private final VisitSequenceCounterRepository visitSequenceCounterRepository;
     /** Phase 1 — links this hospital's local patient row to the shared cross-hospital identity. */
     private final PersonIdentityService personIdentityService;
     /** Registration captures STRUCTURED history rows (not just the legacy free-text columns)
@@ -61,9 +67,9 @@ public class PatientService {
     private final com.smartTriage.smartTriage_server.module.location.repository.RwCellRepository rwCellRepository;
     private final com.smartTriage.smartTriage_server.module.location.repository.RwVillageRepository rwVillageRepository;
 
-    // Simple MRN counter — in production, this would use a database sequence
-    private static final AtomicLong mrnCounter = new AtomicLong(100000);
-    private static final AtomicLong visitCounter = new AtomicLong(0);
+    /** Max attempts to skip past a pre-existing number before failing loud (mirrors VisitService). */
+    private static final int MRN_MAX_ATTEMPTS = 10;
+    private static final int VISIT_NUMBER_MAX_ATTEMPTS = 10;
 
     @Transactional
     public PatientResponse createPatient(CreatePatientRequest request) {
@@ -480,14 +486,52 @@ public class PatientService {
         return PatientMapper.toResponse(patient);
     }
 
+    /**
+     * Allocate the next per-hospital MRN from the DURABLE mrn_sequence_counters table (V103).
+     * Survives restarts and serialises concurrent/cross-instance registrations, so — unlike the old
+     * in-memory AtomicLong — it never re-issues an existing MRN after a restart. The collision-skip
+     * loop is belt-and-braces against a legacy number landing exactly where the counter next points;
+     * it advances the durable counter (monotonic) and retries. Runs inside the caller's @Transactional.
+     */
     private String generateMRN(String hospitalCode) {
-        return hospitalCode + "-" + mrnCounter.incrementAndGet();
+        for (int attempt = 0; attempt < MRN_MAX_ATTEMPTS; attempt++) {
+            long sequence = mrnSequenceCounterRepository.claimNext(hospitalCode);
+            String candidate = hospitalCode + "-" + sequence;
+            if (!patientRepository.existsActiveMrn(hospitalCode, candidate)) {
+                return candidate;
+            }
+            log.warn("[mrn] MRN {} already exists — advancing the sequence (attempt {}).",
+                    candidate, attempt + 1);
+        }
+        // Unreachable in practice; fail loud rather than silently re-issue a duplicate MRN.
+        throw new IllegalStateException(
+                "Could not allocate a unique MRN for hospital " + hospitalCode
+                        + " after " + MRN_MAX_ATTEMPTS + " attempts.");
     }
 
+    /**
+     * Allocate the next per-hospital, per-day visit number from the DURABLE visit_sequence_counters
+     * table (V96 — same mechanism VisitService uses). This registration path previously used a
+     * separate in-memory AtomicLong that reset to 0 on restart and could re-issue a same-day visit
+     * number (the visits.visit_number unique constraint then failed the whole registration). Now it
+     * draws from the durable counter and skips any pre-existing number, so it survives restarts and
+     * serialises concurrent/cross-instance registrations.
+     */
     private String generateVisitNumber(String hospitalCode) {
-        String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        long sequence = visitCounter.incrementAndGet();
-        return String.format("V-%s-%s-%05d", hospitalCode, date, sequence);
+        LocalDate today = LocalDate.now();
+        String date = today.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        for (int attempt = 0; attempt < VISIT_NUMBER_MAX_ATTEMPTS; attempt++) {
+            long sequence = visitSequenceCounterRepository.claimNext(hospitalCode, today);
+            String candidate = String.format("V-%s-%s-%05d", hospitalCode, date, sequence);
+            if (!visitRepository.existsByVisitNumber(candidate)) {
+                return candidate;
+            }
+            log.warn("[visit] Visit number {} already exists — advancing the sequence (attempt {}).",
+                    candidate, attempt + 1);
+        }
+        throw new IllegalStateException(
+                "Could not allocate a unique visit number for hospital " + hospitalCode
+                        + " after " + VISIT_NUMBER_MAX_ATTEMPTS + " attempts.");
     }
 
     private static String blankToNull(String s) {
