@@ -72,6 +72,14 @@ public class IoTDevice extends BaseEntity {
     @Column(name = "registered_by_user_id")
     private java.util.UUID registeredByUserId;
 
+    /**
+     * V104 — the Registrar this RFID registration reader is assigned to (nullable). The Hospital
+     * Admin sets and changes it; the registrar's Registration Desk surfaces their assigned reader.
+     * NULL for unassigned readers and all non-reader devices.
+     */
+    @Column(name = "assigned_registrar_user_id")
+    private java.util.UUID assignedRegistrarUserId;
+
     // ── Latest device-keyed vitals snapshot (V98) ──
     // The most recent reading the device reported, kept per-DEVICE (not per
     // visit/session). Lets a paramedic "pull from my monitor" into the EMS

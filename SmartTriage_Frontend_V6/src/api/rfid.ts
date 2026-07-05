@@ -1,4 +1,4 @@
-import { get, post, put } from './client';
+import { get, patch, post, put } from './client';
 
 /**
  * RFID registration-reader API (V95). The physical reader posts taps to the backend; the registrar
@@ -27,6 +27,8 @@ export interface RfidDevice {
   serialNumber: string;
   status: string;
   deviceType: string;
+  /** V104 — the registrar this reader is assigned to (null = unassigned). */
+  assignedRegistrarUserId?: string | null;
 }
 
 export interface OpenVisitForCardRequest {
@@ -47,6 +49,11 @@ export const rfidApi = {
 
   /** RFID readers registered at a hospital — for the desk-device picker. */
   listDevices: (hospitalId: string) => get<RfidDevice[]>(`/iot/rfid/devices/hospital/${hospitalId}`),
+
+  /** Admin-only: assign this reader to a registrar (registrarUserId=null clears it). Returns the
+   *  updated device. Backend restricts to the reader's hospital admin + validates the registrar. */
+  assignRegistrar: (deviceId: string, registrarUserId: string | null) =>
+    patch<RfidDevice>(`/iot/rfid/devices/${deviceId}/assign-registrar`, { registrarUserId }),
 
   /** Replace a patient's card (lost/damaged) — new card set on the shared identity, old one
    *  immediately stops resolving; rejects a card already held by another patient. */

@@ -2,8 +2,12 @@ package com.smartTriage.smartTriage_server.module.iot.service;
 
 import com.smartTriage.smartTriage_server.common.enums.DeviceStatus;
 import com.smartTriage.smartTriage_server.common.enums.DeviceType;
+import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
+import com.smartTriage.smartTriage_server.module.iot.dto.DeviceResponse;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
+import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
 import com.smartTriage.smartTriage_server.module.audit.service.AuditService;
 import com.smartTriage.smartTriage_server.module.patient.dto.PatientResponse;
 import com.smartTriage.smartTriage_server.module.patient.service.PersonIdentityService;
@@ -57,6 +61,7 @@ public class RfidService {
     private final VisitService visitService;
     private final RealTimeEventPublisher realTimeEventPublisher;
     private final AuditService auditService;
+    private final UserRepository userRepository;
 
     /**
      * Process a card tap from a reader (device already authenticated by API key in the controller).
@@ -141,6 +146,43 @@ public class RfidService {
         device.setRfidBindUntil(Instant.now().plus(BIND_WINDOW));
         ioTDeviceRepository.save(device);
         log.info("RFID bind mode armed on device {} for {}s", deviceId, BIND_WINDOW.toSeconds());
+    }
+
+    /**
+     * Assign this RFID reader to a registrar (or clear the assignment when {@code registrarUserId}
+     * is null). Admin-owned action (authorized in the controller). The registrar must be an ACTIVE
+     * REGISTRAR at the SAME hospital as the reader, and the device must be an RFID_READER. Audited.
+     */
+    @Transactional
+    public DeviceResponse assignRegistrar(UUID deviceId, UUID registrarUserId) {
+        IoTDevice device = ioTDeviceRepository.findById(deviceId)
+                .orElseThrow(() -> new ResourceNotFoundException("IoTDevice", "id", String.valueOf(deviceId)));
+        if (device.getDeviceType() != DeviceType.RFID_READER) {
+            throw new ClinicalBusinessException("Only a registration RFID reader can be assigned to a registrar.");
+        }
+        if (registrarUserId != null) {
+            User registrar = userRepository.findById(registrarUserId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User", "id", String.valueOf(registrarUserId)));
+            if (!registrar.isActive()) {
+                throw new ClinicalBusinessException("That user account is inactive.");
+            }
+            if (registrar.getRole() != Role.REGISTRAR) {
+                throw new ClinicalBusinessException("A registration reader can only be assigned to a Registrar.");
+            }
+            UUID readerHospital = device.getHospital().getId();
+            UUID registrarHospital = userRepository.findHospitalIdByUserId(registrarUserId).orElse(null);
+            if (registrarHospital == null || !registrarHospital.equals(readerHospital)) {
+                throw new ClinicalBusinessException("The registrar must belong to the same hospital as the reader.");
+            }
+        }
+        device.setAssignedRegistrarUserId(registrarUserId);
+        ioTDeviceRepository.save(device);
+        auditService.record("PATCH", "/api/v1/iot/rfid/devices/" + deviceId + "/assign-registrar",
+                registrarUserId != null
+                        ? "RFID_READER_ASSIGNED device=" + deviceId + " registrar=" + registrarUserId
+                        : "RFID_READER_UNASSIGNED device=" + deviceId,
+                200);
+        return IoTMapper.toResponse(device);
     }
 
     /**

@@ -40,7 +40,12 @@ export function RegistrationDeskView() {
 
   const list = readers || [];
   const online = list.filter((r) => (r.status || '').toUpperCase() === 'ONLINE');
-  const readerState: 'none' | 'online' | 'offline' = list.length === 0 ? 'none' : online.length > 0 ? 'online' : 'offline';
+  // V104 — the reader the hospital admin assigned to THIS registrar (if any). When one is assigned
+  // the desk reflects that specific reader's status; otherwise it falls back to any hospital reader.
+  const myReader = list.find((r) => !!r.assignedRegistrarUserId && r.assignedRegistrarUserId === user?.id) || null;
+  const referenceOnline = myReader ? (myReader.status || '').toUpperCase() === 'ONLINE' : online.length > 0;
+  const readerState: 'none' | 'online' | 'offline' =
+    list.length === 0 ? 'none' : referenceOnline ? 'online' : 'offline';
 
   return (
     <div className="min-h-full p-4 lg:p-6 max-w-4xl mx-auto space-y-4">
@@ -84,6 +89,13 @@ export function RegistrationDeskView() {
               <p className={`text-sm mt-1 ${text.muted}`}>Register an RFID reader for this hospital (Admin → IoT Devices), or use manual search below.</p>
             </>
           )}
+          {/* V104 — which reader is serving this registrar. */}
+          {myReader && (
+            <p className={`text-xs mt-2 ${text.muted}`}>Your reader: <span className="font-semibold">{myReader.deviceName}</span></p>
+          )}
+          {!myReader && list.length > 0 && (
+            <p className={`text-xs mt-2 ${text.muted}`}>No reader is assigned to you yet — ask your hospital admin. Any hospital reader still works.</p>
+          )}
         </div>
       )}
 
@@ -108,10 +120,12 @@ export function RegistrationDeskView() {
           <div className="flex flex-wrap gap-2">
             {list.map((r) => {
               const on = (r.status || '').toUpperCase() === 'ONLINE';
+              const mine = r.id === myReader?.id;
               return (
                 <span key={r.id} className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg"
                   style={{ background: on ? 'rgba(16,185,129,0.1)' : 'rgba(100,116,139,0.1)', color: on ? '#059669' : '#64748b' }}>
                   {on ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}{r.deviceName}
+                  {mine && <span className="ml-1 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: 'rgba(6,182,212,0.15)', color: '#0891b2' }}>Yours</span>}
                 </span>
               );
             })}

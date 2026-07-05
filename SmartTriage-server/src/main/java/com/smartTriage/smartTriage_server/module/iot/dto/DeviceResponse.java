@@ -43,6 +43,9 @@ public class DeviceResponse {
     private int dataIntervalSeconds;
     private String notes;
 
+    /** V104 — for an RFID reader, the Registrar it is assigned to (null = unassigned / non-reader). */
+    private UUID assignedRegistrarUserId;
+
     /** API key — only populated on device registration response */
     private String apiKey;
 

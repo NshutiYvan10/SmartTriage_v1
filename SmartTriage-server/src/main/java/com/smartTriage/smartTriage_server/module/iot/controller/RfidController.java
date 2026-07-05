@@ -19,6 +19,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -85,6 +86,25 @@ public class RfidController {
     public ResponseEntity<ApiResponse<PatientResponse>> replaceCard(@Valid @RequestBody ReplaceCardRequest request) {
         return ResponseEntity.ok(ApiResponse.success("Card replaced",
                 rfidService.replaceCardForPatient(request.getPatientId(), request.getNewCardId())));
+    }
+
+    /**
+     * Assign this RFID reader to a registrar (or clear it, when {@code registrarUserId} is null/blank).
+     * Admin-owned: restricted to a SUPER_ADMIN, or a HOSPITAL_ADMIN of the reader's own hospital
+     * (canOperateRfidDevice resolves the device→hospital and blocks cross-hospital admins). The
+     * service validates the registrar is an active REGISTRAR at that same hospital.
+     */
+    @PatchMapping("/devices/{deviceId}/assign-registrar")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','HOSPITAL_ADMIN') "
+            + "and @clinicalAuthz.canOperateRfidDevice(authentication, #deviceId)")
+    public ResponseEntity<ApiResponse<DeviceResponse>> assignRegistrar(
+            @PathVariable UUID deviceId,
+            @RequestBody Map<String, String> body) {
+        String raw = body != null ? body.get("registrarUserId") : null;
+        UUID registrarUserId = (raw == null || raw.isBlank()) ? null : UUID.fromString(raw);
+        DeviceResponse response = rfidService.assignRegistrar(deviceId, registrarUserId);
+        return ResponseEntity.ok(ApiResponse.success(
+                registrarUserId != null ? "Reader assigned to registrar" : "Reader unassigned", response));
     }
 
     /** RFID readers registered at a hospital — for the registration desk-device picker. */

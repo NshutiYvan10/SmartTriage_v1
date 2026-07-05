@@ -1415,6 +1415,8 @@ export interface DeviceResponse {
   ipAddress: string | null;
   apiKey: string | null;
   activeVisitId: string | null;
+  /** V104 — for an RFID reader, the Registrar it's assigned to (null = unassigned / non-reader). */
+  assignedRegistrarUserId: string | null;
   notes: string;
   createdAt: string;
   updatedAt: string;

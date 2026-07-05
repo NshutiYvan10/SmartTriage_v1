@@ -39,6 +39,7 @@ public final class IoTMapper {
                 .heartbeatTimeoutSeconds(device.getHeartbeatTimeoutSeconds())
                 .dataIntervalSeconds(device.getDataIntervalSeconds())
                 .notes(device.getNotes())
+                .assignedRegistrarUserId(device.getAssignedRegistrarUserId())
                 .activeVisitId(activeVisitId)
                 .createdAt(device.getCreatedAt())
                 .updatedAt(device.getUpdatedAt())

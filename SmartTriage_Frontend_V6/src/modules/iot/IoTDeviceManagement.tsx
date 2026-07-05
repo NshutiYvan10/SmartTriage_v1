@@ -18,8 +18,10 @@ import { usePatientStore } from '@/store/patientStore';
 import { useDeviceStore } from '@/store/deviceStore';
 import { useBedStore } from '@/store/bedStore';
 import { iotApi } from '@/api/iot';
+import { rfidApi } from '@/api/rfid';
+import { userApi } from '@/api/users';
 import { hospitalApi } from '@/api/hospitals';
-import type { DeviceResponse, DeviceSessionResponse, HospitalResponse, BedResponse } from '@/api/types';
+import type { DeviceResponse, DeviceSessionResponse, HospitalResponse, BedResponse, UserResponse } from '@/api/types';
 import { format } from 'date-fns';
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; icon: typeof Wifi }> = {
@@ -31,7 +33,7 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string; icon: typeof Wi
   DECOMMISSIONED: { color: 'text-amber-500', bg: 'bg-amber-500/10', icon: Settings },
 };
 
-const DEVICE_TYPES = ['ESP32_MONITOR', 'PULSE_OXIMETER', 'ECG_MONITOR', 'BP_MONITOR', 'TEMPERATURE_PROBE', 'GLUCOMETER', 'AMBULANCE_MONITOR', 'OTHER'];
+const DEVICE_TYPES = ['ESP32_MONITOR', 'PULSE_OXIMETER', 'ECG_MONITOR', 'BP_MONITOR', 'TEMPERATURE_PROBE', 'GLUCOMETER', 'AMBULANCE_MONITOR', 'RFID_READER', 'OTHER'];
 
 export function IoTDeviceManagement() {
   const { glassCard, glassInner, isDark, text } = useTheme();
@@ -89,6 +91,10 @@ export function IoTDeviceManagement() {
   const [registeredDevice, setRegisteredDevice] = useState<{ deviceName: string; serialNumber: string; apiKey: string } | null>(null);
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
 
+  // V104 — RFID reader → registrar assignment (Hospital Admin owns it).
+  const [registrars, setRegistrars] = useState<UserResponse[]>([]);
+  const [assignRegistrarLoadingId, setAssignRegistrarLoadingId] = useState<string | null>(null);
+
   // Assign-to-patient dialog
   const [assignDevice, setAssignDevice] = useState<DeviceResponse | null>(null);
   const [patientSearch, setPatientSearch] = useState('');
@@ -138,6 +144,29 @@ export function IoTDeviceManagement() {
   }, [hospitalId]);
 
   useEffect(() => { loadDevices(); }, [loadDevices]);
+
+  // V104 — load this hospital's registrars for the RFID-reader assignment picker (admins only).
+  // getByHospital already excludes inactive users, so we just filter to the REGISTRAR role.
+  useEffect(() => {
+    if (!isAdmin || !hospitalId) return;
+    let cancelled = false;
+    userApi.getByHospital(hospitalId, 0, 200)
+      .then((page) => { if (!cancelled) setRegistrars((page.content || []).filter((u) => u.role === 'REGISTRAR')); })
+      .catch(() => { if (!cancelled) setRegistrars([]); });
+    return () => { cancelled = true; };
+  }, [isAdmin, hospitalId]);
+
+  const handleAssignRegistrar = async (device: DeviceResponse, registrarUserId: string | null) => {
+    setAssignRegistrarLoadingId(device.id);
+    try {
+      await rfidApi.assignRegistrar(device.id, registrarUserId);
+      await loadDevices();
+    } catch (err) {
+      console.error('Failed to assign registrar:', err);
+    } finally {
+      setAssignRegistrarLoadingId(null);
+    }
+  };
 
   // Fetch hospitals list for SUPER_ADMIN hospital selector
   useEffect(() => {
@@ -584,6 +613,25 @@ export function IoTDeviceManagement() {
                           : <Heart className="w-3 h-3" />}
                         {device.triageMonitor ? 'Triage Monitor ✓' : 'Mark as Triage Monitor'}
                       </button>
+                    )}
+                    {/* V104 — Admin: assign this RFID reader to a registrar (or clear it). */}
+                    {isAdmin && device.deviceType === 'RFID_READER' && (
+                      <div className="w-full flex items-center gap-2 mt-1">
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Registrar</span>
+                        <select
+                          value={device.assignedRegistrarUserId || ''}
+                          disabled={assignRegistrarLoadingId === device.id}
+                          onChange={(e) => handleAssignRegistrar(device, e.target.value || null)}
+                          className={`flex-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body} disabled:opacity-50`}
+                          style={glassInner}
+                        >
+                          <option value="">Unassigned</option>
+                          {registrars.map((r) => (
+                            <option key={r.id} value={r.id}>{r.firstName} {r.lastName}</option>
+                          ))}
+                        </select>
+                        {assignRegistrarLoadingId === device.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                      </div>
                     )}
                     {/* Clinical staff (Nurse): Assign to Patient for ONLINE devices */}
                     {isClinicalStaff && device.status === 'ONLINE' && (
