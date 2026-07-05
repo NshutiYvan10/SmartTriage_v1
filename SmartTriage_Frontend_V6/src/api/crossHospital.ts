@@ -19,6 +19,7 @@ export interface CrossHospitalSafetySummary {
   nationalId: string | null;
   firstName: string | null;
   lastName: string | null;
+  /** ISO-8601 date `YYYY-MM-DD` (backend `LocalDate`); safe for `new Date(...)`. */
   dateOfBirth: string | null;
   gender: string | null;
   bloodType: string | null;
@@ -36,6 +37,7 @@ export type AccessBasis = 'CONSENT' | 'BREAK_THE_GLASS' | 'DENIED';
 
 export interface CrossHospitalVisitSummary {
   visitNumber: string | null;
+  /** ISO-8601 instant `YYYY-MM-DDTHH:mm:ssZ` (backend `Instant`); safe for `new Date(...)`. */
   arrivalTime: string | null;
   status: string | null;
   diagnoses: string[] | null;
@@ -58,6 +60,7 @@ export interface CrossHospitalDeepRecord {
   nationalId: string | null;
   firstName: string | null;
   lastName: string | null;
+  /** ISO-8601 date `YYYY-MM-DD` (backend `LocalDate`); safe for `new Date(...)`. */
   dateOfBirth: string | null;
   gender: string | null;
   linkedHospitalCount: number;

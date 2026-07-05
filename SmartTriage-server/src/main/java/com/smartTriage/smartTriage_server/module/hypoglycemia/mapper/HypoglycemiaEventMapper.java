@@ -26,6 +26,7 @@ public final class HypoglycemiaEventMapper {
                 .treatmentGivenAt(event.getTreatmentGivenAt())
                 .treatmentGivenByName(event.getTreatmentGivenByName())
                 .repeatGlucoseLevel(event.getRepeatGlucoseLevel())
+                .repeatGlucoseUnit(event.getRepeatGlucoseUnit())
                 .repeatGlucoseAt(event.getRepeatGlucoseAt())
                 .resolved(event.isResolved())
                 .resolvedAt(event.getResolvedAt())

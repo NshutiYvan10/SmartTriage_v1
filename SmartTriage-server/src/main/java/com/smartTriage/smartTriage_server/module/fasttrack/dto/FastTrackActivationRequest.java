@@ -39,5 +39,11 @@ public class FastTrackActivationRequest {
     /** Chest pain onset time for MI */
     private Instant chestPainOnsetTime;
 
+    /** MI bundle — whether aspirin was given at activation (nullable; MI pathways only). */
+    private Boolean aspirinGiven;
+
+    /** MI bundle — whether an anticoagulant was given at activation (nullable; MI pathways only). */
+    private Boolean anticoagulantGiven;
+
     private String notes;
 }

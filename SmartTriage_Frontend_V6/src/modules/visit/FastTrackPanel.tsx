@@ -84,6 +84,8 @@ export function FastTrackPanel({ visitId, onChanged }: FastTrackPanelProps) {
     chestPainOnsetTime: '',
     beFastScore: '',
     nihssScore: '',
+    aspirinGiven: false,
+    anticoagulantGiven: false,
     notes: '',
   });
 
@@ -92,6 +94,12 @@ export function FastTrackPanel({ visitId, onChanged }: FastTrackPanelProps) {
   const [ecg, setEcg] = useState({ result: '', stElevation: false });
   const [ctOpen, setCtOpen] = useState(false);
   const [ct, setCt] = useState({ result: '', hemorrhagic: false });
+
+  // Inline complete / cancel capture (replaces blocking window.prompt)
+  const [completeOpen, setCompleteOpen] = useState(false);
+  const [completeOutcome, setCompleteOutcome] = useState('');
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -150,9 +158,12 @@ export function FastTrackPanel({ visitId, onChanged }: FastTrackPanelProps) {
         chestPainOnsetTime: !stroke ? toIso(form.chestPainOnsetTime) : undefined,
         beFastScore: stroke && form.beFastScore.trim() !== '' ? form.beFastScore.trim() : undefined,
         nihssScore: stroke ? nihss : undefined,
+        // MI bundle — only meaningful for the MI/ACS pathway; omit for stroke.
+        aspirinGiven: !stroke ? form.aspirinGiven : undefined,
+        anticoagulantGiven: !stroke ? form.anticoagulantGiven : undefined,
         notes: form.notes.trim() !== '' ? form.notes.trim() : undefined,
       });
-      setForm({ fastTrackType: '', symptomOnsetTime: '', chestPainOnsetTime: '', beFastScore: '', nihssScore: '', notes: '' });
+      setForm({ fastTrackType: '', symptomOnsetTime: '', chestPainOnsetTime: '', beFastScore: '', nihssScore: '', aspirinGiven: false, anticoagulantGiven: false, notes: '' });
       await load();
       onChanged?.();
     } catch (err) {
@@ -186,17 +197,14 @@ export function FastTrackPanel({ visitId, onChanged }: FastTrackPanelProps) {
     setCtOpen(false); setCt({ result: '', hemorrhagic: false });
   }, 'Failed to record CT');
 
-  const complete = () => {
-    // eslint-disable-next-line no-alert
-    const outcome = window.prompt('Outcome / disposition (optional):', '') ?? undefined;
-    runAction(() => fasttrackApi.complete(active!.id, { outcome }), 'Failed to complete fast track');
-  };
-  const cancel = () => {
-    // eslint-disable-next-line no-alert
-    const reason = window.prompt('Reason for cancelling this fast track:', '');
-    if (reason === null) return;
-    runAction(() => fasttrackApi.cancel(active!.id, { reason }), 'Failed to cancel fast track');
-  };
+  const submitComplete = () => runAction(async () => {
+    await fasttrackApi.complete(active!.id, { outcome: completeOutcome.trim() || undefined });
+    setCompleteOpen(false); setCompleteOutcome('');
+  }, 'Failed to complete fast track');
+  const submitCancel = () => runAction(async () => {
+    await fasttrackApi.cancel(active!.id, { reason: cancelReason.trim() || undefined });
+    setCancelOpen(false); setCancelReason('');
+  }, 'Failed to cancel fast track');
 
   if (loading) {
     return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-cyan-500" /></div>;
@@ -304,13 +312,29 @@ export function FastTrackPanel({ visitId, onChanged }: FastTrackPanelProps) {
                   </div>
                 </>
               ) : (
-                <div>
-                  <label className={`block text-[10px] font-semibold mb-1 ${text.muted}`}>Chest-pain / symptom onset</label>
-                  <input type="datetime-local" value={form.chestPainOnsetTime}
-                    onChange={(e) => setForm((f) => ({ ...f, chestPainOnsetTime: e.target.value }))}
-                    className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner} />
-                  <p className={`text-[9px] mt-1 ${text.muted}`}>An ECG is auto-ordered on activation</p>
-                </div>
+                <>
+                  <div>
+                    <label className={`block text-[10px] font-semibold mb-1 ${text.muted}`}>Chest-pain / symptom onset</label>
+                    <input type="datetime-local" value={form.chestPainOnsetTime}
+                      onChange={(e) => setForm((f) => ({ ...f, chestPainOnsetTime: e.target.value }))}
+                      className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner} />
+                    <p className={`text-[9px] mt-1 ${text.muted}`}>An ECG is auto-ordered on activation</p>
+                  </div>
+                  {/* MI bundle — record what was given at activation (chewed aspirin, anticoagulant). */}
+                  <div className="flex flex-col gap-2 rounded-xl p-3" style={glassInner}>
+                    <span className={`text-[10px] font-semibold ${text.muted}`}>Given at activation</span>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={form.aspirinGiven}
+                        onChange={(e) => setForm((f) => ({ ...f, aspirinGiven: e.target.checked }))} className="w-4 h-4" />
+                      <span className={`text-[11px] font-bold ${text.heading}`}>Aspirin given</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={form.anticoagulantGiven}
+                        onChange={(e) => setForm((f) => ({ ...f, anticoagulantGiven: e.target.checked }))} className="w-4 h-4" />
+                      <span className={`text-[11px] font-bold ${text.heading}`}>Anticoagulant given</span>
+                    </label>
+                  </div>
+                </>
               )}
               <div>
                 <label className={`block text-[10px] font-semibold mb-1 ${text.muted}`}>Notes</label>
@@ -335,7 +359,8 @@ export function FastTrackPanel({ visitId, onChanged }: FastTrackPanelProps) {
         ecgOpen={ecgOpen} setEcgOpen={setEcgOpen} ecg={ecg} setEcg={setEcg} submitEcg={submitEcg}
         ctOpen={ctOpen} setCtOpen={setCtOpen} ct={ct} setCt={setCt} submitCt={submitCt}
         onAcknowledge={() => runAction(() => fasttrackApi.acknowledge(active.id), 'Failed to acknowledge')}
-        onComplete={complete} onCancel={cancel}
+        completeOpen={completeOpen} setCompleteOpen={setCompleteOpen} completeOutcome={completeOutcome} setCompleteOutcome={setCompleteOutcome} submitComplete={submitComplete}
+        cancelOpen={cancelOpen} setCancelOpen={setCancelOpen} cancelReason={cancelReason} setCancelReason={setCancelReason} submitCancel={submitCancel}
         glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text}
       />}
 
@@ -357,7 +382,9 @@ export function FastTrackPanel({ visitId, onChanged }: FastTrackPanelProps) {
 /* ── Active-pathway card ── */
 function ActiveCard({
   a, busy, ecgOpen, setEcgOpen, ecg, setEcg, submitEcg,
-  ctOpen, setCtOpen, ct, setCt, submitCt, onAcknowledge, onComplete, onCancel,
+  ctOpen, setCtOpen, ct, setCt, submitCt, onAcknowledge,
+  completeOpen, setCompleteOpen, completeOutcome, setCompleteOutcome, submitComplete,
+  cancelOpen, setCancelOpen, cancelReason, setCancelReason, submitCancel,
   glassCard, glassInner, isDark, text,
 }: any) {
   const stroke = isStrokeType(a.fastTrackType);
@@ -420,10 +447,10 @@ function ActiveCard({
             <Activity className="w-3.5 h-3.5" />Record ECG
           </button>
         )}
-        <button onClick={onComplete} disabled={busy} className="inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
+        <button onClick={() => { setCancelOpen(false); setCompleteOpen((o: boolean) => !o); }} disabled={busy} className="inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
           {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileCheck className="w-3.5 h-3.5" />}Complete
         </button>
-        <button onClick={onCancel} disabled={busy} className={`inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold rounded-xl transition-colors disabled:opacity-50 hover:bg-white/5 ${text.muted}`}>
+        <button onClick={() => { setCompleteOpen(false); setCancelOpen((o: boolean) => !o); }} disabled={busy} className={`inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold rounded-xl transition-colors disabled:opacity-50 hover:bg-white/5 ${text.muted}`}>
           <XCircle className="w-3.5 h-3.5" />Cancel
         </button>
       </div>
@@ -450,6 +477,32 @@ function ActiveCard({
             <span className={`text-[11px] font-bold ${text.heading}`}>Hemorrhagic (thrombolysis contraindicated)</span>
           </label>
           <button onClick={submitCt} disabled={!ct.result.trim() || busy} className="px-4 py-2 text-[11px] font-bold rounded-xl bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors disabled:opacity-50">Save CT</button>
+        </div>
+      )}
+      {/* Inline Complete capture (replaces window.prompt) */}
+      {completeOpen && (
+        <div className="px-5 py-3 border-t" style={{ borderColor: isDark ? 'rgba(2,132,199,0.12)' : 'rgba(203,213,225,0.3)' }}>
+          <textarea rows={2} value={completeOutcome} onChange={(e: any) => setCompleteOutcome(e.target.value)}
+            placeholder="Outcome / disposition (optional)" className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 mb-2 resize-none ${text.body}`} style={glassInner} />
+          <div className="flex items-center gap-2">
+            <button onClick={submitComplete} disabled={busy} className="px-4 py-2 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
+              {busy ? <Loader2 className="w-3.5 h-3.5 inline animate-spin" /> : null} Complete fast track
+            </button>
+            <button onClick={() => setCompleteOpen(false)} disabled={busy} className={`px-4 py-2 text-[11px] font-bold rounded-xl transition-colors hover:bg-white/5 ${text.muted}`}>Dismiss</button>
+          </div>
+        </div>
+      )}
+      {/* Inline Cancel capture (replaces window.prompt) */}
+      {cancelOpen && (
+        <div className="px-5 py-3 border-t" style={{ borderColor: isDark ? 'rgba(2,132,199,0.12)' : 'rgba(203,213,225,0.3)' }}>
+          <textarea rows={2} value={cancelReason} onChange={(e: any) => setCancelReason(e.target.value)}
+            placeholder="Reason for cancelling (optional)" className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 mb-2 resize-none ${text.body}`} style={glassInner} />
+          <div className="flex items-center gap-2">
+            <button onClick={submitCancel} disabled={busy} className="px-4 py-2 text-[11px] font-bold rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50">
+              {busy ? <Loader2 className="w-3.5 h-3.5 inline animate-spin" /> : null} Cancel fast track
+            </button>
+            <button onClick={() => setCancelOpen(false)} disabled={busy} className={`px-4 py-2 text-[11px] font-bold rounded-xl transition-colors hover:bg-white/5 ${text.muted}`}>Dismiss</button>
+          </div>
         </div>
       )}
     </div>

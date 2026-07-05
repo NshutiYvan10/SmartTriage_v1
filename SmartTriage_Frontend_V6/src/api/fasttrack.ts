@@ -78,6 +78,9 @@ export interface ActivateFastTrackRequest {
   chestPainOnsetTime?: string;
   beFastScore?: string;
   nihssScore?: number;
+  /** MI bundle — whether aspirin / anticoagulant were given at activation. */
+  aspirinGiven?: boolean;
+  anticoagulantGiven?: boolean;
   notes?: string;
 }
 

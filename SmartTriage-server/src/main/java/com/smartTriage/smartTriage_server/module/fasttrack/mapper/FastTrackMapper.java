@@ -53,7 +53,10 @@ public final class FastTrackMapper {
                 .notes(activation.getNotes())
                 .createdAt(activation.getCreatedAt());
 
-        if (activation.getVisit() != null) {
+        // Guard against a detached lazy Visit proxy: the service hydrates it before
+        // mapping, but if any future path forgets, degrade to omitting visit details
+        // rather than throwing LazyInitializationException (500).
+        if (activation.getVisit() != null && org.hibernate.Hibernate.isInitialized(activation.getVisit())) {
             builder.visitId(activation.getVisit().getId());
             builder.visitNumber(activation.getVisit().getVisitNumber());
             builder.currentZone(activation.getVisit().getCurrentEdZone() != null

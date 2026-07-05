@@ -1046,7 +1046,8 @@ export interface CreateClinicalNoteRequest {
   visitId: string;
   noteType: NoteType;
   content: string;
-  recordedByName?: string;
+  // recordedByName is derived server-side from the authenticated author; any
+  // client value is discarded, so it is intentionally not sent.
   section?: string;
 }
 
@@ -1283,13 +1284,15 @@ export interface ZoneMedicationBoard {
 }
 
 export interface AdministerMedicationRequest {
-  medicationId: string;
+  // medicationId is taken from the path param (/medications/{id}/administer);
+  // the backend ignores any body value, so it is intentionally not sent.
   administeredByName: string;
   notes?: string;
 }
 
 export interface CountersignMedicationRequest {
-  medicationId: string;
+  // medicationId comes from the path param (/medications/{id}/countersign);
+  // the backend ignores any body value, so it is intentionally not sent.
   countersignedByName: string;
   notes?: string;
 }

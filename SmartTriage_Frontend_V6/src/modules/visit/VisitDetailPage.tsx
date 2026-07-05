@@ -419,7 +419,7 @@ export function VisitDetailPage() {
   const handleCreateNote = async (data: Partial<CreateClinicalNoteRequest>) => {
     setFormLoading(true);
     try {
-      await clinicalNoteApi.create({ visitId: visit.id, recordedByName: userName, ...data } as CreateClinicalNoteRequest);
+      await clinicalNoteApi.create({ visitId: visit.id, ...data } as CreateClinicalNoteRequest);
       setShowNoteForm(false);
       loadData();
     } catch (err) {
@@ -742,10 +742,10 @@ export function VisitDetailPage() {
     try {
       switch (action) {
         case 'administer':
-          await medicationApi.administer(id, { medicationId: id, administeredByName: userName });
+          await medicationApi.administer(id, { administeredByName: userName });
           break;
         case 'countersign':
-          await medicationApi.countersign(id, { medicationId: id, countersignedByName: userName });
+          await medicationApi.countersign(id, { countersignedByName: userName });
           break;
         case 'hold':
           if (!reason) return;

@@ -27,7 +27,11 @@ export function CrossHospitalPanel({ nationalId }: Props) {
   const [showBreakGlass, setShowBreakGlass] = useState(false);
 
   const load = useCallback(async (breakTheGlassReason?: string) => {
-    if (!nationalId) { setLoading(false); return; }
+    // No national ID (or whitespace-only) → there is no cross-hospital identity to
+    // resolve and nothing to audit, so skip the doomed lookup and show the empty
+    // state. A real lookup (with an ID) IS audited server-side by the deep-record
+    // service, so no audit coverage is lost by returning early here.
+    if (!nationalId?.trim()) { setLoading(false); return; }
     setLoading(true);
     setError(null);
     try {
@@ -41,7 +45,7 @@ export function CrossHospitalPanel({ nationalId }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
-  if (!nationalId) {
+  if (!nationalId?.trim()) {
     return (
       <div className={`rounded-xl p-6 text-center text-sm ${text.muted}`} style={glassCard}>
         This patient has no national ID on file, so no cross-hospital identity exists.

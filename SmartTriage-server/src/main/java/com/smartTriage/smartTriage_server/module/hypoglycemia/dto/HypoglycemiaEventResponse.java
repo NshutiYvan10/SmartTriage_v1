@@ -39,6 +39,7 @@ public class HypoglycemiaEventResponse {
     private String treatmentGivenByName;
 
     private Double repeatGlucoseLevel;
+    private String repeatGlucoseUnit;
     private Instant repeatGlucoseAt;
 
     private boolean resolved;

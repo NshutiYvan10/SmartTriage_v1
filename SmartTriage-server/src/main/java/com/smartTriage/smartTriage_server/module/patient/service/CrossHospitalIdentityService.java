@@ -55,7 +55,7 @@ public class CrossHospitalIdentityService {
         }
         return personIdentityRepository.findByNationalIdAndIsActiveTrue(nid)
                 .map(this::assemble)
-                .orElseGet(() -> CrossHospitalSafetySummaryResponse.builder().found(false).nationalId(nid).build());
+                .orElseGet(() -> CrossHospitalSafetySummaryResponse.builder().found(false).nationalId(mask(nid)).build());
     }
 
     /**
@@ -121,7 +121,7 @@ public class CrossHospitalIdentityService {
 
         return CrossHospitalSafetySummaryResponse.builder()
                 .found(true)
-                .nationalId(nid)
+                .nationalId(mask(nid))
                 .firstName(newest.getFirstName())
                 .lastName(newest.getLastName())
                 .dateOfBirth(newest.getDateOfBirth())
@@ -175,8 +175,18 @@ public class CrossHospitalIdentityService {
     private void auditCrossHospitalRead(String keyType, String value) {
         // The GET is not covered by AuditInterceptor (mutating requests only); log it explicitly.
         // REQUIRES_NEW + fail-safe inside AuditService — never breaks the read. Identifier masked.
-        String masked = value == null || value.length() < 4 ? "(none)" : "***" + value.substring(value.length() - 4);
         auditService.record("GET", "/api/v1/patient-identity/safety-summary",
-                "CROSS_HOSPITAL_SAFETY_SUMMARY_READ " + keyType + "=" + masked, 200);
+                "CROSS_HOSPITAL_SAFETY_SUMMARY_READ " + keyType + "=" + mask(value), 200);
+    }
+
+    /**
+     * Mask a national ID for output — show only the last 4 digits (e.g. "***1234").
+     * Matches CrossHospitalDeepRecordService so the same person's ID renders
+     * identically in the safety summary and the deep record; previously the
+     * summary echoed the FULL ID while the deep record masked it, which leaked
+     * the full identifier on one surface and enabled cross-surface fingerprinting.
+     */
+    private static String mask(String value) {
+        return value == null || value.length() < 4 ? "(none)" : "***" + value.substring(value.length() - 4);
     }
 }

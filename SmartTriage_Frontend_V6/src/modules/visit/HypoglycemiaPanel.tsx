@@ -227,7 +227,10 @@ export function HypoglycemiaPanel({ visitId, onChanged }: HypoglycemiaPanelProps
                       )}
                       {evt.repeatGlucoseLevel != null && (
                         <p className={`text-[11px] mt-1 ${text.body}`}>
-                          <FlaskConical className="w-3 h-3 inline mr-1 text-cyan-500" />Repeat: {evt.repeatGlucoseLevel.toFixed(1)} mmol/L
+                          <FlaskConical className="w-3 h-3 inline mr-1 text-cyan-500" />Repeat:{' '}
+                          {evt.repeatGlucoseUnit === 'MG_DL'
+                            ? `${Math.round(evt.repeatGlucoseLevel * 18)} mg/dL (${evt.repeatGlucoseLevel.toFixed(1)} mmol/L)`
+                            : `${evt.repeatGlucoseLevel.toFixed(1)} mmol/L`}
                           {evt.repeatGlucoseAt && <span className={`ml-1 ${text.muted}`}>at {format(new Date(evt.repeatGlucoseAt), 'HH:mm')}</span>}
                         </p>
                       )}

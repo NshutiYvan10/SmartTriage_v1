@@ -76,9 +76,14 @@ public class HypoglycemiaEvent extends BaseEntity {
     @Column(name = "treatment_given_by_name")
     private String treatmentGivenByName;
 
-    /** Follow-up glucose level after treatment */
+    /** Follow-up glucose level after treatment (stored in mmol/L). */
     @Column(name = "repeat_glucose_level")
     private Double repeatGlucoseLevel;
+
+    /** Unit the repeat glucose was ENTERED in (MMOL_L / MG_DL) — audit trail of the
+     *  original entry; the level above stays canonicalised to mmol/L. Nullable. */
+    @Column(name = "repeat_glucose_unit", length = 10)
+    private String repeatGlucoseUnit;
 
     @Column(name = "repeat_glucose_at")
     private Instant repeatGlucoseAt;

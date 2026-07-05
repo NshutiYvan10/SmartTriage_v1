@@ -26,6 +26,8 @@ export interface HypoglycemiaEvent {
   treatmentGivenAt: string | null;
   treatmentGivenByName: string | null;
   repeatGlucoseLevel: number | null;
+  /** Unit the repeat glucose was entered in (MMOL_L / MG_DL); level above is always mmol/L. */
+  repeatGlucoseUnit: string | null;
   repeatGlucoseAt: string | null;
   resolved: boolean;
   resolvedAt: string | null;

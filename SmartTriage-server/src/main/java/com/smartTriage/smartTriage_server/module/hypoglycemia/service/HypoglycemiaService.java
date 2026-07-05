@@ -195,6 +195,7 @@ public class HypoglycemiaService {
         }
 
         event.setRepeatGlucoseLevel(glucoseMmol);
+        event.setRepeatGlucoseUnit(unit.name());
         event.setRepeatGlucoseAt(now);
 
         HypoglycemiaSeverity repeatSeverity =

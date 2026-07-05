@@ -99,6 +99,11 @@ public class FastTrackService {
                 .beFastScore(request.getBeFastScore())
                 .nihssScore(request.getNihssScore())
                 .chestPainOnsetTime(request.getChestPainOnsetTime())
+                // MI bundle — record aspirin/anticoagulant if given at activation.
+                // Stamp aspirinGivenAt only when aspirin was actually given.
+                .aspirinGiven(request.getAspirinGiven())
+                .aspirinGivenAt(Boolean.TRUE.equals(request.getAspirinGiven()) ? now : null)
+                .anticoagulantGiven(request.getAnticoagulantGiven())
                 .notes(request.getNotes())
                 .build();
 
@@ -127,7 +132,7 @@ public class FastTrackService {
         log.warn("Fast-track activated: type={}, visit={}, id={}, by={}",
                 activation.getFastTrackType(), visit.getId(), activation.getId(), activatedBy);
 
-        return activation;
+        return hydrateForResponse(activation);
     }
 
     /**
@@ -167,7 +172,7 @@ public class FastTrackService {
         publishDashboardEvent(activation, "STATUS_" + newStatus.name());
 
         log.info("Fast-track status updated: id={}, newStatus={}", activationId, newStatus);
-        return activation;
+        return hydrateForResponse(activation);
     }
 
     /** Complete a fast-track with an outcome note (sets the actor + door-to-needle). */
@@ -184,7 +189,7 @@ public class FastTrackService {
         activation = fastTrackActivationRepository.save(activation);
         publishDashboardEvent(activation, "COMPLETED");
         log.info("Fast-track completed: id={}, by={}", activationId, activation.getCompletedByName());
-        return activation;
+        return hydrateForResponse(activation);
     }
 
     /** Cancel a fast-track (e.g. activated in error, or ruled out). */
@@ -201,7 +206,7 @@ public class FastTrackService {
         activation = fastTrackActivationRepository.save(activation);
         publishDashboardEvent(activation, "CANCELLED");
         log.info("Fast-track cancelled: id={}, by={}", activationId, activation.getCompletedByName());
-        return activation;
+        return hydrateForResponse(activation);
     }
 
     /** A clinician explicitly accepts ownership of the door-to-treatment clock. */
@@ -219,7 +224,7 @@ public class FastTrackService {
             publishDashboardEvent(activation, "ACKNOWLEDGED");
             log.info("Fast-track acknowledged: id={}, by={}", activationId, activation.getAcknowledgedByName());
         }
-        return activation;
+        return hydrateForResponse(activation);
     }
 
     /** Acknowledge the open FAST_TRACK_ACTIVATED alert for this visit so it stops
@@ -272,7 +277,7 @@ public class FastTrackService {
 
         log.info("ECG recorded for fast-track: id={}, stElevation={}, doorToEcg={} min",
                 activationId, request.getStElevation(), activation.getDoorToEcgMinutes());
-        return activation;
+        return hydrateForResponse(activation);
     }
 
     /**
@@ -307,7 +312,7 @@ public class FastTrackService {
 
         log.info("CT recorded for fast-track: id={}, hemorrhagic={}, doorToCt={} min",
                 activationId, request.getIsHemorrhagic(), activation.getDoorToCtMinutes());
-        return activation;
+        return hydrateForResponse(activation);
     }
 
     /**
@@ -331,13 +336,35 @@ public class FastTrackService {
      */
     public FastTrackActivation getFastTrack(UUID visitId) {
         return fastTrackActivationRepository.findFirstByVisitIdAndIsActiveTrueOrderByActivatedAtDesc(visitId)
+                .map(this::hydrateForResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("FastTrackActivation", "visitId", visitId));
     }
 
     /** Most recent fast-track for a visit, or null when none exists (no 404). */
     public FastTrackActivation getFastTrackOrNull(UUID visitId) {
         return fastTrackActivationRepository.findFirstByVisitIdAndIsActiveTrueOrderByActivatedAtDesc(visitId)
+                .map(this::hydrateForResponse)
                 .orElse(null);
+    }
+
+    /**
+     * Initialise every lazy association {@link com.smartTriage.smartTriage_server.module.fasttrack.mapper.FastTrackMapper}
+     * reads (visit + its bed / hospital / patient), so the controller can map the
+     * entity AFTER this transaction's session closes without a
+     * LazyInitializationException. Same failure class as the Sepsis mapper bug:
+     * the read path returned a detached activation whose lazy {@code visit} proxy
+     * blew up on {@code getVisitNumber()}, 500-ing the Fast-Track tab whenever a
+     * pathway was active. Null-safe on missing associations / already-initialised proxies.
+     */
+    private FastTrackActivation hydrateForResponse(FastTrackActivation activation) {
+        if (activation != null && activation.getVisit() != null) {
+            Visit v = activation.getVisit();
+            org.hibernate.Hibernate.initialize(v);
+            org.hibernate.Hibernate.initialize(v.getCurrentBed());
+            org.hibernate.Hibernate.initialize(v.getHospital());
+            org.hibernate.Hibernate.initialize(v.getPatient());
+        }
+        return activation;
     }
 
     /**
@@ -371,7 +398,7 @@ public class FastTrackService {
             throw new ClinicalBusinessException(
                     "Fast-track " + activationId + " is already " + activation.getStatus() + " — cannot modify.");
         }
-        return activation;
+        return hydrateForResponse(activation);
     }
 
     /** STROKE and TIA are one family; STEMI and NSTEMI are the MI/ACS family. */
