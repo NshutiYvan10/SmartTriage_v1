@@ -1096,12 +1096,14 @@ export interface DiagnosisResponse {
   id: string;
   visitId: string;
   diagnosisType: DiagnosisType;
-  icdCode: string;
+  // Backend leaves these nullable (ICD code / notes are optional, and the
+  // diagnosing clinician's name may be absent on legacy rows). Typed to match
+  // so the UI's runtime guards aren't fighting a lying contract.
+  icdCode: string | null;
   description: string;
-  diagnosedById: string;
-  diagnosedByName: string;
+  diagnosedByName: string | null;
   isPrimary: boolean;
-  notes: string;
+  notes: string | null;
   createdAt: string;
   updatedAt: string;
 }

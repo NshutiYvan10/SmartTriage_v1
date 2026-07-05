@@ -1693,7 +1693,8 @@ function NotesTab({ notes, showForm, setShowForm, onSubmit, formLoading, glassCa
               <select
                 value={currentNoteType}
                 onChange={(e) => handleTypeChange(e.target.value as NoteType)}
-                className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white' : 'text-slate-800'}`}
+                disabled={formLoading}
+                className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none disabled:opacity-50 ${isDark ? 'text-white' : 'text-slate-800'}`}
                 style={glassInner}
               >
                 {Object.entries(NOTE_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -1718,7 +1719,8 @@ function NotesTab({ notes, showForm, setShowForm, onSubmit, formLoading, glassCa
                         key={s}
                         type="button"
                         onClick={() => setForm({ ...form, section: active ? '' : s })}
-                        className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors ${
+                        disabled={formLoading}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 ${
                           active
                             ? 'bg-cyan-500 text-white'
                             : 'bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20'
@@ -1733,8 +1735,9 @@ function NotesTab({ notes, showForm, setShowForm, onSubmit, formLoading, glassCa
               <input
                 value={form.section || ''}
                 onChange={(e) => setForm({ ...form, section: e.target.value })}
+                disabled={formLoading}
                 placeholder={sectionChips.length > 0 ? 'Or type a custom section…' : 'Optional section heading'}
-                className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+                className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none disabled:opacity-50 ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
                 style={glassInner}
               />
             </div>
@@ -1744,9 +1747,10 @@ function NotesTab({ notes, showForm, setShowForm, onSubmit, formLoading, glassCa
               <textarea
                 value={form.content || ''}
                 onChange={(e) => setForm({ ...form, content: e.target.value })}
+                disabled={formLoading}
                 placeholder={placeholder}
                 rows={5}
-                className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+                className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none disabled:opacity-50 ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
                 style={glassInner}
               />
             </div>
@@ -1930,6 +1934,11 @@ function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, on
               Numeric value + unit are optional, but required for the Cockcroft-Gault eGFR calculator
               to fire on creatinine. Use the unit string the lab reported (mg/dL or µmol/L).
             </p>
+            {resultForm.resultNumeric != null && !resultForm.resultUnit?.trim() && (
+              <p className="text-[10px] font-semibold text-amber-500">
+                A numeric value without a unit is stored but ignored by downstream calculators (e.g. eGFR). Add the unit.
+              </p>
+            )}
             <div className="flex items-center gap-4">
               <label className="flex items-center gap-2"><input type="checkbox" checked={resultForm.isAbnormal} onChange={(e) => setResultForm({ ...resultForm, isAbnormal: e.target.checked })} className="rounded" /><span className={`text-xs ${text.body}`}>Abnormal</span></label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={resultForm.isCritical} onChange={(e) => setResultForm({ ...resultForm, isCritical: e.target.checked })} className="rounded" /><span className={`text-xs ${text.body}`}>Critical</span></label>

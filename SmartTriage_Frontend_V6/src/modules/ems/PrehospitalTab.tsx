@@ -193,7 +193,7 @@ export function PrehospitalTab({ visitId, edTriageCategory }: Props) {
           <p className={`text-xs ${text.body}`}>
             <ClipboardCheck className="w-3.5 h-3.5 inline mr-1 text-emerald-500" />
             Paramedic <b>{run.paramedicName ?? '—'}</b> handed off to <b>{run.handedOffToName ?? '—'}</b>{' '}
-            at {new Date(run.handedOffAt).toLocaleTimeString()}.
+            at {new Date(run.handedOffAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.
           </p>
           {run.handoverAcknowledgementText && (
             <p className={`text-xs italic mt-2 ${text.body}`}>"{run.handoverAcknowledgementText}"</p>

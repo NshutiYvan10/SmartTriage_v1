@@ -114,8 +114,17 @@ export function IsolationPanel({ visitId, onChanged }: IsolationPanelProps) {
     return () => unsub();
   }, [hospitalId, visitId, load, wsGen]);
 
-  const fail = (err: unknown, fallback: string) =>
-    setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : fallback);
+  const fail = (err: unknown, fallback: string) => {
+    if (err instanceof ApiError) {
+      // Surface field-level validation detail (the backend returns a
+      // field→message map in err.data) instead of only the generic
+      // "Validation failed" summary.
+      const detail = err.data ? Object.values(err.data).filter(Boolean).join('; ') : '';
+      setError(detail ? `${err.message}: ${detail}` : err.message);
+      return;
+    }
+    setError(err instanceof Error ? err.message : fallback);
+  };
 
   const run = async (fn: () => Promise<unknown>, fallback: string, after?: () => void) => {
     setBusy(true); setError(null);
@@ -228,6 +237,10 @@ export function IsolationPanel({ visitId, onChanged }: IsolationPanelProps) {
                   className={`px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner} />
               )}
             </div>
+            <textarea value={form.notes ?? ''}
+              onChange={(e) => set('notes', e.target.value || undefined)}
+              rows={2} placeholder="Notes (optional) — e.g. symptom timeline, contact-tracing context"
+              className={`w-full mt-2 px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 resize-none ${text.body}`} style={glassInner} />
             <div className="flex items-center gap-2 mt-3">
               <button onClick={submitScreen} disabled={busy}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-[11px] font-bold rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors disabled:opacity-50">
