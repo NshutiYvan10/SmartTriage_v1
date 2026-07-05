@@ -96,8 +96,10 @@ export function ClinicalSignsTab({ visitId, glassCard, glassInner, isDark, text,
       ]);
       if (cs.status === 'fulfilled') setCurrentState(Array.isArray(cs.value) ? cs.value : []);
       if (hs.status === 'fulfilled') setHistory(Array.isArray(hs.value) ? hs.value : []);
-      if (cs.status === 'rejected' && hs.status === 'rejected') {
-        setError('Unable to load clinical signs. Please retry.');
+      // Flag if EITHER fetch failed — otherwise a single-endpoint failure silently shows partial
+      // data (e.g. an empty Current State beside a populated Timeline) with no "incomplete" cue.
+      if (cs.status === 'rejected' || hs.status === 'rejected') {
+        setError('Some clinical-signs data could not be loaded — the view may be incomplete. Please retry.');
       }
     } finally {
       setLoading(false);
@@ -492,7 +494,14 @@ function RecordPanel({
   }, [existingEvents]);
 
   const canSubmit = entries.length > 0
-    && entries.every((e) => !!e.signCode && !!e.status)
+    && entries.every((e) => {
+      if (!e.signCode || !e.status) return false;
+      // A sign that carries a numeric (e.g. glucose for CONVULSIONS / high-glucose) must not be
+      // recorded without it — the value is the clinical discriminator, not optional metadata.
+      const def = CLINICAL_SIGN_DEFINITIONS.find((d) => d.code === e.signCode);
+      if (def?.carriesNumeric && e.numericValue == null) return false;
+      return true;
+    })
     && !submitting;
 
   const handleSubmit = async () => {
@@ -502,12 +511,17 @@ function RecordPanel({
     try {
       await clinicalSignsApi.recordBatch({
         visitId,
-        events: entries.map((e) => ({
-          signCode: e.signCode,
-          status: e.status,
-          numericValue: e.numericValue ?? null,
-          notes: e.notes?.trim() || null,
-        })),
+        events: entries.map((e) => {
+          const def = CLINICAL_SIGN_DEFINITIONS.find((d) => d.code === e.signCode);
+          return {
+            signCode: e.signCode,
+            status: e.status,
+            // Only carry a numeric for signs that take one — stops a stale glucose value (left
+            // from a previous sign selection in this row) riding along on a non-numeric sign.
+            numericValue: def?.carriesNumeric ? (e.numericValue ?? null) : null,
+            notes: e.notes?.trim() || null,
+          };
+        }),
       });
       onRecorded();
     } catch (err) {

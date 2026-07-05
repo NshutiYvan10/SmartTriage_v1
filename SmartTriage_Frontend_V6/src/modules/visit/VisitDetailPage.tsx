@@ -1658,6 +1658,12 @@ function TriageTab({ visit, triageHistory, latestTriage, glassCard, glassInner, 
 function NotesTab({ notes, showForm, setShowForm, onSubmit, formLoading, glassCard, glassInner, isDark, text }: any) {
   const [form, setForm] = useState<Partial<CreateClinicalNoteRequest>>({ noteType: 'PROGRESS_NOTE' as NoteType, content: '', section: '' });
 
+  // Reset the draft whenever the form closes, so reopening never shows a previous note's
+  // content/type/section (which risks submitting stale or duplicate clinical text).
+  useEffect(() => {
+    if (!showForm) setForm({ noteType: 'PROGRESS_NOTE' as NoteType, content: '', section: '' });
+  }, [showForm]);
+
   const currentNoteType = (form.noteType || 'PROGRESS_NOTE') as NoteType;
   const sectionChips = NOTE_SECTION_SUGGESTIONS[currentNoteType] ?? [];
   const placeholder = NOTE_CONTENT_PLACEHOLDER[currentNoteType] ?? 'Clinical note content.';
@@ -1832,7 +1838,7 @@ function DiagnosesTab({ diagnoses, showForm, setShowForm, onSubmit, formLoading,
             </div>
             <p className={`text-sm font-medium ${text.heading}`}>{d.description}</p>
             {d.notes && <p className={`text-xs mt-1 ${text.body}`}>{d.notes}</p>}
-            <p className={`text-[10px] mt-2 ${text.muted}`}>By: {d.diagnosedByName}</p>
+            {d.diagnosedByName && <p className={`text-[10px] mt-2 ${text.muted}`}>By: {d.diagnosedByName}</p>}
           </div>
         ))}
       </div>
@@ -2974,6 +2980,13 @@ function DispositionTab({ visit, onDisposition, formLoading, glassCard, glassInn
             {DISPOSITION_OPTIONS.find(o => o.value === visit.dispositionType)?.label || visit.dispositionType}
             {visit.dispositionTime && ` — ${format(new Date(visit.dispositionTime), 'dd MMM yyyy HH:mm')}`}
           </p>
+          {(visit.dispositionDestinationWard || visit.dispositionReceivingFacility) && (
+            <p className={`text-xs mt-1 font-medium ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+              {visit.dispositionDestinationWard && `Ward: ${visit.dispositionDestinationWard}`}
+              {visit.dispositionDestinationWard && visit.dispositionReceivingFacility && '  ·  '}
+              {visit.dispositionReceivingFacility && `Receiving facility: ${visit.dispositionReceivingFacility}`}
+            </p>
+          )}
           {visit.dispositionNotes && (
             <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{visit.dispositionNotes}</p>
           )}

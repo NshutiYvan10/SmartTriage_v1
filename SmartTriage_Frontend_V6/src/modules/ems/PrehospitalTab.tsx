@@ -138,8 +138,8 @@ export function PrehospitalTab({ visitId, edTriageCategory }: Props) {
           <Cell label="BP"      value={run.fieldSbp != null ? `${run.fieldSbp}/${run.fieldDbp ?? '—'}` : null} text={text} />
           <Cell label="SpO₂"    value={run.fieldSpo2 != null ? `${run.fieldSpo2}%` : null} text={text} />
           <Cell label="RR"      value={run.fieldRespRate} text={text} />
-          <Cell label="Temp"    value={run.fieldTemp} text={text} />
-          <Cell label="Glucose" value={run.fieldGlucose} text={text} />
+          <Cell label="Temp"    value={run.fieldTemp != null ? `${run.fieldTemp} °C` : null} text={text} />
+          <Cell label="Glucose" value={run.fieldGlucose != null ? `${run.fieldGlucose} mg/dL` : null} text={text} />
         </div>
       </div>
 
@@ -165,7 +165,7 @@ export function PrehospitalTab({ visitId, edTriageCategory }: Props) {
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <span className={`text-[10px] font-bold ${text.label}`}>{iv.type}</span>
-                    <span className={`ml-2 ${text.body}`}>{iv.detail}</span>
+                    <span className={`ml-2 ${iv.detail ? text.body : text.muted}`}>{iv.detail || '(no detail)'}</span>
                     {iv.dose  && <span className={`ml-1 ${text.muted}`}>• {iv.dose}</span>}
                     {iv.route && <span className={`ml-1 ${text.muted}`}>• {iv.route}</span>}
                   </div>

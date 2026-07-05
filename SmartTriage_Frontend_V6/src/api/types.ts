@@ -600,6 +600,9 @@ export interface VisitResponse {
   dispositionType: DispositionType | null;
   dispositionTime: string | null;
   dispositionNotes: string | null;
+  /** Where the patient went — backend returns these; surfaced in the recorded-disposition banner. */
+  dispositionDestinationWard: string | null;
+  dispositionReceivingFacility: string | null;
   referringFacility: string | null;
   isPediatric: boolean;
   retriageCount: number;
