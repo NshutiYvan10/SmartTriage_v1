@@ -40,12 +40,22 @@
  *   - ArduinoJson (v6)        by Benoit Blanchon
  *
  *  PROVISIONING (one-time, before flashing)
- *   Register this reader as an IoT device to obtain its API key, then paste
- *   the key into DEVICE_API_KEY below:
- *     POST /api/v1/iot/devices            (SUPER_ADMIN / HOSPITAL_ADMIN JWT)
- *       { "serialNumber":"RFID-DESK-001", "deviceName":"Registration Desk 1",
- *         "deviceType":"RFID_READER", "hospitalId":"<your-hospital-uuid>" }
- *   The response's "apiKey" is what the device sends as X-Device-API-Key.
+ *   A Hospital Admin registers this reader in the app — Admin -> IoT Devices ->
+ *   Register Device, with Device Type = RFID_READER. The response shows the
+ *   device API key ONCE; paste it into DEVICE_API_KEY below, then flash.
+ *     (Equivalent REST call, SUPER_ADMIN / HOSPITAL_ADMIN JWT:
+ *        POST /api/v1/iot/devices
+ *        { "serialNumber":"RFID-DESK-001", "deviceName":"Registration Desk 1",
+ *          "deviceType":"RFID_READER", "hospitalId":"<your-hospital-uuid>" }
+ *      -> the response's "apiKey" is what the device sends as X-Device-API-Key.)
+ *   OPTIONAL: the admin can then assign this reader to a specific registrar
+ *   (IoT Devices -> the reader's card -> Registrar), so that registrar's
+ *   Registration Desk highlights it as "their" reader. This is a backend/UI
+ *   convenience only — the reader's tap behaviour is identical either way.
+ *
+ *  SECURITY NOTE (v2): this build talks PLAIN HTTP and the API key is embedded
+ *  in the sketch. For production/PHI, move to HTTPS with server-cert validation
+ *  (WiFiClientSecure + pinned CA, never setInsecure) and per-device key handling.
  * ==========================================================================*/
 
 #include <WiFi.h>
@@ -89,6 +99,9 @@ MFRC522 rfid(RC522_SS_PIN, RC522_RST_PIN);
 String lastCardUid = "";
 unsigned long lastTapMs = 0;
 unsigned long lastWifiTryMs = 0;
+// True once the reader field is clear (no card). A held card must be lifted before the
+// SAME UID is accepted again — stops a card left on the reader from firing duplicate taps.
+bool fieldClear = true;
 
 // ============================================================================
 //  SETUP
@@ -127,11 +140,13 @@ void loop() {
   }
 
   String uid = readCardUid();
-  if (uid.length() == 0) { delay(60); return; }
+  if (uid.length() == 0) { fieldClear = true; delay(60); return; }  // no card → field is clear
 
-  // Debounce: ignore the same card re-read within the cooldown window.
+  // Debounce: accept the SAME card again only after it has been lifted (fieldClear), and
+  // guard genuine rapid re-reads with a short cooldown. A different card taps through at once.
   unsigned long now = millis();
-  if (uid == lastCardUid && (now - lastTapMs) < TAP_COOLDOWN_MS) return;
+  if (uid == lastCardUid && (!fieldClear || (now - lastTapMs) < TAP_COOLDOWN_MS)) return;
+  fieldClear = false;
   lastCardUid = uid;
   lastTapMs = now;
 
@@ -176,6 +191,8 @@ void handleTap(const String& uid) {
   String url = String(SERVER_HOST) + "/api/v1/iot/rfid/tap";
   http.begin(url);
   http.setTimeout(HTTP_TIMEOUT_MS);
+  http.setConnectTimeout(HTTP_TIMEOUT_MS);   // bound the TCP connect too — a stuck/unroutable
+                                             // backend must not block the desk loop indefinitely
   http.addHeader("Content-Type", "application/json");
   http.addHeader("X-Device-API-Key", DEVICE_API_KEY);
 
@@ -189,22 +206,37 @@ void handleTap(const String& uid) {
   String payload = (code > 0) ? http.getString() : "";
   http.end();
 
-  if (code == 401) {                    // bad / unknown API key
-    beepError();
-    showResult("NOT AUTHORISED", "Check device key", "", uid);
-    holdThenIdle();
-    return;
-  }
+  // ── Failure paths must be DISTINCT from a genuine "card not registered" ──
+  // Otherwise a transient outage or server error reads as "new patient" and the
+  // registrar re-registers someone who already exists (duplicate record).
   if (code <= 0) {                       // network / backend unreachable
     beepError();
     showResult("BACKEND DOWN", "Use manual search", "", uid);
     holdThenIdle();
     return;
   }
+  if (code == 401) {                     // bad / unknown API key
+    beepError();
+    showResult("NOT AUTHORISED", "Check device key", "", uid);
+    holdThenIdle();
+    return;
+  }
+  if (code < 200 || code >= 300) {       // 4xx/5xx (e.g. 500 / 502 / 504 from app or proxy)
+    beepError();
+    showResult("BACKEND ERROR", String("HTTP ") + code, "Try again", uid);
+    holdThenIdle();
+    return;
+  }
 
   StaticJsonDocument<512> res;
   DeserializationError err = deserializeJson(res, payload);
-  String result = err ? "" : String((const char*) (res["result"] | ""));
+  if (err) {                             // 2xx but unparseable body — NOT a "new patient"
+    beepError();
+    showResult("BACKEND ERROR", "Bad response", "Try again", uid);
+    holdThenIdle();
+    return;
+  }
+  String result = String((const char*) (res["result"] | ""));
 
   if (result == "FOUND") {
     String name = String((const char*) (res["patientName"] | "Patient"));
