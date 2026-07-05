@@ -4,6 +4,7 @@ import com.smartTriage.smartTriage_server.common.enums.AlertSeverity;
 import com.smartTriage.smartTriage_server.common.enums.AlertType;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.EmsRunStatus;
+import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.alert.dto.ClinicalAlertResponse;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
@@ -186,14 +187,44 @@ public class ClinicalAlertService {
 
     @Transactional
     public ClinicalAlertResponse acknowledgeAlert(UUID alertId, String note) {
+        return acknowledge(alertId, note, true);
+    }
+
+    /**
+     * Governance sign-off path for medication-safety OVERRIDE alerts (the Override Audit
+     * dashboard). Deliberately does NOT enforce the critical-reason gate: the authz layer
+     * ({@code canAcknowledgeSafetyOverride}) restricts it to override rows only, and marking
+     * an override "reviewed" is a different act from silencing a live clinical alarm.
+     */
+    @Transactional
+    public ClinicalAlertResponse acknowledgeSafetyOverride(UUID alertId, String note) {
+        return acknowledge(alertId, note, false);
+    }
+
+    private ClinicalAlertResponse acknowledge(UUID alertId, String note, boolean requireReasonForCritical) {
         ClinicalAlert alert = clinicalAlertRepository.findByIdAndIsActiveTrue(alertId)
                 .orElseThrow(() -> new ResourceNotFoundException("ClinicalAlert", "id", alertId));
+
+        // PATIENT-SAFETY GATE (1b): a CRITICAL alert must not be silenced with a bare click.
+        // Acknowledgement removes the alert from EVERY escalation loop (all finders filter
+        // isAcknowledged=false), so for a CRITICAL we require a documented reason — what
+        // clinical action was taken, or why it is being dismissed. This is the authoritative
+        // server-side enforcement; the client prompts for the reason. Programmatic
+        // action-linked acks (fast-track accepted, critical-lab read-back, EMS receipt) set
+        // acknowledged directly on the entity and never reach this method, so they are
+        // unaffected. The governance override path passes requireReasonForCritical=false.
+        boolean hasReason = note != null && !note.isBlank();
+        if (requireReasonForCritical && alert.getSeverity() == AlertSeverity.CRITICAL && !hasReason) {
+            throw new ClinicalBusinessException(
+                    "A reason is required to acknowledge a CRITICAL alert. Document the clinical "
+                            + "action taken (or why the alert is being dismissed).");
+        }
 
         alert.setAcknowledged(true);
         alert.setAcknowledgedAt(Instant.now());
         // B5 — persist the acknowledge/dismiss comment (previously dropped).
         // Capped to the column length defensively.
-        if (note != null && !note.isBlank()) {
+        if (hasReason) {
             String trimmed = note.trim();
             alert.setAcknowledgmentNote(trimmed.length() > 1000 ? trimmed.substring(0, 1000) : trimmed);
         }

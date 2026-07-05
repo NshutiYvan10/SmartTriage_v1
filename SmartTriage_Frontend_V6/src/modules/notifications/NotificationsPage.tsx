@@ -10,6 +10,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
+import { useAckAlert } from '@/hooks/useAckAlert';
 
 type NotificationType = 'critical' | 'warning' | 'info' | 'success';
 type NotificationCategory = 'all' | 'triage' | 'vitals' | 'system' | 'patient';
@@ -65,6 +66,9 @@ export function NotificationsPage() {
   const storeAlerts = useAlertStore((s) => s.alerts);
   const fetchAllAlerts = useAlertStore((s) => s.fetchAllAlerts);
   const acknowledgeAlertApi = useAlertStore((s) => s.acknowledgeAlertApi);
+  // 1b: acknowledging a CRITICAL notification requires a documented reason — requestAck
+  // prompts for one (non-criticals are acked immediately).
+  const { requestAck, ackModal } = useAckAlert();
   const user = useAuthStore((s) => s.user);
 
   const mappedNotifications: Notification[] = storeAlerts.map((a) => ({
@@ -119,30 +123,56 @@ export function NotificationsPage() {
     return true;
   });
 
+  // Build the shape useAckAlert needs (id + severity, so it knows to prompt for criticals).
+  const toAckable = (n: Notification) => ({
+    id: n.id,
+    severity: n.type === 'critical' ? 'CRITICAL' : n.type === 'warning' ? 'HIGH' : 'MEDIUM',
+    patientName: n.patientName,
+    message: n.message,
+  });
+
   // Persist acknowledgement to the backend (alertStore.acknowledgeAlertApi)
   // BEFORE reflecting it locally — a local-only "read" was an illusory ack
   // (the alert stays live for everyone else / on reload), a safety hazard.
+  //
+  // 1b: a CRITICAL alert can't be silenced without a documented reason. Bulk actions ack ONLY
+  // non-criticals; unread criticals must be acknowledged individually (which prompts for a
+  // reason via requestAck) — a single click can no longer bulk-silence life-critical alarms.
   const markAllRead = () => {
-    notifications.filter((n) => !n.read).forEach((n) => acknowledgeAlertApi(n.id));
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    notifications.filter((n) => !n.read && n.type !== 'critical').forEach((n) => acknowledgeAlertApi(n.id));
+    setNotifications((prev) => prev.map((n) => (n.type === 'critical' && !n.read ? n : { ...n, read: true })));
   };
 
   const markAsRead = (id: string) => {
+    const n = notifications.find((x) => x.id === id);
+    if (!n) return;
+    if (n.type === 'critical' && !n.read) {
+      // Opens the reason modal; on confirm the store flips acknowledged and the sync effect
+      // re-renders this notification as read.
+      requestAck(toAckable(n));
+      return;
+    }
     acknowledgeAlertApi(id);
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    setNotifications((prev) => prev.map((x) => (x.id === id ? { ...x, read: true } : x)));
   };
 
   const deleteNotification = (id: string) => {
-    // Removing an unacknowledged alert from the list implies acting on it —
-    // persist the ack so it does not silently reappear unhandled.
     const target = notifications.find((n) => n.id === id);
+    // Removing an unread CRITICAL would silently silence it — require a reason instead.
+    if (target && !target.read && target.type === 'critical') {
+      requestAck(toAckable(target));
+      return;
+    }
+    // Removing an unacknowledged (non-critical) alert implies acting on it — persist the ack
+    // so it does not silently reappear unhandled.
     if (target && !target.read) acknowledgeAlertApi(id);
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
   const clearAll = () => {
-    notifications.filter((n) => !n.read).forEach((n) => acknowledgeAlertApi(n.id));
-    setNotifications([]);
+    notifications.filter((n) => !n.read && n.type !== 'critical').forEach((n) => acknowledgeAlertApi(n.id));
+    // Keep unread criticals — they must be acknowledged with a reason, not cleared en masse.
+    setNotifications((prev) => prev.filter((n) => n.type === 'critical' && !n.read));
   };
 
   const openChart = (n: Notification) => {
@@ -408,6 +438,7 @@ export function NotificationsPage() {
           )}
         </div>
       </div>
+      {ackModal}
     </div>
   );
 }

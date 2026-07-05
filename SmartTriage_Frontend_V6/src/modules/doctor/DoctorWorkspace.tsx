@@ -190,10 +190,16 @@ export function DoctorWorkspace() {
     } catch (err) { console.error(err); }
   };
 
-  // ── Acknowledge alert & navigate ──
+  // ── Act on an alert & navigate ──
+  // For a CRITICAL alert we navigate to the chart WITHOUT auto-acknowledging: silencing a
+  // critical now requires a documented reason (1b), which the doctor gives from the Alert
+  // Center after acting. Auto-acking here would have silenced its escalation with a bare
+  // click. Non-critical alerts are acknowledged as before.
   const handleAlertAction = async (alert: ClinicalAlertResponse) => {
     try {
-      await alertApi.acknowledge(alert.id);
+      if ((alert.severity || '').toUpperCase() !== 'CRITICAL') {
+        await alertApi.acknowledge(alert.id);
+      }
       if (alert.visitId) navigate(chartPath(alert.visitId));
       else loadData();
     } catch (err) { console.error(err); }

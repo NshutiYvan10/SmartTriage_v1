@@ -281,6 +281,14 @@ export function AlertsView() {
     }
   };
 
+  // 1b: a reason is mandatory to ACKNOWLEDGE a still-active CRITICAL alert (as well as for a
+  // dismiss). Acknowledging removes it from every escalation reminder, so the server requires
+  // a documented reason — mirror that in the dialog so the clinician can't submit an empty one.
+  const dialogTargetAlert = dialogAlertId ? mergedAlerts.find((a) => a.id === dialogAlertId) : undefined;
+  const dialogReasonRequired =
+    dialogMode === 'dismiss'
+    || (!!dialogTargetAlert && dialogTargetAlert.severity === 'CRITICAL' && !dialogTargetAlert.acknowledged);
+
   return (
     <div className="min-h-full">
       <div className="p-4 lg:p-6 max-w-6xl mx-auto space-y-4 animate-fade-in">
@@ -707,12 +715,18 @@ export function AlertsView() {
             <div className="mb-5">
               <label className={`block text-[11px] font-bold uppercase tracking-wider mb-2 ${text.muted}`}>
                 <MessageSquare className="w-3 h-3 inline mr-1" />
-                {dialogMode === 'dismiss' ? 'Reason *' : 'Comment (optional)'}
+                {dialogReasonRequired ? 'Reason *' : 'Comment (optional)'}
               </label>
               <textarea
                 value={dialogComment}
                 onChange={(e) => setDialogComment(e.target.value)}
-                placeholder={dialogMode === 'dismiss' ? 'Enter reason for dismissal…' : 'Add a clinical note…'}
+                placeholder={
+                  dialogReasonRequired
+                    ? (dialogMode === 'dismiss'
+                        ? 'Enter reason for dismissal…'
+                        : 'Document the clinical action taken (required for a critical alert)…')
+                    : 'Add a clinical note…'
+                }
                 rows={3}
                 autoFocus
                 className={`w-full px-4 py-3 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all ${
@@ -735,7 +749,7 @@ export function AlertsView() {
               </button>
               <button
                 onClick={submitDialog}
-                disabled={dialogSubmitting || (dialogMode === 'dismiss' && !dialogComment.trim())}
+                disabled={dialogSubmitting || (dialogReasonRequired && !dialogComment.trim())}
                 className={`inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                   dialogMode === 'dismiss'
                     ? 'bg-red-600 hover:bg-red-700 shadow-red-500/20'

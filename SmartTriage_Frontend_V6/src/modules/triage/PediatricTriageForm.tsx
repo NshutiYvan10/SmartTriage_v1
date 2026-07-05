@@ -574,7 +574,9 @@ export function PediatricTriageForm() {
     // launched from a click-through. Best-effort: a failed ack
     // shouldn't undo the triage being marked finished.
     if (fromAlertId) {
-      alertApi.acknowledge(fromAlertId).catch((err) => {
+      // The re-triage just completed IS the clinical action — record it as the ack reason so
+      // it also satisfies the server's required-reason gate for CRITICAL re-triage alerts (1b).
+      alertApi.acknowledge(fromAlertId, 'Re-triage completed').catch((err) => {
         console.warn('Failed to acknowledge originating alert', fromAlertId, err);
       });
     }

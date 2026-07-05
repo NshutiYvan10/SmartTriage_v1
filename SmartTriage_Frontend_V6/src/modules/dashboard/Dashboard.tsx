@@ -22,6 +22,7 @@ import { getCategoryColor } from '@/utils/tewsCalculator';
 import { safeFormatDistanceToNow } from '@/utils/safeDate';
 import { useMyShift, getZoneForCategory } from '@/hooks/useMyShift';
 import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
+import { useAckAlert } from '@/hooks/useAckAlert';
 import { ShiftSummaryCard } from './ShiftSummaryCard';
 import { RfidPatientFoundBanner } from './RfidPatientFoundBanner';
 import { ShiftStartBanner } from '@/components/ShiftStartBanner';
@@ -67,7 +68,9 @@ function HospitalDashboard() {
   const allAlerts = useAlertStore((state) => state.alerts);
   const alerts = useMemo(() => allAlerts.filter((a) => !a.acknowledged), [allAlerts]);
   const acknowledgeAlert = useAlertStore((state) => state.acknowledgeAlert);
-  const acknowledgeAlertApi = useAlertStore((state) => state.acknowledgeAlertApi);
+  // 1b: requestAck acknowledges non-critical alerts immediately, but prompts for a mandatory
+  // reason before silencing a CRITICAL one (a bare-click ack of a critical is now rejected).
+  const { requestAck, ackModal } = useAckAlert();
   const { zone: myZone, assignment: myShiftAssignment } = useMyShift();
   const { canSeeAllZones } = useCanSeeAllZones();
 
@@ -393,7 +396,7 @@ function HospitalDashboard() {
                               </div>
                               {!a.acknowledgedAt && (
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); acknowledgeAlertApi(a.id); }}
+                                  onClick={(e) => { e.stopPropagation(); requestAck(a); }}
                                   className="text-[10px] font-bold text-cyan-600 hover:text-cyan-500 bg-cyan-50 hover:bg-cyan-100 px-2 py-1 rounded-lg flex-shrink-0 transition-all"
                                 >
                                   ACK
@@ -913,7 +916,7 @@ function HospitalDashboard() {
                         >{alert.severity}</span>
                         {!alert.acknowledgedAt && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); acknowledgeAlertApi(alert.id); }}
+                            onClick={(e) => { e.stopPropagation(); requestAck(alert); }}
                             className="text-[9px] font-bold text-cyan-600 hover:text-white hover:bg-cyan-600 bg-cyan-50 px-1.5 py-0.5 rounded-md transition-all"
                           >
                             ACK
@@ -987,6 +990,7 @@ function HospitalDashboard() {
             onClose={() => setShowAlerts(false)}
           />
         )}
+        {ackModal}
       </div>
     </div>
   );

@@ -765,7 +765,10 @@ export function AdultTriageForm() {
         // not undo the successful triage submission.
         if (fromAlertId) {
           try {
-            await alertApi.acknowledge(fromAlertId);
+            // The re-triage the nurse just completed IS the clinical action, so record it as
+            // the acknowledgment reason — this also satisfies the server's required-reason gate
+            // for CRITICAL (RED) re-triage alerts (1b).
+            await alertApi.acknowledge(fromAlertId, 'Re-triage completed');
           } catch (ackErr) {
             console.warn('Failed to acknowledge originating alert', fromAlertId, ackErr);
           }

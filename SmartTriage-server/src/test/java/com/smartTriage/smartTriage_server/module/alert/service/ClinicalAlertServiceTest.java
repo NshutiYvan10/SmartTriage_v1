@@ -187,4 +187,68 @@ class ClinicalAlertServiceTest {
         org.mockito.Mockito.verify(repo, org.mockito.Mockito.never())
                 .findUnacknowledgedAlerts(any(), any());
     }
+
+    // ── 1b: acknowledging a CRITICAL alert requires a documented reason ──
+
+    @Test
+    void acknowledgeCriticalAlert_withoutReason_isRejected_andNotSilenced() {
+        UUID alertId = UUID.randomUUID();
+        ClinicalAlert alert = mock(ClinicalAlert.class);
+        when(alert.getSeverity()).thenReturn(AlertSeverity.CRITICAL);
+        when(repo.findByIdAndIsActiveTrue(alertId)).thenReturn(java.util.Optional.of(alert));
+
+        // A bare click (blank note) must NOT silence a critical alert — it stays in the
+        // escalation loop until a reason is documented.
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException.class,
+                () -> service.acknowledgeAlert(alertId, "   "));
+
+        org.mockito.Mockito.verify(alert, org.mockito.Mockito.never()).setAcknowledged(true);
+        org.mockito.Mockito.verify(repo, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    void acknowledgeCriticalAlert_withReason_succeeds_andStoresNote() {
+        UUID alertId = UUID.randomUUID();
+        ClinicalAlert alert = mock(ClinicalAlert.class);
+        when(alert.getSeverity()).thenReturn(AlertSeverity.CRITICAL);
+        when(alert.getAlertType()).thenReturn(AlertType.HYPOGLYCEMIA_CRITICAL);
+        when(repo.findByIdAndIsActiveTrue(alertId)).thenReturn(java.util.Optional.of(alert));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.acknowledgeAlert(alertId, "IV dextrose given, 15-min recheck ordered");
+
+        org.mockito.Mockito.verify(alert).setAcknowledged(true);
+        org.mockito.Mockito.verify(alert).setAcknowledgmentNote("IV dextrose given, 15-min recheck ordered");
+    }
+
+    @Test
+    void acknowledgeNonCriticalAlert_withoutReason_stillSucceeds() {
+        UUID alertId = UUID.randomUUID();
+        ClinicalAlert alert = mock(ClinicalAlert.class);
+        when(alert.getSeverity()).thenReturn(AlertSeverity.HIGH);
+        when(alert.getAlertType()).thenReturn(AlertType.RETRIAGE_REQUIRED);
+        when(repo.findByIdAndIsActiveTrue(alertId)).thenReturn(java.util.Optional.of(alert));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // The gate is CRITICAL-only: a HIGH re-triage nudge can still be acked without a reason.
+        service.acknowledgeAlert(alertId, null);
+
+        org.mockito.Mockito.verify(alert).setAcknowledged(true);
+    }
+
+    @Test
+    void acknowledgeSafetyOverride_criticalWithoutReason_bypassesGate() {
+        UUID alertId = UUID.randomUUID();
+        ClinicalAlert alert = mock(ClinicalAlert.class);
+        when(alert.getSeverity()).thenReturn(AlertSeverity.CRITICAL);
+        when(alert.getAlertType()).thenReturn(AlertType.MEDICATION_EMERGENCY_OVERRIDE);
+        when(repo.findByIdAndIsActiveTrue(alertId)).thenReturn(java.util.Optional.of(alert));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // Governance sign-off path is intentionally exempt from the critical-reason gate.
+        service.acknowledgeSafetyOverride(alertId, null);
+
+        org.mockito.Mockito.verify(alert).setAcknowledged(true);
+    }
 }

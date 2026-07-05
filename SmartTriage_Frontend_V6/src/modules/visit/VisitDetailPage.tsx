@@ -45,6 +45,7 @@ import { diagnosisApi } from '@/api/diagnoses';
 import { investigationApi } from '@/api/investigations';
 import { medicationApi } from '@/api/medications';
 import { alertApi } from '@/api/alerts';
+import { AckReasonModal } from '@/components/AckReasonModal';
 import { patientApi } from '@/api/patients';
 import { PatientHistoryPanel } from '@/modules/entry/PatientHistoryPanel';
 import { PatientProfilePanel } from '@/modules/entry/PatientProfilePanel';
@@ -249,6 +250,9 @@ export function VisitDetailPage() {
   const [investigations, setInvestigations] = useState<InvestigationResponse[]>([]);
   const [medications, setMedications] = useState<MedicationResponse[]>([]);
   const [visitAlerts, setVisitAlerts] = useState<ClinicalAlertResponse[]>([]);
+  // 1b: reason capture for acknowledging a CRITICAL alert (a bare click can't silence it).
+  const [ackModalAlert, setAckModalAlert] = useState<ClinicalAlertResponse | null>(null);
+  const [ackModalReason, setAckModalReason] = useState('');
   // Patient is fetched separately (visit only carries patientId).
   // Used for allergy cross-checking at prescribe time.
   const [patient, setPatient] = useState<PatientResponse | null>(null);
@@ -674,11 +678,22 @@ export function VisitDetailPage() {
     await submitPrescribe(data);
   };
 
-  const handleAcknowledgeAlert = async (alertId: string) => {
+  const handleAcknowledgeAlert = async (alertId: string, note?: string) => {
     try {
-      await alertApi.acknowledge(alertId);
+      await alertApi.acknowledge(alertId, note);
       loadData();
     } catch (err) { console.error(err); }
+  };
+
+  // 1b: acknowledging a CRITICAL alert removes it from every escalation reminder, so require a
+  // documented reason first (opens the modal). Non-critical alerts acknowledge immediately.
+  const requestAlertAck = (alert: ClinicalAlertResponse) => {
+    if ((alert.severity || '').toUpperCase() === 'CRITICAL') {
+      setAckModalReason('');
+      setAckModalAlert(alert);
+      return;
+    }
+    void handleAcknowledgeAlert(alert.id);
   };
 
   const handleInvestigationAction = async (id: string, action: string, data?: unknown) => {
@@ -843,7 +858,7 @@ export function VisitDetailPage() {
           {activeTab === 'medications' && <MedicationsTab medications={medications} showForm={showMedicationForm} setShowForm={setShowMedicationForm} onSubmit={handlePrescribeMedication} onAction={handleMedicationAction} formLoading={formLoading} patient={patient} visit={visit} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'handover' && <HandoverPanel visitId={visit.id} />}
           {activeTab === 'cross-hospital' && <CrossHospitalPanel nationalId={patient?.nationalId ?? null} />}
-          {activeTab === 'alerts' && <AlertsTab alerts={visitAlerts} onAcknowledge={handleAcknowledgeAlert} visit={visit} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
+          {activeTab === 'alerts' && <AlertsTab alerts={visitAlerts} onAcknowledge={requestAlertAck} visit={visit} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'disposition' && <DispositionTab visit={visit} onDisposition={handleRecordDisposition} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
         </div>
       </div>
@@ -877,6 +892,25 @@ export function VisitDetailPage() {
             pendingPrescribe.renalEgfrMatches,
             reason,
           )}
+        />
+      )}
+
+      {/* ── Acknowledge a CRITICAL alert — mandatory reason (1b) ── */}
+      {ackModalAlert && (
+        <AckReasonModal
+          open
+          patientName={(ackModalAlert as { patientName?: string }).patientName}
+          message={(ackModalAlert as { message?: string }).message}
+          reason={ackModalReason}
+          onReasonChange={setAckModalReason}
+          onConfirm={async () => {
+            const id = ackModalAlert.id;
+            const reason = ackModalReason.trim();
+            setAckModalAlert(null);
+            setAckModalReason('');
+            await handleAcknowledgeAlert(id, reason);
+          }}
+          onCancel={() => { setAckModalAlert(null); setAckModalReason(''); }}
         />
       )}
 
@@ -2632,7 +2666,7 @@ function AlertsTab({ alerts, onAcknowledge, visit, navigate, glassCard, glassInn
                 </button>
               )}
               {!a.acknowledged && (
-                <button onClick={() => onAcknowledge(a.id)} className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors">
+                <button onClick={() => onAcknowledge(a)} className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors">
                   <CheckCircle2 className="w-3 h-3 inline mr-1" /> Acknowledge
                 </button>
               )}

@@ -67,7 +67,7 @@ interface AlertState {
   addAlert: (alert: Omit<AIAlert, 'id' | 'timestamp' | 'acknowledged'> & { backendId?: string; acknowledged?: boolean }) => void;
   acknowledgeAlert: (id: string, clinicianId: string, comment?: string) => void;
   /** Acknowledge via API then update local store */
-  acknowledgeAlertApi: (alertId: string) => Promise<void>;
+  acknowledgeAlertApi: (alertId: string, note?: string) => Promise<void>;
   applyRecommendation: (alertId: string, clinicianId: string, clinicianName: string) => { patientId: string; previousCategory?: TriageCategory; newCategory?: TriageCategory } | null;
   dismissAlert: (id: string, clinicianId: string, reason: string) => void;
   getActiveAlerts: () => AIAlert[];
@@ -103,7 +103,7 @@ export const useAlertStore = create<AlertState>((set, get) => ({
     }
   },
 
-  acknowledgeAlertApi: async (alertId: string) => {
+  acknowledgeAlertApi: async (alertId: string, note?: string) => {
     // OPTIMISTIC: flip the row acknowledged immediately so the click ALWAYS has a
     // visible effect (the reported "ACK button does nothing" — the previous version
     // only updated AFTER the network round-trip and swallowed failures silently, so a
@@ -111,13 +111,18 @@ export const useAlertStore = create<AlertState>((set, get) => ({
     // row (not the whole array — a WS frame may have landed during the await), so the
     // alert reappears: a failed acknowledge must never masquerade as done on a
     // life-critical board.
+    //
+    // 1b: `note` carries the mandatory reason for CRITICAL alerts. The backend now
+    // REJECTS a reason-less critical ack (422), so the catch below reverts the optimistic
+    // flip and the alert correctly reappears — fail-safe, never fail-open. Callers acking a
+    // critical must supply a reason (see useAckAlert / the AlertsView dialog).
     set((state) => ({
       alerts: state.alerts.map((a) =>
         a.id === alertId ? { ...a, acknowledged: true, acknowledgedAt: new Date() } : a
       ),
     }));
     try {
-      await alertApi.acknowledge(alertId);
+      await alertApi.acknowledge(alertId, note);
     } catch (err) {
       console.error('[alertStore] acknowledgeAlertApi failed — reverting:', err);
       set((state) => ({

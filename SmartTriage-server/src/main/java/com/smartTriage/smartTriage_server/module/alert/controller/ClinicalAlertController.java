@@ -121,7 +121,10 @@ public class ClinicalAlertController {
     public ResponseEntity<ApiResponse<ClinicalAlertResponse>> acknowledgeSafetyOverride(
             @PathVariable UUID alertId,
             @RequestParam(required = false) String note) {
-        ClinicalAlertResponse alert = clinicalAlertService.acknowledgeAlert(alertId, note);
+        // Governance sign-off path — uses the non-enforcing service method so marking an
+        // override "reviewed" doesn't require the critical-alert reason gate (that gate is
+        // for silencing live clinical alarms via the generic /acknowledge endpoint).
+        ClinicalAlertResponse alert = clinicalAlertService.acknowledgeSafetyOverride(alertId, note);
         return ResponseEntity.ok(ApiResponse.success("Override acknowledged", alert));
     }
 
