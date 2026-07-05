@@ -199,7 +199,14 @@ public class RwandaTriageDecisionEngine {
                 || r.isHasComa()
                 || r.isHasHypoglycaemia()
                 || r.isHasPurpuricRash()
-                || r.isHasBurnFaceInhalation();
+                || r.isHasBurnFaceInhalation()
+                // Additional (non-national-form) EMERGENCY-level signs from the richer UI → RED.
+                || hasAny(r.getAdditionalEmergencySigns());
+    }
+
+    /** True when a captured additional-signs list holds at least one sign. */
+    private static boolean hasAny(java.util.List<String> signs) {
+        return signs != null && !signs.isEmpty();
     }
 
     // ====================================================================
@@ -250,7 +257,9 @@ public class RwandaTriageDecisionEngine {
                 || r.isVuLargeJointDislocation()
                 || r.isVuSevereMechanismOfInjury()
                 || r.isVuVerySeverePain()
-                || r.isVuPregnantAbdominalTrauma();
+                || r.isVuPregnantAbdominalTrauma()
+                // Additional (non-national-form) VERY-URGENT-level signs from the richer UI → ORANGE.
+                || hasAny(r.getAdditionalVeryUrgentSigns());
     }
 
     // ====================================================================
@@ -286,6 +295,8 @@ public class RwandaTriageDecisionEngine {
                 || r.isUrgPregnantTraumaNonAbdominal()
                 || r.isUrgModeratePain()
                 || r.isUrgLacerationAbscess()
-                || r.isUrgForeignBodyAspiration();
+                || r.isUrgForeignBodyAspiration()
+                // Additional (non-national-form) URGENT-level signs from the richer UI → YELLOW.
+                || hasAny(r.getAdditionalUrgentSigns());
     }
 }

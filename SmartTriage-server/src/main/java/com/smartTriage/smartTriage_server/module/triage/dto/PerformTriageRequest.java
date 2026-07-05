@@ -375,6 +375,33 @@ public class PerformTriageRequest {
     private boolean urgForeignBodyAspiration = false;
 
     // ====================================================================
+    // SECTION 4b: ADDITIONAL CLINICAL SIGNS (beyond the national form's fixed lists)
+    //
+    // The triage UI captures a richer set of clinical signs than the national form's
+    // fixed checkboxes (e.g. capillary refill > 3s, cold peripheries, tracheal deviation,
+    // suspected pneumothorax, eclampsia features, anaphylaxis). These MUST NOT be dropped
+    // or recorded as inert text — each is carried here at the acuity level the assessor
+    // assigned, and the decision engine treats a non-empty list exactly like the
+    // corresponding national-sign group: any additional-emergency sign → RED, any
+    // additional-very-urgent → ORANGE, any additional-urgent → YELLOW. The strings are the
+    // human-readable sign labels, persisted for the medico-legal record. This keeps the
+    // form rich (captures more life-threatening findings) without ever silently discarding
+    // a sign the nurse selected.
+    // ====================================================================
+
+    /** Extra (non-national-form) EMERGENCY-level signs the assessor checked → RED. */
+    @Builder.Default
+    private java.util.List<String> additionalEmergencySigns = new java.util.ArrayList<>();
+
+    /** Extra (non-national-form) VERY-URGENT-level signs the assessor checked → ORANGE. */
+    @Builder.Default
+    private java.util.List<String> additionalVeryUrgentSigns = new java.util.ArrayList<>();
+
+    /** Extra (non-national-form) URGENT-level signs the assessor checked → YELLOW. */
+    @Builder.Default
+    private java.util.List<String> additionalUrgentSigns = new java.util.ArrayList<>();
+
+    // ====================================================================
     // V38 — Pediatric form compliance — Very Urgent (peds-only)
     // KFH Infant 0–3 / Child 3–12 form items not present on the adult
     // form. The decision engine reads these only on peds visits.

@@ -350,6 +350,19 @@ public class TriageRecord extends BaseEntity {
     @Builder.Default
     private boolean urgForeignBodyAspiration = false;
 
+    // ── Additional (non-national-form) signs captured by the richer triage UI, persisted for
+    // the medico-legal record. Stored as " | "-joined human-readable labels; a non-empty value
+    // at a given tier drove the triage colour (see RwandaTriageDecisionEngine). Nothing the
+    // nurse selected is discarded. ──
+    @Column(name = "additional_emergency_signs", columnDefinition = "TEXT")
+    private String additionalEmergencySigns;
+
+    @Column(name = "additional_very_urgent_signs", columnDefinition = "TEXT")
+    private String additionalVeryUrgentSigns;
+
+    @Column(name = "additional_urgent_signs", columnDefinition = "TEXT")
+    private String additionalUrgentSigns;
+
     // ====================================================================
     // V38 — Pediatric form compliance — Very Urgent (peds-only)
     // These exist on the KFH Infant and/or Child triage forms but NOT on

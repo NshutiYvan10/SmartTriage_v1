@@ -309,6 +309,12 @@ public class TriageService {
                 .urgLacerationAbscess(request.isUrgLacerationAbscess())
                 .urgForeignBodyAspiration(request.isUrgForeignBodyAspiration())
 
+                // Additional (non-national-form) signs captured by the richer UI — persisted so
+                // nothing the nurse selected is lost (each also drove the triage colour).
+                .additionalEmergencySigns(joinSigns(request.getAdditionalEmergencySigns()))
+                .additionalVeryUrgentSigns(joinSigns(request.getAdditionalVeryUrgentSigns()))
+                .additionalUrgentSigns(joinSigns(request.getAdditionalUrgentSigns()))
+
                 // V38 — peds-specific Very Urgent (KFH peds form)
                 .vuPedsMoreSleepyThanNormal(request.isVuPedsMoreSleepyThanNormal())
                 .vuPedsInconsolableSeverePain(request.isVuPedsInconsolableSeverePain())
@@ -1134,5 +1140,15 @@ public class TriageService {
                 || request.getHeartRate() != null
                 || request.getSystolicBP() != null
                 || request.getTemperature() != null;
+    }
+
+    /**
+     * Join captured additional-sign labels into a single persisted string (" | "-separated),
+     * or {@code null} when none were selected. Keeps the medico-legal record of every extra
+     * sign the assessor checked beyond the national form's fixed lists.
+     */
+    private static String joinSigns(java.util.List<String> signs) {
+        if (signs == null || signs.isEmpty()) return null;
+        return String.join(" | ", signs);
     }
 }
