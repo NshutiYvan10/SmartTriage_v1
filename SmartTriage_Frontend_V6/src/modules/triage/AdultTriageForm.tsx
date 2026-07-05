@@ -517,12 +517,16 @@ export function AdultTriageForm() {
   const [discriminatorNotes, setDiscriminatorNotes] = useState('');
   const [discriminatorReviewed, setDiscriminatorReviewed] = useState(false);
   const [triageStartedAt] = useState(() => new Date());
+  // Manual clinical override — the nurse's gestalt up-triage ("Circle Triage Color"). Only ever
+  // RAISES acuity; carried via the additional-signs channel so the SERVER's category reflects it.
+  const [manualUpTriage, setManualUpTriage] = useState<'NONE' | 'ORANGE' | 'RED'>('NONE');
 
   // --- Computed ---
   const normalRanges = useMemo(() => getAdultNormalRanges(), []);
   const tewsScoring = useMemo(() => calculateAdultTEWS(tewsInput), [tewsInput]);
   const tewsColumns = useMemo(() => getAdultTEWSColumns(tewsInput), [tewsInput]);
   const hasAnyCriticalSign = useMemo(() => {
+    if (manualUpTriage === 'RED') return true; // nurse clinical override
     if (CRITICAL_SIGN_IDS.some((id) => checkedSigns[id])) return true;
     // Coma and hypoglycaemia are national EMERGENCY signs derived from AVPU / glucose (not
     // checkboxes) — they force RED on the backend, so the preview must reflect them too.
@@ -536,11 +540,11 @@ export function AdultTriageForm() {
       }
     }
     return false;
-  }, [checkedSigns, tewsInput.avpu, fieldValues, bloodGlucose, glucoseUnit]);
+  }, [checkedSigns, tewsInput.avpu, fieldValues, bloodGlucose, glucoseUnit, manualUpTriage]);
   const spo2Value = spo2 !== '' ? parseInt(spo2) : null;
 
   // Discriminator computed
-  const hasVeryUrgentSigns = useMemo(() => hasCheckedDiscriminators(VERY_URGENT_DISCRIMINATORS, checkedVeryUrgent), [checkedVeryUrgent]);
+  const hasVeryUrgentSigns = useMemo(() => hasCheckedDiscriminators(VERY_URGENT_DISCRIMINATORS, checkedVeryUrgent) || manualUpTriage === 'ORANGE', [checkedVeryUrgent, manualUpTriage]);
   const hasUrgentSigns = useMemo(() => hasCheckedDiscriminators(URGENT_DISCRIMINATORS, checkedUrgent), [checkedUrgent]);
   const discriminatorNeeded = useMemo(() => isDiscriminatorRequired(tewsScoring.totalScore, hasAnyCriticalSign), [tewsScoring.totalScore, hasAnyCriticalSign]);
 
@@ -666,6 +670,14 @@ export function AdultTriageForm() {
         ];
         const additionalEmergencySigns = EXTRA_EMERGENCY_SIGNS
           .filter(([id]) => checkedSigns[id]).map(([, label]) => label);
+        const additionalVeryUrgentSigns = [...vuRoute.extraLabels];
+        // Manual clinical override → carried via the additional channel so it drives (and is
+        // persisted on) the server's category. RED adds an emergency entry; ORANGE a very-urgent.
+        if (manualUpTriage === 'RED') {
+          additionalEmergencySigns.unshift(`Clinical override — escalated to RED${nurseName ? ' by ' + nurseName : ''}`);
+        } else if (manualUpTriage === 'ORANGE') {
+          additionalVeryUrgentSigns.unshift(`Clinical override — escalated to ORANGE${nurseName ? ' by ' + nurseName : ''}`);
+        }
         const triageResponse = await triageApi.perform({
           visitId: targetPatientId,
           // B10 — persist the phone field (previously dropped: no DTO slot).
@@ -724,7 +736,7 @@ export function AdultTriageForm() {
           urgForeignBodyAspiration: !!checkedUrgent['urg_foreign_body_aspiration'],
           // ── Additional (non-national) signs — kept, drive acuity, persisted ──
           additionalEmergencySigns,
-          additionalVeryUrgentSigns: vuRoute.extraLabels,
+          additionalVeryUrgentSigns,
           additionalUrgentSigns: urgRoute.extraLabels,
           // Clinical metadata
           presentingComplaints: chiefComplaint,
@@ -868,7 +880,7 @@ export function AdultTriageForm() {
         },
       );
     }
-  }, [canFinish, patient, patientNames, patientAge, gender, chiefComplaint, weightVal, categoryResult, tewsScoring, assignCategory, setTriageStatus, addPatient, addAuditEntry, addTEWSHistoryEntry, nurseName, discriminatorNeeded, discriminatorReviewed, discriminatorNotes, hasVeryUrgentSigns, hasUrgentSigns, hasAnyCriticalSign, spo2Value, triageStartedAt, tewsInput, checkedSigns, checkedVeryUrgent, checkedUrgent, fieldValues]);
+  }, [canFinish, patient, patientNames, patientAge, gender, chiefComplaint, weightVal, categoryResult, tewsScoring, assignCategory, setTriageStatus, addPatient, addAuditEntry, addTEWSHistoryEntry, nurseName, discriminatorNeeded, discriminatorReviewed, discriminatorNotes, hasVeryUrgentSigns, hasUrgentSigns, hasAnyCriticalSign, spo2Value, triageStartedAt, tewsInput, checkedSigns, checkedVeryUrgent, checkedUrgent, fieldValues, manualUpTriage]);
 
   const handleConfirmPlaceBed = useCallback(async () => {
     if (!suggestedBed) return;
@@ -1580,6 +1592,36 @@ export function AdultTriageForm() {
               <p className="text-lg font-bold text-gray-900">{tewsScoring.totalScore} <span className="text-xs font-normal text-slate-400">/ 17</span></p>
             </div>
             {triageFinished && <div className="w-full mt-2"><CategoryTimer category={categoryResult.category} startedAt={triageFinishTime!} /></div>}
+            {/* Manual up-triage override — the nurse's clinical judgement ("Circle Triage Color").
+                Only ever RAISES acuity; sent via the additional-signs channel so the server honours it. */}
+            {!triageFinished && (
+              <div className="w-full mt-3 pt-3 border-t border-slate-200/70">
+                <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Clinical override — raise acuity</label>
+                <div className="grid grid-cols-3 gap-1">
+                  {(['NONE', 'ORANGE', 'RED'] as const).map((lvl) => (
+                    <button
+                      key={lvl}
+                      type="button"
+                      onClick={() => setManualUpTriage(lvl)}
+                      className={`px-2 py-1 text-[10px] font-bold rounded-lg border transition-all ${
+                        manualUpTriage === lvl
+                          ? lvl === 'RED'
+                            ? 'bg-red-600 text-white border-red-600'
+                            : lvl === 'ORANGE'
+                              ? 'bg-orange-500 text-white border-orange-500'
+                              : 'bg-slate-600 text-white border-slate-600'
+                          : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      {lvl === 'NONE' ? 'None' : `→ ${lvl}`}
+                    </button>
+                  ))}
+                </div>
+                {manualUpTriage !== 'NONE' && (
+                  <p className="text-[9px] text-slate-500 mt-1">Category raised to at least {manualUpTriage} on clinical judgement.</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
