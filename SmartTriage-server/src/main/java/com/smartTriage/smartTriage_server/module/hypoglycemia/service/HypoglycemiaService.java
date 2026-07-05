@@ -173,6 +173,19 @@ public class HypoglycemiaService {
         // anything outside the physiologic window — range alone cannot disambiguate
         // mmol/L from mg/dL, so we rely on the unit AND a plausibility floor/ceiling.
         GlucoseUnit unit = request.getUnit() != null ? request.getUnit() : GlucoseUnit.MMOL_L;
+        // Unit-AWARE plausibility on the RAW entry. This is a post-treatment RECHECK — glucose should
+        // be rising from hypoglycaemia toward normal — so a mg/dL reading above ~600 (or mmol/L above
+        // ~33.3) is almost certainly a unit/data error. The shared mmol gate below is too loose to
+        // catch it (e.g. 999 mg/dL converts to 55.5 mmol/L, under the 60 mmol/L ceiling, and would be
+        // stored). Reject per-unit with a clear message; never auto-resolve on a suspected unit error.
+        final double rawMax = unit == GlucoseUnit.MG_DL ? 600.0 : 33.3;
+        final double rawMin = unit == GlucoseUnit.MG_DL ? 10.0 : 0.5;
+        double raw = request.getGlucoseLevel();
+        if (raw < rawMin || raw > rawMax) {
+            throw new IllegalArgumentException(String.format(
+                    "Repeat glucose %.1f %s is outside the plausible range for a recheck (%.1f–%.1f %s). "
+                    + "Check the value and the selected unit.", raw, unit, rawMin, rawMax, unit));
+        }
         double glucoseMmol = unit.toMmolL(request.getGlucoseLevel());
         if (glucoseMmol < PLAUSIBLE_MIN_MMOL || glucoseMmol > PLAUSIBLE_MAX_MMOL) {
             throw new IllegalArgumentException(String.format(

@@ -262,12 +262,12 @@ export function HypoglycemiaPanel({ visitId, onChanged }: HypoglycemiaPanelProps
                         </button>
                       ))}
                     </div>
-                    <button onClick={() => submitTreatment(evt.id)} disabled={!treatment || busy} className="px-4 py-2 text-[11px] font-bold rounded-xl bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 transition-colors disabled:opacity-50">Confirm treatment</button>
+                    <button onClick={() => submitTreatment(evt.id)} disabled={!treatment.trim() || busy} className="px-4 py-2 text-[11px] font-bold rounded-xl bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 transition-colors disabled:opacity-50">Confirm treatment</button>
                   </div>
                 )}
                 {repeatFor === evt.id && (
                   <div className="px-5 py-3 border-t flex items-center gap-2 flex-wrap" style={{ borderColor: isDark ? 'rgba(2,132,199,0.12)' : 'rgba(203,213,225,0.3)' }}>
-                    <input type="number" step={repeatUnit === 'MG_DL' ? '1' : '0.1'} min="0" max={repeatUnit === 'MG_DL' ? '600' : '40'} value={repeatGlucose}
+                    <input type="number" step={repeatUnit === 'MG_DL' ? '1' : '0.1'} min="0" max={repeatUnit === 'MG_DL' ? '600' : '33.3'} value={repeatGlucose}
                       onChange={(e) => setRepeatGlucose(e.target.value)} placeholder={repeatUnit === 'MG_DL' ? 'e.g. 75' : 'e.g. 4.2'}
                       className="w-32 px-3 py-2.5 rounded-xl text-sm outline-none" style={glassInner} />
                     {/* Unit toggle — a mg/dL glucometer reading is converted server-side */}

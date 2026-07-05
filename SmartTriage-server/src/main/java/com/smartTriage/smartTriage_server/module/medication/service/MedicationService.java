@@ -956,6 +956,12 @@ public class MedicationService {
     public MedicationResponse holdMedication(UUID medicationId, String reason) {
         MedicationAdministration med = findMedicationOrThrow(medicationId);
 
+        // Audit compliance: holding a life-critical order MUST carry a documented reason. The web
+        // client enforces >=3 chars, but a direct API caller could bypass it — enforce server-side too.
+        if (reason == null || reason.trim().length() < 3) {
+            throw new ClinicalBusinessException("A reason (at least 3 characters) is required to hold a medication order.");
+        }
+
         if (med.getStatus() != MedicationStatus.PRESCRIBED) {
             throw new ClinicalBusinessException(
                     "Only PRESCRIBED medications can be held. Current status: " + med.getStatus());
