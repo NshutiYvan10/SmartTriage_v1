@@ -38,9 +38,17 @@ public final class FastTrackMapper {
                 .ecgCompletedAt(activation.getEcgCompletedAt())
                 .ecgResult(activation.getEcgResult())
                 .stElevation(activation.getStElevation())
-                .troponinOrdered(activation.getTroponinOrdered())
-                .troponinResult(activation.getTroponinResult())
-                .troponinResultedAt(activation.getTroponinResultedAt())
+                // Troponin: prefer the labs bridge (latest resulted troponin from the
+                // Investigations / Lab module); fall back to any persisted value.
+                .troponinOrdered(activation.getLatestTroponinValue() != null
+                        ? Boolean.TRUE : activation.getTroponinOrdered())
+                .troponinResult(activation.getLatestTroponinValue() != null
+                        ? activation.getLatestTroponinValue() : activation.getTroponinResult())
+                .troponinResultedAt(activation.getLatestTroponinResultedAt() != null
+                        ? activation.getLatestTroponinResultedAt() : activation.getTroponinResultedAt())
+                .troponinUnit(activation.getLatestTroponinUnit())
+                .troponinElevated(activation.getLatestTroponinElevated())
+                .troponinSource(activation.getLatestTroponinSource())
                 .aspirinGiven(activation.getAspirinGiven())
                 .aspirinGivenAt(activation.getAspirinGivenAt())
                 .anticoagulantGiven(activation.getAnticoagulantGiven())

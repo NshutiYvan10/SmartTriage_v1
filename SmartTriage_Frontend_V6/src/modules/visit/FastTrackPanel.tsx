@@ -402,6 +402,7 @@ function ActiveCard({
               <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg ${stroke ? 'bg-purple-500/10 text-purple-400' : 'bg-red-500/10 text-red-400'}`}>{TYPE_LABEL[a.fastTrackType as FastTrackType]}</span>
               {a.isHemorrhagic === true && <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-red-500/15 text-red-500"><AlertTriangle className="w-3 h-3 inline mr-1" />Hemorrhagic</span>}
               {a.stElevation === true && <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-red-500/15 text-red-500"><AlertTriangle className="w-3 h-3 inline mr-1" />ST Elevation</span>}
+              {a.troponinElevated === true && <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-red-500/15 text-red-500"><AlertTriangle className="w-3 h-3 inline mr-1" />Troponin ↑</span>}
               {a.acknowledgedAt && <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400"><UserCheck className="w-3 h-3 inline mr-1" />Acknowledged</span>}
             </div>
             <div className="flex items-center gap-3 flex-wrap">
@@ -422,6 +423,13 @@ function ActiveCard({
 
             {a.ecgResult && <p className={`text-[11px] mt-2 ${text.body}`}>ECG: {a.ecgResult}</p>}
             {a.ctResult && <p className={`text-[11px] mt-1 ${text.body}`}>CT: {a.ctResult}</p>}
+            {a.troponinResult != null && (
+              <p className={`text-[11px] mt-1 ${a.troponinElevated === true ? 'text-red-400 font-semibold' : text.body}`} title={a.troponinSource || undefined}>
+                Troponin: {a.troponinResult}{a.troponinUnit ? ` ${a.troponinUnit}` : ''}
+                {a.troponinElevated === true ? ' (elevated)' : ''}
+                {a.troponinResultedAt ? ` · ${format(new Date(a.troponinResultedAt), 'dd MMM HH:mm')}` : ''}
+              </p>
+            )}
             {stroke && a.thrombolysisAdvisory && (
               <p className={`text-[10px] mt-2 leading-relaxed ${a.thrombolysisEligible === true ? 'text-emerald-400' : a.thrombolysisEligible === false ? 'text-red-400' : 'text-amber-400'}`}>💉 {a.thrombolysisAdvisory}</p>
             )}

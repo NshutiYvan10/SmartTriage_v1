@@ -141,6 +141,26 @@ public class FastTrackActivation extends BaseEntity {
     @Column(name = "troponin_resulted_at")
     private Instant troponinResultedAt;
 
+    // ── Labs bridge (read-side, NOT persisted) ──────────────────────────────
+    // The latest resulted troponin for this visit, pulled from the Investigations
+    // / Lab module by FastTrackTroponinResolver on every response path. These are
+    // @Transient so they NEVER flush — the fast-track never owns the troponin, it
+    // just surfaces the lab's latest. Populated for MI/ACS pathways only.
+    @Transient
+    private Double latestTroponinValue;
+
+    @Transient
+    private String latestTroponinUnit;
+
+    @Transient
+    private Instant latestTroponinResultedAt;
+
+    @Transient
+    private Boolean latestTroponinElevated;
+
+    @Transient
+    private String latestTroponinSource;
+
     @Column(name = "aspirin_given")
     private Boolean aspirinGiven;
 

@@ -60,6 +60,12 @@ public class FastTrackResponse {
     private Boolean troponinOrdered;
     private Double troponinResult;
     private Instant troponinResultedAt;
+    // Labs bridge — provenance + interpretation of the latest resulted troponin
+    // (from Investigations / Lab), surfaced on MI/ACS pathways. troponinResult /
+    // troponinResultedAt / troponinOrdered above are populated FROM this bridge.
+    private String troponinUnit;
+    private Boolean troponinElevated;
+    private String troponinSource;
     private Boolean aspirinGiven;
     private Instant aspirinGivenAt;
     private Boolean anticoagulantGiven;

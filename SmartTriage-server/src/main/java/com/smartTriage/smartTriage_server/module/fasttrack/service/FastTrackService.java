@@ -56,6 +56,7 @@ public class FastTrackService {
     private final ShiftAssignmentService shiftAssignmentService;
     private final TriageRecordRepository triageRecordRepository;
     private final StrokeMIDetectionEngine strokeMIDetectionEngine;
+    private final FastTrackTroponinResolver troponinResolver;
 
     /**
      * Activate a fast-track protocol for a visit.
@@ -363,8 +364,34 @@ public class FastTrackService {
             org.hibernate.Hibernate.initialize(v.getCurrentBed());
             org.hibernate.Hibernate.initialize(v.getHospital());
             org.hibernate.Hibernate.initialize(v.getPatient());
+            applyLatestTroponin(activation, v.getId());
         }
         return activation;
+    }
+
+    /**
+     * Labs bridge: surface the latest resulted troponin for this visit on MI/ACS
+     * pathways. Writes ONLY the {@code @Transient latestTroponin*} fields — never
+     * the persisted columns — so it is side-effect-free even on the read-write
+     * mutation paths that also route through {@link #hydrateForResponse}. Troponin
+     * is meaningless for a stroke/TIA activation, so those are skipped (also spares
+     * the dashboard list a lab lookup per stroke row). Best-effort: a lab-lookup
+     * failure must never break the fast-track response.
+     */
+    private void applyLatestTroponin(FastTrackActivation activation, UUID visitId) {
+        FastTrackType type = activation.getFastTrackType();
+        if (type != FastTrackType.STEMI_SUSPECTED && type != FastTrackType.NSTEMI_SUSPECTED) return;
+        try {
+            FastTrackTroponinResolver.Troponin t = troponinResolver.latestForVisit(visitId);
+            if (t == null) return;
+            activation.setLatestTroponinValue(t.value());
+            activation.setLatestTroponinUnit(t.unit());
+            activation.setLatestTroponinResultedAt(t.resultedAt());
+            activation.setLatestTroponinElevated(t.elevated());
+            activation.setLatestTroponinSource(t.source());
+        } catch (Exception e) {
+            log.warn("Failed to resolve latest troponin for visit {}: {}", visitId, e.getMessage());
+        }
     }
 
     /**

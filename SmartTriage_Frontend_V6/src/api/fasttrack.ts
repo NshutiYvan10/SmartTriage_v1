@@ -57,6 +57,9 @@ export interface FastTrackActivation {
   troponinOrdered: boolean | null;
   troponinResult: number | null;
   troponinResultedAt: string | null;
+  troponinUnit: string | null;
+  troponinElevated: boolean | null;
+  troponinSource: string | null;
   aspirinGiven: boolean | null;
   anticoagulantGiven: boolean | null;
   referredForPci: boolean | null;

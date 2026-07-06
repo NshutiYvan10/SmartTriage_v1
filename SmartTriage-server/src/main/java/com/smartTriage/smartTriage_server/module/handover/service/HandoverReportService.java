@@ -118,6 +118,9 @@ public class HandoverReportService {
      */
     private final com.smartTriage.smartTriage_server.module.medication.service.MedicationScheduleService medicationScheduleService;
 
+    /** Labs bridge — the latest resulted troponin for a visit, for the fast-track block. */
+    private final com.smartTriage.smartTriage_server.module.fasttrack.service.FastTrackTroponinResolver troponinResolver;
+
     private static final DateTimeFormatter TIME_FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.of("Africa/Kigali"));
 
@@ -1112,11 +1115,7 @@ public class HandoverReportService {
         appendField(sb, "  BE-FAST", ft.getBeFastScore());
         if (ft.getNihssScore() != null) sb.append("  NIHSS: ").append(ft.getNihssScore()).append("\n");
         appendYesNo(sb, "  ST elevation", ft.getStElevation());
-        if (ft.getTroponinResult() != null) {
-            sb.append("  Troponin: ").append(ft.getTroponinResult());
-            if (ft.getTroponinResultedAt() != null) sb.append(" (").append(TIME_FMT.format(ft.getTroponinResultedAt())).append(")");
-            sb.append("\n");
-        }
+        appendTroponin(sb, ft);
         appendYesNo(sb, "  Hemorrhagic", ft.getIsHemorrhagic());
         appendField(sb, "  CT result", ft.getCtResult());
         appendField(sb, "  ECG result", ft.getEcgResult());
@@ -1130,6 +1129,39 @@ public class HandoverReportService {
         appendField(sb, "  Outcome", ft.getOutcome());
         appendField(sb, "  Notes", ft.getNotes());
         return sb.toString();
+    }
+
+    /**
+     * Troponin line for the fast-track block. Prefers the labs bridge (the latest
+     * resulted troponin from the Investigations / Lab module) so the handover shows
+     * a real value even though nothing ever wrote the persisted troponin column;
+     * falls back to any persisted value. Best-effort: a lab lookup must never break
+     * the handover.
+     */
+    private void appendTroponin(StringBuilder sb, FastTrackActivation ft) {
+        try {
+            UUID visitId = ft.getVisit() != null ? ft.getVisit().getId() : null;
+            if (visitId != null && (ft.getFastTrackType() == FastTrackType.STEMI_SUSPECTED
+                    || ft.getFastTrackType() == FastTrackType.NSTEMI_SUSPECTED)) {
+                var t = troponinResolver.latestForVisit(visitId);
+                if (t != null) {
+                    sb.append("  Troponin: ").append(t.value());
+                    if (t.unit() != null && !t.unit().isBlank()) sb.append(" ").append(t.unit());
+                    if (t.elevated()) sb.append(" [ELEVATED]");
+                    if (t.resultedAt() != null) sb.append(" (").append(TIME_FMT.format(t.resultedAt())).append(")");
+                    sb.append(" — ").append(t.source()).append("\n");
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Handover troponin lookup failed for fast-track {}: {}", ft.getId(), e.getMessage());
+        }
+        // Fallback: any persisted value (legacy / manual entry).
+        if (ft.getTroponinResult() != null) {
+            sb.append("  Troponin: ").append(ft.getTroponinResult());
+            if (ft.getTroponinResultedAt() != null) sb.append(" (").append(TIME_FMT.format(ft.getTroponinResultedAt())).append(")");
+            sb.append("\n");
+        }
     }
 
     private String buildSepsisBlock(Visit visit) {

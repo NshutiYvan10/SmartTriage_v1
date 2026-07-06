@@ -75,7 +75,8 @@ class HandoverReportServiceTest {
             mock(com.smartTriage.smartTriage_server.module.pathway.repository.PathwayActivationRepository.class),
             mock(com.smartTriage.smartTriage_server.module.zonetransfer.repository.ZoneTransferRepository.class),
             mock(com.smartTriage.smartTriage_server.module.patient.repository.PatientChronicConditionRepository.class),
-            medicationScheduleService);
+            medicationScheduleService,
+            mock(com.smartTriage.smartTriage_server.module.fasttrack.service.FastTrackTroponinResolver.class));
 
     @Test
     void generateReport_assemblesDoctorCriticalSections_andPersists() {

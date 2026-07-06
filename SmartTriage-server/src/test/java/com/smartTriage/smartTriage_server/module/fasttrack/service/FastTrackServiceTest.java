@@ -69,7 +69,7 @@ class FastTrackServiceTest {
         shiftService = mock(com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService.class);
         TriageRecordRepository triageRepo = mock(TriageRecordRepository.class);
         service = new FastTrackService(ftRepo, visitRepo, alertRepo, publisher, shiftService,
-                triageRepo, new StrokeMIDetectionEngine());
+                triageRepo, new StrokeMIDetectionEngine(), mock(FastTrackTroponinResolver.class));
 
         Hospital h = new Hospital();
         h.setId(hospitalId);
