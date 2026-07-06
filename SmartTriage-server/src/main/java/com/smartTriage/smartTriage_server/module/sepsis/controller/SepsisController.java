@@ -62,6 +62,18 @@ public class SepsisController {
     }
 
     /**
+     * Suggest lactate / WBC for the screening form from lab data already recorded
+     * for this visit — pre-fills the "Add labs" form so the clinician need not
+     * re-key values. Read-only; never runs a screening.
+     */
+    @GetMapping("/visit/{visitId}/lab-suggestions")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
+    public ResponseEntity<ApiResponse<com.smartTriage.smartTriage_server.module.sepsis.dto.SepsisLabSuggestionsResponse>> getLabSuggestions(
+            @PathVariable UUID visitId) {
+        return ResponseEntity.ok(ApiResponse.success(sepsisService.getLabSuggestions(visitId)));
+    }
+
+    /**
      * Get the current active screening for a visit.
      */
     @GetMapping("/visit/{visitId}/active")

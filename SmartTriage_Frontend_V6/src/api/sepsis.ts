@@ -58,6 +58,25 @@ export interface SepsisScreeningRequest {
   notes?: string;
 }
 
+/** One pre-fill suggestion (lactate or WBC) sourced from existing lab data. */
+export interface SepsisLabSuggestion {
+  value: number;
+  unit: string | null;
+  /** value converted to the unit the engine expects (mmol/L for lactate, cells/µL for WBC). */
+  normalizedValue: number;
+  normalizedUnit: string;
+  /** Provenance, e.g. "Lab: CBC — WBC" or "Investigation: Point-of-care lactate". */
+  source: string;
+  resultedAt: string;
+  /** When true the source unit was ambiguous — the UI flags "verify unit". */
+  needsUnitConfirmation: boolean;
+}
+
+export interface SepsisLabSuggestions {
+  lactate: SepsisLabSuggestion | null;
+  wbc: SepsisLabSuggestion | null;
+}
+
 export const sepsisApi = {
   // post() only serializes a body when one is passed, so screen(visitId) with
   // no body is byte-for-byte the prior vitals-only request.
@@ -82,4 +101,9 @@ export const sepsisApi = {
     get<SepsisScreening[]>(
       `/sepsis/hospital/${hospitalId}/active${zone ? `?zone=${zone}` : ''}`,
     ),
+  // Pre-fill suggestions for the "Add labs" form — latest lactate/WBC already on
+  // file for the visit, normalised to the engine's units. Read-only; the
+  // clinician confirms before screening.
+  getLabSuggestions: (visitId: string) =>
+    get<SepsisLabSuggestions>(`/sepsis/visit/${visitId}/lab-suggestions`),
 };

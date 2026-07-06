@@ -18,7 +18,7 @@ import {
   AlertTriangle, RefreshCw, History,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
-import { sepsisApi, type SepsisScreening, type SepsisScreeningRequest } from '@/api/sepsis';
+import { sepsisApi, type SepsisScreening, type SepsisScreeningRequest, type SepsisLabSuggestions, type SepsisLabSuggestion } from '@/api/sepsis';
 import { subscribeToSepsis } from '@/api/websocket';
 import { useWebSocketGeneration } from '@/hooks/useWebSocket';
 import { useAuthStore } from '@/store/authStore';
@@ -105,6 +105,12 @@ export function SepsisPanel({ visitId, latestVitals, onScreened }: SepsisPanelPr
   // byte-for-byte the prior vitals-only request.
   const [showLabsForm, setShowLabsForm] = useState(false);
   const [labs, setLabs] = useState({ lactate: '', wbc: '', infectionSource: '', notes: '' });
+  // Labs bridge: latest lactate/WBC already on file (resulted investigations +
+  // lab-panel analytes), fetched when the form opens to PRE-FILL — the clinician
+  // reviews/edits and confirms; nothing auto-screens.
+  const [labSuggestions, setLabSuggestions] = useState<SepsisLabSuggestions | null>(null);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const suggestFetchedForRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -135,6 +141,26 @@ export function SepsisPanel({ visitId, latestVitals, onScreened }: SepsisPanelPr
     });
     return () => unsub();
   }, [hospitalId, visitId, load, wsGen]);
+
+  // When the "Add labs" form opens, pull the latest lactate/WBC on file for this
+  // visit and pre-fill any EMPTY field (never clobber what the clinician typed).
+  // Fetches once per visit; the clinician can still clear/override each value.
+  useEffect(() => {
+    if (!showLabsForm || suggestFetchedForRef.current === visitId) return;
+    suggestFetchedForRef.current = visitId;
+    setSuggestLoading(true);
+    sepsisApi.getLabSuggestions(visitId)
+      .then((s) => {
+        setLabSuggestions(s);
+        setLabs((l) => ({
+          ...l,
+          lactate: l.lactate === '' && s.lactate ? String(s.lactate.normalizedValue) : l.lactate,
+          wbc: l.wbc === '' && s.wbc ? String(Math.round(s.wbc.normalizedValue)) : l.wbc,
+        }));
+      })
+      .catch((err) => console.error('Failed to load sepsis lab suggestions:', err))
+      .finally(() => setSuggestLoading(false));
+  }, [showLabsForm, visitId]);
 
   const runScreening = async () => {
     setRunning(true);
@@ -290,9 +316,19 @@ export function SepsisPanel({ visitId, latestVitals, onScreened }: SepsisPanelPr
 
         {showLabsForm && (
           <div className="mt-3 rounded-xl p-4 animate-fade-up" style={glassInner}>
-            <p className={`text-[11px] font-bold uppercase tracking-wider mb-3 ${text.muted}`}>
-              Optional labs &amp; context (operator-entered)
+            <p className={`text-[11px] font-bold uppercase tracking-wider mb-1 ${text.muted}`}>
+              Optional labs &amp; context
             </p>
+            {suggestLoading && (
+              <p className={`text-[10px] mb-2 flex items-center gap-1.5 ${text.muted}`}>
+                <Loader2 className="w-3 h-3 animate-spin" /> Checking labs on file…
+              </p>
+            )}
+            {!suggestLoading && labSuggestions && !labSuggestions.lactate && !labSuggestions.wbc && (
+              <p className={`text-[10px] mb-2 ${text.muted}`}>
+                No recent lactate or WBC on file — enter values below if available.
+              </p>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className={`block text-[10px] font-semibold mb-1 ${text.muted}`}>Lactate (mmol/L)</label>
@@ -305,6 +341,7 @@ export function SepsisPanel({ visitId, latestVitals, onScreened }: SepsisPanelPr
                   style={glassInner}
                 />
                 <p className={`text-[9px] mt-1 ${text.muted}`}>&gt; 2.0 mmol/L escalates to severe sepsis</p>
+                <LabSourceHint s={labSuggestions?.lactate ?? null} canonicalUnit="mmol/L" isDark={isDark} />
               </div>
               <div>
                 <label className={`block text-[10px] font-semibold mb-1 ${text.muted}`}>WBC (cells/µL)</label>
@@ -317,6 +354,7 @@ export function SepsisPanel({ visitId, latestVitals, onScreened }: SepsisPanelPr
                   style={glassInner}
                 />
                 <p className={`text-[9px] mt-1 ${text.muted}`}>Absolute count — &gt;12000 or &lt;4000 meets the SIRS criterion</p>
+                <LabSourceHint s={labSuggestions?.wbc ?? null} canonicalUnit="cells/µL" isDark={isDark} />
               </div>
               <div className="sm:col-span-2">
                 <label className={`block text-[10px] font-semibold mb-1 ${text.muted}`}>Suspected infection source</label>
@@ -605,6 +643,23 @@ function ScreeningCard({
         </div>
       )}
     </div>
+  );
+}
+
+/* Provenance caption under a pre-filled lab field: where the value came from, its
+   age, the originally-recorded value/unit when a conversion happened, and an amber
+   "verify unit" flag when the source unit was ambiguous. */
+function LabSourceHint({ s, canonicalUnit, isDark }: { s: SepsisLabSuggestion | null; canonicalUnit: string; isDark: boolean }) {
+  if (!s) return null;
+  const norm = (u: string) => u.replace(/\s/g, '').toLowerCase();
+  const converted = !!s.unit && norm(s.unit) !== norm(canonicalUnit);
+  const recorded = s.unit ? `${s.value} ${s.unit}` : `${s.value}`;
+  return (
+    <p className={`text-[9px] mt-1 font-semibold ${s.needsUnitConfirmation ? 'text-amber-500' : (isDark ? 'text-cyan-400' : 'text-cyan-600')}`}>
+      ↳ Pre-filled from {s.source} · {formatElapsed(s.resultedAt)} old
+      {converted ? ` (recorded ${recorded})` : ''}
+      {s.needsUnitConfirmation ? ' — ⚠ verify unit' : ''}
+    </p>
   );
 }
 

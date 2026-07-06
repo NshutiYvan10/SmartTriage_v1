@@ -52,6 +52,7 @@ public class SepsisService {
     private final ClinicalAlertRepository clinicalAlertRepository;
     private final ShiftAssignmentService shiftAssignmentService;
     private final RealTimeEventPublisher realTimeEventPublisher;
+    private final SepsisLabResolver sepsisLabResolver;
 
     /**
      * Screen a patient for sepsis using their latest vital signs.
@@ -303,6 +304,15 @@ public class SepsisService {
         // but the panel's reload silently failed and showed nothing.
         page.forEach(this::hydrateForResponse);
         return page;
+    }
+
+    /**
+     * Suggest lactate / WBC for the screening form from lab data already recorded
+     * for this visit (resulted investigations + lab-panel analytes), normalised to
+     * the units the engine expects. Read-only; the clinician confirms before use.
+     */
+    public com.smartTriage.smartTriage_server.module.sepsis.dto.SepsisLabSuggestionsResponse getLabSuggestions(UUID visitId) {
+        return sepsisLabResolver.resolve(visitId);
     }
 
     /**
