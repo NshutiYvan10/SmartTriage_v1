@@ -15,6 +15,8 @@ public final class AuditMapper {
                 .actorName(a.getActorName())
                 .actorRole(a.getActorRole())
                 .hospitalId(a.getHospitalId())
+                .visitId(a.getVisitId())
+                .patientId(a.getPatientId())
                 .httpMethod(a.getHttpMethod())
                 .path(a.getPath())
                 .action(a.getAction())

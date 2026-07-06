@@ -44,10 +44,30 @@ public class AuditController {
             @PathVariable UUID hospitalId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            @RequestParam(required = false) UUID actorUserId,
+            @RequestParam(required = false) String outcome,
+            @RequestParam(required = false) String q,
             @PageableDefault(size = 50) Pageable pageable) {
-        Page<AuditLogResponse> page = auditService.getForHospital(hospitalId, from, to, pageable)
+        Page<AuditLogResponse> page = auditService
+                .search(hospitalId, from, to, actorUserId, outcome, q, pageable)
                 .map(AuditMapper::toResponse);
+        auditService.enrichWithVisitRefs(page.getContent());
         return ResponseEntity.ok(ApiResponse.success(page));
+    }
+
+    /**
+     * V107 — the incident timeline: every audited action that touched this visit,
+     * oldest first (who did what, when, outcome — including FAILED/denied attempts).
+     * Gated to the governance/audit readers via the visit's own hospital.
+     */
+    @GetMapping("/visit/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canViewAuditForVisit(authentication, #visitId)")
+    public ResponseEntity<ApiResponse<List<AuditLogResponse>>> visitTrail(@PathVariable UUID visitId) {
+        List<AuditLogResponse> rows = auditService.getForVisit(visitId).stream()
+                .map(AuditMapper::toResponse)
+                .collect(java.util.stream.Collectors.toList());
+        auditService.enrichWithVisitRefs(rows);
+        return ResponseEntity.ok(ApiResponse.success(rows));
     }
 
     @GetMapping("/hospital/{hospitalId}/export")
@@ -59,13 +79,21 @@ public class AuditController {
         Instant rangeFrom = from != null ? from : Instant.now().minus(30, ChronoUnit.DAYS);
         Instant rangeTo = to != null ? to : Instant.now();
         List<AuditLog> rows = auditService.getForHospitalRange(hospitalId, rangeFrom, rangeTo);
+        // Resolve visit display refs once for the whole export (V107 patient columns).
+        List<AuditLogResponse> enriched = rows.stream()
+                .map(AuditMapper::toResponse)
+                .collect(java.util.stream.Collectors.toList());
+        auditService.enrichWithVisitRefs(enriched);
 
-        StringBuilder sb = new StringBuilder("Timestamp,Actor,Role,Action,Method,Path,Status,Outcome\n");
-        for (AuditLog a : rows) {
-            sb.append(csv(a.getCreatedAt())).append(',')
+        StringBuilder sb = new StringBuilder(
+                "Timestamp,Actor,Role,Action,Visit,Patient,Method,Path,Status,Outcome\n");
+        for (AuditLogResponse a : enriched) {
+            sb.append(csv(a.getTimestamp())).append(',')
               .append(csv(a.getActorName())).append(',')
               .append(csv(a.getActorRole())).append(',')
               .append(csv(a.getAction())).append(',')
+              .append(csv(a.getVisitNumber())).append(',')
+              .append(csv(a.getPatientName())).append(',')
               .append(csv(a.getHttpMethod())).append(',')
               .append(csv(a.getPath())).append(',')
               .append(csv(a.getStatusCode())).append(',')

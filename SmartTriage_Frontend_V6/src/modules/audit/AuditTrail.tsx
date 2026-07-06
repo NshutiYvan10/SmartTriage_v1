@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   ScrollText, Search, Download, Calendar, Clock,
   CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Loader2, RefreshCw,
+  User, History, X,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { auditApi, AuditLogEntry } from '@/api/audit';
@@ -24,6 +25,13 @@ export function AuditTrail() {
   const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
   const [downloading, setDownloading] = useState(false);
+  // Outcome filter — server-side, so "Failed" surfaces denied/erroring actions
+  // beyond the loaded page (the incident-review starting point).
+  const [outcomeFilter, setOutcomeFilter] = useState<'' | 'SUCCESS' | 'FAILED'>('');
+  // Per-patient incident timeline drawer (V107).
+  const [trailFor, setTrailFor] = useState<AuditLogEntry | null>(null);
+  const [trail, setTrail] = useState<AuditLogEntry[]>([]);
+  const [trailLoading, setTrailLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!hospitalId) return;
@@ -33,6 +41,7 @@ export function AuditTrail() {
         size: 200,
         from: startIso(dateRange.start),
         to: endIso(dateRange.end),
+        outcome: outcomeFilter || undefined,
       });
       setEntries(res.content || []);
     } catch (e) {
@@ -41,9 +50,23 @@ export function AuditTrail() {
     } finally {
       setLoading(false);
     }
-  }, [hospitalId, dateRange.start, dateRange.end]);
+  }, [hospitalId, dateRange.start, dateRange.end, outcomeFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Open the full chronological trail for the visit an entry touched.
+  const openTrail = useCallback(async (entry: AuditLogEntry) => {
+    if (!entry.visitId) return;
+    setTrailFor(entry); setTrail([]); setTrailLoading(true);
+    try {
+      setTrail(await auditApi.visitTrail(entry.visitId));
+    } catch {
+      setError('Failed to load the patient audit trail.');
+      setTrailFor(null);
+    } finally {
+      setTrailLoading(false);
+    }
+  }, []);
 
   const displayEntries = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -118,6 +141,24 @@ export function AuditTrail() {
                 className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
                 style={glassInner}
               />
+            </div>
+            {/* Outcome chips — server-side filter (Failed = incident-review view) */}
+            <div className="flex items-center gap-1.5">
+              {([['', 'All'], ['SUCCESS', 'Success'], ['FAILED', 'Failed']] as const).map(([value, label]) => (
+                <button
+                  key={label}
+                  onClick={() => setOutcomeFilter(value)}
+                  className={`px-3 py-2 text-[11px] font-bold rounded-lg transition-all border ${
+                    outcomeFilter === value
+                      ? value === 'FAILED'
+                        ? 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                        : 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                      : `${text.body} hover:bg-white/5 border-transparent`
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
             <button
               onClick={() => setShowFilters(!showFilters)}
@@ -203,11 +244,18 @@ export function AuditTrail() {
                             </span>
                           </div>
                           <p className={`text-[12px] font-semibold truncate ${text.label}`}>{entry.action}</p>
-                          <div className="flex items-center gap-3 mt-1">
+                          <div className="flex items-center gap-3 mt-1 flex-wrap">
                             <span className={`text-[10px] ${text.muted}`}>
                               by <span className={`font-semibold ${text.body}`}>{entry.actorName}</span>
                               {entry.actorRole ? <span className={text.muted}> ({entry.actorRole})</span> : null}
                             </span>
+                            {(entry.patientName || entry.visitNumber) && (
+                              <span className={`text-[10px] ${text.muted} flex items-center gap-1`}>
+                                <User className="w-2.5 h-2.5" />
+                                <span className={`font-semibold ${text.body}`}>{entry.patientName || 'Patient'}</span>
+                                {entry.visitNumber ? <span className={text.muted}>({entry.visitNumber})</span> : null}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="flex-shrink-0">
@@ -238,6 +286,22 @@ export function AuditTrail() {
                             <p className={`text-[9px] font-bold ${text.muted} uppercase tracking-wider mb-1`}>Path</p>
                             <p className={`text-[11px] font-mono ${text.body} break-all`}>{entry.path}</p>
                           </div>
+                          {entry.visitId && (
+                            <div className="rounded-xl p-3 col-span-2 flex items-center justify-between gap-3" style={glassInner}>
+                              <div>
+                                <p className={`text-[9px] font-bold ${text.muted} uppercase tracking-wider mb-1`}>Patient</p>
+                                <p className={`text-[11px] ${text.body} font-semibold`}>
+                                  {entry.patientName || 'Patient'}{entry.visitNumber ? ` · ${entry.visitNumber}` : ''}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => openTrail(entry)}
+                                className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold rounded-lg bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 transition-colors"
+                              >
+                                <History className="w-3.5 h-3.5" /> View patient trail
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -248,6 +312,63 @@ export function AuditTrail() {
           )}
         </div>
       </div>
+
+      {/* Patient incident-timeline drawer (V107): the full chronological audit
+          trail of one visit — who did what, when, outcome, incl. failed/denied. */}
+      {trailFor && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setTrailFor(null)} />
+          <div className="fixed inset-y-0 right-0 w-full max-w-md z-50 flex flex-col overflow-hidden shadow-2xl" style={glassCard}>
+            <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/20 flex items-center justify-center shrink-0">
+                  <History className="w-4 h-4 text-cyan-300" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-bold text-white truncate">
+                    {trailFor.patientName || 'Patient'} {trailFor.visitNumber ? `· ${trailFor.visitNumber}` : ''}
+                  </h2>
+                  <p className="text-[11px] text-white/50">Full audit trail for this visit — chronological, incl. failed attempts</p>
+                </div>
+              </div>
+              <button onClick={() => setTrailFor(null)} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all shrink-0" title="Close">
+                <X className="w-4 h-4 text-white" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {trailLoading ? (
+                <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-cyan-500" /></div>
+              ) : trail.length === 0 ? (
+                <p className={`text-xs ${text.muted} text-center py-10`}>No audited actions for this visit yet.</p>
+              ) : (
+                trail.map((t) => {
+                  const tFailed = t.outcome === 'FAILED';
+                  return (
+                    <div key={t.id} className="rounded-xl p-3" style={glassInner}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${tFailed ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                        <span className={`text-[10px] font-mono ${text.muted}`}>
+                          {t.timestamp ? format(new Date(t.timestamp), 'dd MMM HH:mm:ss') : '—'}
+                        </span>
+                        {tFailed && (
+                          <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-500">
+                            Failed{t.statusCode ? ` · ${t.statusCode}` : ''}
+                          </span>
+                        )}
+                      </div>
+                      <p className={`text-[11px] font-semibold mt-1 ${text.label}`}>{t.action}</p>
+                      <p className={`text-[10px] mt-0.5 ${text.muted}`}>
+                        by <span className={`font-semibold ${text.body}`}>{t.actorName}</span>
+                        {t.actorRole ? ` (${t.actorRole})` : ''}
+                      </p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

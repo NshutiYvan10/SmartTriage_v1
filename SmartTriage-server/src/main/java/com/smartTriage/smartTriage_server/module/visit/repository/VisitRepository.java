@@ -51,6 +51,21 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
         Optional<com.smartTriage.smartTriage_server.common.enums.EdZone>
                 findCurrentEdZoneByVisitId(@Param("visitId") UUID visitId);
 
+        /**
+         * Lightweight projection used by AuditService to stamp the patient on an
+         * audit row from the visit the request touched (V107 patient-centric audit).
+         */
+        @Query("SELECT v.patient.id FROM Visit v WHERE v.id = :visitId")
+        Optional<UUID> findPatientIdByVisitId(@Param("visitId") UUID visitId);
+
+        /**
+         * Batch display refs for audit-log enrichment (V107): one query resolves a
+         * page of audit rows' visit ids to visitNumber + patient name. Each row is
+         * [0]=visitId, [1]=visitNumber, [2]=patient firstName, [3]=patient lastName.
+         */
+        @Query("SELECT v.id, v.visitNumber, p.firstName, p.lastName FROM Visit v JOIN v.patient p WHERE v.id IN :visitIds")
+        java.util.List<Object[]> findAuditDisplayRefsByVisitIds(@Param("visitIds") java.util.Collection<UUID> visitIds);
+
         Page<Visit> findByHospitalIdAndIsActiveTrue(UUID hospitalId, Pageable pageable);
 
         Page<Visit> findByPatientIdAndIsActiveTrue(UUID patientId, Pageable pageable);

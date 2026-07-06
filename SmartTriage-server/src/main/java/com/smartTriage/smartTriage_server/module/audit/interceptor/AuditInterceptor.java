@@ -21,23 +21,39 @@ import java.util.Set;
 public class AuditInterceptor implements HandlerInterceptor {
 
     private final AuditService auditService;
+    private final com.smartTriage.smartTriage_server.module.audit.context.AuditContext auditContext;
 
     private static final Set<String> MUTATING = Set.of("POST", "PUT", "PATCH", "DELETE");
     private static final String UUID_REGEX =
             "/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 
     @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+        // Defensive: servlet threads are pooled — never let a previous request's
+        // visit/actor attribution leak into this one.
+        auditContext.clear();
+        return true;
+    }
+
+    @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response,
                                 Object handler, Exception ex) {
-        String method = request.getMethod();
-        if (method == null || !MUTATING.contains(method)) {
-            return;
+        try {
+            String method = request.getMethod();
+            if (method == null || !MUTATING.contains(method)) {
+                return;
+            }
+            String path = request.getRequestURI();
+            if (path == null || !path.startsWith("/api/")) {
+                return; // skip websocket / static / non-API
+            }
+            // record() reads this request's AuditContext (visit resolved by authz,
+            // actor noted on login/refresh) — still populated here: afterCompletion
+            // runs on the request thread, before the clear below.
+            auditService.record(method, path, deriveAction(method, path), response.getStatus());
+        } finally {
+            auditContext.clear();
         }
-        String path = request.getRequestURI();
-        if (path == null || !path.startsWith("/api/")) {
-            return; // skip websocket / static / non-API
-        }
-        auditService.record(method, path, deriveAction(method, path), response.getStatus());
     }
 
     /** Readable, groupable action label: verb + resource path with UUIDs masked. */

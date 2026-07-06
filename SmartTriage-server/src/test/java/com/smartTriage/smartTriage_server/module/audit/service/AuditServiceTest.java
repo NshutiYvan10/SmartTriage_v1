@@ -27,10 +27,18 @@ class AuditServiceTest {
 
     private final AuditLogRepository auditLogRepository = mock(AuditLogRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
-    private final AuditService service = new AuditService(auditLogRepository, userRepository);
+    private final com.smartTriage.smartTriage_server.module.visit.repository.VisitRepository visitRepository =
+            mock(com.smartTriage.smartTriage_server.module.visit.repository.VisitRepository.class);
+    private final com.smartTriage.smartTriage_server.module.audit.context.AuditContext auditContext =
+            new com.smartTriage.smartTriage_server.module.audit.context.AuditContext();
+    private final AuditService service =
+            new AuditService(auditLogRepository, userRepository, visitRepository, auditContext);
 
     @AfterEach
-    void clear() { SecurityContextHolder.clearContext(); }
+    void clear() {
+        SecurityContextHolder.clearContext();
+        auditContext.clear();
+    }
 
     private User user(Role role) {
         User u = new User();

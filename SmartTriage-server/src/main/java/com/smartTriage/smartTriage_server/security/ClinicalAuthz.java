@@ -123,6 +123,14 @@ public class ClinicalAuthz {
     private final MohReportRepository mohReportRepository;
     private final MedicationSafetyCheckRepository medicationSafetyCheckRepository;
     private final IoTDeviceRepository ioTDeviceRepository;
+    /**
+     * V107 patient-centric audit: authorization is the one place that already
+     * resolves WHICH VISIT every clinical request targets (all resource-keyed
+     * canAccessX checks funnel into canAccessVisit) — so it notes that visit on
+     * the request's audit context, and AuditInterceptor stamps it onto the
+     * audit row. Note-only; it never influences the authorization decision.
+     */
+    private final com.smartTriage.smartTriage_server.module.audit.context.AuditContext auditContext;
 
     /**
      * @return true if the authenticated user is attached to {@code hospitalId}.
@@ -154,6 +162,9 @@ public class ClinicalAuthz {
     public boolean canAccessVisit(Authentication authentication, UUID visitId) {
         try {
             if (visitId == null) return false;
+            // Audit attribution (V107): note the visit BEFORE deciding, so even a
+            // DENIED attempt is recorded against the patient it targeted.
+            auditContext.noteVisit(visitId);
             Optional<UUID> visitHospitalId = visitRepository.findHospitalIdByVisitId(visitId);
             if (visitHospitalId.isEmpty()) {
                 // Don't reveal whether the id exists — deny.
@@ -416,6 +427,27 @@ public class ClinicalAuthz {
             return user.getRole() == Role.HOSPITAL_ADMIN || user.getRole() == Role.READ_ONLY;
         } catch (Exception e) {
             log.error("canViewHospitalReports error for hospital {}: {}", hospitalId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Read gate for a single visit's AUDIT TRAIL (V107 incident timeline) — the
+     * same governance/audit-reader tier as {@link #canViewHospitalReports}, scoped
+     * via the visit's OWN hospital. Deliberately does NOT reuse canAccessVisit:
+     * this is oversight tooling for admins/auditors, not bedside chart access —
+     * and canAccessVisit's audit-attribution hook must not fire for the auditor
+     * merely READING the trail.
+     */
+    @Transactional(readOnly = true)
+    public boolean canViewAuditForVisit(Authentication authentication, UUID visitId) {
+        try {
+            if (visitId == null) return false;
+            return visitRepository.findHospitalIdByVisitId(visitId)
+                    .map(hospitalId -> canViewHospitalReports(authentication, hospitalId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canViewAuditForVisit error for visit {}: {}", visitId, e.getMessage(), e);
             return false;
         }
     }
@@ -802,6 +834,7 @@ public class ClinicalAuthz {
     public boolean callerCanConfirmFieldTriage(Authentication authentication, UUID visitId) {
         try {
             if (visitId == null) return false;
+            auditContext.noteVisit(visitId); // V107 audit attribution (note-only)
             // Triage trio always may.
             if (callerCanPerformTriage(authentication)) return true;
             User user = currentUser(authentication);
@@ -835,6 +868,7 @@ public class ClinicalAuthz {
     public boolean callerCanWriteToVisit(Authentication authentication, UUID visitId) {
         try {
             if (visitId == null) return false;
+            auditContext.noteVisit(visitId); // V107 audit attribution (note-only)
             User user = currentUser(authentication);
             if (user == null) return false;
 

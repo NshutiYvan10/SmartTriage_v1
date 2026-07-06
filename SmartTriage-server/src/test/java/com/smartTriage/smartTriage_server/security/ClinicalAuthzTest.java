@@ -112,7 +112,8 @@ class ClinicalAuthzTest {
                 referralRepository,
                 mohReportRepository,
                 medicationSafetyCheckRepository,
-                ioTDeviceRepository);
+                ioTDeviceRepository,
+                new com.smartTriage.smartTriage_server.module.audit.context.AuditContext());
     }
 
     @Test

@@ -19,6 +19,12 @@ public class AuditLogResponse {
     private String actorName;
     private String actorRole;
     private UUID hospitalId;
+    // Patient linkage (V107) — which visit/patient the action touched, when resolvable.
+    private UUID visitId;
+    private UUID patientId;
+    /** Enriched for display (batch-resolved per page; null when the row has no visit). */
+    private String visitNumber;
+    private String patientName;
     private String httpMethod;
     private String path;
     private String action;

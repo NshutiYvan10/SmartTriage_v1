@@ -35,6 +35,9 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final UserRepository userRepository;
+    /** V107 audit: attributes login/refresh audit rows to the user (the SecurityContext
+     *  holds no User principal during these requests, so they logged as "anonymous"). */
+    private final com.smartTriage.smartTriage_server.module.audit.context.AuditContext auditContext;
 
     private static final int MAX_FAILED_ATTEMPTS = 5;
 
@@ -69,6 +72,10 @@ public class AuthService {
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+
+            // Attribute this login's audit row to the user ("who was on the system
+            // when" is part of any incident timeline).
+            auditContext.noteActor(user);
 
             // Reset failed attempts on successful login
             if (user.getFailedLoginAttempts() > 0) {
@@ -136,6 +143,9 @@ public class AuthService {
             throw new BadCredentialsException(
                     "Your hospital account has been deactivated. Please contact a system administrator.");
         }
+
+        // Attribute this refresh's audit row to the user (was "anonymous").
+        auditContext.noteActor(user);
 
         String newAccessToken = jwtService.generateAccessToken(
                 user,

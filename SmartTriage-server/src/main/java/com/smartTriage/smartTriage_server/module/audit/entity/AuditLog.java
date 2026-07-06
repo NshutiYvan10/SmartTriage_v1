@@ -42,6 +42,19 @@ public class AuditLog extends BaseEntity {
     @Column(name = "hospital_id")
     private UUID hospitalId;
 
+    /**
+     * Visit this action touched (V107) — resolved at write time from the request's
+     * authorization context, so actions keyed by a resource id (a hypoglycemia event,
+     * an isolation screening, a pathway activation...) are still attributable to the
+     * patient they affected. Null for non-clinical actions (admin, auth, config).
+     */
+    @Column(name = "visit_id")
+    private UUID visitId;
+
+    /** Patient of that visit (denormalised so a patient-level trail spans visits). */
+    @Column(name = "patient_id")
+    private UUID patientId;
+
     @Column(name = "http_method", length = 10)
     private String httpMethod;
 
