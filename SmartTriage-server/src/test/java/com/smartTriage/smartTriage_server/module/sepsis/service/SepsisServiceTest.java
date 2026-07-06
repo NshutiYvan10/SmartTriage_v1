@@ -50,6 +50,7 @@ class SepsisServiceTest {
     private ClinicalAlertRepository alertRepo;
     private ShiftAssignmentService shiftService;
     private RealTimeEventPublisher publisher;
+    private SepsisLabResolver labResolver;
     private SepsisService service;
 
     private final UUID visitId = UUID.randomUUID();
@@ -63,8 +64,9 @@ class SepsisServiceTest {
         alertRepo = mock(ClinicalAlertRepository.class);
         shiftService = mock(ShiftAssignmentService.class);
         publisher = mock(RealTimeEventPublisher.class);
+        labResolver = mock(SepsisLabResolver.class);
         service = new SepsisService(sepsisRepo, new SepsisScreeningEngine(), visitRepo, vitalRepo,
-                alertRepo, shiftService, publisher);
+                alertRepo, shiftService, publisher, labResolver);
 
         when(sepsisRepo.findFirstByVisitIdAndIsActiveTrueOrderByScreenedAtDesc(visitId))
                 .thenReturn(Optional.empty());
