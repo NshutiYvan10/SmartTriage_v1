@@ -94,6 +94,7 @@ export function IoTDeviceManagement() {
   // V104 — RFID reader → registrar assignment (Hospital Admin owns it).
   const [registrars, setRegistrars] = useState<UserResponse[]>([]);
   const [assignRegistrarLoadingId, setAssignRegistrarLoadingId] = useState<string | null>(null);
+  const [regenKeyLoadingId, setRegenKeyLoadingId] = useState<string | null>(null);
 
   // Assign-to-patient dialog
   const [assignDevice, setAssignDevice] = useState<DeviceResponse | null>(null);
@@ -215,6 +216,33 @@ export function IoTDeviceManagement() {
       document.body.removeChild(textarea);
       setApiKeyCopied(true);
       setTimeout(() => setApiKeyCopied(false), 3000);
+    }
+  };
+
+  // Re-issue (rotate) a device's API key. The key is shown ONCE at registration
+  // and is never retrievable afterwards, so this is the recovery path when it was
+  // lost — it mints a NEW key (the old one stops working immediately) and pops the
+  // same "shown once" modal with a copy button. Backend-gated to owner/admin.
+  const handleRegenerateKey = async (device: DeviceResponse) => {
+    const ok = window.confirm(
+      `Re-issue the API key for "${device.deviceName}"?\n\n` +
+      `The current key STOPS working immediately. You'll need to paste the NEW key into the ` +
+      `device firmware (DEVICE_API_KEY) and re-flash it. The new key is shown ONCE — copy it right away.`);
+    if (!ok) return;
+    setRegenKeyLoadingId(device.id);
+    try {
+      const response = await iotApi.regenerateKey(device.id);
+      if (response?.apiKey) {
+        setRegisteredDevice({ deviceName: response.deviceName, serialNumber: response.serialNumber, apiKey: response.apiKey });
+        setApiKeyCopied(false);
+      }
+      loadDevices();
+    } catch (err: any) {
+      console.error(err);
+      // eslint-disable-next-line no-alert
+      window.alert(err?.message || 'Failed to re-issue the API key. Check your permissions and try again.');
+    } finally {
+      setRegenKeyLoadingId(null);
     }
   };
 
@@ -632,6 +660,19 @@ export function IoTDeviceManagement() {
                         </select>
                         {assignRegistrarLoadingId === device.id && <Loader2 className="w-3 h-3 animate-spin" />}
                       </div>
+                    )}
+                    {/* Admin: re-issue (rotate) the device API key — the recovery path when the
+                        key was lost (it's only shown once at registration). Issues a NEW key
+                        (old one stops working) and shows it once with a copy button. */}
+                    {isAdmin && (
+                      <button
+                        onClick={() => handleRegenerateKey(device)}
+                        disabled={regenKeyLoadingId === device.id}
+                        title="Issue a NEW API key for this device. The current key stops working immediately — paste the new key into the firmware (DEVICE_API_KEY) and re-flash. Use this to recover a lost key."
+                        className="flex-1 px-3 py-1.5 text-[10px] font-bold rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                      >
+                        {regenKeyLoadingId === device.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Key className="w-3 h-3" />} Re-issue API Key
+                      </button>
                     )}
                     {/* Clinical staff (Nurse): Assign to Patient for ONLINE devices */}
                     {isClinicalStaff && device.status === 'ONLINE' && (
@@ -1222,7 +1263,7 @@ export function IoTDeviceManagement() {
               <div className="flex items-center gap-2 px-3 py-2 rounded-xl mb-4 bg-amber-500/20 border border-amber-500/30">
                 <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-400" />
                 <p className="text-[10px] text-amber-300">
-                  This API key is needed by the Python monitor simulator. Copy it now — you won't see it again.
+                  Paste this into the device firmware (DEVICE_API_KEY) — or the monitor simulator. Copy it now — you won't see it again.
                 </p>
               </div>
 
