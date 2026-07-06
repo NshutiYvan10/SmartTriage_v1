@@ -334,7 +334,7 @@ public class ClinicalPathwayService {
                     .stepOrder(step.getStepOrder())
                     .stepTitle(step.getStepTitle())
                     .category(step.getCategory())
-                    .isMandatory(step.isMandatory())
+                    .mandatory(step.isMandatory())
                     .timeframeMinutes(step.getTimeframeMinutes())
                     .status(status)
                     .completedAt(completion != null ? completion.getCompletedAt() : null)

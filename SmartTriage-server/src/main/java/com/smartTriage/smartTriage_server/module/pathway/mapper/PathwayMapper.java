@@ -39,7 +39,7 @@ public final class PathwayMapper {
                 .stepTitle(step.getStepTitle())
                 .stepDescription(step.getStepDescription())
                 .timeframeMinutes(step.getTimeframeMinutes())
-                .isMandatory(step.isMandatory())
+                .mandatory(step.isMandatory())
                 .category(step.getCategory())
                 .build();
     }

@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.pathway.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.smartTriage.smartTriage_server.common.enums.PathwayActivationStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -41,7 +42,10 @@ public class PathwayProgressResponse {
         private Integer stepOrder;
         private String stepTitle;
         private String category;
-        private boolean isMandatory;
+        // Field `mandatory` + @JsonProperty("isMandatory") → exactly one JSON key the FE reads.
+        // See PathwayStepResponse for why (field named `isMandatory` emitted two keys).
+        @JsonProperty("isMandatory")
+        private boolean mandatory;
         private Integer timeframeMinutes;
         private String status; // "COMPLETED", "SKIPPED", "PENDING", "OVERDUE"
         private Instant completedAt;
