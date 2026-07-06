@@ -21,8 +21,14 @@ import java.util.List;
  *
  * Severity (mmol/L), adult/child:
  *   NORMAL   >= 3.9   |   MILD < 3.9   |   MODERATE < 3.0
- *   SEVERE   < 2.2  OR  any hypoglycemia with neuroglycopenia (altered
- *            consciousness / convulsions / coma)
+ *   SEVERE   < 2.2  OR  clinically-significant hypoglycemia (< 3.0) with
+ *            neuroglycopenia (altered consciousness / convulsions / coma).
+ *            A mild-band value (3.0–3.9) with symptoms still files an event,
+ *            a HIGH alert and the mandatory recheck — but is deliberately NOT
+ *            forced to SEVERE by symptoms alone (see the engine test): at that
+ *            level the symptoms are rarely attributable to glucose, and
+ *            auto-CRITICAL paging on every confused patient with a
+ *            borderline value would breed alarm fatigue.
  * Neonatal (< 28 days): treat below 2.6 mmol/L; SEVERE < 2.0 or neuroglycopenic.
  */
 @Slf4j

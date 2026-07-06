@@ -38,9 +38,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class HypoglycemiaRecheckMonitorService {
 
-    private static final java.util.Set<VisitStatus> TERMINAL_VISIT = java.util.EnumSet.of(
-            VisitStatus.DISCHARGED, VisitStatus.ADMITTED, VisitStatus.ICU_ADMITTED,
-            VisitStatus.TRANSFERRED, VisitStatus.LEFT_WITHOUT_BEING_SEEN, VisitStatus.DECEASED);
+    /** Shared with the live dashboard's terminal-visit exclusion (single source of truth). */
+    private static final java.util.Set<VisitStatus> TERMINAL_VISIT =
+            HypoglycemiaService.TERMINAL_VISIT_STATUSES;
 
     private final HypoglycemiaEventRepository hypoglycemiaEventRepository;
     private final ClinicalAlertRepository clinicalAlertRepository;
@@ -102,21 +102,40 @@ public class HypoglycemiaRecheckMonitorService {
                 .build();
         alert = clinicalAlertRepository.save(alert);
 
-        try {
-            if (hospitalId != null) {
-                var resp = ClinicalAlertMapper.toResponse(alert);
-                realTimeEventPublisher.publishHospitalAlert(hospitalId, resp);
-                if (zone != null) realTimeEventPublisher.publishZoneAlert(hospitalId, zone, resp);
-                if (zoneDoctor != null) realTimeEventPublisher.publishUserAlert(zoneDoctor.getId(), resp);
-                for (User cn : shiftAssignmentService.getChargeNurse(hospitalId)) {
-                    realTimeEventPublisher.publishUserAlert(cn.getId(), resp);
+        // Fan out AFTER COMMIT — same contract as HypoglycemiaService.publishHypoglycemiaAlert:
+        // if this monitor transaction rolls back after the save, clinicians must never
+        // receive a CRITICAL page whose backing alert row was never persisted (phantom
+        // alert → 404 on click). The response is built now, in-session.
+        if (hospitalId == null) return;
+        final var resp = ClinicalAlertMapper.toResponse(alert);
+        final UUID hid = hospitalId;
+        final EdZone z = zone;
+        final UUID doctorId = zoneDoctor != null ? zoneDoctor.getId() : null;
+        final List<UUID> chargeNurseIds = shiftAssignmentService.getChargeNurse(hospitalId)
+                .stream().map(User::getId).toList();
+        final UUID visitId = visit.getId();
+        Runnable fire = () -> {
+            try {
+                realTimeEventPublisher.publishHospitalAlert(hid, resp);
+                if (z != null) realTimeEventPublisher.publishZoneAlert(hid, z, resp);
+                if (doctorId != null) realTimeEventPublisher.publishUserAlert(doctorId, resp);
+                for (UUID cnId : chargeNurseIds) {
+                    realTimeEventPublisher.publishUserAlert(cnId, resp);
                 }
-                realTimeEventPublisher.publishHypoglycemiaEventAfterCommit(hospitalId, Map.of(
+                realTimeEventPublisher.publishHypoglycemiaEvent(hid, Map.of(
                         "eventType", "RECHECK_OVERDUE",
-                        "visitId", visit.getId().toString()));
+                        "visitId", visitId.toString()));
+            } catch (Exception e) {
+                log.warn("Failed to publish hypoglycemia recheck-overdue for visit {}: {}", visitId, e.getMessage());
             }
-        } catch (Exception e) {
-            log.warn("Failed to publish hypoglycemia recheck-overdue for visit {}: {}", visit.getId(), e.getMessage());
+        };
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override public void afterCommit() { fire.run(); }
+                    });
+        } else {
+            fire.run();
         }
     }
 }

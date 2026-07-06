@@ -49,6 +49,8 @@ class HypoglycemiaServiceTest {
     private ClinicalAlertRepository alertRepo;
     private RealTimeEventPublisher publisher;
     private ShiftAssignmentService shiftService;
+    private VisitRepository visitRepo;
+    private TriageRecordRepository triageRepo;
     private HypoglycemiaService service;
 
     private final UUID visitId = UUID.randomUUID();
@@ -61,8 +63,10 @@ class HypoglycemiaServiceTest {
         alertRepo = mock(ClinicalAlertRepository.class);
         publisher = mock(RealTimeEventPublisher.class);
         shiftService = mock(ShiftAssignmentService.class);
-        service = new HypoglycemiaService(eventRepo, mock(VisitRepository.class),
-                mock(TriageRecordRepository.class), alertRepo, new HypoglycemiaEnforcementEngine(),
+        visitRepo = mock(VisitRepository.class);
+        triageRepo = mock(TriageRecordRepository.class);
+        service = new HypoglycemiaService(eventRepo, visitRepo,
+                triageRepo, alertRepo, new HypoglycemiaEnforcementEngine(),
                 publisher, shiftService);
 
         Hospital h = new Hospital();
@@ -197,5 +201,77 @@ class HypoglycemiaServiceTest {
                 .severity("SEVERE").neonatal(false).build();
         event.setId(UUID.randomUUID());
         return event;
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // Front-door enforcement (the gate-order fix + the triage hook)
+    // ────────────────────────────────────────────────────────────────────
+
+    private com.smartTriage.smartTriage_server.module.triage.entity.TriageRecord triageWith(
+            Double glucose, boolean coma) {
+        var t = new com.smartTriage.smartTriage_server.module.triage.entity.TriageRecord();
+        t.setBloodGlucose(glucose);
+        t.setHasComa(coma);
+        return t;
+    }
+
+    @Test
+    @DisplayName("GATE FIX: a severe-low triage glucose files the event even when NO check was 'required' "
+            + "(non-diabetic, alert patient) — the old gate returned early and filed NOTHING")
+    void checkAndEnforce_hypoglycemicValueAlwaysFilesEvent() {
+        when(visitRepo.findByIdAndIsActiveTrue(visitId)).thenReturn(Optional.of(visit));
+        when(triageRepo.findFirstByVisitIdAndIsActiveTrueOrderByTriageTimeDesc(visitId))
+                .thenReturn(Optional.of(triageWith(2.1, false))); // no triggers, not diabetic
+        when(eventRepo.existsByVisitIdAndResolvedFalseAndIsActiveTrue(visitId)).thenReturn(false);
+
+        var response = service.checkAndEnforce(visitId);
+
+        assertEquals("SEVERE", response.getSeverity());
+        ArgumentCaptor<HypoglycemiaEvent> cap = ArgumentCaptor.forClass(HypoglycemiaEvent.class);
+        verify(eventRepo).save(cap.capture());
+        assertEquals("TRIAGE", cap.getValue().getGlucoseSource());
+        verify(alertRepo).save(any(ClinicalAlert.class));
+    }
+
+    @Test
+    @DisplayName("TRIAGE HOOK: enforceFromTriage files the event + alert for a hypoglycemic triage glucose")
+    void enforceFromTriage_lowGlucoseFilesEvent() {
+        when(eventRepo.existsByVisitIdAndResolvedFalseAndIsActiveTrue(visitId)).thenReturn(false);
+
+        service.enforceFromTriage(visit, triageWith(2.1, false));
+
+        ArgumentCaptor<HypoglycemiaEvent> cap = ArgumentCaptor.forClass(HypoglycemiaEvent.class);
+        verify(eventRepo).save(cap.capture());
+        assertEquals("TRIAGE", cap.getValue().getGlucoseSource());
+        assertNotNull(cap.getValue().getRecheckDueAt(), "mandatory recheck clock armed at the front door");
+        verify(alertRepo).save(any(ClinicalAlert.class));
+    }
+
+    @Test
+    @DisplayName("TRIAGE HOOK: coma WITHOUT a glucose pages GLUCOSE CHECK REQUIRED; an open alert dedupes a re-page")
+    void enforceFromTriage_mandatoryCheckWithoutGlucoseAlertsOnce() {
+        // First triage: no open hypoglycemia alert → the check-required alert fires.
+        when(alertRepo.existsByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(
+                visitId, AlertType.HYPOGLYCEMIA_CRITICAL)).thenReturn(false);
+        service.enforceFromTriage(visit, triageWith(null, true));
+        ArgumentCaptor<ClinicalAlert> cap = ArgumentCaptor.forClass(ClinicalAlert.class);
+        verify(alertRepo).save(cap.capture());
+        assertTrue(cap.getValue().getTitle().contains("GLUCOSE CHECK REQUIRED"));
+        verify(eventRepo, never()).save(any(HypoglycemiaEvent.class)); // no value → no event
+
+        // Re-triage while that alert is still open → deduped, no second page.
+        when(alertRepo.existsByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(
+                visitId, AlertType.HYPOGLYCEMIA_CRITICAL)).thenReturn(true);
+        service.enforceFromTriage(visit, triageWith(null, true));
+        verify(alertRepo, org.mockito.Mockito.times(1)).save(any(ClinicalAlert.class));
+    }
+
+    @Test
+    @DisplayName("PLAUSIBILITY: an implausible auto reading (0.05 or 999 mmol/L) files NOTHING — data error, not a page")
+    void autoReadingOutsidePhysiologicWindowIgnored() {
+        service.evaluateGlucoseReading(visit, 0.05, false, "IOT_STREAM");
+        service.evaluateGlucoseReading(visit, 999.0, false, "LAB");
+        verify(eventRepo, never()).save(any(HypoglycemiaEvent.class));
+        verify(alertRepo, never()).save(any(ClinicalAlert.class));
     }
 }

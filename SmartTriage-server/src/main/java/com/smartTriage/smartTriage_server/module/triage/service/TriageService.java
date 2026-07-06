@@ -94,6 +94,8 @@ public class TriageService {
     private final com.smartTriage.smartTriage_server.module.zonetransfer.service.ZoneTransferService zoneTransferService;
     /** Phase G #2 — surfaces bed suggestion on the post-triage response. */
     private final BedService bedService;
+    /** Hypoglycemia enforcement at the front door — see the post-save hook in performTriage. */
+    private final com.smartTriage.smartTriage_server.module.hypoglycemia.service.HypoglycemiaService hypoglycemiaService;
 
     /**
      * Perform initial triage or manual re-triage on a visit.
@@ -438,6 +440,14 @@ public class TriageService {
         // not fail because of timeline bookkeeping.
         clinicalSignService.recordBaselineFromTriage(record);
 
+        // Hypoglycemia enforcement at the FRONT DOOR (never propagates — the
+        // service catches internally). A hypoglycemic triage glucose files the
+        // event + owned alert + mandatory 15-min recheck clock NOW, and an
+        // unconscious/convulsing/comatose patient triaged WITHOUT a glucose pages
+        // GLUCOSE CHECK REQUIRED now — previously both only happened if a
+        // clinician later opened the Glucose tab and clicked Run Check.
+        hypoglycemiaService.enforceFromTriage(visit, record);
+
         // Bed assignment — Option A: auto-place in the destination zone
         // when a bed is available, in the same transaction as the triage.
         // Eliminates the modal click that was previously required.
@@ -455,10 +465,25 @@ public class TriageService {
         Bed suggestedBed = null;
         boolean autoPlaced = false;
         String autoPlacementNote = null;
-        try {
-            suggestedBed = bedService.suggestBedForVisit(visit.getId()).orElse(null);
-        } catch (Exception e) {
-            log.warn("Bed suggestion failed for visit {}: {}", visit.getVisitNumber(), e.getMessage());
+        // A visit that ALREADY has a bed must never be auto-RE-placed: placePatient
+        // rejects it ("already placed — use transfer"), and because that rejection is
+        // thrown through a joining @Transactional proxy it marked the WHOLE triage
+        // transaction rollback-only — the catch below "handled" the exception, but the
+        // commit then failed with UnexpectedRollbackException, destroying the entire
+        // RE-triage (record, zone change, alerts, hypoglycemia enforcement) behind an
+        // opaque 500. The deteriorating, already-bedded patient (GREEN → RED re-triage)
+        // is exactly the re-triage that must never be lost; moving them is the
+        // zone-transfer workflow's job.
+        boolean alreadyBedded = visit.getCurrentBed() != null;
+        if (alreadyBedded) {
+            autoPlacementNote = "Already in bed " + visit.getCurrentBed().getCode()
+                    + " — use zone transfer to move.";
+        } else {
+            try {
+                suggestedBed = bedService.suggestBedForVisit(visit.getId()).orElse(null);
+            } catch (Exception e) {
+                log.warn("Bed suggestion failed for visit {}: {}", visit.getVisitNumber(), e.getMessage());
+            }
         }
 
         if (suggestedBed != null) {
@@ -504,7 +529,7 @@ public class TriageService {
                 log.warn("Auto-place after triage failed for visit {}: {}",
                         visit.getVisitNumber(), e.getMessage());
             }
-        } else {
+        } else if (autoPlacementNote == null) {
             autoPlacementNote = "No bed available in destination zone — pick one manually.";
         }
 

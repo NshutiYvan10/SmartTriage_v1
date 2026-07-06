@@ -26,14 +26,19 @@ public interface HypoglycemiaEventRepository extends JpaRepository<HypoglycemiaE
     List<HypoglycemiaEvent> findByVisitIdAndIsActiveTrueOrderByDetectedAtDesc(@Param("visitId") UUID visitId);
 
     /**
-     * Active (unresolved) hypoglycemia events for a hospital.
-     * JOIN FETCH visit/patient (+ LEFT JOIN FETCH bed) for the same reason as above.
+     * Active (unresolved) hypoglycemia events for a hospital, excluding visits the
+     * ED no longer owns (discharged/admitted/... — else their open events sit on the
+     * live dashboard forever). JOIN FETCH visit/patient (+ LEFT JOIN FETCH bed) for
+     * the same reason as above.
      */
     @Query("SELECT h FROM HypoglycemiaEvent h JOIN FETCH h.visit v JOIN FETCH v.patient " +
             "LEFT JOIN FETCH v.currentBed " +
             "WHERE v.hospital.id = :hospitalId AND h.isActive = true AND h.resolved = false " +
+            "AND (v.status IS NULL OR v.status NOT IN :terminalStatuses) " +
             "ORDER BY h.detectedAt DESC")
-    List<HypoglycemiaEvent> findActiveEventsByHospital(@Param("hospitalId") UUID hospitalId);
+    List<HypoglycemiaEvent> findActiveEventsByHospital(
+            @Param("hospitalId") UUID hospitalId,
+            @Param("terminalStatuses") java.util.Collection<com.smartTriage.smartTriage_server.common.enums.VisitStatus> terminalStatuses);
 
     /**
      * Check for existing unresolved event for a visit — prevents duplicate events.

@@ -56,6 +56,20 @@ public class HypoglycemiaService {
     static final Duration RECHECK_INTERVAL = Duration.ofMinutes(15);
 
     /**
+     * Visit states where the ED no longer owns the patient — the recheck monitor
+     * does not page for them, and the live dashboard must not list their still-open
+     * events forever (shared with {@link HypoglycemiaRecheckMonitorService}).
+     */
+    public static final java.util.Set<com.smartTriage.smartTriage_server.common.enums.VisitStatus>
+            TERMINAL_VISIT_STATUSES = java.util.EnumSet.of(
+                    com.smartTriage.smartTriage_server.common.enums.VisitStatus.DISCHARGED,
+                    com.smartTriage.smartTriage_server.common.enums.VisitStatus.ADMITTED,
+                    com.smartTriage.smartTriage_server.common.enums.VisitStatus.ICU_ADMITTED,
+                    com.smartTriage.smartTriage_server.common.enums.VisitStatus.TRANSFERRED,
+                    com.smartTriage.smartTriage_server.common.enums.VisitStatus.LEFT_WITHOUT_BEING_SEEN,
+                    com.smartTriage.smartTriage_server.common.enums.VisitStatus.DECEASED);
+
+    /**
      * Physiologic plausibility window (mmol/L) for a repeat glucose AFTER unit
      * conversion. Outside this band the value is a unit/data error and is rejected.
      */
@@ -104,23 +118,63 @@ public class HypoglycemiaService {
                 .treatmentProtocol(result.treatmentProtocol())
                 .triggerReasons(result.triggerReasons());
 
-        if (!result.requiresCheck()) {
-            return responseBuilder.build();
-        }
-
+        // A PRESENT hypoglycemic value ALWAYS files the event + owned alert + recheck
+        // clock — regardless of whether a check was "required". The previous gate
+        // returned early on !requiresCheck BEFORE testing the value, so a
+        // non-diabetic, alert patient with a severe-low triage glucose produced a
+        // response saying SEVERE while filing NOTHING (no event, no page, no
+        // 15-minute recheck). Requiredness gates the "missing glucose" nag only —
+        // never the interpretation of a real reading.
         if (result.isHypoglycemic()) {
             HypoglycemiaEvent event = createEventAndAlert(visit, result, "TRIAGE");
             if (event != null) responseBuilder.eventId(event.getId());
-        } else if (result.glucoseValue() == null && result.requiresCheck()) {
+        } else if (result.requiresCheck() && result.glucoseValue() == null) {
             // A check is required (mandatory OR recommended-for-known-diabetic) but no
             // glucose is on file — surface the glucose-check-required alert in BOTH cases
             // (previously only the mandatory branch alerted, so a diabetic with no glucose
             // was silent).
-            generateGlucoseCheckRequiredAlert(visit, result);
-            log.warn("Glucose check required but not performed for visit {} ({})",
-                    visitId, String.join(", ", result.triggerReasons()));
+            if (generateGlucoseCheckRequiredAlert(visit, result)) {
+                log.warn("Glucose check required but not performed for visit {} ({})",
+                        visitId, String.join(", ", result.triggerReasons()));
+            }
         }
         return responseBuilder.build();
+    }
+
+    /**
+     * Auto-enforcement at TRIAGE time — the front door. Called by TriageService
+     * right after a triage record is saved, so:
+     * <ul>
+     *   <li>a hypoglycemic triage glucose files the event + owned CRITICAL/HIGH
+     *       alert + the mandatory 15-minute recheck clock IMMEDIATELY (previously
+     *       the "TRIAGE" source only fired if a clinician happened to open the
+     *       Glucose tab and click Run Check);</li>
+     *   <li>an unconscious / convulsing / comatose patient triaged WITHOUT a
+     *       glucose raises GLUCOSE CHECK REQUIRED at triage time — the highest-
+     *       stakes cohort is exactly the one that cannot wait for a panel click.</li>
+     * </ul>
+     * Best-effort and never throws (mirrors the vitals-hook contract): triage
+     * submission must never fail because of hypoglycemia bookkeeping. Joins the
+     * caller's transaction, so the event/alert commit atomically with the triage
+     * and the after-commit publisher never pushes a phantom page.
+     */
+    @Transactional
+    public void enforceFromTriage(Visit visit, TriageRecord triage) {
+        try {
+            if (visit == null || triage == null) return;
+            HypoglycemiaCheckResult result = enforcementEngine.enforceGlucoseCheck(visit, triage);
+            if (result.isHypoglycemic()) {
+                createEventAndAlert(visit, result, "TRIAGE");
+            } else if (result.requiresCheck() && result.glucoseValue() == null) {
+                if (generateGlucoseCheckRequiredAlert(visit, result)) {
+                    log.warn("Glucose check required but not performed at triage for visit {} ({})",
+                            visit.getId(), String.join(", ", result.triggerReasons()));
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Hypoglycemia triage enforcement failed for visit {}: {}",
+                    visit != null ? visit.getId() : null, e.getMessage());
+        }
     }
 
     /**
@@ -133,6 +187,18 @@ public class HypoglycemiaService {
     public void evaluateGlucoseReading(Visit visit, Double glucose, boolean neuroglycopenia, String source) {
         try {
             if (visit == null || glucose == null) return;
+            // Physiologic plausibility gate — same window recordRepeatGlucose enforces.
+            // The auto paths (vitals API, IoT stream, lab bridge) previously passed any
+            // number straight to classification, so a data/unit error (e.g. 0.05, or a
+            // mg/dL-scale value landing in an mmol field) could page a phantom SEVERE
+            // or silently classify NORMAL. Outside the window = a measurement/data
+            // error, never a treatable reading: log loudly, file nothing.
+            if (glucose < PLAUSIBLE_MIN_MMOL || glucose > PLAUSIBLE_MAX_MMOL) {
+                log.error("DATA-QUALITY: implausible glucose {} mmol/L from {} for visit {} — "
+                        + "outside {}–{} mmol/L; NOT classified. Check the value and its unit.",
+                        glucose, source, visit.getId(), PLAUSIBLE_MIN_MMOL, PLAUSIBLE_MAX_MMOL);
+                return;
+            }
             HypoglycemiaCheckResult result = enforcementEngine.interpret(
                     visit, glucose, neuroglycopenia, true, true,
                     List.of(source == null ? "glucose_reading" : source.toLowerCase()));
@@ -252,7 +318,10 @@ public class HypoglycemiaService {
      * zone's events without needing cross-zone read authority.
      */
     public List<HypoglycemiaEvent> getActiveEvents(UUID hospitalId, EdZone zone) {
-        List<HypoglycemiaEvent> all = hypoglycemiaEventRepository.findActiveEventsByHospital(hospitalId);
+        // Exclude departed visits (discharged/admitted/...) — their open events used
+        // to sit on the live dashboard forever, burying the patients still in the ED.
+        List<HypoglycemiaEvent> all = hypoglycemiaEventRepository
+                .findActiveEventsByHospital(hospitalId, TERMINAL_VISIT_STATUSES);
         if (zone == null) return all;
         return all.stream()
                 .filter(e -> e.getVisit() != null && e.getVisit().getCurrentEdZone() == zone)
@@ -374,7 +443,16 @@ public class HypoglycemiaService {
         publishHypoglycemiaAlert(alert, hospitalId, zone, zoneDoctor);
     }
 
-    private void generateGlucoseCheckRequiredAlert(Visit visit, HypoglycemiaCheckResult result) {
+    /** @return true when a new alert was filed; false when an open one deduped it. */
+    private boolean generateGlucoseCheckRequiredAlert(Visit visit, HypoglycemiaCheckResult result) {
+        // Dedup: with triage-time auto-enforcement, a re-triage or a panel click
+        // would otherwise re-page. Any OPEN (unacknowledged) hypoglycemia alert for
+        // this visit makes a new check-required nag redundant — either the check
+        // reminder is already up, or a detection alert (glucose known) superseded it.
+        if (clinicalAlertRepository.existsByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(
+                visit.getId(), AlertType.HYPOGLYCEMIA_CRITICAL)) {
+            return false;
+        }
         UUID hospitalId = visit.getHospital() != null ? visit.getHospital().getId() : null;
         EdZone zone = visit.getCurrentEdZone();
         User zoneDoctor = resolveZoneDoctor(hospitalId, zone);
@@ -394,6 +472,7 @@ public class HypoglycemiaService {
                 .build();
         alert = clinicalAlertRepository.save(alert);
         publishHypoglycemiaAlert(alert, hospitalId, zone, zoneDoctor);
+        return true;
     }
 
     /**
