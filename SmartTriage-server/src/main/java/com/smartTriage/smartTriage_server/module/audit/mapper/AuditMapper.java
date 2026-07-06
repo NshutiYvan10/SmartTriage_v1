@@ -22,6 +22,8 @@ public final class AuditMapper {
                 .action(a.getAction())
                 .statusCode(a.getStatusCode())
                 .outcome(a.getOutcome())
+                .sourceIp(a.getSourceIp())
+                .userAgent(a.getUserAgent())
                 .build();
     }
 }

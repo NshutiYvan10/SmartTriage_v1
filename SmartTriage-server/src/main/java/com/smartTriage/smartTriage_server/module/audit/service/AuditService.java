@@ -85,6 +85,9 @@ public class AuditService {
                     .action(action)
                     .statusCode(statusCode)
                     .outcome(statusCode < 400 ? "SUCCESS" : "FAILED")
+                    // Origin forensics (V108) — noted per-request by AuditInterceptor.preHandle.
+                    .sourceIp(truncate(auditContext.getSourceIp(), 45))
+                    .userAgent(truncate(auditContext.getUserAgent(), 256))
                     .build();
             auditLogRepository.save(entry);
         } catch (Exception e) {
@@ -95,12 +98,35 @@ public class AuditService {
 
     /**
      * Filtered, paged hospital audit search (V107): optional time range, actor,
-     * outcome (SUCCESS/FAILED), and a free-text needle matched against the action
-     * label, the raw path and the actor name. Always newest-first.
+     * outcome (SUCCESS/FAILED), a free-text needle matched against the action
+     * label, the raw path and the actor name, and a session-noise switch —
+     * {@code includeAuth=false} hides /auth/* rows (login/refresh housekeeping,
+     * one refresh per user per ~15 min) so real clinical/admin actions are not
+     * drowned; the auditor flips the toggle to review sign-in activity. Always
+     * newest-first.
      */
     @Transactional(readOnly = true)
     public Page<AuditLog> search(UUID hospitalId, Instant from, Instant to,
-                                 UUID actorUserId, String outcome, String q, Pageable pageable) {
+                                 UUID actorUserId, String outcome, String q,
+                                 boolean includeAuth, Pageable pageable) {
+        Specification<AuditLog> spec = buildSearchSpec(hospitalId, from, to, actorUserId, outcome, q, includeAuth);
+        Pageable sorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                Sort.by(Sort.Direction.DESC, "createdAt"));
+        return auditLogRepository.findAll(spec, sorted);
+    }
+
+    /** Unpaged variant of {@link #search} for the CSV export — the export honours the same filters. */
+    @Transactional(readOnly = true)
+    public List<AuditLog> searchAll(UUID hospitalId, Instant from, Instant to,
+                                    UUID actorUserId, String outcome, String q, boolean includeAuth) {
+        return auditLogRepository.findAll(
+                buildSearchSpec(hospitalId, from, to, actorUserId, outcome, q, includeAuth),
+                Sort.by(Sort.Direction.DESC, "createdAt"));
+    }
+
+    private Specification<AuditLog> buildSearchSpec(UUID hospitalId, Instant from, Instant to,
+                                                    UUID actorUserId, String outcome, String q,
+                                                    boolean includeAuth) {
         Specification<AuditLog> spec = (root, query, cb) -> cb.equal(root.get("hospitalId"), hospitalId);
         if (from != null) {
             spec = spec.and((root, query, cb) -> cb.greaterThanOrEqualTo(root.get("createdAt"), from));
@@ -122,9 +148,10 @@ public class AuditService {
                     cb.like(cb.lower(root.get("path")), needle),
                     cb.like(cb.lower(root.get("actorName")), needle)));
         }
-        Pageable sorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
-                Sort.by(Sort.Direction.DESC, "createdAt"));
-        return auditLogRepository.findAll(spec, sorted);
+        if (!includeAuth) {
+            spec = spec.and((root, query, cb) -> cb.not(cb.like(root.get("path"), "/api/v1/auth/%")));
+        }
+        return spec;
     }
 
     /** Back-compat unfiltered read (kept for callers that only page by time). */
@@ -187,6 +214,11 @@ public class AuditService {
             refs.put(id, new String[]{visitNumber, name.isEmpty() ? null : name});
         }
         return refs;
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return null;
+        return s.length() > max ? s.substring(0, max) : s;
     }
 
     private static UUID extractVisitIdFromPath(String path) {

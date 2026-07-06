@@ -32,7 +32,21 @@ public class AuditInterceptor implements HandlerInterceptor {
         // Defensive: servlet threads are pooled — never let a previous request's
         // visit/actor attribution leak into this one.
         auditContext.clear();
+        // Origin forensics (V108): note the client IP + device once per request, so
+        // every audit row this request produces (interceptor OR custom producer)
+        // carries "from where".
+        auditContext.noteRequest(clientIp(request), request.getHeader("User-Agent"));
         return true;
+    }
+
+    /** Client IP, honouring the first hop of X-Forwarded-For when behind a proxy. */
+    private static String clientIp(HttpServletRequest request) {
+        String xff = request.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            int comma = xff.indexOf(',');
+            return (comma > 0 ? xff.substring(0, comma) : xff).trim();
+        }
+        return request.getRemoteAddr();
     }
 
     @Override

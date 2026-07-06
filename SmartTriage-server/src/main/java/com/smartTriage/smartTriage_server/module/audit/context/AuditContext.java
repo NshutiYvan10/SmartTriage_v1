@@ -32,12 +32,24 @@ public class AuditContext {
 
     private final ThreadLocal<UUID> visitId = new ThreadLocal<>();
     private final ThreadLocal<User> actor = new ThreadLocal<>();
+    private final ThreadLocal<String> sourceIp = new ThreadLocal<>();
+    private final ThreadLocal<String> userAgent = new ThreadLocal<>();
 
     /** Attribute this request to a visit (first caller wins; nulls ignored). */
     public void noteVisit(UUID id) {
         if (id != null && visitId.get() == null) {
             visitId.set(id);
         }
+    }
+
+    /**
+     * Origin of this request (V108 forensics) — noted once by AuditInterceptor.preHandle,
+     * so both the interceptor's own record() call AND the custom producers that call
+     * AuditService.record mid-request (RFID / cross-hospital reads) stamp the same origin.
+     */
+    public void noteRequest(String ip, String agent) {
+        if (ip != null && !ip.isBlank()) sourceIp.set(ip);
+        if (agent != null && !agent.isBlank()) userAgent.set(agent);
     }
 
     /** Attribute this request to an actor resolved outside the SecurityContext (login/refresh). */
@@ -55,9 +67,19 @@ public class AuditContext {
         return actor.get();
     }
 
+    public String getSourceIp() {
+        return sourceIp.get();
+    }
+
+    public String getUserAgent() {
+        return userAgent.get();
+    }
+
     /** Remove all request-scoped state (interceptor calls this on every /api request). */
     public void clear() {
         visitId.remove();
         actor.remove();
+        sourceIp.remove();
+        userAgent.remove();
     }
 }

@@ -71,4 +71,11 @@ public class AuditLog extends BaseEntity {
     /** SUCCESS when the request returned 2xx/3xx, otherwise FAILED. */
     @Column(name = "outcome", length = 12)
     private String outcome;
+
+    /** Request origin (V108 forensics): client IP (X-Forwarded-For aware) + device. */
+    @Column(name = "source_ip", length = 45)
+    private String sourceIp;
+
+    @Column(name = "user_agent", length = 256)
+    private String userAgent;
 }

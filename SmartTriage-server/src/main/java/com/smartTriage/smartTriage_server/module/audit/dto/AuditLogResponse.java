@@ -30,4 +30,7 @@ public class AuditLogResponse {
     private String action;
     private Integer statusCode;
     private String outcome;
+    /** Request origin (V108 forensics). */
+    private String sourceIp;
+    private String userAgent;
 }

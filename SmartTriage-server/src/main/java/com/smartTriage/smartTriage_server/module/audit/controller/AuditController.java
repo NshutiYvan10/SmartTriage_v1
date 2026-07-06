@@ -47,9 +47,10 @@ public class AuditController {
             @RequestParam(required = false) UUID actorUserId,
             @RequestParam(required = false) String outcome,
             @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "true") boolean includeAuth,
             @PageableDefault(size = 50) Pageable pageable) {
         Page<AuditLogResponse> page = auditService
-                .search(hospitalId, from, to, actorUserId, outcome, q, pageable)
+                .search(hospitalId, from, to, actorUserId, outcome, q, includeAuth, pageable)
                 .map(AuditMapper::toResponse);
         auditService.enrichWithVisitRefs(page.getContent());
         return ResponseEntity.ok(ApiResponse.success(page));
@@ -70,15 +71,25 @@ public class AuditController {
         return ResponseEntity.ok(ApiResponse.success(rows));
     }
 
+    /**
+     * CSV export — honours the SAME filters as the list (what the auditor sees is
+     * what they export), defaults to the last 30 days, and includes the V107/V108
+     * forensic columns (Visit/Patient + SourceIP/UserAgent).
+     */
     @GetMapping("/hospital/{hospitalId}/export")
     @PreAuthorize("@clinicalAuthz.canViewHospitalReports(authentication, #hospitalId)")
     public ResponseEntity<byte[]> exportCsv(
             @PathVariable UUID hospitalId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            @RequestParam(required = false) UUID actorUserId,
+            @RequestParam(required = false) String outcome,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "true") boolean includeAuth) {
         Instant rangeFrom = from != null ? from : Instant.now().minus(30, ChronoUnit.DAYS);
         Instant rangeTo = to != null ? to : Instant.now();
-        List<AuditLog> rows = auditService.getForHospitalRange(hospitalId, rangeFrom, rangeTo);
+        List<AuditLog> rows = auditService.searchAll(
+                hospitalId, rangeFrom, rangeTo, actorUserId, outcome, q, includeAuth);
         // Resolve visit display refs once for the whole export (V107 patient columns).
         List<AuditLogResponse> enriched = rows.stream()
                 .map(AuditMapper::toResponse)
@@ -86,7 +97,7 @@ public class AuditController {
         auditService.enrichWithVisitRefs(enriched);
 
         StringBuilder sb = new StringBuilder(
-                "Timestamp,Actor,Role,Action,Visit,Patient,Method,Path,Status,Outcome\n");
+                "Timestamp,Actor,Role,Action,Visit,Patient,Method,Path,Status,Outcome,SourceIP,UserAgent\n");
         for (AuditLogResponse a : enriched) {
             sb.append(csv(a.getTimestamp())).append(',')
               .append(csv(a.getActorName())).append(',')
@@ -97,7 +108,9 @@ public class AuditController {
               .append(csv(a.getHttpMethod())).append(',')
               .append(csv(a.getPath())).append(',')
               .append(csv(a.getStatusCode())).append(',')
-              .append(csv(a.getOutcome())).append('\n');
+              .append(csv(a.getOutcome())).append(',')
+              .append(csv(a.getSourceIp())).append(',')
+              .append(csv(a.getUserAgent())).append('\n');
         }
         byte[] body = sb.toString().getBytes(StandardCharsets.UTF_8);
         return ResponseEntity.ok()

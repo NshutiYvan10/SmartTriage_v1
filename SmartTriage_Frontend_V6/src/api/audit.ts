@@ -18,6 +18,9 @@ export interface AuditLogEntry {
   action: string;
   statusCode: number | null;
   outcome: string; // SUCCESS | FAILED
+  /** Request origin (V108 forensics). */
+  sourceIp: string | null;
+  userAgent: string | null;
 }
 
 interface PageResp<T> {
@@ -25,24 +28,36 @@ interface PageResp<T> {
   totalElements: number;
 }
 
+/** Server-side audit filters (V107/V108) — shared by the list and the CSV export. */
+export interface AuditFilterOpts {
+  from?: string;
+  to?: string;
+  outcome?: 'SUCCESS' | 'FAILED';
+  actorUserId?: string;
+  q?: string;
+  /** false hides /auth/* session housekeeping (login/refresh) server-side. */
+  includeAuth?: boolean;
+}
+
+function filterParams(opts: AuditFilterOpts): URLSearchParams {
+  const qs = new URLSearchParams();
+  if (opts.from) qs.set('from', opts.from);
+  if (opts.to) qs.set('to', opts.to);
+  if (opts.outcome) qs.set('outcome', opts.outcome);
+  if (opts.actorUserId) qs.set('actorUserId', opts.actorUserId);
+  if (opts.q) qs.set('q', opts.q);
+  if (opts.includeAuth !== undefined) qs.set('includeAuth', String(opts.includeAuth));
+  return qs;
+}
+
 export const auditApi = {
   list: (
     hospitalId: string,
-    opts: {
-      page?: number; size?: number; from?: string; to?: string;
-      /** Server-side filters (V107). */
-      outcome?: 'SUCCESS' | 'FAILED'; actorUserId?: string; q?: string;
-    } = {},
+    opts: AuditFilterOpts & { page?: number; size?: number } = {},
   ) => {
-    const qs = new URLSearchParams({
-      page: String(opts.page ?? 0),
-      size: String(opts.size ?? 100),
-    });
-    if (opts.from) qs.set('from', opts.from);
-    if (opts.to) qs.set('to', opts.to);
-    if (opts.outcome) qs.set('outcome', opts.outcome);
-    if (opts.actorUserId) qs.set('actorUserId', opts.actorUserId);
-    if (opts.q) qs.set('q', opts.q);
+    const qs = filterParams(opts);
+    qs.set('page', String(opts.page ?? 0));
+    qs.set('size', String(opts.size ?? 50));
     return get<PageResp<AuditLogEntry>>(`/audit/hospital/${hospitalId}?${qs.toString()}`);
   },
   /**
@@ -50,10 +65,9 @@ export const auditApi = {
    * this patient's encounter, oldest first, including FAILED/denied attempts.
    */
   visitTrail: (visitId: string) => get<AuditLogEntry[]>(`/audit/visit/${visitId}`),
-  exportCsv: (hospitalId: string, from?: string, to?: string) => {
-    const qs = new URLSearchParams();
-    if (from) qs.set('from', from);
-    if (to) qs.set('to', to);
+  /** CSV export — honours the SAME filters as the list (WYSIWYG export). */
+  exportCsv: (hospitalId: string, opts: AuditFilterOpts = {}) => {
+    const qs = filterParams(opts);
     const suffix = qs.toString() ? `?${qs.toString()}` : '';
     return downloadBlob(`/audit/hospital/${hospitalId}/export${suffix}`, 'audit-log.csv');
   },
