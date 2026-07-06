@@ -16,7 +16,19 @@ public interface InfectionScreeningRepository extends JpaRepository<InfectionScr
 
     Optional<InfectionScreening> findByIdAndIsActiveTrue(UUID id);
 
-    List<InfectionScreening> findByVisitIdAndIsActiveTrueOrderByScreenedAtDesc(UUID visitId);
+    /**
+     * All active screenings for a visit (newest first).
+     *
+     * <p>JOIN FETCH visit + patient (+ LEFT bed) so the response mapper can read
+     * patientName / zone / bedLabel AFTER the service transaction closes without a
+     * LazyInitializationException — both the isolation tab ({@code getScreeningsForVisit})
+     * and the handover isolation block map these rows post-transaction. Every screening
+     * has a non-null visit + patient, so the inner joins never drop rows.
+     */
+    @Query("SELECT s FROM InfectionScreening s JOIN FETCH s.visit v JOIN FETCH v.patient " +
+            "LEFT JOIN FETCH v.currentBed WHERE v.id = :visitId AND s.isActive = true " +
+            "ORDER BY s.screenedAt DESC")
+    List<InfectionScreening> findByVisitIdAndIsActiveTrueOrderByScreenedAtDesc(@Param("visitId") UUID visitId);
 
     /** Projection for hospital-scope authz — the screening's visit id. */
     @Query("SELECT s.visit.id FROM InfectionScreening s WHERE s.id = :id")

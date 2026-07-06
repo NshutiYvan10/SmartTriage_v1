@@ -215,7 +215,7 @@ public class InfectionIsolationService {
         publishIsolationDashboard(screening.getVisit(), "ROOM_ASSIGNED");
         log.info("Isolation room assigned: screening={}, room={}, by={}",
                 screeningId, roomNumber, screening.getIsolationAssignedByName());
-        return screening;
+        return hydrateForResponse(screening);
     }
 
     /** End / clear isolation — explicit, actor-stamped, with a mandatory reason (de-isolation). */
@@ -238,7 +238,7 @@ public class InfectionIsolationService {
         publishIsolationDashboard(screening.getVisit(), "CLEARED");
         log.info("Isolation ended: screening={}, by={}, reason={}",
                 screeningId, screening.getIsolationEndedByName(), reason);
-        return screening;
+        return hydrateForResponse(screening);
     }
 
     /** Mark public health notification as sent (to Rwanda RBC) — records the actor. */
@@ -255,7 +255,7 @@ public class InfectionIsolationService {
         publishIsolationDashboard(screening.getVisit(), "NOTIFIED");
         log.info("Public health notified: screening={}, reference={}, by={}",
                 screeningId, referenceNumber, screening.getPublicHealthNotifiedByName());
-        return screening;
+        return hydrateForResponse(screening);
     }
 
     public List<InfectionScreening> getActiveIsolations(UUID hospitalId, EdZone zone) {
@@ -281,6 +281,27 @@ public class InfectionIsolationService {
     // ====================================================================
     // PRIVATE HELPERS
     // ====================================================================
+
+    /**
+     * Initialise every lazy association {@link InfectionScreeningMapper} reads (visit + its
+     * patient / bed / zone) so the controller can map the screening AFTER this transaction's
+     * session closes without a LazyInitializationException. The mutation paths (assignIsolationRoom
+     * / endIsolation / notifyPublicHealth) load via {@code findByIdAndIsActiveTrue} and only touch
+     * {@code visit.hospital} before returning, so the mapper's {@code visit.getPatient()} /
+     * {@code getCurrentBed()} 500'd every room-assign / de-isolation / RBC-notification (the write
+     * committed, but the response failed). Null-safe on missing associations. (The READ paths use
+     * JOIN FETCH queries and never reach here.)
+     */
+    private InfectionScreening hydrateForResponse(InfectionScreening screening) {
+        if (screening != null && screening.getVisit() != null) {
+            Visit v = screening.getVisit();
+            org.hibernate.Hibernate.initialize(v);
+            org.hibernate.Hibernate.initialize(v.getCurrentBed());
+            org.hibernate.Hibernate.initialize(v.getHospital());
+            org.hibernate.Hibernate.initialize(v.getPatient());
+        }
+        return screening;
+    }
 
     private void generateInfectionAlert(Visit visit, InfectionScreeningResult result,
                                         IsolationType effectiveType, InfectionRiskLevel effectiveRisk) {
