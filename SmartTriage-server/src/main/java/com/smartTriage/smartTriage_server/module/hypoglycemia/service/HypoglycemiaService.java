@@ -160,7 +160,7 @@ public class HypoglycemiaService {
         event = hypoglycemiaEventRepository.save(event);
         publishDashboardEvent(event, "TREATED");
         log.info("Treatment recorded for hypoglycemia event {} by {}", eventId, event.getTreatmentGivenByName());
-        return event;
+        return hydrateForResponse(event);
     }
 
     @Transactional
@@ -228,7 +228,7 @@ public class HypoglycemiaService {
         }
         event = hypoglycemiaEventRepository.save(event);
         publishDashboardEvent(event, "RECHECKED");
-        return event;
+        return hydrateForResponse(event);
     }
 
     @Transactional
@@ -242,7 +242,7 @@ public class HypoglycemiaService {
         event = hypoglycemiaEventRepository.save(event);
         publishDashboardEvent(event, "RESOLVED");
         log.info("Hypoglycemia event resolved: {} by {}", eventId, event.getResolvedByName());
-        return event;
+        return hydrateForResponse(event);
     }
 
     /**
@@ -271,6 +271,27 @@ public class HypoglycemiaService {
     // ====================================================================
     // PRIVATE HELPERS
     // ====================================================================
+
+    /**
+     * Initialise every lazy association {@link com.smartTriage.smartTriage_server.module.hypoglycemia.mapper.HypoglycemiaEventMapper}
+     * reads (visit + its patient / bed / hospital-derived zone), so the controller can map the
+     * event AFTER this transaction's session closes without a LazyInitializationException. The
+     * READ endpoints already JOIN FETCH these (see the repository), but the MUTATION paths
+     * (recordTreatment / recordRepeatGlucose / resolveEvent) load via {@code findByIdAndIsActiveTrue}
+     * and only touch {@code visit.hospital} before returning — so the mapper's
+     * {@code visit.getPatient()} / {@code getCurrentBed()} 500'd every treatment/recheck/resolve
+     * (the write committed, but the response failed). Null-safe on missing associations.
+     */
+    private HypoglycemiaEvent hydrateForResponse(HypoglycemiaEvent event) {
+        if (event != null && event.getVisit() != null) {
+            Visit v = event.getVisit();
+            org.hibernate.Hibernate.initialize(v);
+            org.hibernate.Hibernate.initialize(v.getCurrentBed());
+            org.hibernate.Hibernate.initialize(v.getHospital());
+            org.hibernate.Hibernate.initialize(v.getPatient());
+        }
+        return event;
+    }
 
     /** Create the event + owned alert when no unresolved event already exists. */
     private HypoglycemiaEvent createEventAndAlert(Visit visit, HypoglycemiaCheckResult result, String source) {

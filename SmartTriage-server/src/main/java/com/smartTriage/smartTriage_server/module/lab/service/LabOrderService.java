@@ -78,6 +78,8 @@ public class LabOrderService {
     private final LabResultComponentRepository labResultComponentRepository;
     private final ClinicalAuthz clinicalAuthz;
     private final LabReportPdfService labReportPdfService;
+    /** Labs → hypoglycemia bridge: a resulted glucose feeds the hypoglycemia enforcement loop. */
+    private final com.smartTriage.smartTriage_server.module.hypoglycemia.service.HypoglycemiaService hypoglycemiaService;
 
     private static final java.time.ZoneId KIGALI = java.time.ZoneId.of("Africa/Kigali");
 
@@ -579,7 +581,77 @@ public class LabOrderService {
         log.info("Result released for order {} — value: {} critical: {} turnaround: {} min",
                 order.getOrderNumber(), order.getResultValue(), order.isCritical(), turnaroundMinutes);
 
+        // Labs → hypoglycemia bridge: a resulted glucose is a real glucose reading and must
+        // engage the hypoglycemia enforcement loop (owned alert + mandatory 15-min recheck),
+        // not merely raise a passive critical-value flag.
+        bridgeGlucoseToHypoglycemia(order);
+
         return broadcastAndMap(order);
+    }
+
+    // ====================================================================
+    // LABS → HYPOGLYCEMIA BRIDGE
+    // ====================================================================
+
+    /**
+     * Feed a resulted glucose into the hypoglycemia enforcement entry point that vitals / IoT
+     * already use ({@link com.smartTriage.smartTriage_server.module.hypoglycemia.service.HypoglycemiaService#evaluateGlucoseReading}).
+     * Before this, a lab-confirmed hypoglycemia was invisible to the hypoglycemia module — it
+     * raised a generic critical-value alert but created no {@code HypoglycemiaEvent}, armed no
+     * mandatory recheck, and never appeared on the hypoglycemia dashboard ({@code glucoseSource}
+     * had no LAB). Fires at the RESULTED transition (so a gated/unverified critical result never
+     * triggers it prematurely) and covers BOTH a single glucose order (RBS/FBS/glucose) and a
+     * glucose analyte inside a panel. A NORMAL glucose is a no-op — the enforcement engine acts
+     * only when hypoglycemic, and its duplicate-event guard makes a re-fire harmless.
+     * Best-effort: a bridge failure must never break the lab result.
+     */
+    private void bridgeGlucoseToHypoglycemia(LabOrder order) {
+        try {
+            Visit visit = order.getVisit();
+            if (visit == null) return;
+
+            // Single glucose test with an order-level numeric result.
+            if (isGlucoseName(order.getTestName()) && order.getResultNumeric() != null) {
+                Double mmol = glucoseToMmolL(order.getResultNumeric(), order.getResultUnit());
+                if (mmol != null) hypoglycemiaService.evaluateGlucoseReading(visit, mmol, false, "LAB");
+                return;
+            }
+
+            // Glucose analyte inside a panel — scan the persisted components.
+            for (LabResultComponent comp : labResultComponentRepository.findByLabOrder_Id(order.getId())) {
+                if (comp.getResultNumeric() == null) continue;
+                if (isGlucoseName(comp.getAnalyteName()) || isGlucoseName(comp.getAnalyteCode())) {
+                    Double mmol = glucoseToMmolL(comp.getResultNumeric(), comp.getResultUnit());
+                    if (mmol != null) hypoglycemiaService.evaluateGlucoseReading(visit, mmol, false, "LAB");
+                    return; // one glucose reading is enough to arm the enforcement loop
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Glucose→hypoglycemia bridge failed for order {}: {}",
+                    order != null ? order.getOrderNumber() : null, e.getMessage());
+        }
+    }
+
+    /** Mirrors CriticalValueEngine's glucose recognition (name / common codes). */
+    private boolean isGlucoseName(String name) {
+        if (name == null) return false;
+        String n = name.toLowerCase().trim();
+        return n.contains("glucose") || n.contains("blood sugar")
+                || n.equals("rbs") || n.equals("fbs") || n.equals("glu");
+    }
+
+    /**
+     * Convert a lab glucose to mmol/L (the canonical hypoglycemia unit) using its declared
+     * unit — Rwandan glucometers/analysers often read mg/dL. A blank/unknown unit is treated
+     * as canonical mmol/L, matching the rest of the lab pipeline. Reuses {@link com.smartTriage.smartTriage_server.common.enums.GlucoseUnit}.
+     */
+    private Double glucoseToMmolL(Double value, String unit) {
+        if (value == null) return null;
+        String u = unit == null ? "" : unit.toLowerCase();
+        var gu = u.contains("mg")
+                ? com.smartTriage.smartTriage_server.common.enums.GlucoseUnit.MG_DL
+                : com.smartTriage.smartTriage_server.common.enums.GlucoseUnit.MMOL_L;
+        return gu.toMmolL(value);
     }
 
     // ====================================================================
