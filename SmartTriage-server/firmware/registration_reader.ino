@@ -5,39 +5,53 @@
  *  the ESP32 reads the card UID and POSTs it to the backend, which resolves
  *  the patient SYSTEM-WIDE (a card first issued at hospital A resolves the
  *  same person at hospital B) and pushes the result to the registrar's
- *  dashboard. This device gives the registrar instant local feedback
- *  (OLED + buzzer) while the dashboard shows the patient and the
+ *  dashboard. This device gives the registrar instant LOCAL feedback
+ *  (two LEDs + buzzer) while the dashboard shows the patient and the
  *  "Start visit" action.
  *
  *  TWO USES — the device behaves identically for both; the BACKEND decides:
  *   1. LOOK-UP (returning patient): tap the card → backend finds the patient →
- *      OLED shows the name, positive tone → registrar starts a visit on screen.
+ *      GREEN + positive tone → registrar starts a visit on screen.
  *   2. CAPTURE (new patient): on the registration form the registrar clicks
  *      "Capture card" (arms bind-mode); the next tap of a fresh card is
- *      captured — its UID is pushed straight into the form's RFID field and
- *      the OLED shows "Card captured". No re-typing.
- *   A fresh card tapped WITHOUT bind-mode returns NOT_FOUND and the OLED
- *   shows the UID so the registrar can register with it manually.
+ *      captured — its UID is pushed straight into the form's RFID field
+ *      (GREEN + confirm tone). No re-typing.
+ *   A fresh card tapped WITHOUT bind-mode returns NOT_FOUND → RED + attention
+ *   tone; the registrar registers the patient with that UID (shown on the
+ *   dashboard / serial log).
  *
- *  The RFID tap is a SPEED LAYER. If WiFi/backend is down the device shows a
- *  clear offline state; the registrar's manual search on the dashboard is
- *  unaffected. Care is never blocked by this device.
+ *  The RFID tap is a SPEED LAYER. If WiFi/backend is down the device signals a
+ *  clear offline state (RED + error tone); the registrar's manual search on the
+ *  dashboard is unaffected. Care is never blocked by this device.
  *
  * ----------------------------------------------------------------------------
- *  HARDWARE (ESP32 dev board, 3.3 V logic)
- *   - RC522 RFID reader (SPI)      VSPI
- *       SDA/SS  → GPIO 5     SCK → GPIO 18
- *       MOSI    → GPIO 23    MISO → GPIO 19
- *       RST     → GPIO 4     3.3V + GND   (RC522 is 3.3 V — do NOT use 5 V)
- *   - SSD1306 128x64 OLED (I2C)    SDA → GPIO 21   SCL → GPIO 22
- *   - Passive buzzer               → GPIO 32
- *   - Status LED (WiFi)            → GPIO 2 (onboard)
+ *  HARDWARE (ESP32 dev board, 3.3 V logic) — pins MATCH THE VERIFIED bring-up
+ *  test build; do not change a pin without re-checking the physical solder.
+ *   - RC522 RFID reader (SPI)   VSPI
+ *       SDA/SS → GPIO 5     SCK → GPIO 18
+ *       MOSI   → GPIO 23    MISO → GPIO 19
+ *       RST    → GPIO 22    3.3V + GND   (RC522 is 3.3 V — do NOT use 5 V)
+ *   - Green LED (success)       → GPIO 2
+ *   - Red LED   (denied/error)  → GPIO 4
+ *   - Buzzer (passive)          → GPIO 15   (driven with tone()/PWM — a passive buzzer is
+ *                                            SILENT on plain digitalWrite, it needs a square
+ *                                            wave. GPIO 15 is a strapping pin, so a brief chirp
+ *                                            at boot is possible — harmless. VERIFIED on 15.)
+ *   - OLED SH1106 128x64 (I2C)  → SDA GPIO 32, SCL GPIO 33   (3.3 V + GND)
+ *       Same panel as medical_monitor.ino, but on REMAPPED I2C pins (32/33) — the
+ *       monitor's default SCL (22) is taken by the RFID RST on this build. Hardware
+ *       I2C is remapped via Wire.begin(32, 33) BEFORE u8g2.begin(), matching the
+ *       verified bring-up exactly. (Set HAVE_OLED to 0 to disable for debugging.)
+ *
+ *   Note: GPIO 2 (green LED) is the onboard LED on many ESP32 boards, so an external
+ *   green LED there simply mirrors it — harmless. Every pin above is the ACTUAL
+ *   soldered layout, verified on the assembled device.
  *
  *  LIBRARIES (Arduino Library Manager)
  *   - WiFi, HTTPClient        (ESP32 core, built-in)
  *   - MFRC522                 by GithubCommunity / miguelbalboa  (RC522)
- *   - U8g2                    by oliver  (OLED — same as medical_monitor.ino)
  *   - ArduinoJson (v6)        by Benoit Blanchon
+ *   - U8g2                    by oliver  (ONLY needed once HAVE_OLED = 1)
  *
  *  PROVISIONING (one-time, before flashing)
  *   A Hospital Admin registers this reader in the app — Admin -> IoT Devices ->
@@ -49,9 +63,7 @@
  *          "deviceType":"RFID_READER", "hospitalId":"<your-hospital-uuid>" }
  *      -> the response's "apiKey" is what the device sends as X-Device-API-Key.)
  *   OPTIONAL: the admin can then assign this reader to a specific registrar
- *   (IoT Devices -> the reader's card -> Registrar), so that registrar's
- *   Registration Desk highlights it as "their" reader. This is a backend/UI
- *   convenience only — the reader's tap behaviour is identical either way.
+ *   (IoT Devices -> the reader's card -> Registrar).
  *
  *  SECURITY NOTE (v2): this build talks PLAIN HTTP and the API key is embedded
  *  in the sketch. For production/PHI, move to HTTPS with server-cert validation
@@ -63,36 +75,85 @@
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <MFRC522.h>
-#include <U8g2lib.h>
 
 // ======================== WiFi Configuration ========================
-const char* WIFI_SSID     = "SanTech";
-const char* WIFI_PASSWORD = "SanTech@IdeasHappen";
+const char* WIFI_SSID     = "YOUR_WIFI_SSID";
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 
 // ======================== Server Configuration ======================
 // Base host of the SmartTriage backend (no trailing slash).
-const char* SERVER_HOST     = "http://192.168.1.85:8080";
+const char* SERVER_HOST     = "http://YOUR_BACKEND_IP:8080";
 // Pre-shared device API key — see PROVISIONING above. Sent as X-Device-API-Key.
 const char* DEVICE_API_KEY  = "PASTE_RFID_READER_API_KEY_HERE";
 const char* DEVICE_LABEL    = "Registration Desk";
 
-// ======================== Pin Definitions ===========================
+// ======================== Pin Definitions ==========================
+// These match the verified bring-up test build exactly.
 #define RC522_SS_PIN   5     // RC522 SDA / SS
-#define RC522_RST_PIN  4     // RC522 RST
-#define BUZZER_PIN     32    // Passive buzzer
-#define LED_WIFI       2     // Onboard LED — WiFi connected
-// OLED uses hardware I2C: SDA=21, SCL=22 (ESP32 defaults)
+#define RC522_RST_PIN  22    // RC522 RST  (verified — was on 4 in an earlier draft)
+#define SPI_SCK_PIN    18    // VSPI SCK
+#define SPI_MISO_PIN   19    // VSPI MISO
+#define SPI_MOSI_PIN   23    // VSPI MOSI
+#define GREEN_LED      2     // success  (patient found / card captured)
+#define RED_LED        4     // denied / not-found / error / offline
+#define BUZZER_PIN     15    // passive buzzer — driven via tone()/PWM. VERIFIED on GPIO 15
+                             // (a strapping pin; may emit a brief chirp at boot — harmless).
+
+// ======================== OLED (disabled until pins confirmed) =======
+// Flip HAVE_OLED to 1 and set OLED_SDA/OLED_SCL to the ACTUAL soldered GPIOs
+// once you've read them off the board. SCL must NOT be 22 (RFID RST uses it).
+// The SH1106 driver + software-I2C lets the panel sit on any two free GPIOs.
+#define HAVE_OLED  1         // OLED confirmed present + wired (SDA 32 / SCL 33)
+#define OLED_SDA   32        // verified soldered SDA
+#define OLED_SCL   33        // verified soldered SCL
+
+#if HAVE_OLED
+  #include <Wire.h>
+  #include <U8g2lib.h>
+  // SH1106 128x64 on HARDWARE I2C, remapped to SDA=OLED_SDA / SCL=OLED_SCL via
+  // Wire.begin(...) in setup() — matches the verified bring-up test exactly.
+  U8G2_SH1106_128X64_NONAME_F_HW_I2C display(U8G2_R0, U8X8_PIN_NONE);
+  String clip(const String& s, int n) { return s.length() <= n ? s : s.substring(0, n - 1) + "."; }
+  void oledBanner(const char* a, const char* b, const char* c) {
+    display.clearBuffer();
+    display.setFont(u8g2_font_7x13B_tr); display.drawStr(0, 14, a);
+    display.setFont(u8g2_font_6x12_tr);
+    if (b && b[0]) display.drawStr(0, 36, b);
+    if (c && c[0]) display.drawStr(0, 54, c);
+    display.sendBuffer();
+  }
+  void oledShow(const char* title, const String& l1, const String& l2) {
+    display.clearBuffer();
+    display.setFont(u8g2_font_7x13B_tr); display.drawStr(0, 12, title);
+    display.drawHLine(0, 16, 128);
+    display.setFont(u8g2_font_6x12_tr);
+    if (l1.length()) display.drawStr(0, 34, clip(l1, 21).c_str());
+    if (l2.length()) display.drawStr(0, 52, clip(l2, 21).c_str());
+    display.sendBuffer();
+  }
+  void oledIdle() {
+    display.clearBuffer();
+    display.setFont(u8g2_font_7x13B_tr); display.drawStr(0, 12, "SmartTriage");
+    display.drawHLine(0, 16, 128);
+    display.setFont(u8g2_font_6x12_tr);  display.drawStr(0, 34, DEVICE_LABEL);
+    display.setFont(u8g2_font_7x13B_tr); display.drawStr(0, 54, "Tap patient card");
+    display.sendBuffer();
+  }
+#else
+  // No-op stubs — the app logic calls these unconditionally, so enabling the
+  // OLED later needs no changes anywhere except the HAVE_OLED block above.
+  inline void oledBanner(const char*, const char*, const char*) {}
+  inline void oledShow(const char*, const String&, const String&) {}
+  inline void oledIdle() {}
+#endif
 
 // ======================== Behaviour timing ==========================
-#define RESULT_HOLD_MS   4500   // How long a tap result stays on screen
+#define RESULT_HOLD_MS   1500   // How long the result LED stays lit after a tap
 #define TAP_COOLDOWN_MS  1500   // Ignore re-reads of the same card within this
 #define HTTP_TIMEOUT_MS  6000   // Backend call timeout
 #define WIFI_RETRY_MS    5000   // Reconnect backoff
 
 // ======================== Objects ===================================
-// SSD1306 128x64 via HW I2C. If your panel is an SH1106 (like the monitor),
-// swap to: U8G2_SH1106_128X64_NONAME_F_HW_I2C
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C display(U8G2_R0, U8X8_PIN_NONE);
 MFRC522 rfid(RC522_SS_PIN, RC522_RST_PIN);
 
 // ======================== State =====================================
@@ -104,39 +165,118 @@ unsigned long lastWifiTryMs = 0;
 bool fieldClear = true;
 
 // ============================================================================
+//  Buzzer — driven with tone() (a PWM square wave). A PASSIVE buzzer makes NO
+//  sound on plain digitalWrite(HIGH) (that's DC); it needs an oscillating signal,
+//  i.e. tone(). tone() also drives an ACTIVE buzzer fine, so this is correct
+//  regardless of buzzer type. Outcomes are distinguished by pitch + pattern.
+// ============================================================================
+void beep(int freq, int ms) { tone(BUZZER_PIN, freq, ms); delay(ms + 30); noTone(BUZZER_PIN); }
+
+// Warble = rapidly alternate two tones (siren). Same 3.3 V peak as a steady tone,
+// but the sweeping pitch — landing in the ear's most-sensitive ~3–4 kHz band — is
+// PERCEIVED as louder and cuts through ambient noise far better. With a fixed
+// single pin at 3.3 V, this (plus sitting exactly on the resonant peak) is the most
+// a passive buzzer can do without changing the voltage/wiring.
+void warble(int fLo, int fHi, int totalMs, int stepMs) {
+  unsigned long start = millis();
+  bool hi = false;
+  while (millis() - start < (unsigned long) totalMs) {
+    tone(BUZZER_PIN, hi ? fHi : fLo);
+    delay(stepMs);
+    hi = !hi;
+  }
+  noTone(BUZZER_PIN);
+}
+
+// ONE knob: set BUZZER_RESONANT to your buzzer's LOUDEST frequency (run the sweep).
+// Single-tone cues sit right on it (max real volume); warble cues sweep around it
+// (max perceived loudness) — so tuning this one number makes everything louder.
+static const int BUZZER_RESONANT = 2700;
+void beepFound()    { beep(BUZZER_RESONANT - 200, 90); beep(BUZZER_RESONANT + 400, 180); }   // quick rising — positive
+void beepCaptured() { beep(BUZZER_RESONANT, 200); }                                          // single strong tone — confirm
+void beepNotFound() { warble(BUZZER_RESONANT - 200, BUZZER_RESONANT + 500, 800, 70); }       // bright siren — attention
+void beepError()    { warble(BUZZER_RESONANT - 700, BUZZER_RESONANT + 100, 1000, 100); }     // slower low siren — error
+
+// ============================================================================
+//  LEDs
+// ============================================================================
+void ledsOff() { digitalWrite(GREEN_LED, LOW); digitalWrite(RED_LED, LOW); }
+
+// Startup self-test — mirrors the verified bring-up test: blink both LEDs + buzzer twice.
+void startupSelfTest() {
+  for (int i = 0; i < 2; i++) {
+    digitalWrite(GREEN_LED, HIGH); digitalWrite(RED_LED, HIGH);
+    beep(BUZZER_RESONANT, 180);                        // loud startup beep at the resonant peak
+    digitalWrite(GREEN_LED, LOW);  digitalWrite(RED_LED, LOW);
+    delay(150);
+  }
+}
+
+// Boot connectivity cue on the LEDs (no dedicated WiFi LED on this build).
+void wifiCue(bool connected) {
+  for (int i = 0; i < 2; i++) {
+    digitalWrite(connected ? GREEN_LED : RED_LED, HIGH); delay(120);
+    digitalWrite(connected ? GREEN_LED : RED_LED, LOW);  delay(120);
+  }
+  if (connected) beepCaptured(); else beepError();
+}
+
+// Show a tap outcome: light the LED, drive the buzzer, mirror to the OLED (if
+// enabled) and the serial log, hold briefly, then return to idle.
+void result(bool ok, const char* title, const String& l1, const String& l2, void (*toneFn)()) {
+  digitalWrite(ok ? GREEN_LED : RED_LED, HIGH);
+  oledShow(title, l1, l2);
+  Serial.printf("[result] %s | %s | %s\n", title, l1.c_str(), l2.c_str());
+  toneFn();
+  delay(RESULT_HOLD_MS);
+  ledsOff();
+  oledIdle();
+}
+
+// ============================================================================
 //  SETUP
 // ============================================================================
 void setup() {
   Serial.begin(115200);
   delay(200);
 
+  pinMode(GREEN_LED, OUTPUT);
+  pinMode(RED_LED, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
-  pinMode(LED_WIFI, OUTPUT);
+  ledsOff();
   digitalWrite(BUZZER_PIN, LOW);
-  digitalWrite(LED_WIFI, LOW);
 
+  startupSelfTest();
+
+  Serial.println();
+  Serial.println("================================");
+  Serial.println(" SmartTriage Registration Reader");
+  Serial.println("================================");
+
+#if HAVE_OLED
+  Wire.begin(OLED_SDA, OLED_SCL);   // remap HW I2C to the soldered pins BEFORE begin()
+  delay(200);
   display.begin();
-  banner("SmartTriage", "Registration Reader", "Starting...");
+  oledBanner("SmartTriage", "Registration Reader", "Starting...");
+#endif
 
-  SPI.begin();            // VSPI: SCK=18, MISO=19, MOSI=23
+  // VSPI: explicit pins to match the verified wiring.
+  SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, RC522_SS_PIN);
   rfid.PCD_Init();
   Serial.println("RC522 initialised.");
 
   connectWiFi();
-  startupChime();
-  showIdle();
+  oledIdle();
+  Serial.println("Ready. Tap a patient card...");
 }
 
 // ============================================================================
 //  MAIN LOOP
 // ============================================================================
 void loop() {
-  // Keep WiFi up; a dropped link shows offline but never blocks the desk.
+  // Keep WiFi up; a dropped link signals offline on tap but never blocks the desk.
   if (WiFi.status() != WL_CONNECTED) {
-    digitalWrite(LED_WIFI, LOW);
-    if (millis() - lastWifiTryMs > WIFI_RETRY_MS) { connectWiFi(); showIdle(); }
-  } else {
-    digitalWrite(LED_WIFI, HIGH);
+    if (millis() - lastWifiTryMs > WIFI_RETRY_MS) { connectWiFi(); oledIdle(); }
   }
 
   String uid = readCardUid();
@@ -178,12 +318,10 @@ String readCardUid() {
 //  Tap → backend → feedback. The backend decides look-up vs bind-capture.
 // ============================================================================
 void handleTap(const String& uid) {
-  banner("Reading card...", uid.c_str(), "");
+  oledBanner("Reading card...", uid.c_str(), "");
 
   if (WiFi.status() != WL_CONNECTED) {
-    beepError();
-    showResult("OFFLINE", "No connection", "Use manual search", uid);
-    holdThenIdle();
+    result(false, "OFFLINE", "No connection", "Use manual search", beepError);
     return;
   }
 
@@ -206,54 +344,49 @@ void handleTap(const String& uid) {
   String payload = (code > 0) ? http.getString() : "";
   http.end();
 
+  // DEBUG — shows the ACTUAL URL hit + the raw HTTPClient code, so a "BACKEND
+  // DOWN" is unambiguous: a negative code is a transport error (-1 refused,
+  // -11 read timeout, ...); a positive code is a real HTTP status. Confirms the
+  // URL is the right IP (not a stale one). Safe to remove once it's working.
+  Serial.printf("[tap] POST %s  ->  code=%d\n", url.c_str(), code);
+  if (code > 0) Serial.printf("[tap] response: %s\n", payload.c_str());
+
   // ── Failure paths must be DISTINCT from a genuine "card not registered" ──
   // Otherwise a transient outage or server error reads as "new patient" and the
   // registrar re-registers someone who already exists (duplicate record).
   if (code <= 0) {                       // network / backend unreachable
-    beepError();
-    showResult("BACKEND DOWN", "Use manual search", "", uid);
-    holdThenIdle();
+    result(false, "BACKEND DOWN", "Use manual search", "", beepError);
     return;
   }
   if (code == 401) {                     // bad / unknown API key
-    beepError();
-    showResult("NOT AUTHORISED", "Check device key", "", uid);
-    holdThenIdle();
+    result(false, "NOT AUTHORISED", "Check device key", "", beepError);
     return;
   }
   if (code < 200 || code >= 300) {       // 4xx/5xx (e.g. 500 / 502 / 504 from app or proxy)
-    beepError();
-    showResult("BACKEND ERROR", String("HTTP ") + code, "Try again", uid);
-    holdThenIdle();
+    result(false, "BACKEND ERROR", String("HTTP ") + code, "Try again", beepError);
     return;
   }
 
   StaticJsonDocument<512> res;
   DeserializationError err = deserializeJson(res, payload);
   if (err) {                             // 2xx but unparseable body — NOT a "new patient"
-    beepError();
-    showResult("BACKEND ERROR", "Bad response", "Try again", uid);
-    holdThenIdle();
+    result(false, "BACKEND ERROR", "Bad response", "Try again", beepError);
     return;
   }
-  String result = String((const char*) (res["result"] | ""));
+  String outcome = String((const char*) (res["result"] | ""));
 
-  if (result == "FOUND") {
+  if (outcome == "FOUND") {
     String name = String((const char*) (res["patientName"] | "Patient"));
     String dob  = String((const char*) (res["dateOfBirth"] | ""));
     String sex  = String((const char*) (res["gender"] | ""));
     String sub  = dob;
     if (sex.length()) sub += (sub.length() ? "  " : "") + sex;
-    beepFound();
-    showResult("PATIENT FOUND", name, sub.length() ? sub : String("Start visit on screen"), "");
-  } else if (result == "CARD_CAPTURED") {
-    beepCaptured();
-    showResult("CARD CAPTURED", uid, "Filled on the form", "");
-  } else {                               // NOT_FOUND (or unparseable)
-    beepNotFound();
-    showResult("CARD NOT REGISTERED", uid, "Register patient", "");
+    result(true, "PATIENT FOUND", name, sub.length() ? sub : String("Start visit on screen"), beepFound);
+  } else if (outcome == "CARD_CAPTURED") {
+    result(true, "CARD CAPTURED", uid, "Filled on the form", beepCaptured);
+  } else {                               // NOT_FOUND
+    result(false, "CARD NOT REGISTERED", uid, "Register patient", beepNotFound);
   }
-  holdThenIdle();
 }
 
 // ============================================================================
@@ -262,86 +395,21 @@ void handleTap(const String& uid) {
 void connectWiFi() {
   lastWifiTryMs = millis();
   Serial.printf("Connecting to WiFi: %s\n", WIFI_SSID);
-  banner("SmartTriage", "Connecting WiFi", WIFI_SSID);
+  oledBanner("SmartTriage", "Connecting WiFi", WIFI_SSID);
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 30) {
     delay(400); Serial.print("."); attempts++;
   }
-  if (WiFi.status() == WL_CONNECTED) {
-    digitalWrite(LED_WIFI, HIGH);
-    Serial.printf("\nWiFi connected: %s\n", WiFi.localIP().toString().c_str());
-    banner("SmartTriage", "WiFi connected", WiFi.localIP().toString().c_str());
-    delay(600);
+  bool ok = (WiFi.status() == WL_CONNECTED);
+  Serial.println();
+  if (ok) {
+    Serial.printf("WiFi connected: %s\n", WiFi.localIP().toString().c_str());
+    oledBanner("SmartTriage", "WiFi connected", WiFi.localIP().toString().c_str());
   } else {
-    digitalWrite(LED_WIFI, LOW);
-    Serial.println("\nWiFi FAILED");
-    banner("SmartTriage", "WiFi FAILED", "Manual search only");
-    delay(600);
+    Serial.println("WiFi FAILED — manual search only");
+    oledBanner("SmartTriage", "WiFi FAILED", "Manual search only");
   }
+  wifiCue(ok);
 }
-
-// ============================================================================
-//  OLED helpers (U8g2 full-buffer)
-// ============================================================================
-void showIdle() {
-  display.clearBuffer();
-  display.setFont(u8g2_font_7x13B_tr);
-  display.drawStr(0, 12, "SmartTriage");
-  display.drawHLine(0, 16, 128);
-  display.setFont(u8g2_font_6x12_tr);
-  display.drawStr(0, 34, DEVICE_LABEL);
-  display.setFont(u8g2_font_7x13B_tr);
-  display.drawStr(0, 54, "Tap patient card");
-  // WiFi dot bottom-right
-  display.setFont(u8g2_font_5x7_tr);
-  display.drawStr(96, 63, WiFi.status() == WL_CONNECTED ? "online" : "OFFLINE");
-  display.sendBuffer();
-}
-
-// A titled result: bold title, then up to two detail lines, optional 4th line.
-void showResult(const char* title, const String& l1, const String& l2, const String& l3) {
-  display.clearBuffer();
-  display.setFont(u8g2_font_7x13B_tr);
-  display.drawStr(0, 12, title);
-  display.drawHLine(0, 16, 128);
-  display.setFont(u8g2_font_6x12_tr);
-  if (l1.length()) display.drawStr(0, 32, clip(l1, 21).c_str());
-  if (l2.length()) display.drawStr(0, 48, clip(l2, 21).c_str());
-  if (l3.length()) { display.setFont(u8g2_font_5x7_tr); display.drawStr(0, 62, clip(l3, 25).c_str()); }
-  display.sendBuffer();
-}
-
-void banner(const char* a, const char* b, const char* c) {
-  display.clearBuffer();
-  display.setFont(u8g2_font_7x13B_tr);
-  display.drawStr(0, 14, a);
-  display.setFont(u8g2_font_6x12_tr);
-  if (b && b[0]) display.drawStr(0, 36, b);
-  if (c && c[0]) display.drawStr(0, 54, c);
-  display.sendBuffer();
-}
-
-String clip(const String& s, int n) { return s.length() <= n ? s : s.substring(0, n - 1) + "."; }
-
-void holdThenIdle() {
-  unsigned long t = millis();
-  // Hold the result, but stay responsive to WiFi LED updates.
-  while (millis() - t < RESULT_HOLD_MS) {
-    digitalWrite(LED_WIFI, WiFi.status() == WL_CONNECTED ? HIGH : LOW);
-    delay(80);
-  }
-  showIdle();
-}
-
-// ============================================================================
-//  Buzzer — distinct tones per outcome (passive buzzer via tone()).
-// ============================================================================
-void beep(int freq, int ms) { tone(BUZZER_PIN, freq, ms); delay(ms + 20); }
-
-void startupChime() { beep(880, 90); beep(1320, 120); }
-void beepFound()    { beep(1200, 90); beep(1600, 140); }          // rising, positive
-void beepCaptured() { beep(1400, 120); }                          // single confirm
-void beepNotFound() { beep(500, 180); beep(400, 220); }           // low, descending
-void beepError()    { beep(300, 300); }                           // long low buzz
