@@ -78,7 +78,11 @@ public final class SepsisMapper {
         // uninitialised proxy would throw LazyInitializationException. Guard with isInitialized so
         // mapping degrades to a null label instead of a 500 — the write paths initialise these
         // in-service so the data is present there.
-        if (screening.getVisit() != null) {
+        // Guard the visit proxy itself (not just its bed/patient): the read paths
+        // return detached entities, so an uninitialised visit would throw
+        // LazyInitializationException on getVisitNumber(). The service hydrates it
+        // before mapping; this degrades to a bare id rather than a 500 if it didn't.
+        if (screening.getVisit() != null && org.hibernate.Hibernate.isInitialized(screening.getVisit())) {
             builder.visitId(screening.getVisit().getId());
             builder.visitNumber(screening.getVisit().getVisitNumber());
             builder.currentZone(screening.getVisit().getCurrentEdZone());
@@ -108,7 +112,12 @@ public final class SepsisMapper {
         }
 
         String patientName = null;
-        if (screening.getVisit() != null && screening.getVisit().getPatient() != null) {
+        // Same lazy-proxy guard as toResponse: the bundle endpoints map a detached
+        // screening whose visit/patient may be uninitialised — never dereference an
+        // uninitialised proxy here (the service hydrates it on the happy path).
+        if (screening.getVisit() != null && org.hibernate.Hibernate.isInitialized(screening.getVisit())
+                && screening.getVisit().getPatient() != null
+                && org.hibernate.Hibernate.isInitialized(screening.getVisit().getPatient())) {
             patientName = screening.getVisit().getPatient().getFirstName() + " " +
                     screening.getVisit().getPatient().getLastName();
         }

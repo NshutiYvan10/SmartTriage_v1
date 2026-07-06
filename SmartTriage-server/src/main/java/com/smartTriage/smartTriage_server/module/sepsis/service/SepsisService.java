@@ -196,7 +196,7 @@ public class SepsisService {
         org.hibernate.Hibernate.initialize(visit.getPatient());
         org.hibernate.Hibernate.initialize(visit.getCurrentBed());
 
-        return screening;
+        return hydrateForResponse(screening);
     }
 
     /**
@@ -227,7 +227,7 @@ public class SepsisService {
         log.info("Sepsis bundle started: Screening={}, Visit={}, by={}",
                 screeningId, screening.getVisit().getVisitNumber(), screening.getBundleStartedByName());
 
-        return screening;
+        return hydrateForResponse(screening);
     }
 
     /**
@@ -252,7 +252,7 @@ public class SepsisService {
 
         log.info("Bundle item completed: {} for Screening={} at {}", item.name(), screeningId, now);
 
-        return screening;
+        return hydrateForResponse(screening);
     }
 
     /**
@@ -287,14 +287,22 @@ public class SepsisService {
         log.info("Sepsis bundle COMPLETED: Screening={}, Visit={}",
                 screeningId, screening.getVisit().getVisitNumber());
 
-        return screening;
+        return hydrateForResponse(screening);
     }
 
     /**
      * Get screening history for a visit.
      */
     public Page<SepsisScreening> getScreenings(UUID visitId, Pageable pageable) {
-        return sepsisScreeningRepository.findByVisitIdAndIsActiveTrueOrderByScreenedAtDesc(visitId, pageable);
+        Page<SepsisScreening> page = sepsisScreeningRepository
+                .findByVisitIdAndIsActiveTrueOrderByScreenedAtDesc(visitId, pageable);
+        // The controller maps each entity to a DTO AFTER this readOnly tx closes;
+        // initialise the lazy visit graph the mapper reads so it can't throw
+        // LazyInitializationException. This was 500-ing GET /sepsis/visit/{id} for
+        // any visit that already had ≥1 screening — so a per-visit screen persisted
+        // but the panel's reload silently failed and showed nothing.
+        page.forEach(this::hydrateForResponse);
+        return page;
     }
 
     /**
@@ -302,8 +310,26 @@ public class SepsisService {
      */
     public SepsisScreening getActiveScreening(UUID visitId) {
         return sepsisScreeningRepository.findFirstByVisitIdAndIsActiveTrueOrderByScreenedAtDesc(visitId)
+                .map(this::hydrateForResponse)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "SepsisScreening", "visitId", visitId));
+    }
+
+    /**
+     * Initialise the lazy associations the response mappers read (visit + its
+     * patient + current bed) while the Hibernate session is still open, so the
+     * controller can map the entity AFTER this @Transactional method returns
+     * without a LazyInitializationException. Null-safe; a no-op on already-
+     * initialised proxies and on a patient with no assigned bed.
+     */
+    private SepsisScreening hydrateForResponse(SepsisScreening screening) {
+        if (screening != null && screening.getVisit() != null) {
+            Visit v = screening.getVisit();
+            org.hibernate.Hibernate.initialize(v);
+            org.hibernate.Hibernate.initialize(v.getPatient());
+            org.hibernate.Hibernate.initialize(v.getCurrentBed());
+        }
+        return screening;
     }
 
     /**
