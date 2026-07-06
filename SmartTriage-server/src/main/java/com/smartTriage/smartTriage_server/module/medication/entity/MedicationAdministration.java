@@ -173,6 +173,10 @@ public class MedicationAdministration extends BaseEntity {
     @Column(name = "allergy_override_acknowledged_at")
     private Instant allergyOverrideAcknowledgedAt;
 
+    /** Mandatory clinical justification for prescribing despite the allergy (V109). */
+    @Column(name = "allergy_override_reason", columnDefinition = "TEXT")
+    private String allergyOverrideReason;
+
     // ====================================================================
     // INTERACTION OVERRIDE (V24)
     // ====================================================================
@@ -199,6 +203,10 @@ public class MedicationAdministration extends BaseEntity {
     /** Server timestamp when the interaction override was confirmed. */
     @Column(name = "interaction_override_acknowledged_at")
     private Instant interactionOverrideAcknowledgedAt;
+
+    /** Mandatory clinical justification for prescribing despite the interaction (V109). */
+    @Column(name = "interaction_override_reason", columnDefinition = "TEXT")
+    private String interactionOverrideReason;
 
     // ====================================================================
     // TYPED ORDERS — Medication Management module (V67)

@@ -265,4 +265,15 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
             "AND u.isActive = true " +
             "AND u.designation = com.smartTriage.smartTriage_server.common.enums.Designation.HEAD_LAB_TECHNICIAN")
     long countActiveHeadLabTechs(@Param("hospitalId") UUID hospitalId);
+
+    /** Override register (V109): lab orders released via verification bypass, hospital-scoped + ranged. */
+    @org.springframework.data.jpa.repository.Query("SELECT o FROM LabOrder o JOIN o.visit v "
+            + "WHERE v.hospital.id = :hospitalId AND o.verificationOverride = true "
+            + "AND o.verificationOverrideAt BETWEEN :from AND :to AND o.isActive = true "
+            + "ORDER BY o.verificationOverrideAt DESC")
+    java.util.List<LabOrder> findVerificationOverriddenForHospital(
+            @org.springframework.data.repository.query.Param("hospitalId") java.util.UUID hospitalId,
+            @org.springframework.data.repository.query.Param("from") java.time.Instant from,
+            @org.springframework.data.repository.query.Param("to") java.time.Instant to);
+
 }

@@ -1196,12 +1196,18 @@ export interface PrescribeMedicationRequest {
    *  backend. Nullable for backward compat: if absent, the backend
    *  anchors at CRITICAL to fail safe. */
   allergyOverrideSeverity?: AllergySeverity;
+  /** V109 — mandatory clinical justification (WHY) for prescribing despite the
+   *  allergy. Distinct from allergyOverrideMatches (WHAT). The backend rejects an
+   *  allergy override with a blank reason. */
+  allergyOverrideReason?: string;
   /** TRUE when the prescriber acknowledged a drug–drug interaction in
    *  the PrescribeSafetyDialog and chose to prescribe anyway. */
   prescribedDespiteInteraction?: boolean;
   /** Free-text snapshot of the interaction conflicts at decision time,
    *  formatted by formatInteractionMatches() in utils/interactionCheck. */
   interactionOverrideMatches?: string;
+  /** V109 — mandatory clinical justification for prescribing despite the interaction. */
+  interactionOverrideReason?: string;
 
   // ── Typed orders (V67). Omit prescriptionType for the legacy
   //    single-shot flow — old behaviour is preserved byte-for-byte. ──

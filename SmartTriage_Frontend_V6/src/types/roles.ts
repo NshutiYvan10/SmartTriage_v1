@@ -35,6 +35,7 @@ export type AppPage =
   | 'documentation'
   | 'med-safety'
   | 'med-safety-overrides'
+  | 'override-register'
   | 'lab'
   /** Doctor-side aggregate "Investigations I ordered" view (Workflow 2
    *  refinement). Read-only — doctors track their orders but don't
@@ -201,6 +202,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'settings', 'notifications', 'profile',
     'audit-trail', 'reports', 'quality',
     'moh-reports', 'governance', 'safety-incidents',
+    'override-register',
   ],
 
   // ── Hospital-level administration only ──
@@ -217,7 +219,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'registration-desk',
     'settings', 'notifications', 'profile',
     'audit-trail', 'reports', 'quality', 'registrar-reports',
-    'safety-incidents', 'med-safety-overrides', 'moh-reports',
+    'safety-incidents', 'med-safety-overrides', 'override-register', 'moh-reports',
     // Shift management — READ-ONLY governance view. The editor UI
     // suppresses mutate controls when role === 'HOSPITAL_ADMIN'; the
     // backend ShiftAssignmentAuthz.canAssign denies mutation attempts
@@ -376,7 +378,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   // ── View-only ──
   READ_ONLY: [
     'dashboard', 'patients', 'profile',
-    'audit-trail', 'reports', 'quality', 'med-safety-overrides', 'moh-reports',
+    'audit-trail', 'reports', 'quality', 'med-safety-overrides', 'override-register', 'moh-reports',
   ],
 };
 

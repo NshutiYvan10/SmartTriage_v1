@@ -125,8 +125,12 @@ export function PrescribeSafetyDialog({
     return best;
   }, [allergyMatches]);
 
+  // V109 — a justification is mandatory for ANY allergy or interaction override
+  // (the backend now rejects a blank reason on either), not just SEVERE/ANAPHYLAXIS.
+  // Dose/renal/geriatric/duplicate warnings stay single-click (advisory — not a
+  // server-enforced hard block on the prescribe path).
   const requiresOverrideReason =
-    highestAllergySev === 'SEVERE' || highestAllergySev === 'ANAPHYLAXIS';
+    allergyMatches.length > 0 || interactionMatches.length > 0;
 
   const [overrideReason, setOverrideReason] = useState('');
   const overrideReasonOk =
@@ -925,7 +929,7 @@ export function PrescribeSafetyDialog({
           </p>
         </div>
 
-        {/* ── Override reason (Workflow 2 — SEVERE/ANAPHYLAXIS only) ── */}
+        {/* ── Override reason (V109 — mandatory for any allergy / interaction override) ── */}
         {requiresOverrideReason && (
           <div className="px-5 pb-3" style={{ borderTop: borderStyle }}>
             <label className="block mt-3 text-[11px] font-bold uppercase tracking-wider text-red-400">
@@ -933,8 +937,10 @@ export function PrescribeSafetyDialog({
             </label>
             <p className={`text-[11px] mt-0.5 mb-2 ${text.body}`}>
               {highestAllergySev === 'ANAPHYLAXIS'
-                ? 'Anaphylaxis is on this patient\'s record. Document why this prescription is clinically justified — your reason is permanent and visible department-wide.'
-                : 'A severe allergy is on this patient\'s record. Document why this prescription is clinically justified — your reason is permanent and visible department-wide.'}
+                ? 'Anaphylaxis is on this patient\'s record. Document why this prescription is clinically justified — your reason is permanent, audited, and visible department-wide.'
+                : hasAllergy
+                  ? 'A documented allergy conflicts with this prescription. Document why it is clinically justified — your reason is permanent, audited, and visible department-wide.'
+                  : 'A known drug interaction conflicts with this prescription. Document why it is clinically justified — your reason is permanent, audited, and visible department-wide.'}
             </p>
             <textarea
               rows={3}

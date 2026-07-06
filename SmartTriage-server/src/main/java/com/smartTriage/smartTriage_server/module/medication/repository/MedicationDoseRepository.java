@@ -104,4 +104,14 @@ public interface MedicationDoseRepository extends JpaRepository<MedicationDose, 
             + "AND d.status = com.smartTriage.smartTriage_server.common.enums.DoseStatus.DUE "
             + "AND d.dueAt < :cutoff")
     List<MedicationDose> findDueBefore(@Param("cutoff") Instant cutoff);
+
+    /** Override register (V109): doses given via a gate override, hospital-scoped + ranged. */
+    @org.springframework.data.jpa.repository.Query("SELECT d FROM MedicationDose d JOIN d.visit v "
+            + "WHERE v.hospital.id = :hospitalId AND d.isOverride = true "
+            + "AND d.givenAt BETWEEN :from AND :to AND d.isActive = true ORDER BY d.givenAt DESC")
+    java.util.List<MedicationDose> findOverriddenForHospital(
+            @org.springframework.data.repository.query.Param("hospitalId") java.util.UUID hospitalId,
+            @org.springframework.data.repository.query.Param("from") java.time.Instant from,
+            @org.springframework.data.repository.query.Param("to") java.time.Instant to);
+
 }

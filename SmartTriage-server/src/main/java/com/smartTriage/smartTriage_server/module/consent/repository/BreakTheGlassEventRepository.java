@@ -30,4 +30,14 @@ public interface BreakTheGlassEventRepository extends JpaRepository<BreakTheGlas
     /** Governance feed bounded to a time window (range filters). */
     Page<BreakTheGlassEvent> findByActorHospitalIdAndAccessedAtGreaterThanEqualAndIsActiveTrueOrderByAccessedAtDesc(
             UUID actorHospitalId, Instant from, Pageable pageable);
+
+    /** Override register (V109): break-the-glass accesses at this hospital, ranged (unpaged). */
+    @org.springframework.data.jpa.repository.Query("SELECT e FROM BreakTheGlassEvent e "
+            + "WHERE e.actorHospitalId = :hospitalId AND e.accessedAt BETWEEN :from AND :to AND e.isActive = true "
+            + "ORDER BY e.accessedAt DESC")
+    java.util.List<BreakTheGlassEvent> findForHospitalRange(
+            @org.springframework.data.repository.query.Param("hospitalId") java.util.UUID hospitalId,
+            @org.springframework.data.repository.query.Param("from") java.time.Instant from,
+            @org.springframework.data.repository.query.Param("to") java.time.Instant to);
+
 }

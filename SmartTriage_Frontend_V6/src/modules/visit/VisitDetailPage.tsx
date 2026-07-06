@@ -521,9 +521,10 @@ export function VisitDetailPage() {
       const allergyMatchesText = allergyOverride.length > 0
         ? formatAllergyMatches(allergyOverride)
         : null;
-      const allergySnapshot = allergyMatchesText && overrideReason
-        ? `${allergyMatchesText} | Override reason: ${overrideReason}`
-        : allergyMatchesText;
+      // V109 — the justification now travels in its OWN field (allergyOverrideReason /
+      // interactionOverrideReason), not smuggled into the "matches" snapshot. The backend
+      // REQUIRES it for any allergy/interaction override; the dialog now always collects it.
+      const reason = overrideReason && overrideReason.trim() ? overrideReason.trim() : undefined;
 
       const payload: PrescribeMedicationRequest = {
         visitId: visit.id,
@@ -532,7 +533,8 @@ export function VisitDetailPage() {
         ...(allergyOverride.length > 0
           ? {
               prescribedDespiteAllergy: true,
-              allergyOverrideMatches: allergySnapshot ?? undefined,
+              allergyOverrideMatches: allergyMatchesText ?? undefined,
+              allergyOverrideReason: reason,
               ...(allergySev ? { allergyOverrideSeverity: allergySev } : {}),
             }
           : {}),
@@ -540,6 +542,7 @@ export function VisitDetailPage() {
           ? {
               prescribedDespiteInteraction: true,
               interactionOverrideMatches: interactionParts.join('; '),
+              interactionOverrideReason: reason,
             }
           : {}),
       } as PrescribeMedicationRequest;

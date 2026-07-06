@@ -74,6 +74,15 @@ public class PrescribeMedicationRequest {
     private String allergyOverrideMatches;
 
     /**
+     * Mandatory clinical justification when prescribing despite the allergy (V109).
+     * Enforced server-side: a blocking allergy override with a blank reason is
+     * rejected. WHY the prescriber proceeded (e.g. "prior tolerance documented;
+     * benefit outweighs risk in sepsis"), distinct from {@link #allergyOverrideMatches}
+     * which snapshots WHAT conflicted.
+     */
+    private String allergyOverrideReason;
+
+    /**
      * Structured severity of the allergy that was overridden (V58 /
      * Workflow 2). Nullable for backward compatibility — when the
      * frontend hasn't been upgraded, the override alert falls back to
@@ -98,6 +107,12 @@ public class PrescribeMedicationRequest {
      * "Warfarin 5mg + aspirin/warfarin: additive bleeding risk [major]".
      */
     private String interactionOverrideMatches;
+
+    /**
+     * Mandatory clinical justification when prescribing despite the interaction
+     * (V109). Enforced server-side, same as {@link #allergyOverrideReason}.
+     */
+    private String interactionOverrideReason;
 
     // ────────── TYPED ORDERS (V67 — Medication Management) ──────────
     // All nullable: an old client that sends none of these gets the

@@ -44,4 +44,14 @@ public interface MedicationSafetyCheckRepository extends JpaRepository<Medicatio
     /** Resolve a safety check's visit id — used by ClinicalAuthz to hospital-scope the override endpoint. */
     @Query("SELECT c.visit.id FROM MedicationSafetyCheck c WHERE c.id = :id AND c.isActive = true")
     Optional<UUID> findVisitIdById(@Param("id") UUID id);
+
+    /** Override register (V109): med-safety checks that were OVERRIDDEN, hospital-scoped + ranged. */
+    @org.springframework.data.jpa.repository.Query("SELECT c FROM MedicationSafetyCheck c JOIN c.visit v "
+            + "WHERE v.hospital.id = :hospitalId AND c.overriddenBy IS NOT NULL "
+            + "AND c.overriddenAt BETWEEN :from AND :to AND c.isActive = true ORDER BY c.overriddenAt DESC")
+    java.util.List<MedicationSafetyCheck> findOverriddenForHospital(
+            @org.springframework.data.repository.query.Param("hospitalId") java.util.UUID hospitalId,
+            @org.springframework.data.repository.query.Param("from") java.time.Instant from,
+            @org.springframework.data.repository.query.Param("to") java.time.Instant to);
+
 }

@@ -140,10 +140,26 @@ public class MedicationService {
         boolean allergyOverride = Boolean.TRUE.equals(request.getPrescribedDespiteAllergy());
         Instant allergyOverrideAt = allergyOverride ? Instant.now() : null;
         String allergyMatches = allergyOverride ? request.getAllergyOverrideMatches() : null;
+        String allergyReason = allergyOverride ? trimToNull(request.getAllergyOverrideReason()) : null;
 
         boolean interactionOverride = Boolean.TRUE.equals(request.getPrescribedDespiteInteraction());
         Instant interactionOverrideAt = interactionOverride ? Instant.now() : null;
         String interactionMatches = interactionOverride ? request.getInteractionOverrideMatches() : null;
+        String interactionReason = interactionOverride ? trimToNull(request.getInteractionOverrideReason()) : null;
+
+        // V109 — a safety override without a stated reason is not an auditable
+        // override, it is a silent bypass. Every other override path in the system
+        // requires a justification; the highest-stakes one (prescribing against a
+        // documented allergy / a known interaction) must too. Enforced server-side
+        // so a direct API call or an un-upgraded client cannot skip it.
+        if (allergyOverride && allergyReason == null) {
+            throw new ClinicalBusinessException(
+                    "A clinical justification is required to prescribe despite a documented allergy.");
+        }
+        if (interactionOverride && interactionReason == null) {
+            throw new ClinicalBusinessException(
+                    "A clinical justification is required to prescribe despite a known drug interaction.");
+        }
 
         // ── S1: server-side allergy ENFORCEMENT (defense-in-depth) ──
         // The frontend PrescribeSafetyDialog is the first line of defence,
@@ -202,9 +218,11 @@ public class MedicationService {
                 .prescribedDespiteAllergy(allergyOverride)
                 .allergyOverrideMatches(allergyMatches)
                 .allergyOverrideAcknowledgedAt(allergyOverrideAt)
+                .allergyOverrideReason(allergyReason)
                 .prescribedDespiteInteraction(interactionOverride)
                 .interactionOverrideMatches(interactionMatches)
                 .interactionOverrideAcknowledgedAt(interactionOverrideAt)
+                .interactionOverrideReason(interactionReason)
                 .build();
 
         // V67 — typed orders: validate the type-specific parameters,
@@ -1151,6 +1169,13 @@ public class MedicationService {
         String last = u.getLastName() != null ? u.getLastName().trim() : "";
         String joined = (first + " " + last).trim();
         return joined.isEmpty() ? u.getEmail() : joined;
+    }
+
+    /** Blank/whitespace → null, else trimmed (used for the mandatory override-reason gates). */
+    private static String trimToNull(String s) {
+        if (s == null) return null;
+        String t = s.trim();
+        return t.isEmpty() ? null : t;
     }
 
     /**

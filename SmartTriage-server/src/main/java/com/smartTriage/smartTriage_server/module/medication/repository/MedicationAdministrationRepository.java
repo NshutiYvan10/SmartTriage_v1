@@ -142,4 +142,15 @@ public interface MedicationAdministrationRepository extends JpaRepository<Medica
     List<MedicationAdministration> findOverduePrescribedByPriority(
             @Param("priority") com.smartTriage.smartTriage_server.common.enums.MedicationPriority priority,
             @Param("cutoff") java.time.Instant cutoff);
+
+    /** Override register (V109): prescriptions carrying an emergency / allergy / interaction override. */
+    @org.springframework.data.jpa.repository.Query("SELECT m FROM MedicationAdministration m JOIN m.visit v "
+            + "WHERE v.hospital.id = :hospitalId AND m.isActive = true AND m.prescribedAt BETWEEN :from AND :to "
+            + "AND (m.emergencyOverride = true OR m.prescribedDespiteAllergy = true OR m.prescribedDespiteInteraction = true) "
+            + "ORDER BY m.prescribedAt DESC")
+    java.util.List<MedicationAdministration> findOverridesForHospital(
+            @org.springframework.data.repository.query.Param("hospitalId") java.util.UUID hospitalId,
+            @org.springframework.data.repository.query.Param("from") java.time.Instant from,
+            @org.springframework.data.repository.query.Param("to") java.time.Instant to);
+
 }

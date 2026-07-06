@@ -52,6 +52,7 @@ import { IsolationDashboard } from './modules/isolation/IsolationDashboard';
 import { ClinicalPathwaysView } from './modules/pathway/ClinicalPathwaysView';
 import { MedicationSafetyView } from './modules/medsafety/MedicationSafetyView';
 import { MedicationSafetyOverridesView } from './modules/medsafety/MedicationSafetyOverridesView';
+import { OverrideRegisterView } from './modules/override/OverrideRegisterView';
 import { IcuEscalationView } from './modules/icu/IcuEscalationView';
 import { ClinicalDocumentation } from './modules/documentation/ClinicalDocumentation';
 import { ConsentReferralView } from './modules/consent/ConsentReferralView';
@@ -244,6 +245,7 @@ function AppContent() {
                 (the safety-officer persona is the READ_ONLY role, which has the page) so they
                 were dead no-ops. Backend canAuditSafetyOverrides mirrors this audience. */}
             <Route path="/med-safety/overrides" element={<RoleGuard page="med-safety-overrides" allowDesignations={['CHARGE_NURSE']}><MedicationSafetyOverridesView /></RoleGuard>} />
+            <Route path="/overrides" element={<RoleGuard page="override-register"><OverrideRegisterView /></RoleGuard>} />
             <Route path="/icu" element={<RoleGuard page="icu"><IcuEscalationView /></RoleGuard>} />
             {/* Documentation & Handover */}
             <Route path="/documentation" element={<RoleGuard page="documentation"><ClinicalDocumentation /></RoleGuard>} />
