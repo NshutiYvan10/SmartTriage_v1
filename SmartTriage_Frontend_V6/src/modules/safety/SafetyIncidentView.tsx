@@ -1,57 +1,89 @@
 /* ═══════════════════════════════════════════════════════════════
    Patient Safety Incident Reporting — Module 19
-   Report, investigate, and close safety incidents
+
+   Two surfaces in one page, split by access:
+   - REPORT (every staff role): the blameless-reporting form. Frictionless by
+     design — a ward nurse must never be blocked from filing what they saw.
+   - REGISTER (oversight: admin / charge nurse / shift lead): the governance
+     worklist — the full 5-stage lifecycle per incident (investigate → root
+     cause → corrective action → implemented → close), stats, CSV/PDF export.
+
+   Speaks the backend's REAL vocabulary (harm-scale severities, 16 incident
+   types, 6 lifecycle statuses). The previous build used enum values that
+   didn't exist server-side — most report submissions 400'd, both workflow
+   buttons 500'd, and the register stayed empty forever.
    ═══════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback } from 'react';
 import {
   ShieldAlert, Search, Plus, ChevronDown, ChevronUp, Clock,
-  CheckCircle, AlertTriangle, Loader2, RefreshCw, X, Eye,
-  FileText, UserCheck, Shield, Activity, AlertCircle, Ban, Download,
+  AlertTriangle, Loader2, RefreshCw, Eye,
+  UserCheck, Shield, AlertCircle, Download, FileText, CheckCircle2, Timer,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
-import { safetyApi } from '@/api/safety';
-import { saveBlob } from '@/api/client';
-import type { SafetyIncident, ReportIncidentRequest } from '@/api/safety';
+import { safetyApi, INCIDENT_TYPES, INCIDENT_SEVERITIES, INCIDENT_STATUSES } from '@/api/safety';
+import { saveBlob, ApiError } from '@/api/client';
+import type { SafetyIncident } from '@/api/safety';
 import { format } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
 import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
-import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
+import { ReportIncidentForm } from './ReportIncidentForm';
 
-// ── Constants ──
-
-const INCIDENT_TYPES = [
-  'MEDICATION_ERROR', 'FALL', 'WRONG_PATIENT', 'DEVICE_FAILURE',
-  'DELAYED_TREATMENT', 'INFECTION_CONTROL_BREACH', 'DOCUMENTATION_ERROR',
-  'COMMUNICATION_FAILURE', 'OTHER',
-] as const;
-
-const SEVERITIES = ['CRITICAL', 'MAJOR', 'MODERATE', 'MINOR', 'NEAR_MISS'] as const;
-
-const STATUSES = ['REPORTED', 'UNDER_INVESTIGATION', 'INVESTIGATION_COMPLETE', 'CLOSED'] as const;
-
-const SEVERITY_STYLE: Record<string, { bg: string; border: string; text: string; dot: string }> = {
-  CRITICAL:  { bg: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', text: 'text-red-600', dot: 'bg-red-500' },
-  MAJOR:     { bg: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', text: 'text-amber-600', dot: 'bg-amber-500' },
-  MODERATE:  { bg: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)', text: 'text-yellow-600', dot: 'bg-yellow-500' },
-  MINOR:     { bg: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', text: 'text-blue-600', dot: 'bg-blue-500' },
-  NEAR_MISS: { bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)', text: 'text-slate-600', dot: 'bg-slate-400' },
+// ── Severity styling — keys MUST match the backend IncidentSeverity enum
+//    (harm scale). Unknown value falls back to the SEVERE look (never
+//    downgrade an unrecognised severity to a reassuring colour). ──
+const SEVERITY_STYLE: Record<string, { bg: string; border: string; text: string }> = {
+  DEATH:         { bg: 'rgba(127,29,29,0.12)', border: '1px solid rgba(127,29,29,0.35)', text: 'text-red-800' },
+  SEVERE_HARM:   { bg: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.25)', text: 'text-red-600' },
+  MODERATE_HARM: { bg: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.25)', text: 'text-amber-600' },
+  MILD_HARM:     { bg: 'rgba(234,179,8,0.10)', border: '1px solid rgba(234,179,8,0.25)', text: 'text-yellow-600' },
+  NO_HARM:       { bg: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', text: 'text-blue-600' },
+  NEAR_MISS:     { bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)', text: 'text-slate-600' },
 };
+const SEVERITY_FALLBACK = SEVERITY_STYLE.SEVERE_HARM;
 
 const STATUS_STYLE: Record<string, { bg: string; border: string; text: string }> = {
-  REPORTED:                { bg: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', text: 'text-red-600' },
-  UNDER_INVESTIGATION:     { bg: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', text: 'text-amber-600' },
-  INVESTIGATION_COMPLETE:  { bg: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', text: 'text-blue-600' },
-  CLOSED:                  { bg: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', text: 'text-emerald-600' },
+  REPORTED:                      { bg: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', text: 'text-red-600' },
+  INVESTIGATION_STARTED:         { bg: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', text: 'text-amber-600' },
+  ROOT_CAUSE_IDENTIFIED:         { bg: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', text: 'text-blue-600' },
+  CORRECTIVE_ACTION_PLANNED:     { bg: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)', text: 'text-cyan-600' },
+  CORRECTIVE_ACTION_IMPLEMENTED: { bg: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', text: 'text-emerald-600' },
+  CLOSED:                        { bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)', text: 'text-slate-500' },
+};
+const STATUS_FALLBACK = STATUS_STYLE.REPORTED;
+
+function sevStyle(s: string) { return SEVERITY_STYLE[s] || SEVERITY_FALLBACK; }
+function statusStyle(s: string) { return STATUS_STYLE[s] || STATUS_FALLBACK; }
+function labelOf(s: string | null | undefined) { return (s || '').replace(/_/g, ' '); }
+
+/** The register's next lifecycle step for an incident (drives the primary button). */
+type ActionMode = 'investigate' | 'root-cause' | 'corrective-action' | 'complete-action' | 'close';
+function nextAction(i: SafetyIncident): ActionMode | null {
+  switch (i.status) {
+    case 'REPORTED': return 'investigate';
+    case 'INVESTIGATION_STARTED': return 'root-cause';
+    case 'ROOT_CAUSE_IDENTIFIED': return 'corrective-action';
+    case 'CORRECTIVE_ACTION_PLANNED': return 'complete-action';
+    case 'CORRECTIVE_ACTION_IMPLEMENTED': return 'close';
+    default: return null;
+  }
+}
+const ACTION_LABEL: Record<ActionMode, string> = {
+  'investigate': 'Start Investigation',
+  'root-cause': 'Record Root Cause',
+  'corrective-action': 'Plan Corrective Action',
+  'complete-action': 'Mark Action Implemented',
+  'close': 'Close Incident',
 };
 
-function getSeverityStyle(s: string) { return SEVERITY_STYLE[s] || SEVERITY_STYLE.MINOR; }
-function getStatusStyle(s: string) { return STATUS_STYLE[s] || STATUS_STYLE.REPORTED; }
-function formatLabel(s: string) { return s.replace(/_/g, ' '); }
+const isSevere = (i: SafetyIncident) => i.severity === 'SEVERE_HARM' || i.severity === 'DEATH';
+const actionOverdue = (i: SafetyIncident) =>
+  i.status === 'CORRECTIVE_ACTION_PLANNED' && !!i.correctiveActionDeadline
+  && new Date(i.correctiveActionDeadline).getTime() < Date.now();
 
-type FilterStatus = 'ALL' | typeof STATUSES[number];
-type FilterSeverity = 'ALL' | typeof SEVERITIES[number];
-type FilterType = 'ALL' | typeof INCIDENT_TYPES[number];
+type FilterStatus = 'ALL' | string;
+type FilterSeverity = 'ALL' | string;
+type FilterType = 'ALL' | string;
 
 export function SafetyIncidentView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
@@ -64,6 +96,7 @@ export function SafetyIncidentView() {
   const [totalElements, setTotalElements] = useState(0);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // ── Filters ──
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('ALL');
@@ -71,47 +104,33 @@ export function SafetyIncidentView() {
   const [filterType, setFilterType] = useState<FilterType>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // ── Expanded row ──
   const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  // ── Report form ──
   const [showForm, setShowForm] = useState(false);
-  const [formSubmitting, setFormSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    incidentType: 'MEDICATION_ERROR' as string,
-    severity: 'MODERATE' as string,
-    description: '',
-    locationInHospital: '',
-    contributingFactors: '',
-    immediateActions: '',
-    isAnonymous: false,
-  });
 
-  // ── Action dialogs ──
-  const [actionDialog, setActionDialog] = useState<{
-    mode: 'investigate' | 'complete' | 'close';
-    incidentId: string;
-  } | null>(null);
-  const [actionFields, setActionFields] = useState({
-    investigatorName: '',
-    rootCauseAnalysis: '',
-    rootCauseCategory: '',
-    correctiveAction: '',
-    lessonsLearned: '',
+  // ── Action dialog state (register workflow) ──
+  const [actionDialog, setActionDialog] = useState<{ mode: ActionMode; incident: SafetyIncident } | null>(null);
+  const [fields, setFields] = useState({
+    investigatorName: '', rootCauseAnalysis: '', rootCauseCategory: '',
+    correctiveAction: '', correctiveActionOwner: '', correctiveActionDeadline: '',
+    preventiveMeasures: '', lessonsLearned: '',
   });
   const [actionSubmitting, setActionSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  // ── Load data ──
+  const canWorkRegister = access.canSeeAllZones;
+
   const loadIncidents = useCallback(async () => {
-    if (!hospitalId || !access.canSeeAllZones) return;
+    if (!hospitalId || !access.canSeeAllZones) { setLoading(false); return; }
     setLoading(true);
     try {
       const res = await safetyApi.getForHospital(hospitalId, page);
       setIncidents(res.content || []);
       setTotalElements(res.totalElements || 0);
+      setError(null);
     } catch (err) {
       console.error('[SafetyIncidentView] Load failed:', err);
       setIncidents([]);
+      setError(err instanceof ApiError ? err.message : 'Failed to load the incident register');
     } finally {
       setLoading(false);
     }
@@ -150,7 +169,7 @@ export function SafetyIncidentView() {
     }
   };
 
-  // ── Filtering ──
+  // ── Filtering (client-side, over the loaded page) ──
   const filtered = incidents
     .filter((i) => filterStatus === 'ALL' || i.status === filterStatus)
     .filter((i) => filterSeverity === 'ALL' || i.severity === filterSeverity)
@@ -166,100 +185,78 @@ export function SafetyIncidentView() {
       );
     });
 
-  // ── Stats ──
+  // ── Stats (real lifecycle values) ──
   const stats = {
-    open: incidents.filter((i) => i.status === 'REPORTED').length,
-    investigating: incidents.filter((i) => i.status === 'UNDER_INVESTIGATION').length,
-    critical: incidents.filter((i) => i.severity === 'CRITICAL' && i.status !== 'CLOSED').length,
+    open: incidents.filter((i) => i.status !== 'CLOSED').length,
+    investigating: incidents.filter((i) => i.status === 'INVESTIGATION_STARTED' || i.status === 'ROOT_CAUSE_IDENTIFIED').length,
+    severeOpen: incidents.filter((i) => isSevere(i) && i.status !== 'CLOSED').length,
+    actionOverdue: incidents.filter(actionOverdue).length,
   };
 
-  // ── Submit new incident ──
-  const handleSubmitIncident = async () => {
-    if (!formData.description.trim()) return;
-    setFormSubmitting(true);
-    try {
-      const req: ReportIncidentRequest = {
-        hospitalId,
-        incidentType: formData.incidentType,
-        severity: formData.severity,
-        incidentDateTime: new Date().toISOString(),
-        description: formData.description,
-        locationInHospital: formData.locationInHospital || undefined,
-        contributingFactors: formData.contributingFactors || undefined,
-        immediateActions: formData.immediateActions || undefined,
-        reportedByName: formData.isAnonymous ? 'Anonymous' : (user?.fullName || user?.username || 'Staff'),
-        reportedByRole: user?.role || undefined,
-        isAnonymous: formData.isAnonymous,
-      };
-      await safetyApi.report(req);
-      setShowForm(false);
-      setFormData({
-        incidentType: 'MEDICATION_ERROR', severity: 'MODERATE', description: '',
-        locationInHospital: '', contributingFactors: '', immediateActions: '', isAnonymous: false,
-      });
-      loadIncidents();
-    } catch (err) {
-      console.error('[SafetyIncidentView] Report failed:', err);
-    } finally {
-      setFormSubmitting(false);
-    }
+  // ── Register workflow ──
+  const openAction = (mode: ActionMode, incident: SafetyIncident) => {
+    setFields({
+      investigatorName: '', rootCauseAnalysis: '', rootCauseCategory: '',
+      correctiveAction: '', correctiveActionOwner: '', correctiveActionDeadline: '',
+      preventiveMeasures: '', lessonsLearned: '',
+    });
+    setActionError(null);
+    setActionDialog({ mode, incident });
   };
 
-  // ── Action handlers ──
-  const handleAction = async () => {
+  const runAction = async () => {
     if (!actionDialog) return;
+    const { mode, incident } = actionDialog;
     setActionSubmitting(true);
+    setActionError(null);
     try {
-      if (actionDialog.mode === 'investigate') {
-        await safetyApi.startInvestigation(actionDialog.incidentId, {
-          investigatorName: actionFields.investigatorName,
+      if (mode === 'investigate') {
+        await safetyApi.startInvestigation(incident.id, { investigatorName: fields.investigatorName.trim() });
+      } else if (mode === 'root-cause') {
+        await safetyApi.recordRootCause(incident.id, {
+          rootCauseAnalysis: fields.rootCauseAnalysis.trim(),
+          rootCauseCategory: fields.rootCauseCategory.trim() || undefined,
         });
-      } else if (actionDialog.mode === 'complete') {
-        await safetyApi.completeInvestigation(actionDialog.incidentId, {
-          rootCauseAnalysis: actionFields.rootCauseAnalysis,
-          rootCauseCategory: actionFields.rootCauseCategory,
-          correctiveAction: actionFields.correctiveAction,
+      } else if (mode === 'corrective-action') {
+        await safetyApi.planCorrectiveAction(incident.id, {
+          correctiveAction: fields.correctiveAction.trim(),
+          correctiveActionOwner: fields.correctiveActionOwner.trim() || undefined,
+          correctiveActionDeadline: fields.correctiveActionDeadline
+            ? new Date(fields.correctiveActionDeadline).toISOString() : undefined,
+          preventiveMeasures: fields.preventiveMeasures.trim() || undefined,
         });
-      } else if (actionDialog.mode === 'close') {
-        await safetyApi.close(actionDialog.incidentId, {
-          lessonsLearned: actionFields.lessonsLearned,
-        });
+      } else if (mode === 'complete-action') {
+        await safetyApi.completeCorrectiveAction(incident.id);
+      } else if (mode === 'close') {
+        await safetyApi.close(incident.id, { lessonsLearned: fields.lessonsLearned.trim() });
       }
       setActionDialog(null);
-      setActionFields({ investigatorName: '', rootCauseAnalysis: '', rootCauseCategory: '', correctiveAction: '', lessonsLearned: '' });
       loadIncidents();
     } catch (err) {
-      console.error('[SafetyIncidentView] Action failed:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Action failed');
     } finally {
       setActionSubmitting(false);
     }
   };
 
-  const openAction = (mode: 'investigate' | 'complete' | 'close', incidentId: string) => {
-    setActionFields({ investigatorName: '', rootCauseAnalysis: '', rootCauseCategory: '', correctiveAction: '', lessonsLearned: '' });
-    setActionDialog({ mode, incidentId });
-  };
+  const actionReady = (() => {
+    if (!actionDialog) return false;
+    switch (actionDialog.mode) {
+      case 'investigate': return !!fields.investigatorName.trim();
+      case 'root-cause': return !!fields.rootCauseAnalysis.trim();
+      case 'corrective-action': return !!fields.correctiveAction.trim();
+      case 'complete-action': return true;
+      case 'close': return !!fields.lessonsLearned.trim();
+    }
+  })();
 
-  // ── Helpers ──
   const totalPages = Math.ceil(totalElements / 20);
 
-  // Don't render the restriction panel until the shift fetch resolves —
-  // otherwise the "lead/admin only" card flashes for every user on first paint.
   if (access.isLoading) {
     return (
       <div className="min-h-full flex items-center justify-center p-10">
         <div className="w-8 h-8 rounded-full border-2 border-slate-400/40 border-t-slate-500 animate-spin" />
       </div>
-    );
-  }
-
-  if (!access.canSeeAllZones) {
-    return (
-      <CrossZoneRestrictedPanel
-        pageTitle="Safety Incidents"
-        zone={access.zone ?? null}
-        reason={access.reason === 'OFF_SHIFT' ? 'OFF_SHIFT' : 'ZONE_SCOPED'}
-      />
     );
   }
 
@@ -270,669 +267,397 @@ export function SafetyIncidentView() {
         {/* ── Header Banner ── */}
         <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
-                  <ShieldAlert className="w-5 h-5 text-cyan-300" />
+                <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+                  <ShieldAlert className="w-5 h-5 text-red-300" />
                 </div>
                 <div>
                   <h1 className="text-lg font-bold text-white tracking-wide">Patient Safety Incidents</h1>
-                  <p className="text-white/70 text-xs font-medium">Report, investigate and track safety incidents</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                {stats.critical > 0 && (
-                  <div className="bg-red-500/20 backdrop-blur rounded-xl px-3 py-1.5 flex items-center gap-2 border border-red-400/30">
-                    <AlertTriangle className="w-3.5 h-3.5 text-red-300" />
-                    <span className="text-xs font-bold text-red-200">{stats.critical} Critical</span>
-                  </div>
-                )}
-                <button
-                  onClick={() => setShowForm(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-xl transition-all shadow-md"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Report Incident
-                </button>
-                <button
-                  onClick={handleExportCsv}
-                  disabled={exporting}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-white/10 border border-white/15 hover:bg-white/15 rounded-xl transition-all disabled:opacity-50"
-                  title="Download the last 90 days of incidents as CSV"
-                >
-                  {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Export CSV
-                </button>
-                <button
-                  onClick={loadIncidents}
-                  className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-                >
-                  <RefreshCw className="w-4 h-4 text-white" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Summary Cards ── */}
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Open Incidents', value: stats.open, icon: AlertCircle, color: 'text-red-500', bg: 'rgba(239,68,68,0.1)' },
-            { label: 'Under Investigation', value: stats.investigating, icon: Eye, color: 'text-amber-500', bg: 'rgba(245,158,11,0.1)' },
-            { label: 'Critical', value: stats.critical, icon: Shield, color: 'text-rose-500', bg: 'rgba(239,68,68,0.1)' },
-          ].map((s) => {
-            const Icon = s.icon;
-            return (
-              <div key={s.label} className="rounded-2xl p-4 animate-fade-up" style={glassCard}>
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: s.bg }}>
-                    <Icon className={`w-4 h-4 ${s.color}`} />
-                  </div>
-                  <div>
-                    <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
-                    <p className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>{s.label}</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* ── Filters ── */}
-        <div className="rounded-2xl p-4 animate-fade-up" style={glassCard}>
-          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-            {/* Search */}
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by incident number, description, reporter..."
-                className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all ${
-                  isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                }`}
-                style={glassInner}
-              />
-            </div>
-            {/* Status filter */}
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as FilterStatus)}
-              className={`px-3 py-2.5 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                isDark ? 'text-white' : 'text-slate-800'
-              }`}
-              style={glassInner}
-            >
-              <option value="ALL">All Statuses</option>
-              {STATUSES.map((s) => <option key={s} value={s}>{formatLabel(s)}</option>)}
-            </select>
-            {/* Severity filter */}
-            <select
-              value={filterSeverity}
-              onChange={(e) => setFilterSeverity(e.target.value as FilterSeverity)}
-              className={`px-3 py-2.5 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                isDark ? 'text-white' : 'text-slate-800'
-              }`}
-              style={glassInner}
-            >
-              <option value="ALL">All Severities</option>
-              {SEVERITIES.map((s) => <option key={s} value={s}>{formatLabel(s)}</option>)}
-            </select>
-            {/* Type filter */}
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value as FilterType)}
-              className={`px-3 py-2.5 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                isDark ? 'text-white' : 'text-slate-800'
-              }`}
-              style={glassInner}
-            >
-              <option value="ALL">All Types</option>
-              {INCIDENT_TYPES.map((t) => <option key={t} value={t}>{formatLabel(t)}</option>)}
-            </select>
-          </div>
-        </div>
-
-        {/* ── Incidents List ── */}
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-7 h-7 animate-spin text-cyan-500" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="rounded-2xl p-12 text-center animate-fade-up" style={glassCard}>
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: 'rgba(34,197,94,0.1)' }}>
-              <CheckCircle className="w-8 h-8 text-emerald-400" />
-            </div>
-            <p className={`text-sm font-bold ${text.heading}`}>No Incidents Found</p>
-            <p className={`text-xs font-medium mt-1 ${text.muted}`}>
-              No safety incidents match your current filters.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filtered.map((incident, idx) => {
-              const sevStyle = getSeverityStyle(incident.severity);
-              const statStyle = getStatusStyle(incident.status);
-              const isExpanded = expandedId === incident.id;
-
-              return (
-                <div
-                  key={incident.id}
-                  className="rounded-2xl overflow-hidden transition-all animate-fade-up hover:-translate-y-0.5"
-                  style={{ ...glassCard, animationDelay: `${0.03 + idx * 0.03}s` } as React.CSSProperties}
-                >
-                  {/* Main row */}
-                  <div
-                    className="p-5 cursor-pointer"
-                    onClick={() => setExpandedId(isExpanded ? null : incident.id)}
-                  >
-                    <div className="flex items-start gap-4">
-                      {/* Severity dot */}
-                      <div className="pt-1 flex-shrink-0">
-                        <div className={`w-3 h-3 rounded-full ${sevStyle.dot}`} />
-                      </div>
-
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2.5 mb-2 flex-wrap">
-                          {/* Incident number */}
-                          <span className={`text-sm font-bold ${text.heading}`}>
-                            {incident.incidentNumber}
-                          </span>
-                          {/* Type badge */}
-                          <span
-                            className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-slate-600"
-                            style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}
-                          >
-                            {formatLabel(incident.incidentType)}
-                          </span>
-                          {/* Severity badge */}
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${sevStyle.text}`}
-                            style={{ background: sevStyle.bg, border: sevStyle.border }}
-                          >
-                            {formatLabel(incident.severity)}
-                          </span>
-                          {/* Status badge */}
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${statStyle.text}`}
-                            style={{ background: statStyle.bg, border: statStyle.border }}
-                          >
-                            {formatLabel(incident.status)}
-                          </span>
-                          {/* Patient harmed */}
-                          {incident.patientHarmed && (
-                            <span
-                              className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider text-red-600"
-                              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
-                            >
-                              <Ban className="w-3 h-3" /> Patient Harmed
-                            </span>
-                          )}
-                        </div>
-
-                        <p className={`text-[13px] font-medium leading-relaxed line-clamp-2 ${text.body}`}>
-                          {incident.description}
-                        </p>
-
-                        <div className="flex items-center gap-4 mt-2">
-                          {!incident.isAnonymous && (
-                            <span className={`text-[11px] font-medium ${text.muted}`}>
-                              Reported by: <span className="font-bold">{incident.reportedByName}</span>
-                            </span>
-                          )}
-                          {incident.isAnonymous && (
-                            <span className={`text-[11px] font-medium italic ${text.muted}`}>Anonymous report</span>
-                          )}
-                          <span className={`text-[10px] font-medium flex items-center gap-1 ${text.muted}`}>
-                            <Clock className="w-3 h-3" />
-                            {incident.incidentDateTime
-                              ? format(new Date(incident.incidentDateTime), 'dd MMM yyyy HH:mm')
-                              : format(new Date(incident.createdAt), 'dd MMM yyyy HH:mm')}
-                          </span>
-                          {incident.locationInHospital && (
-                            <span className={`text-[10px] font-medium ${text.muted}`}>
-                              Location: {incident.locationInHospital}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Actions + Expand */}
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {incident.status === 'REPORTED' && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); openAction('investigate', incident.id); }}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-xl shadow-md hover:-translate-y-0.5 transition-all"
-                          >
-                            <Eye className="w-3 h-3" /> Investigate
-                          </button>
-                        )}
-                        {incident.status === 'UNDER_INVESTIGATION' && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); openAction('complete', incident.id); }}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-xl shadow-md hover:-translate-y-0.5 transition-all"
-                          >
-                            <FileText className="w-3 h-3" /> Complete
-                          </button>
-                        )}
-                        {incident.status === 'INVESTIGATION_COMPLETE' && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); openAction('close', incident.id); }}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl shadow-md hover:-translate-y-0.5 transition-all"
-                          >
-                            <CheckCircle className="w-3 h-3" /> Close
-                          </button>
-                        )}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDownloadPdf(incident.id); }}
-                          disabled={downloadingPdfId === incident.id}
-                          className="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-white bg-white/10 border border-white/15 rounded-xl hover:bg-white/15 transition-all disabled:opacity-50"
-                          title="Download incident report (PDF)"
-                        >
-                          {downloadingPdfId === incident.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />} PDF
-                        </button>
-                        {isExpanded
-                          ? <ChevronUp className={`w-4 h-4 ${text.muted}`} />
-                          : <ChevronDown className={`w-4 h-4 ${text.muted}`} />}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Expanded details */}
-                  {isExpanded && (
-                    <div className="px-5 pb-5 pt-0 border-t" style={{ borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }}>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                        {incident.contributingFactors && (
-                          <DetailSection title="Contributing Factors" content={incident.contributingFactors} isDark={isDark} text={text} glassInner={glassInner} />
-                        )}
-                        {incident.immediateActions && (
-                          <DetailSection title="Immediate Actions Taken" content={incident.immediateActions} isDark={isDark} text={text} glassInner={glassInner} />
-                        )}
-                        {incident.rootCauseAnalysis && (
-                          <DetailSection title="Root Cause Analysis" content={incident.rootCauseAnalysis} isDark={isDark} text={text} glassInner={glassInner} />
-                        )}
-                        {incident.correctiveAction && (
-                          <DetailSection title="Corrective Action" content={incident.correctiveAction} isDark={isDark} text={text} glassInner={glassInner} />
-                        )}
-                        {incident.lessonsLearned && (
-                          <DetailSection title="Lessons Learned" content={incident.lessonsLearned} isDark={isDark} text={text} glassInner={glassInner} />
-                        )}
-                        {incident.notes && (
-                          <DetailSection title="Notes" content={incident.notes} isDark={isDark} text={text} glassInner={glassInner} />
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ── Pagination ── */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-2 pt-2">
-            <button
-              disabled={page === 0}
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all disabled:opacity-40 ${
-                isDark ? 'text-white bg-white/5 hover:bg-white/10' : 'text-slate-700 bg-white/60 hover:bg-white/80'
-              }`}
-            >
-              Previous
-            </button>
-            <span className={`text-xs font-bold ${text.muted}`}>
-              Page {page + 1} of {totalPages}
-            </span>
-            <button
-              disabled={page >= totalPages - 1}
-              onClick={() => setPage((p) => p + 1)}
-              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all disabled:opacity-40 ${
-                isDark ? 'text-white bg-white/5 hover:bg-white/10' : 'text-slate-700 bg-white/60 hover:bg-white/80'
-              }`}
-            >
-              Next
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════════════
-         Report New Incident Dialog
-         ═══════════════════════════════════════════════════════════════ */}
-      {showForm && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
-          <div className="absolute inset-0" onClick={() => !formSubmitting && setShowForm(false)} />
-          <div className="relative w-full max-w-lg mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in max-h-[85vh] overflow-y-auto" style={glassCard}>
-            {/* Header */}
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10">
-                  <ShieldAlert className="w-5 h-5 text-red-500" />
-                </div>
-                <div>
-                  <h3 className={`text-sm font-bold ${text.heading}`}>Report New Incident</h3>
-                  <p className={`text-[11px] ${text.muted}`}>Submit a patient safety incident report</p>
-                </div>
-              </div>
-              <button
-                onClick={() => !formSubmitting && setShowForm(false)}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-                  isDark ? 'hover:bg-white/10 text-slate-400' : 'hover:bg-slate-100 text-slate-500'
-                }`}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Type */}
-              <div>
-                <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Incident Type *</label>
-                <select
-                  value={formData.incidentType}
-                  onChange={(e) => setFormData((f) => ({ ...f, incidentType: e.target.value }))}
-                  className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                    isDark ? 'text-white' : 'text-slate-800'
-                  }`}
-                  style={glassInner}
-                >
-                  {INCIDENT_TYPES.map((t) => <option key={t} value={t}>{formatLabel(t)}</option>)}
-                </select>
-              </div>
-
-              {/* Severity */}
-              <div>
-                <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Severity *</label>
-                <select
-                  value={formData.severity}
-                  onChange={(e) => setFormData((f) => ({ ...f, severity: e.target.value }))}
-                  className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                    isDark ? 'text-white' : 'text-slate-800'
-                  }`}
-                  style={glassInner}
-                >
-                  {SEVERITIES.map((s) => <option key={s} value={s}>{formatLabel(s)}</option>)}
-                </select>
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Description *</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData((f) => ({ ...f, description: e.target.value }))}
-                  placeholder="Describe the incident in detail..."
-                  rows={4}
-                  className={`w-full px-4 py-3 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                    isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                  }`}
-                  style={glassInner}
-                />
-              </div>
-
-              {/* Location */}
-              <div>
-                <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Location in Hospital</label>
-                <input
-                  type="text"
-                  value={formData.locationInHospital}
-                  onChange={(e) => setFormData((f) => ({ ...f, locationInHospital: e.target.value }))}
-                  placeholder="e.g., Ward 3B, Emergency Bay 2"
-                  className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                    isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                  }`}
-                  style={glassInner}
-                />
-              </div>
-
-              {/* Contributing Factors */}
-              <div>
-                <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Contributing Factors</label>
-                <textarea
-                  value={formData.contributingFactors}
-                  onChange={(e) => setFormData((f) => ({ ...f, contributingFactors: e.target.value }))}
-                  placeholder="What factors contributed to this incident?"
-                  rows={2}
-                  className={`w-full px-4 py-3 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                    isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                  }`}
-                  style={glassInner}
-                />
-              </div>
-
-              {/* Immediate Actions */}
-              <div>
-                <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Immediate Actions Taken</label>
-                <textarea
-                  value={formData.immediateActions}
-                  onChange={(e) => setFormData((f) => ({ ...f, immediateActions: e.target.value }))}
-                  placeholder="What immediate actions were taken?"
-                  rows={2}
-                  className={`w-full px-4 py-3 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                    isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                  }`}
-                  style={glassInner}
-                />
-              </div>
-
-              {/* Anonymous toggle */}
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setFormData((f) => ({ ...f, isAnonymous: !f.isAnonymous }))}
-                  className={`relative w-10 h-5 rounded-full transition-colors ${
-                    formData.isAnonymous ? 'bg-cyan-500' : isDark ? 'bg-white/15' : 'bg-slate-300'
-                  }`}
-                >
-                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                    formData.isAnonymous ? 'translate-x-5' : 'translate-x-0.5'
-                  }`} />
-                </button>
-                <span className={`text-xs font-bold ${text.body}`}>Report anonymously</span>
-              </div>
-            </div>
-
-            {/* Submit */}
-            <div className="flex items-center justify-end gap-3 mt-6">
-              <button
-                onClick={() => !formSubmitting && setShowForm(false)}
-                disabled={formSubmitting}
-                className={`px-4 py-2.5 text-xs font-bold rounded-xl transition-all ${
-                  isDark ? 'text-slate-400 hover:bg-white/5' : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmitIncident}
-                disabled={formSubmitting || !formData.description.trim()}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-cyan-600 hover:bg-cyan-700 hover:-translate-y-0.5"
-              >
-                {formSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldAlert className="w-3.5 h-3.5" />}
-                {formSubmitting ? 'Submitting...' : 'Submit Report'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════
-         Action Dialog — Investigate / Complete / Close
-         ═══════════════════════════════════════════════════════════════ */}
-      {actionDialog && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
-          <div className="absolute inset-0" onClick={() => !actionSubmitting && setActionDialog(null)} />
-          <div className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in" style={glassCard}>
-            {/* Header */}
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                  actionDialog.mode === 'investigate' ? 'bg-amber-500/10' :
-                  actionDialog.mode === 'complete' ? 'bg-blue-500/10' : 'bg-emerald-500/10'
-                }`}>
-                  {actionDialog.mode === 'investigate' && <Eye className="w-5 h-5 text-amber-500" />}
-                  {actionDialog.mode === 'complete' && <FileText className="w-5 h-5 text-blue-500" />}
-                  {actionDialog.mode === 'close' && <CheckCircle className="w-5 h-5 text-emerald-500" />}
-                </div>
-                <div>
-                  <h3 className={`text-sm font-bold ${text.heading}`}>
-                    {actionDialog.mode === 'investigate' && 'Start Investigation'}
-                    {actionDialog.mode === 'complete' && 'Complete Investigation'}
-                    {actionDialog.mode === 'close' && 'Close Incident'}
-                  </h3>
-                  <p className={`text-[11px] ${text.muted}`}>
-                    {actionDialog.mode === 'investigate' && 'Assign an investigator to this incident'}
-                    {actionDialog.mode === 'complete' && 'Document root cause and corrective actions'}
-                    {actionDialog.mode === 'close' && 'Record lessons learned and close the incident'}
+                  <p className="text-white/70 text-xs font-medium">
+                    {canWorkRegister
+                      ? 'Report, investigate and track safety incidents'
+                      : 'Blameless incident reporting — every report improves patient safety'}
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => !actionSubmitting && setActionDialog(null)}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-                  isDark ? 'hover:bg-white/10 text-slate-400' : 'hover:bg-slate-100 text-slate-500'
-                }`}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {actionDialog.mode === 'investigate' && (
-                <div>
-                  <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Investigator Name *</label>
-                  <input
-                    type="text"
-                    value={actionFields.investigatorName}
-                    onChange={(e) => setActionFields((f) => ({ ...f, investigatorName: e.target.value }))}
-                    placeholder="Name of the assigned investigator"
-                    autoFocus
-                    className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                      isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                    }`}
-                    style={glassInner}
-                  />
-                </div>
-              )}
-
-              {actionDialog.mode === 'complete' && (
-                <>
-                  <div>
-                    <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Root Cause Analysis *</label>
-                    <textarea
-                      value={actionFields.rootCauseAnalysis}
-                      onChange={(e) => setActionFields((f) => ({ ...f, rootCauseAnalysis: e.target.value }))}
-                      placeholder="What was the root cause of this incident?"
-                      rows={3}
-                      autoFocus
-                      className={`w-full px-4 py-3 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                        isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                      }`}
-                      style={glassInner}
-                    />
+              <div className="flex items-center gap-3">
+                {canWorkRegister && stats.severeOpen > 0 && (
+                  <div className="bg-red-500/20 backdrop-blur rounded-xl px-3 py-1.5 flex items-center gap-2 border border-red-400/30">
+                    <AlertTriangle className="w-3.5 h-3.5 text-red-300" />
+                    <span className="text-xs font-bold text-red-200">{stats.severeOpen} Severe open</span>
                   </div>
-                  <div>
-                    <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Root Cause Category *</label>
-                    <input
-                      type="text"
-                      value={actionFields.rootCauseCategory}
-                      onChange={(e) => setActionFields((f) => ({ ...f, rootCauseCategory: e.target.value }))}
-                      placeholder="e.g., Human Error, System Failure, Process Gap"
-                      className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                        isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                      }`}
-                      style={glassInner}
-                    />
-                  </div>
-                  <div>
-                    <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Corrective Action *</label>
-                    <textarea
-                      value={actionFields.correctiveAction}
-                      onChange={(e) => setActionFields((f) => ({ ...f, correctiveAction: e.target.value }))}
-                      placeholder="What corrective actions will be taken?"
-                      rows={3}
-                      className={`w-full px-4 py-3 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                        isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                      }`}
-                      style={glassInner}
-                    />
-                  </div>
-                </>
-              )}
-
-              {actionDialog.mode === 'close' && (
-                <div>
-                  <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Lessons Learned *</label>
-                  <textarea
-                    value={actionFields.lessonsLearned}
-                    onChange={(e) => setActionFields((f) => ({ ...f, lessonsLearned: e.target.value }))}
-                    placeholder="What lessons were learned from this incident?"
-                    rows={4}
-                    autoFocus
-                    className={`w-full px-4 py-3 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
-                      isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
-                    }`}
-                    style={glassInner}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-3 mt-6">
-              <button
-                onClick={() => !actionSubmitting && setActionDialog(null)}
-                disabled={actionSubmitting}
-                className={`px-4 py-2.5 text-xs font-bold rounded-xl transition-all ${
-                  isDark ? 'text-slate-400 hover:bg-white/5' : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAction}
-                disabled={
-                  actionSubmitting ||
-                  (actionDialog.mode === 'investigate' && !actionFields.investigatorName.trim()) ||
-                  (actionDialog.mode === 'complete' && (!actionFields.rootCauseAnalysis.trim() || !actionFields.rootCauseCategory.trim() || !actionFields.correctiveAction.trim())) ||
-                  (actionDialog.mode === 'close' && !actionFields.lessonsLearned.trim())
-                }
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5 bg-cyan-600 hover:bg-cyan-700"
-              >
-                {actionSubmitting ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : actionDialog.mode === 'investigate' ? (
-                  <UserCheck className="w-3.5 h-3.5" />
-                ) : actionDialog.mode === 'complete' ? (
-                  <FileText className="w-3.5 h-3.5" />
-                ) : (
-                  <CheckCircle className="w-3.5 h-3.5" />
                 )}
-                {actionSubmitting
-                  ? 'Processing...'
-                  : actionDialog.mode === 'investigate' ? 'Start Investigation'
-                  : actionDialog.mode === 'complete' ? 'Complete Investigation'
-                  : 'Close Incident'}
-              </button>
+                <button
+                  onClick={() => setShowForm((v) => !v)}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-all shadow-md"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Report Incident
+                </button>
+                {canWorkRegister && (
+                  <>
+                    <button
+                      onClick={handleExportCsv}
+                      disabled={exporting}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-white/10 border border-white/15 hover:bg-white/15 rounded-xl transition-all disabled:opacity-50"
+                      title="Download the last 90 days of incidents as CSV"
+                    >
+                      {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Export CSV
+                    </button>
+                    <button
+                      onClick={loadIncidents}
+                      className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                    >
+                      <RefreshCw className="w-4 h-4 text-white" />
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      )}
+
+        {/* ── Report form (EVERY role can file) ── */}
+        {showForm && (
+          <div className="rounded-2xl p-5 animate-fade-up" style={glassCard}>
+            <h3 className={`text-sm font-extrabold tracking-tight mb-3 ${text.heading}`}>Report a safety incident</h3>
+            <ReportIncidentForm
+              hospitalId={hospitalId}
+              onReported={() => { if (canWorkRegister) loadIncidents(); }}
+              onCancel={() => setShowForm(false)}
+            />
+          </div>
+        )}
+
+        {/* ── Non-oversight staff: reporting is the whole page ── */}
+        {!canWorkRegister && !showForm && (
+          <div className="rounded-2xl p-8 text-center animate-fade-up" style={glassCard}>
+            <ShieldAlert className={`w-10 h-10 mx-auto mb-3 ${text.muted}`} />
+            <p className={`text-sm font-bold ${text.heading}`}>See something, report it</p>
+            <p className={`text-xs mt-1 max-w-md mx-auto ${text.muted}`}>
+              Any staff member can report a safety incident — anonymously if preferred. Reports go to
+              the hospital's governance register for investigation and follow-up. The register itself
+              is managed by the charge nurse / administration.
+            </p>
+            <button
+              onClick={() => setShowForm(true)}
+              className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-all shadow-md"
+            >
+              <Plus className="w-3.5 h-3.5" /> Report an incident
+            </button>
+          </div>
+        )}
+
+        {/* ── Governance register (oversight only) ── */}
+        {canWorkRegister && (
+          <>
+            {/* Summary cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: 'Open', value: stats.open, icon: AlertCircle, color: 'text-red-500', bg: 'rgba(239,68,68,0.1)' },
+                { label: 'Investigating', value: stats.investigating, icon: Eye, color: 'text-amber-500', bg: 'rgba(245,158,11,0.1)' },
+                { label: 'Severe open', value: stats.severeOpen, icon: Shield, color: 'text-rose-500', bg: 'rgba(239,68,68,0.1)' },
+                { label: 'Action overdue', value: stats.actionOverdue, icon: Timer, color: 'text-red-600', bg: 'rgba(220,38,38,0.1)' },
+              ].map((s) => {
+                const Icon = s.icon;
+                return (
+                  <div key={s.label} className="rounded-2xl p-4 animate-fade-up" style={glassCard}>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${s.value > 0 && (s.label === 'Severe open' || s.label === 'Action overdue') ? 'animate-pulse' : ''}`} style={{ backgroundColor: s.bg }}>
+                        <Icon className={`w-4 h-4 ${s.color}`} />
+                      </div>
+                      <div>
+                        <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
+                        <p className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>{s.label}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Filters */}
+            <div className="rounded-2xl p-4 animate-fade-up" style={glassCard}>
+              <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by incident number, description, reporter..."
+                    className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all ${
+                      isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
+                    }`}
+                    style={glassInner}
+                  />
+                </div>
+                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+                  className={`px-3 py-2.5 rounded-xl text-xs font-bold focus:outline-none ${isDark ? 'text-white' : 'text-slate-800'}`}
+                  style={glassInner}>
+                  <option value="ALL">All Statuses</option>
+                  {INCIDENT_STATUSES.map((s) => <option key={s} value={s}>{labelOf(s)}</option>)}
+                </select>
+                <select value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)}
+                  className={`px-3 py-2.5 rounded-xl text-xs font-bold focus:outline-none ${isDark ? 'text-white' : 'text-slate-800'}`}
+                  style={glassInner}>
+                  <option value="ALL">All Severities</option>
+                  {INCIDENT_SEVERITIES.map((s) => <option key={s} value={s}>{labelOf(s)}</option>)}
+                </select>
+                <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
+                  className={`px-3 py-2.5 rounded-xl text-xs font-bold focus:outline-none ${isDark ? 'text-white' : 'text-slate-800'}`}
+                  style={glassInner}>
+                  <option value="ALL">All Types</option>
+                  {INCIDENT_TYPES.map((t) => <option key={t} value={t}>{labelOf(t)}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {error && (
+              <div className="rounded-2xl px-4 py-3 flex items-start gap-2 bg-red-500/10 border border-red-500/20 animate-fade-up">
+                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-[12px] font-semibold text-red-500">{error}</p>
+              </div>
+            )}
+
+            {/* Incident list */}
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-cyan-500" />
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="rounded-2xl p-8 text-center animate-fade-up" style={glassCard}>
+                <CheckCircle2 className="w-10 h-10 mx-auto mb-3 text-emerald-500" />
+                <p className={`text-sm font-bold ${text.heading}`}>No incidents match</p>
+                <p className={`text-xs mt-1 ${text.muted}`}>
+                  {incidents.length === 0 ? 'The register is empty for this page.' : 'Adjust the filters above.'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filtered.map((inc) => {
+                  const sev = sevStyle(inc.severity);
+                  const st = statusStyle(inc.status);
+                  const expanded = expandedId === inc.id;
+                  const next = nextAction(inc);
+                  const overdue = actionOverdue(inc);
+                  return (
+                    <div key={inc.id} className="rounded-2xl overflow-hidden animate-fade-up" style={glassCard}>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(expanded ? null : inc.id)}
+                        className="w-full text-left p-4"
+                      >
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className={`text-xs font-black ${text.heading}`}>{inc.incidentNumber}</span>
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg"
+                            style={{ background: sev.bg, border: sev.border }}>
+                            <span className={sev.text}>{labelOf(inc.severity)}</span>
+                          </span>
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg"
+                            style={{ background: st.bg, border: st.border }}>
+                            <span className={st.text}>{labelOf(inc.status)}</span>
+                          </span>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>{labelOf(inc.incidentType)}</span>
+                          {inc.isAnonymous && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg bg-slate-500/10 text-slate-500">ANONYMOUS</span>
+                          )}
+                          {inc.visitNumber && (
+                            <span className={`text-[10px] ${text.muted}`}>Visit {inc.visitNumber}</span>
+                          )}
+                          {overdue && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-red-600/15 text-red-600 animate-pulse inline-flex items-center gap-1">
+                              <Timer className="w-3 h-3" /> ACTION OVERDUE
+                            </span>
+                          )}
+                          <span className={`ml-auto text-[10px] flex items-center gap-1 ${text.muted}`}>
+                            <Clock className="w-3 h-3" />
+                            {inc.incidentDateTime ? format(new Date(inc.incidentDateTime), 'dd MMM yyyy HH:mm') : '—'}
+                            {expanded ? <ChevronUp className="w-3.5 h-3.5 ml-1" /> : <ChevronDown className="w-3.5 h-3.5 ml-1" />}
+                          </span>
+                        </div>
+                        <p className={`text-xs mt-2 ${text.body} ${expanded ? '' : 'line-clamp-2'}`}>{inc.description}</p>
+                      </button>
+
+                      {expanded && (
+                        <div className="px-4 pb-4 space-y-3" style={{ borderTop: isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)' }}>
+                          {/* Detail grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 pt-3">
+                            <Detail label="Reported by" value={`${inc.reportedByName}${inc.reportedByRole ? ` (${labelOf(inc.reportedByRole)})` : ''}${inc.reportedAt ? ` · ${format(new Date(inc.reportedAt), 'dd MMM HH:mm')}` : ''}`} text={text} />
+                            <Detail label="Location" value={inc.locationInHospital} text={text} />
+                            <Detail label="Patient harmed" value={inc.patientHarmed == null ? null : inc.patientHarmed ? 'Yes' : 'No'} text={text} />
+                            <Detail label="Contributing factors" value={inc.contributingFactors} text={text} />
+                            <Detail label="Immediate actions" value={inc.immediateActions} text={text} />
+                            <Detail label="Investigator" value={inc.investigatorName ? `${inc.investigatorName}${inc.investigationStartedAt ? ` · since ${format(new Date(inc.investigationStartedAt), 'dd MMM HH:mm')}` : ''}` : null} text={text} />
+                            <Detail label="Root cause" value={inc.rootCauseAnalysis ? `${inc.rootCauseAnalysis}${inc.rootCauseCategory ? ` [${inc.rootCauseCategory}]` : ''}` : null} text={text} />
+                            <Detail label="Corrective action" value={inc.correctiveAction ? `${inc.correctiveAction}${inc.correctiveActionOwner ? ` · owner: ${inc.correctiveActionOwner}` : ''}${inc.correctiveActionDeadline ? ` · due ${format(new Date(inc.correctiveActionDeadline), 'dd MMM yyyy')}` : ''}${inc.correctiveActionCompletedAt ? ` · implemented ${format(new Date(inc.correctiveActionCompletedAt), 'dd MMM')}` : ''}` : null} text={text} />
+                            <Detail label="Preventive measures" value={inc.preventiveMeasures} text={text} />
+                            <Detail label="Lessons learned" value={inc.lessonsLearned} text={text} />
+                            {inc.closedAt && (
+                              <Detail label="Closed" value={`${format(new Date(inc.closedAt), 'dd MMM yyyy HH:mm')}${inc.closedByName ? ` by ${inc.closedByName}` : ''}`} text={text} />
+                            )}
+                          </div>
+
+                          {/* Workflow actions */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {next && (
+                              <button
+                                onClick={() => openAction(next, inc)}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 text-[11px] font-bold rounded-xl bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 transition-colors"
+                              >
+                                <UserCheck className="w-3.5 h-3.5" /> {ACTION_LABEL[next]}
+                              </button>
+                            )}
+                            {inc.status !== 'CLOSED' && next !== 'close' && (
+                              <button
+                                onClick={() => openAction('close', inc)}
+                                title={isSevere(inc) ? 'Severe incidents need a root cause + corrective action before closing' : 'Close with lessons learned'}
+                                className={`inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold rounded-xl transition-colors ${text.muted} hover:bg-white/5`}
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Close…
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDownloadPdf(inc.id)}
+                              disabled={downloadingPdfId === inc.id}
+                              className={`inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold rounded-xl transition-colors ${text.muted} hover:bg-white/5`}
+                            >
+                              {downloadingPdfId === inc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                              PDF
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2">
+                <button disabled={page === 0} onClick={() => setPage((p) => p - 1)}
+                  className={`px-3 py-1.5 text-[11px] font-bold rounded-lg disabled:opacity-40 ${text.body}`} style={glassInner}>
+                  Previous
+                </button>
+                <span className={`text-[11px] ${text.muted}`}>Page {page + 1} of {totalPages}</span>
+                <button disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}
+                  className={`px-3 py-1.5 text-[11px] font-bold rounded-lg disabled:opacity-40 ${text.body}`} style={glassInner}>
+                  Next
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Workflow action dialog ── */}
+        {actionDialog && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !actionSubmitting && setActionDialog(null)}>
+            <div className="rounded-2xl p-5 w-full max-w-lg" style={glassCard} onClick={(e) => e.stopPropagation()}>
+              <h3 className={`text-sm font-extrabold tracking-tight mb-1 ${text.heading}`}>
+                {ACTION_LABEL[actionDialog.mode]} — {actionDialog.incident.incidentNumber}
+              </h3>
+              <p className={`text-[11px] mb-3 ${text.muted}`}>{labelOf(actionDialog.incident.incidentType)} · {labelOf(actionDialog.incident.severity)}</p>
+
+              <div className="space-y-2">
+                {actionDialog.mode === 'investigate' && (
+                  <input type="text" value={fields.investigatorName}
+                    onChange={(e) => setFields((f) => ({ ...f, investigatorName: e.target.value }))}
+                    placeholder="Investigator name (required)" style={glassInner}
+                    className={`w-full px-3 py-2 text-xs rounded-xl focus:outline-none ${text.body}`} />
+                )}
+                {actionDialog.mode === 'root-cause' && (
+                  <>
+                    <textarea value={fields.rootCauseAnalysis} rows={3}
+                      onChange={(e) => setFields((f) => ({ ...f, rootCauseAnalysis: e.target.value }))}
+                      placeholder="Root cause analysis (required) — what underlying system factors caused this?"
+                      style={glassInner} className={`w-full px-3 py-2 text-xs rounded-xl focus:outline-none resize-none ${text.body}`} />
+                    <input type="text" value={fields.rootCauseCategory}
+                      onChange={(e) => setFields((f) => ({ ...f, rootCauseCategory: e.target.value }))}
+                      placeholder="Category (e.g. process, training, equipment, communication)" style={glassInner}
+                      className={`w-full px-3 py-2 text-xs rounded-xl focus:outline-none ${text.body}`} />
+                  </>
+                )}
+                {actionDialog.mode === 'corrective-action' && (
+                  <>
+                    <textarea value={fields.correctiveAction} rows={2}
+                      onChange={(e) => setFields((f) => ({ ...f, correctiveAction: e.target.value }))}
+                      placeholder="Corrective action (required)" style={glassInner}
+                      className={`w-full px-3 py-2 text-xs rounded-xl focus:outline-none resize-none ${text.body}`} />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input type="text" value={fields.correctiveActionOwner}
+                        onChange={(e) => setFields((f) => ({ ...f, correctiveActionOwner: e.target.value }))}
+                        placeholder="Action owner" style={glassInner}
+                        className={`px-3 py-2 text-xs rounded-xl focus:outline-none ${text.body}`} />
+                      <input type="date" value={fields.correctiveActionDeadline}
+                        onChange={(e) => setFields((f) => ({ ...f, correctiveActionDeadline: e.target.value }))}
+                        title="Deadline — the follow-up monitor escalates when it lapses"
+                        style={glassInner} className={`px-3 py-2 text-xs rounded-xl focus:outline-none ${text.body}`} />
+                    </div>
+                    <textarea value={fields.preventiveMeasures} rows={2}
+                      onChange={(e) => setFields((f) => ({ ...f, preventiveMeasures: e.target.value }))}
+                      placeholder="Preventive measures (optional)" style={glassInner}
+                      className={`w-full px-3 py-2 text-xs rounded-xl focus:outline-none resize-none ${text.body}`} />
+                  </>
+                )}
+                {actionDialog.mode === 'complete-action' && (
+                  <p className={`text-xs ${text.body}`}>
+                    Confirm the corrective action has been implemented
+                    {actionDialog.incident.correctiveAction ? <>: <span className="font-bold">{actionDialog.incident.correctiveAction}</span></> : '.'}
+                  </p>
+                )}
+                {actionDialog.mode === 'close' && (
+                  <>
+                    {isSevere(actionDialog.incident) && (!actionDialog.incident.rootCauseAnalysis || !actionDialog.incident.correctiveAction) && (
+                      <div className="flex items-start gap-2 rounded-xl px-3 py-2.5 bg-amber-500/10 border border-amber-500/20">
+                        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                        <p className="text-[11px] font-semibold text-amber-600">
+                          This is a {labelOf(actionDialog.incident.severity)} incident — the register requires a completed
+                          root-cause analysis and a corrective action before it can be closed.
+                        </p>
+                      </div>
+                    )}
+                    <textarea value={fields.lessonsLearned} rows={3}
+                      onChange={(e) => setFields((f) => ({ ...f, lessonsLearned: e.target.value }))}
+                      placeholder="Lessons learned (required) — what should the department take away?"
+                      style={glassInner} className={`w-full px-3 py-2 text-xs rounded-xl focus:outline-none resize-none ${text.body}`} />
+                  </>
+                )}
+              </div>
+
+              {actionError && (
+                <div className="mt-2 flex items-start gap-2 rounded-xl px-3 py-2.5 bg-red-500/10 border border-red-500/20">
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-[11px] font-semibold text-red-500">{actionError}</p>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 mt-4">
+                <button onClick={runAction} disabled={!actionReady || actionSubmitting}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-[11px] font-bold rounded-xl bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 transition-colors disabled:opacity-40">
+                  {actionSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                  Confirm
+                </button>
+                <button onClick={() => setActionDialog(null)} disabled={actionSubmitting}
+                  className={`px-4 py-2 text-[11px] font-bold rounded-xl transition-colors hover:bg-white/5 ${text.muted}`}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-// ── Detail Section Component ──
-function DetailSection({ title, content, isDark, text, glassInner }: {
-  title: string; content: string; isDark: boolean;
-  text: { heading: string; body: string; muted: string; label: string; accent: string };
-  glassInner: React.CSSProperties;
-}) {
+function Detail({ label, value, text }: { label: string; value: string | null | undefined; text: { muted: string; body: string } }) {
+  if (!value) return null;
   return (
-    <div className="rounded-xl p-4" style={glassInner}>
-      <p className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>{title}</p>
-      <p className={`text-xs font-medium leading-relaxed ${text.body}`}>{content}</p>
+    <div>
+      <span className={`text-[9px] font-bold uppercase tracking-wider block ${text.muted}`}>{label}</span>
+      <span className={`text-[11px] ${text.body}`}>{value}</span>
     </div>
   );
 }

@@ -254,6 +254,10 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'med-board',
     // Reports (own)
     'reports',
+    // Safety reporting — blameless incident filing is open to every clinical
+    // role (doctors witness medication/diagnostic incidents daily; the page
+    // shows them the report form; the register stays oversight-gated inside).
+    'safety-incidents',
     // Self-service shift surface
     'my-schedule',
   ],
@@ -315,6 +319,10 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     // unidentified-patient reconciliation queue (a safety follow-up
     // surface), and a live census. Hospital-scoped.
     'registrar-reports',
+    // Blameless safety reporting (form only — the register inside is
+    // oversight-gated). Wrong-patient / identification errors are the
+    // front desk's own incident class.
+    'safety-incidents',
   ],
 
   // ── Pre-hospital / transport ──
@@ -373,6 +381,9 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     // laboratory/diagnostics alerts (critical results, SLA breaches, new/
     // cancelled lab + imaging orders) — no triage/EMS/zone clinical noise.
     'alerts', 'notifications', 'profile',
+    // Blameless safety reporting (form only) — mislabelled/haemolysed specimen
+    // chains and transfusion errors are the lab's own incident class.
+    'safety-incidents',
   ],
 
   // ── View-only ──

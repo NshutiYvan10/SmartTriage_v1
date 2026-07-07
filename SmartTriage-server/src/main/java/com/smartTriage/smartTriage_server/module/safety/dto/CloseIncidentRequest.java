@@ -15,8 +15,10 @@ import lombok.NoArgsConstructor;
 @Builder
 public class CloseIncidentRequest {
 
-    @NotBlank(message = "Closed by name is required")
+    /** FALLBACK ONLY — the service stamps the closer from the authenticated principal. */
     private String closedByName;
 
+    /** Closure without lessons learned is just archiving — the register requires them. */
+    @NotBlank(message = "Lessons learned are required to close an incident")
     private String lessonsLearned;
 }

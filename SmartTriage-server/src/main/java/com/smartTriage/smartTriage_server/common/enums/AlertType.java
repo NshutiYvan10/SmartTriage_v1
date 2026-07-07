@@ -131,6 +131,16 @@ public enum AlertType {
 
     // Patient safety incident alert types
     SAFETY_INCIDENT_CRITICAL(AlertCategory.CLINICAL, true),
+    /**
+     * Incident-governance follow-up is overdue: a planned corrective action passed
+     * its deadline without being implemented, or a SEVERE_HARM/DEATH incident has sat
+     * in REPORTED past the review window with no investigation started. Raised by the
+     * safety-incident follow-up monitor, targeted at governance (charge nurses + the
+     * hospital board). OPERATIONAL + not time-critical: it is a governance chase, not
+     * a bedside emergency; the monitor itself re-raises after each acknowledgment
+     * while the underlying follow-up remains undone.
+     */
+    SAFETY_FOLLOWUP_OVERDUE(AlertCategory.OPERATIONAL, false),
 
     // ICU escalation alert types
     ICU_ESCALATION_REQUESTED(AlertCategory.CLINICAL, true),

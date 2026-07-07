@@ -43,12 +43,21 @@ public class ReportIncidentRequest {
     private String contributingFactors;
     private String immediateActions;
 
-    @NotBlank(message = "Reporter name is required")
+    /** FALLBACK ONLY — the service stamps the reporter from the authenticated principal
+     *  (actor-identity doctrine); no longer client-required. */
     private String reportedByName;
 
     private String reportedByRole;
     private String involvedStaffNames;
     private Boolean patientHarmed;
-    private boolean isAnonymous;
+
+    /**
+     * Field named {@code anonymous} + wire name pinned to {@code isAnonymous}: with the
+     * old {@code isAnonymous} field name Jackson derived the property {@code anonymous},
+     * so the client's {@code isAnonymous: true} was SILENTLY DROPPED — an "anonymous"
+     * report would have been stamped with the reporter's real identity.
+     */
+    @com.fasterxml.jackson.annotation.JsonProperty("isAnonymous")
+    private boolean anonymous;
     private String notes;
 }

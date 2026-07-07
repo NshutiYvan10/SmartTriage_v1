@@ -39,7 +39,7 @@ public final class SafetyIncidentMapper {
                 .closedAt(incident.getClosedAt())
                 .closedByName(incident.getClosedByName())
                 .lessonsLearned(incident.getLessonsLearned())
-                .isAnonymous(incident.isAnonymous())
+                .anonymous(incident.isAnonymous())
                 .notes(incident.getNotes())
                 .createdAt(incident.getCreatedAt());
 
@@ -54,14 +54,22 @@ public final class SafetyIncidentMapper {
             builder.involvedStaffNames(incident.getInvolvedStaffNames());
         }
 
+        // Lazy-association guards: the controller maps AFTER the service transaction
+        // closes, so only read initialized associations (the service hydrates them on
+        // every mapped return path). getId() alone is proxy-safe; getName()/getVisitNumber()
+        // are not — an unguarded read here was a latent 500 on the register's first row.
         if (incident.getHospital() != null) {
             builder.hospitalId(incident.getHospital().getId());
-            builder.hospitalName(incident.getHospital().getName());
+            if (org.hibernate.Hibernate.isInitialized(incident.getHospital())) {
+                builder.hospitalName(incident.getHospital().getName());
+            }
         }
 
         if (incident.getVisit() != null) {
             builder.visitId(incident.getVisit().getId());
-            builder.visitNumber(incident.getVisit().getVisitNumber());
+            if (org.hibernate.Hibernate.isInitialized(incident.getVisit())) {
+                builder.visitNumber(incident.getVisit().getVisitNumber());
+            }
         }
 
         return builder.build();

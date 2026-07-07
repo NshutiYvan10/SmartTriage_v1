@@ -64,7 +64,14 @@ public class SafetyIncidentResponse {
     private String closedByName;
     private String lessonsLearned;
 
-    private boolean isAnonymous;
+    /**
+     * Field named {@code anonymous} (not {@code isAnonymous}) so Lombok's getter and
+     * setter couple into ONE Jackson property; {@code @JsonProperty} pins the wire name
+     * the frontend reads. The old {@code isAnonymous} field serialized as {@code anonymous}
+     * — the FE's {@code isAnonymous} read was always undefined (the recurring isX trap).
+     */
+    @com.fasterxml.jackson.annotation.JsonProperty("isAnonymous")
+    private boolean anonymous;
     private String notes;
     private Instant createdAt;
 }

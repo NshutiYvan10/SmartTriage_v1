@@ -65,4 +65,28 @@ public interface SafetyIncidentRepository extends JpaRepository<SafetyIncident, 
      */
     @Query("SELECT COUNT(i) FROM SafetyIncident i WHERE i.incidentNumber LIKE :prefix%")
     long countByIncidentNumberPrefix(@Param("prefix") String prefix);
+
+    /** Projection for hospital-scope authz — the incident's hospital id. */
+    @Query("SELECT i.hospital.id FROM SafetyIncident i WHERE i.id = :id")
+    Optional<UUID> findHospitalIdById(@Param("id") UUID id);
+
+    /**
+     * Corrective actions past their deadline — planned, deadline lapsed, not yet
+     * implemented, incident still open. The follow-up monitor escalates these.
+     */
+    @Query("SELECT i FROM SafetyIncident i WHERE i.isActive = true " +
+            "AND i.status = 'CORRECTIVE_ACTION_PLANNED' " +
+            "AND i.correctiveActionDeadline IS NOT NULL AND i.correctiveActionDeadline < :now " +
+            "AND i.correctiveActionCompletedAt IS NULL")
+    List<SafetyIncident> findOverdueCorrectiveActions(@Param("now") Instant now);
+
+    /**
+     * SEVERE_HARM / DEATH incidents still sitting in REPORTED past the review
+     * window — nobody has started an investigation on the worst-severity reports.
+     */
+    @Query("SELECT i FROM SafetyIncident i WHERE i.isActive = true " +
+            "AND i.status = 'REPORTED' " +
+            "AND i.severity IN ('SEVERE_HARM', 'DEATH') " +
+            "AND i.reportedAt < :cutoff")
+    List<SafetyIncident> findUnattendedSevereIncidents(@Param("cutoff") Instant cutoff);
 }

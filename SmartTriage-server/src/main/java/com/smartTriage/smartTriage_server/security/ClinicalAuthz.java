@@ -123,6 +123,7 @@ public class ClinicalAuthz {
     private final MohReportRepository mohReportRepository;
     private final MedicationSafetyCheckRepository medicationSafetyCheckRepository;
     private final IoTDeviceRepository ioTDeviceRepository;
+    private final com.smartTriage.smartTriage_server.module.safety.repository.SafetyIncidentRepository safetyIncidentRepository;
     /**
      * V107 patient-centric audit: authorization is the one place that already
      * resolves WHICH VISIT every clinical request targets (all resource-keyed
@@ -1082,6 +1083,24 @@ public class ClinicalAuthz {
                     .orElse(false);
         } catch (Exception e) {
             log.error("canAccessInfectionScreening error for screening {}: {}", screeningId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** Scopes safety-incident reads + lifecycle mutations (get / pdf / investigate /
+     *  root-cause / corrective-action / complete / close / update) to the incident's own
+     *  hospital, so staff cannot read or drive another hospital's incident register by
+     *  enumerating incident ids. Hospital-keyed (not visit-keyed) because incidents may
+     *  legitimately have NO visit (equipment failure in a corridor, etc.). */
+    @Transactional(readOnly = true)
+    public boolean canAccessSafetyIncident(Authentication authentication, UUID incidentId) {
+        try {
+            if (incidentId == null) return false;
+            return safetyIncidentRepository.findHospitalIdById(incidentId)
+                    .map(hospitalId -> canAccessHospital(authentication, hospitalId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessSafetyIncident error for incident {}: {}", incidentId, e.getMessage(), e);
             return false;
         }
     }

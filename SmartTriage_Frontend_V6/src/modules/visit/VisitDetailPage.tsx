@@ -18,6 +18,7 @@ import { SepsisPanel } from './SepsisPanel';
 import { FastTrackPanel } from './FastTrackPanel';
 import { HypoglycemiaPanel, HypoglycemiaEventBanner } from './HypoglycemiaPanel';
 import { IsolationPanel, IsolationPrecautionBanner } from './IsolationPanel';
+import { ReportIncidentForm } from '../safety/ReportIncidentForm';
 import { PathwayPanel } from './PathwayPanel';
 import { HandoverPanel } from './HandoverPanel';
 import { CrossHospitalPanel } from './CrossHospitalPanel';
@@ -283,6 +284,9 @@ export function VisitDetailPage() {
 
   // Forms
   const [showIdentityModal, setShowIdentityModal] = useState(false);
+  // Blameless safety reporting from the chart — incidents happen TO patients,
+  // and the reporter is usually standing at this screen when they notice one.
+  const [showIncidentForm, setShowIncidentForm] = useState(false);
   const [showVitalsForm, setShowVitalsForm] = useState(false);
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [showDiagnosisForm, setShowDiagnosisForm] = useState(false);
@@ -828,6 +832,13 @@ export function VisitDetailPage() {
                   <UserCheck className="w-4 h-4" /> Set identity
                 </button>
               )}
+              <button
+                onClick={() => setShowIncidentForm(true)}
+                title="Report a safety incident involving this patient (blameless, optionally anonymous)"
+                className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center hover:bg-red-500/30 transition-colors"
+              >
+                <ShieldAlert className="w-4 h-4 text-white" />
+              </button>
               <button onClick={loadData} className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors">
                 <RefreshCw className="w-4 h-4 text-white" />
               </button>
@@ -909,6 +920,23 @@ export function VisitDetailPage() {
           {activeTab === 'disposition' && <DispositionTab visit={visit} onDisposition={handleRecordDisposition} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
         </div>
       </div>
+
+      {/* ── Report-a-safety-incident modal (visit-linked, any staff role) ── */}
+      {showIncidentForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowIncidentForm(false)}>
+          <div className="rounded-2xl p-5 w-full max-w-xl max-h-[90vh] overflow-y-auto" style={glassCard} onClick={(e) => e.stopPropagation()}>
+            <h3 className={`text-sm font-extrabold tracking-tight mb-3 ${text.heading}`}>
+              Report a safety incident — {visit.patientName}
+            </h3>
+            <ReportIncidentForm
+              hospitalId={visit.hospitalId}
+              visitId={visit.id}
+              visitNumber={visit.visitNumber}
+              onCancel={() => setShowIncidentForm(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* ── Combined prescribe-time safety hard-stop modal ── */}
       {pendingPrescribe && (

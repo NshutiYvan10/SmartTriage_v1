@@ -37,9 +37,11 @@ public class SafetyIncidentController {
     private final SafetyIncidentService safetyIncidentService;
 
     @PostMapping
-    // Authz sweep — DELIBERATELY any authenticated staff member: incident
-    // reporting must be frictionless (blameless reporting culture).
-    @PreAuthorize("isAuthenticated()")
+    // DELIBERATELY any authenticated staff member — incident reporting must be
+    // frictionless (blameless reporting culture) — but only INTO THEIR OWN hospital:
+    // the hospitalId in the body was previously trusted from the client, letting
+    // staff file incidents into another hospital's register.
+    @PreAuthorize("isAuthenticated() and @clinicalAuthz.canAccessHospital(authentication, #request.hospitalId)")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> reportIncident(
             @Valid @RequestBody ReportIncidentRequest request) {
         SafetyIncidentResponse response = SafetyIncidentMapper.toResponse(
@@ -49,7 +51,9 @@ public class SafetyIncidentController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    // Role + INCIDENT-hospital scope (an id from another hospital must 403, not resolve).
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessSafetyIncident(authentication, #id)")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> updateIncident(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateIncidentRequest request) {
@@ -59,17 +63,19 @@ public class SafetyIncidentController {
     }
 
     @PutMapping("/{id}/investigate")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessSafetyIncident(authentication, #id)")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> startInvestigation(
             @PathVariable UUID id,
-            @RequestParam String investigatorName) {
+            @Valid @RequestBody StartInvestigationRequest request) {
         SafetyIncidentResponse response = SafetyIncidentMapper.toResponse(
-                safetyIncidentService.startInvestigation(id, investigatorName));
+                safetyIncidentService.startInvestigation(id, request.getInvestigatorName()));
         return ResponseEntity.ok(ApiResponse.success("Investigation started", response));
     }
 
     @PutMapping("/{id}/root-cause")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessSafetyIncident(authentication, #id)")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> recordRootCause(
             @PathVariable UUID id,
             @Valid @RequestBody RootCauseRequest request) {
@@ -79,7 +85,8 @@ public class SafetyIncidentController {
     }
 
     @PutMapping("/{id}/corrective-action")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessSafetyIncident(authentication, #id)")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> planCorrectiveAction(
             @PathVariable UUID id,
             @Valid @RequestBody CorrectiveActionRequest request) {
@@ -89,7 +96,8 @@ public class SafetyIncidentController {
     }
 
     @PutMapping("/{id}/complete-action")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessSafetyIncident(authentication, #id)")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> completeCorrectiveAction(
             @PathVariable UUID id) {
         SafetyIncidentResponse response = SafetyIncidentMapper.toResponse(
@@ -98,7 +106,8 @@ public class SafetyIncidentController {
     }
 
     @PutMapping("/{id}/close")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessSafetyIncident(authentication, #id)")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> closeIncident(
             @PathVariable UUID id,
             @Valid @RequestBody CloseIncidentRequest request) {
@@ -146,7 +155,9 @@ public class SafetyIncidentController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("isAuthenticated()")
+    // Incident-hospital scope — was isAuthenticated() only, i.e. any staff member at ANY
+    // hospital could read any incident (description carries patient/staff detail) by id.
+    @PreAuthorize("@clinicalAuthz.canAccessSafetyIncident(authentication, #id)")
     public ResponseEntity<ApiResponse<SafetyIncidentResponse>> getIncident(
             @PathVariable UUID id) {
         SafetyIncidentResponse response = SafetyIncidentMapper.toResponse(
@@ -186,7 +197,7 @@ public class SafetyIncidentController {
 
     /** Printable single-incident report (PDF) — the formal record for the governance file. */
     @GetMapping("/{id}/pdf")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("@clinicalAuthz.canAccessSafetyIncident(authentication, #id)")
     public ResponseEntity<byte[]> downloadIncidentPdf(
             @PathVariable UUID id,
             org.springframework.security.core.Authentication authentication) {
