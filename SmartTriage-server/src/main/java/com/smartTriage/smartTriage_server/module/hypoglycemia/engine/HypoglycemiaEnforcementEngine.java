@@ -29,6 +29,9 @@ import java.util.List;
  *            level the symptoms are rarely attributable to glucose, and
  *            auto-CRITICAL paging on every confused patient with a
  *            borderline value would breed alarm fatigue.
+ *            RATIFIED as clinical policy by the product owner (2026-07-07),
+ *            choosing alarm-fatigue protection over the strict ADA Level-3
+ *            reading — do not escalate this band without clinical sign-off.
  * Neonatal (< 28 days): treat below 2.6 mmol/L; SEVERE < 2.0 or neuroglycopenic.
  */
 @Slf4j
