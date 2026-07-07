@@ -28,6 +28,8 @@ public class MohReportGenerator {
 
     private final VisitRepository visitRepository;
     private final HospitalRepository hospitalRepository;
+    /** V111 — real module indicators (sepsis/isolation/malaria/diagnoses/IDSR), previously hardcoded 0. */
+    private final MohIndicatorQueries indicatorQueries;
 
     private static final ZoneId KIGALI = ZoneId.of("Africa/Kigali");
 
@@ -53,6 +55,7 @@ public class MohReportGenerator {
                 .build();
 
         populateReportData(report, visits);
+        populateModuleIndicators(report, hospitalId, dayStart, dayEnd);
 
         log.info("Daily summary generated for hospital {}: {} ED visits", hospital.getName(), report.getTotalEdVisits());
         return report;
@@ -81,6 +84,7 @@ public class MohReportGenerator {
                 .build();
 
         populateReportData(report, visits);
+        populateModuleIndicators(report, hospitalId, start, end);
 
         log.info("Weekly surveillance generated for hospital {}: {} ED visits over 7 days",
                 hospital.getName(), report.getTotalEdVisits());
@@ -111,6 +115,7 @@ public class MohReportGenerator {
                 .build();
 
         populateReportData(report, visits);
+        populateModuleIndicators(report, hospitalId, start, end);
 
         log.info("Monthly statistics generated for hospital {} for {}: {} ED visits",
                 hospital.getName(), month, report.getTotalEdVisits());
@@ -151,10 +156,78 @@ public class MohReportGenerator {
                 .build();
 
         populateReportData(report, pooledVisits);
+        populateModuleIndicators(report, null, start, end);
 
         log.info("National {} rollup generated across {} hospitals: {} ED visits",
                 type, hospitals.size(), report.getTotalEdVisits());
         return report;
+    }
+
+    /**
+     * Generate a report over an ARBITRARY period (quarterly / annual / outbreak /
+     * mortality types). Previously these types reused the DAILY generator and merely
+     * relabelled the period — a quarterly report contained one day of data presented
+     * as three months (verified: a quarter with 14 real visits reported 0).
+     */
+    public MohReport generatePeriodReport(UUID hospitalId, MohReportType type,
+                                          LocalDate periodStart, LocalDate periodEnd) {
+        log.info("Generating {} report for hospital {} from {} to {}", type, hospitalId, periodStart, periodEnd);
+
+        Hospital hospital = findHospital(hospitalId);
+        Instant start = periodStart.atStartOfDay(KIGALI).toInstant();
+        Instant end = periodEnd.plusDays(1).atStartOfDay(KIGALI).toInstant();
+
+        List<Visit> visits = getVisitsForPeriod(hospitalId, start, end);
+
+        MohReport report = MohReport.builder()
+                .hospital(hospital)
+                .reportType(type)
+                .reportPeriodStart(start)
+                .reportPeriodEnd(end)
+                .generatedAt(Instant.now())
+                .status(ReportStatus.GENERATED)
+                .build();
+
+        populateReportData(report, visits);
+        populateModuleIndicators(report, hospitalId, start, end);
+
+        log.info("{} generated for hospital {} ({} → {}): {} ED visits",
+                type, hospital.getName(), periodStart, periodEnd, report.getTotalEdVisits());
+        return report;
+    }
+
+    /**
+     * Fill the module-integration indicators from their AUTHORITATIVE sources — the
+     * sepsis, isolation, lab and diagnosis modules — plus the IDSR notifiable-disease
+     * section (V111). {@code hospitalId} null = NATIONAL (all hospitals pooled).
+     * Previously these fields were hardcoded to 0 ("data unavailable") and the report
+     * shipped zeros to the Ministry regardless of reality.
+     */
+    private void populateModuleIndicators(MohReport report, UUID hospitalId, Instant start, Instant end) {
+        report.setSepsisScreenedCount(indicatorQueries.countSepsisScreened(hospitalId, start, end));
+        report.setIsolationActivatedCount(indicatorQueries.countIsolationActivated(hospitalId, start, end));
+        report.setMalariaPositiveCount(indicatorQueries.countMalariaPositive(hospitalId, start, end));
+
+        // IDSR notifiable diseases
+        report.setNotifiableDiseaseCount(indicatorQueries.countNotifiableDiseases(hospitalId, start, end));
+        report.setPublicHealthNotifiedCount(indicatorQueries.countPublicHealthNotified(hospitalId, start, end));
+        Map<String, Long> diseaseCounts = new LinkedHashMap<>();
+        for (Object[] row : indicatorQueries.notifiableDiseaseBreakdown(hospitalId, start, end)) {
+            diseaseCounts.put(String.valueOf(row[0]), (Long) row[1]);
+        }
+        report.setNotifiableDiseaseBreakdown(buildTopItemsJson(diseaseCounts, diseaseCounts.size()));
+
+        // Top diagnoses (ICD code + description where present)
+        Map<String, Long> diagnosisCounts = new LinkedHashMap<>();
+        for (Object[] row : indicatorQueries.topDiagnoses(hospitalId, start, end, 10)) {
+            String code = row[0] != null ? String.valueOf(row[0]) : null;
+            String desc = row[1] != null ? String.valueOf(row[1]) : null;
+            String label = code != null && !code.isBlank()
+                    ? (desc != null && !desc.isBlank() ? code + " — " + desc : code)
+                    : (desc != null ? desc : "unspecified");
+            diagnosisCounts.merge(label, (Long) row[2], Long::sum);
+        }
+        report.setTopDiagnoses(buildTopItemsJson(diagnosisCounts, 10));
     }
 
     // ====================================================================
@@ -246,16 +319,9 @@ public class MohReportGenerator {
                 .average();
         report.setAverageLengthOfStayMinutes(avgStay.orElse(0.0));
 
-        // Counts that require integration with sub-modules default to 0 when data is unavailable
-        if (report.getMalariaPositiveCount() == null) {
-            report.setMalariaPositiveCount(0);
-        }
-        if (report.getSepsisScreenedCount() == null) {
-            report.setSepsisScreenedCount(0);
-        }
-        if (report.getIsolationActivatedCount() == null) {
-            report.setIsolationActivatedCount(0);
-        }
+        // Module-integration indicators (sepsis / isolation / malaria / diagnoses / IDSR)
+        // are populated from their authoritative sources by populateModuleIndicators —
+        // no more hardcoded zeros.
     }
 
     /**

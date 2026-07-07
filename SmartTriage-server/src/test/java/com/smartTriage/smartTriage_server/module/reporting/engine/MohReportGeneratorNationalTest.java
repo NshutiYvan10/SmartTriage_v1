@@ -35,7 +35,8 @@ class MohReportGeneratorNationalTest {
     private final VisitRepository visitRepository = mock(VisitRepository.class);
     private final HospitalRepository hospitalRepository = mock(HospitalRepository.class);
     private final MohReportGenerator generator =
-            new MohReportGenerator(visitRepository, hospitalRepository);
+            new MohReportGenerator(visitRepository, hospitalRepository,
+                    org.mockito.Mockito.mock(MohIndicatorQueries.class));
 
     private Hospital hospital(UUID id) {
         Hospital h = new Hospital();

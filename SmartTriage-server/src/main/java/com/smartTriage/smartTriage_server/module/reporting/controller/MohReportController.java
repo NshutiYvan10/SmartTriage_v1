@@ -43,7 +43,11 @@ public class MohReportController {
      * Generate a new MoH report.
      */
     @PostMapping("/generate")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
+    // Hospital scope: hospitalId comes from the client body — a hospital admin may
+    // only generate (and thereby read the aggregates of) THEIR OWN hospital's report;
+    // SUPER_ADMIN may generate for any hospital and owns the NATIONAL rollup below.
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #request.hospitalId)")
     public ResponseEntity<ApiResponse<MohReportResponse>> generateReport(
             @Valid @RequestBody GenerateReportRequest request) {
         log.info("Generating {} report for hospital {}", request.getReportType(), request.getHospitalId());

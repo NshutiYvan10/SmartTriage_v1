@@ -38,13 +38,16 @@ public final class MohReportMapper {
                 .topChiefComplaints(report.getTopChiefComplaints())
                 .pediatricVisitCount(report.getPediatricVisitCount())
                 .malariaPositiveCount(report.getMalariaPositiveCount())
+                .notifiableDiseaseCount(report.getNotifiableDiseaseCount())
+                .notifiableDiseaseBreakdown(report.getNotifiableDiseaseBreakdown())
+                .publicHealthNotifiedCount(report.getPublicHealthNotifiedCount())
                 .sepsisScreenedCount(report.getSepsisScreenedCount())
                 .isolationActivatedCount(report.getIsolationActivatedCount())
                 .averageLengthOfStayMinutes(report.getAverageLengthOfStayMinutes())
                 .reportDataJson(report.getReportDataJson())
                 .createdAt(report.getCreatedAt());
 
-        if (report.getHospital() != null) {
+        if (report.getHospital() != null && org.hibernate.Hibernate.isInitialized(report.getHospital())) {
             builder.hospitalId(report.getHospital().getId());
             builder.hospitalName(report.getHospital().getName());
         }

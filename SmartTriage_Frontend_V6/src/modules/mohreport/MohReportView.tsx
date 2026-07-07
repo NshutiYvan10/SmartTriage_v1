@@ -484,6 +484,8 @@ export function MohReportView() {
                             { icon: AlertTriangle, label: 'ICU Admissions', value: report.icuAdmissionCount, color: 'text-orange-500', bg: 'rgba(249,115,22,0.10)' },
                             { icon: Baby, label: 'Pediatric Visits', value: report.pediatricVisitCount, color: 'text-pink-500', bg: 'rgba(236,72,153,0.10)' },
                             { icon: Bug, label: 'Malaria Positive', value: report.malariaPositiveCount, color: 'text-yellow-600', bg: 'rgba(202,138,4,0.10)' },
+                            { icon: Activity, label: 'Sepsis Screened', value: report.sepsisScreenedCount, color: 'text-rose-500', bg: 'rgba(244,63,94,0.10)' },
+                            { icon: AlertTriangle, label: 'Isolation Activated', value: report.isolationActivatedCount, color: 'text-purple-500', bg: 'rgba(168,85,247,0.10)' },
                           ].map((stat) => (
                             <div key={stat.label} className="rounded-xl p-3" style={glassInner}>
                               <div className="flex items-center gap-2 mb-1">
@@ -504,6 +506,64 @@ export function MohReportView() {
                             </div>
                           </div>
                         )}
+
+                        {/* IDSR Notifiable Diseases (V111) — the statutory Rwanda return */}
+                        <div className="mt-3">
+                          <p className={`text-[10px] font-bold ${text.muted} uppercase tracking-wider mb-2`}>IDSR Notifiable Diseases</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="rounded-xl p-3" style={glassInner}>
+                              <p className={`text-[9px] font-bold ${text.muted} uppercase tracking-wider mb-1`}>Cases Detected</p>
+                              <p className={`text-lg font-extrabold ${text.heading}`}>{report.notifiableDiseaseCount ?? '—'}</p>
+                            </div>
+                            <div className="rounded-xl p-3" style={glassInner}>
+                              <p className={`text-[9px] font-bold ${text.muted} uppercase tracking-wider mb-1`}>Reported to RBC</p>
+                              <p className={`text-lg font-extrabold ${(report.notifiableDiseaseCount ?? 0) > (report.publicHealthNotifiedCount ?? 0) ? 'text-red-500' : text.heading}`}>
+                                {report.publicHealthNotifiedCount ?? '—'}
+                                {(report.notifiableDiseaseCount ?? 0) > (report.publicHealthNotifiedCount ?? 0) && (
+                                  <span className="text-[10px] font-bold ml-2">UNREPORTED CASES</span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          {(() => {
+                            try {
+                              const items = JSON.parse(report.notifiableDiseaseBreakdown || '[]') as Array<{ item: string; count: number }>;
+                              if (!items.length) return null;
+                              return (
+                                <div className="rounded-xl p-3 mt-2" style={glassInner}>
+                                  <div className="flex flex-wrap gap-2">
+                                    {items.map((d) => (
+                                      <span key={d.item} className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-red-500/10 text-red-500">
+                                        {d.item.replace(/_/g, ' ')} × {d.count}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            } catch { return null; }
+                          })()}
+                        </div>
+
+                        {/* Top diagnoses */}
+                        {(() => {
+                          try {
+                            const items = JSON.parse(report.topDiagnoses || '[]') as Array<{ item: string; count: number }>;
+                            if (!items.length) return null;
+                            return (
+                              <div className="mt-3">
+                                <p className={`text-[10px] font-bold ${text.muted} uppercase tracking-wider mb-2`}>Top Diagnoses</p>
+                                <div className="rounded-xl p-3 space-y-1" style={glassInner}>
+                                  {items.map((d) => (
+                                    <div key={d.item} className="flex items-center justify-between gap-3">
+                                      <span className={`text-[11px] ${text.body}`}>{d.item}</span>
+                                      <span className={`text-[11px] font-bold ${text.heading}`}>{d.count}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          } catch { return null; }
+                        })()}
 
                         {/* Submitted date */}
                         {report.submittedAt && (

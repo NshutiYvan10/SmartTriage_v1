@@ -91,8 +91,10 @@ public class MohReportService {
      * List national rollups with pagination (SUPER_ADMIN national view).
      */
     public Page<MohReport> getNationalReports(Pageable pageable) {
-        return mohReportRepository.findByReportLevelAndIsActiveTrueOrderByReportPeriodStartDesc(
+        Page<MohReport> page = mohReportRepository.findByReportLevelAndIsActiveTrueOrderByReportPeriodStartDesc(
                 ReportLevel.NATIONAL, pageable);
+        page.forEach(this::hydrateForResponse);
+        return page;
     }
 
     /**
@@ -112,7 +114,7 @@ public class MohReportService {
 
         report = mohReportRepository.save(report);
         log.info("Report {} submitted for MoH review", reportId);
-        return report;
+        return hydrateForResponse(report);
     }
 
     /**
@@ -132,7 +134,7 @@ public class MohReportService {
 
         report = mohReportRepository.save(report);
         log.info("Report {} rejected: {}", reportId, reason);
-        return report;
+        return hydrateForResponse(report);
     }
 
     /**
@@ -151,22 +153,24 @@ public class MohReportService {
 
         report = mohReportRepository.save(report);
         log.info("Report {} accepted", reportId);
-        return report;
+        return hydrateForResponse(report);
     }
 
     /**
      * List all reports for a hospital with pagination.
      */
     public Page<MohReport> getReportsForHospital(UUID hospitalId, Pageable pageable) {
-        return mohReportRepository.findByHospitalIdAndIsActiveTrueOrderByReportPeriodStartDesc(
+        Page<MohReport> page = mohReportRepository.findByHospitalIdAndIsActiveTrueOrderByReportPeriodStartDesc(
                 hospitalId, pageable);
+        page.forEach(this::hydrateForResponse);
+        return page;
     }
 
     /**
      * Get a single report by ID.
      */
     public MohReport getReport(UUID reportId) {
-        return findReport(reportId);
+        return hydrateForResponse(findReport(reportId));
     }
 
     /**
@@ -180,6 +184,21 @@ public class MohReportService {
     // ====================================================================
     // PRIVATE HELPERS
     // ====================================================================
+
+    /**
+     * Initialise the lazy {@code hospital} so the controller can map the entity AFTER
+     * this transaction's session closes — the mapper reads hospital id/name, and every
+     * read/lifecycle endpoint (list, get, submit, accept, reject) was 500-ing with a
+     * LazyInitializationException. This — not the generator — was why the MoH reports
+     * page never loaded. Same fix pattern as the clinical modules. Null-safe: NATIONAL
+     * rollups have no hospital.
+     */
+    private MohReport hydrateForResponse(MohReport report) {
+        if (report != null && report.getHospital() != null) {
+            org.hibernate.Hibernate.initialize(report.getHospital());
+        }
+        return report;
+    }
 
     private MohReport findReport(UUID reportId) {
         return mohReportRepository.findByIdAndIsActiveTrue(reportId)
@@ -206,15 +225,9 @@ public class MohReportService {
      */
     private MohReport generateGenericReport(UUID hospitalId, MohReportType type,
                                              LocalDate periodStart, LocalDate periodEnd) {
-        Instant start = periodStart.atStartOfDay(KIGALI).toInstant();
-        Instant end = periodEnd.plusDays(1).atStartOfDay(KIGALI).toInstant();
-
-        // Reuse the daily summary generator logic for the full period
-        MohReport report = mohReportGenerator.generateDailySummary(hospitalId, periodStart);
-        report.setReportType(type);
-        report.setReportPeriodStart(start);
-        report.setReportPeriodEnd(end);
-
-        return report;
+        // Full-period generation. The old implementation reused the DAILY generator and
+        // relabelled the period — a quarterly report carried ONE DAY of data presented
+        // as three months (actively false statistics under an official label).
+        return mohReportGenerator.generatePeriodReport(hospitalId, type, periodStart, periodEnd);
     }
 }

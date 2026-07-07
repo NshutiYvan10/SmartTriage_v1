@@ -50,6 +50,10 @@ public class MohReportResponse {
     private String topChiefComplaints;
     private Integer pediatricVisitCount;
     private Integer malariaPositiveCount;
+    // IDSR notifiable-disease section (V111)
+    private Integer notifiableDiseaseCount;
+    private String notifiableDiseaseBreakdown;
+    private Integer publicHealthNotifiedCount;
     private Integer sepsisScreenedCount;
     private Integer isolationActivatedCount;
     private Double averageLengthOfStayMinutes;

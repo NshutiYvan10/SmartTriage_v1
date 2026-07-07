@@ -116,6 +116,17 @@ public class MohReportPdfService {
                 PdfReport.kv("Malaria positive", num(r.getMalariaPositiveCount())),
                 PdfReport.kv("Sepsis screened", num(r.getSepsisScreenedCount())),
                 PdfReport.kv("Isolation activated", num(r.getIsolationActivatedCount()))));
+
+        // ── IDSR Notifiable Diseases (V111) — the statutory Rwanda return ──
+        report.sectionHeader("IDSR Notifiable Diseases");
+        report.keyValues(List.of(
+                PdfReport.kv("Notifiable cases detected", num(r.getNotifiableDiseaseCount())),
+                PdfReport.kv("Reported to RBC", num(r.getPublicHealthNotifiedCount()))));
+        if (r.getNotifiableDiseaseBreakdown() != null && !r.getNotifiableDiseaseBreakdown().isBlank()
+                && !"[]".equals(r.getNotifiableDiseaseBreakdown().trim())) {
+            report.narrative("Cases by disease\n" + r.getNotifiableDiseaseBreakdown());
+        }
+
         if (r.getTopDiagnoses() != null && !r.getTopDiagnoses().isBlank()) {
             report.narrative("Top diagnoses\n" + r.getTopDiagnoses());
         }

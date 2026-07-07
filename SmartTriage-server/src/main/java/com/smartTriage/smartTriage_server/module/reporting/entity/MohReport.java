@@ -129,6 +129,20 @@ public class MohReport extends BaseEntity {
     @Column(name = "average_length_of_stay_minutes")
     private Double averageLengthOfStayMinutes;
 
+    // ---- IDSR notifiable-disease section (V111) ----
+
+    /** Notifiable-disease cases detected in the period (IDSR). */
+    @Column(name = "notifiable_disease_count")
+    private Integer notifiableDiseaseCount;
+
+    /** Per-disease breakdown as JSON: [{"item":"MEASLES","count":3},...]. */
+    @Column(name = "notifiable_disease_breakdown", columnDefinition = "TEXT")
+    private String notifiableDiseaseBreakdown;
+
+    /** Of those, how many were actually reported to RBC (the gap is a compliance indicator). */
+    @Column(name = "public_health_notified_count")
+    private Integer publicHealthNotifiedCount;
+
     @Column(name = "report_data_json", columnDefinition = "TEXT")
     private String reportDataJson;
 }
