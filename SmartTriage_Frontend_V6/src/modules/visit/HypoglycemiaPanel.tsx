@@ -18,7 +18,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
 import {
   hypoglycemiaApi, protocolIncomplete, treatmentOptionsFor, protocolHintFor,
-  recheckCountdown, type HypoglycemiaEvent,
+  recheckCountdown, type HypoglycemiaEvent, type HypoglycemiaCheckResponse,
 } from '@/api/hypoglycemia';
 import { subscribeToHypoglycemia } from '@/api/websocket';
 import { useWebSocketGeneration } from '@/hooks/useWebSocket';
@@ -149,6 +149,9 @@ export function HypoglycemiaPanel({ visitId, onChanged }: HypoglycemiaPanelProps
   const [repeatUnit, setRepeatUnit] = useState<'MMOL_L' | 'MG_DL'>('MMOL_L');
   const [resolveFor, setResolveFor] = useState<string | null>(null);
   const [resolveReason, setResolveReason] = useState('');
+  /** Verdict of the last "Run glucose check" — previously DISCARDED, so a check
+      that (correctly) filed nothing looked like the button did nothing at all. */
+  const [checkResult, setCheckResult] = useState<HypoglycemiaCheckResponse | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -196,9 +199,24 @@ export function HypoglycemiaPanel({ visitId, onChanged }: HypoglycemiaPanelProps
     }
   };
 
-  const runCheck = () => runAction(
-    () => hypoglycemiaApi.enforce(visitId),
-    'Failed to run glucose check');
+  /* Run the enforcement check and SHOW ITS VERDICT. Only propagate the heavy
+     page-level refresh (onChanged → VisitDetailPage.loadData → full-page spinner,
+     which reads as a "reload") when the check actually filed an event. */
+  const runCheck = async () => {
+    setBusy(true);
+    setError(null);
+    setCheckResult(null);
+    try {
+      const res = await hypoglycemiaApi.enforce(visitId);
+      setCheckResult(res);
+      await load();
+      if (res.eventId || res.isHypoglycemic) onChanged?.();
+    } catch (err) {
+      fail(err, 'Failed to run glucose check');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const submitTreatment = (id: string) => {
     if (!treatment) return;
@@ -276,6 +294,52 @@ export function HypoglycemiaPanel({ visitId, onChanged }: HypoglycemiaPanelProps
             <p className="text-[11px] font-semibold text-red-500">{error}</p>
           </div>
         )}
+
+        {/* ── Check verdict — every "Run glucose check" now says what it concluded. ── */}
+        {checkResult && (() => {
+          const r = checkResult;
+          const tone = r.isHypoglycemic
+            ? { bg: 'bg-red-500/10 border-red-500/25', text: 'text-red-500', Icon: AlertTriangle }
+            : r.glucoseValue == null && r.requiresCheck
+              ? { bg: 'bg-amber-500/10 border-amber-500/25', text: 'text-amber-500', Icon: Timer }
+              : r.glucoseValue == null
+                ? { bg: 'bg-slate-500/10 border-slate-500/20', text: text.body, Icon: FlaskConical }
+                : { bg: 'bg-emerald-500/10 border-emerald-500/25', text: 'text-emerald-500', Icon: CheckCircle2 };
+          const Icon = tone.Icon;
+          return (
+            <div className={`mt-3 rounded-xl px-3 py-2.5 border ${tone.bg}`}>
+              <div className="flex items-start gap-2">
+                <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${tone.text}`} />
+                <div className="flex-1 min-w-0">
+                  {r.isHypoglycemic ? (
+                    <>
+                      <p className={`text-[11px] font-bold ${tone.text}`}>
+                        HYPOGLYCEMIA {r.severity} — {r.glucoseValue?.toFixed(1)} mmol/L. Event filed, care team paged.
+                      </p>
+                      {r.treatmentProtocol && <p className={`text-[10px] mt-1 ${text.muted}`}>{r.treatmentProtocol}</p>}
+                    </>
+                  ) : r.glucoseValue == null && r.requiresCheck ? (
+                    <p className={`text-[11px] font-bold ${tone.text}`}>
+                      GLUCOSE CHECK {r.checkMandatory ? 'REQUIRED' : 'RECOMMENDED'} — no reading on file
+                      {r.triggerReasons?.length ? ` (${r.triggerReasons.join(', ').replace(/_/g, ' ')})` : ''}.
+                      Record a bedside glucose now{r.checkMandatory ? ' — the care team has been paged' : ''}.
+                    </p>
+                  ) : r.glucoseValue == null ? (
+                    <p className={`text-[11px] font-semibold ${text.body}`}>
+                      No glucose reading on file and no mandatory-check triggers (patient alert, not a known
+                      diabetic). Nothing filed — record a bedside glucose in Vitals to screen.
+                    </p>
+                  ) : (
+                    <p className={`text-[11px] font-bold ${tone.text}`}>
+                      Latest glucose {r.glucoseValue.toFixed(1)} mmol/L — {r.severity}. No event filed.
+                    </p>
+                  )}
+                </div>
+                <button onClick={() => setCheckResult(null)} className={`text-[10px] font-bold ${text.muted} hover:opacity-70`}>✕</button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {loading ? (

@@ -101,10 +101,14 @@ public class HypoglycemiaService {
     public HypoglycemiaCheckResponse checkAndEnforce(UUID visitId) {
         Visit visit = visitRepository.findByIdAndIsActiveTrue(visitId)
                 .orElseThrow(() -> new ResourceNotFoundException("Visit", "id", visitId));
+        // Triage is OPTIONAL: a glucose check must be runnable at the door, before
+        // triage (previously this threw 404 — "Run glucose check" on an un-triaged
+        // patient just failed). The engine is already null-safe on a missing record
+        // (no triage signs → no mandatory triggers; known-diabetic still evaluates
+        // from the patient's chronic conditions).
         TriageRecord triage = triageRecordRepository
                 .findFirstByVisitIdAndIsActiveTrueOrderByTriageTimeDesc(visitId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "No triage record found for visit: " + visitId));
+                .orElse(null);
 
         HypoglycemiaCheckResult result = enforcementEngine.enforceGlucoseCheck(visit, triage);
 
@@ -113,7 +117,7 @@ public class HypoglycemiaService {
                 .requiresCheck(result.requiresCheck())
                 .checkMandatory(result.checkMandatory())
                 .glucoseValue(result.glucoseValue())
-                .isHypoglycemic(result.isHypoglycemic())
+                .hypoglycemic(result.isHypoglycemic())
                 .severity(result.severity().name())
                 .treatmentProtocol(result.treatmentProtocol())
                 .triggerReasons(result.triggerReasons());

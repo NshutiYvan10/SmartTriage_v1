@@ -21,7 +21,15 @@ public class HypoglycemiaCheckResponse {
     private boolean requiresCheck;
     private boolean checkMandatory;
     private Double glucoseValue;
-    private boolean isHypoglycemic;
+    /**
+     * Field named {@code hypoglycemic} + wire name pinned to {@code isHypoglycemic}: with
+     * the old {@code isHypoglycemic} field name Jackson serialized the key as
+     * {@code hypoglycemic}, so the frontend's {@code isHypoglycemic} read was always
+     * undefined (the recurring isX trap — unnoticed here only because the panel used to
+     * discard this response entirely).
+     */
+    @com.fasterxml.jackson.annotation.JsonProperty("isHypoglycemic")
+    private boolean hypoglycemic;
     private String severity;
     private String treatmentProtocol;
     private List<String> triggerReasons;
