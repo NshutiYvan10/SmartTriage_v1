@@ -8,14 +8,16 @@ import { useNavigate } from 'react-router-dom';
 import {
   Droplets, AlertTriangle, CheckCircle2, RefreshCw,
   Loader2, Clock, Syringe, FlaskConical, ArrowRight,
-  Activity, CircleDot, ChevronRight,
+  Activity, CircleDot, ChevronRight, Timer,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
 import { useScopedView, fetchForScope } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
-import { hypoglycemiaApi } from '@/api/hypoglycemia';
+import {
+  hypoglycemiaApi, protocolIncomplete, treatmentOptionsFor, protocolHintFor, recheckCountdown,
+} from '@/api/hypoglycemia';
 import { subscribeToHypoglycemia } from '@/api/websocket';
 import { useWebSocketGeneration } from '@/hooks/useWebSocket';
 import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
@@ -35,12 +37,8 @@ const SEVERITY_CONFIG: Record<string, { color: string; bg: string; border: strin
   PENDING_CHECK: { color: 'text-amber-500',   bg: 'bg-amber-500/10',  border: 'border-amber-500/20',  label: 'CHECK PENDING' },
 };
 
-const TREATMENT_OPTIONS = [
-  'IV Dextrose 50% 50ml',
-  'Oral glucose gel',
-  'Sweet drink',
-  'IV D10W infusion',
-];
+/* Treatment options come from treatmentOptionsFor(evt.neonatal) — neonates are
+   never offered 50% dextrose (engine-aligned; see api/hypoglycemia.ts). */
 
 function getGlucoseSeverity(level: number | null | undefined): { color: string; bgColor: string; label: string } {
   // Loose null check — backend omits null fields (non_null serialization) so an
@@ -52,7 +50,7 @@ function getGlucoseSeverity(level: number | null | undefined): { color: string; 
   return { color: 'text-emerald-500', bgColor: 'bg-emerald-500/10', label: 'NORMAL' };
 }
 
-type WorkflowStep = 'treat' | 'repeat-glucose' | 'resolve';
+type WorkflowStep = 'treat' | 'repeat-glucose' | 'resolve' | 'resolve-reason';
 
 export function HypoglycemiaView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
@@ -74,6 +72,14 @@ export function HypoglycemiaView() {
   const [selectedTreatment, setSelectedTreatment] = useState<string>('');
   const [repeatGlucose, setRepeatGlucose] = useState<string>('');
   const [repeatUnit, setRepeatUnit] = useState<'MMOL_L' | 'MG_DL'>('MMOL_L');
+  const [resolveReason, setResolveReason] = useState<string>('');
+
+  // Keep the recheck countdowns moving between refreshes.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((v) => v + 1), 30000);
+    return () => clearInterval(t);
+  }, []);
 
   /* ── Data loading ──────────────────────────────────────── */
   const loadEvents = useCallback(async () => {
@@ -147,11 +153,33 @@ export function HypoglycemiaView() {
     }
   };
 
-  const handleResolve = async (id: string) => {
+  /* Resolving is FREE only when the recheck protocol completed (repeat glucose on
+     record AND recovered). Otherwise the backend demands a documented reason — open
+     the reason panel instead of firing a doomed request. */
+  const handleResolve = async (evt: HypoglycemiaEvent) => {
+    if (protocolIncomplete(evt)) {
+      openWorkflow(evt.id, 'resolve-reason');
+      return;
+    }
+    setActionLoading(evt.id);
+    setError(null);
+    try {
+      await hypoglycemiaApi.resolve(evt.id);
+      loadEvents();
+    } catch (err) {
+      reportError(err, 'Failed to resolve event');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleResolveWithReason = async (id: string) => {
+    if (!resolveReason.trim()) return;
     setActionLoading(id);
     setError(null);
     try {
-      await hypoglycemiaApi.resolve(id);
+      await hypoglycemiaApi.resolve(id, resolveReason.trim());
+      closeWorkflow();
       loadEvents();
     } catch (err) {
       reportError(err, 'Failed to resolve event');
@@ -166,6 +194,7 @@ export function HypoglycemiaView() {
     setSelectedTreatment('');
     setRepeatGlucose('');
     setRepeatUnit('MMOL_L');
+    setResolveReason('');
   };
 
   const closeWorkflow = () => {
@@ -174,6 +203,7 @@ export function HypoglycemiaView() {
     setSelectedTreatment('');
     setRepeatGlucose('');
     setRepeatUnit('MMOL_L');
+    setResolveReason('');
   };
 
   /* ── Determine next workflow step for an event ─────────── */
@@ -183,10 +213,27 @@ export function HypoglycemiaView() {
     // `undefined`; `=== null` would skip straight to resolve and let a clinician
     // close the event WITHOUT the mandatory post-treatment glucose recheck.
     if (evt.repeatGlucoseLevel == null) return 'repeat-glucose';
+    // Repeat on record but STILL hypoglycemic → the protocol continues: treat/recheck
+    // again. (Resolve stays reachable via the guarded secondary button.)
+    if (protocolIncomplete(evt)) return 'repeat-glucose';
     return 'resolve';
   };
 
   const unresolvedCount = events.length;
+  const severeCount = events.filter((e) => e.severity === 'SEVERE').length;
+  const awaitingTreatmentCount = events.filter((e) => !e.treatmentGiven).length;
+  const recheckOverdueCount = events.filter((e) => recheckCountdown(e.recheckDueAt)?.overdue).length;
+
+  /* Recheck-overdue events float to the top (most overdue first), then untreated
+     severe events, then newest detection. The board must read as a worklist. */
+  const sortedEvents = [...events].sort((a, b) => {
+    const ao = recheckCountdown(a.recheckDueAt)?.overdue ? new Date(a.recheckDueAt as string).getTime() : Infinity;
+    const bo = recheckCountdown(b.recheckDueAt)?.overdue ? new Date(b.recheckDueAt as string).getTime() : Infinity;
+    if (ao !== bo) return ao - bo;
+    const sevRank = (e: HypoglycemiaEvent) => (e.severity === 'SEVERE' ? 0 : e.severity === 'MODERATE' ? 1 : 2);
+    if (sevRank(a) !== sevRank(b)) return sevRank(a) - sevRank(b);
+    return new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime();
+  });
 
   // Off-shift clinicians have no zone to scope by → show the restriction
   // card with a clear "pick up a shift" hint. On-shift clinicians fall
@@ -252,6 +299,23 @@ export function HypoglycemiaView() {
           </div>
         )}
 
+        {/* ── Summary cards — the worklist at a glance: how many severe, how many
+            untreated, how many past their mandatory recheck window. ── */}
+        <div className="grid grid-cols-3 gap-3 animate-fade-up" style={{ animationDelay: '0.05s' }}>
+          {([
+            { label: 'SEVERE', count: severeCount, cls: 'text-red-600', bg: 'bg-red-500/15', pulse: severeCount > 0 },
+            { label: 'AWAITING TREATMENT', count: awaitingTreatmentCount, cls: 'text-amber-500', bg: 'bg-amber-500/15', pulse: false },
+            { label: 'RECHECK OVERDUE', count: recheckOverdueCount, cls: 'text-red-500', bg: 'bg-red-500/10', pulse: recheckOverdueCount > 0 },
+          ] as const).map(({ label, count, cls, bg, pulse }) => (
+            <div key={label} className="rounded-2xl p-4 text-center" style={glassCard}>
+              <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center mx-auto mb-2 ${pulse ? 'animate-pulse' : ''}`}>
+                <span className={`text-lg font-bold ${cls}`}>{count}</span>
+              </div>
+              <p className={`text-[10px] font-bold uppercase tracking-wider ${cls}`}>{label}</p>
+            </div>
+          ))}
+        </div>
+
         {/* ── Event List ─────────────────────────────────── */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -265,11 +329,12 @@ export function HypoglycemiaView() {
           </div>
         ) : events.length === 0 ? null : (
           <div className="space-y-3">
-            {events.map((evt, i) => {
+            {sortedEvents.map((evt, i) => {
               const sev = SEVERITY_CONFIG[evt.severity] || SEVERITY_FALLBACK;
               const glucoseInfo = getGlucoseSeverity(evt.glucoseLevel);
               const nextStep = getNextStep(evt);
               const isActive = activeEventId === evt.id;
+              const recheck = recheckCountdown(evt.recheckDueAt);
 
               return (
                 <div
@@ -318,6 +383,12 @@ export function HypoglycemiaView() {
                           <span className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>
                             {evt.triggerReason?.replace(/_/g, ' ') || 'Unknown trigger'}
                           </span>
+                          {recheck && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg inline-flex items-center gap-1 ${
+                              recheck.overdue ? 'bg-red-500/15 text-red-500 animate-pulse' : 'bg-cyan-500/10 text-cyan-500'}`}>
+                              <Timer className="w-3 h-3" />{recheck.text}
+                            </span>
+                          )}
                           <span className={`ml-auto text-[10px] flex items-center gap-1 ${text.muted}`}>
                             <Clock className="w-3 h-3" />
                             {evt.detectedAt ? format(new Date(evt.detectedAt), 'dd MMM yyyy HH:mm') : '—'}
@@ -374,9 +445,10 @@ export function HypoglycemiaView() {
                           <p className={`text-xs mt-2 ${text.muted}`}>{evt.notes}</p>
                         )}
 
-                        {/* Action buttons */}
+                        {/* Action buttons — primary action per protocol step, plus a
+                            guarded Resolve escape (reason required while incomplete). */}
                         {!isActive && nextStep && (
-                          <div className="flex items-center gap-2 mt-3">
+                          <div className="flex items-center gap-2 mt-3 flex-wrap">
                             {nextStep === 'treat' && (
                               <button
                                 onClick={() => openWorkflow(evt.id, 'treat')}
@@ -395,9 +467,9 @@ export function HypoglycemiaView() {
                                 <FlaskConical className="w-3.5 h-3.5" /> Record Repeat Glucose
                               </button>
                             )}
-                            {nextStep === 'resolve' && (
+                            {nextStep === 'resolve' ? (
                               <button
-                                onClick={() => handleResolve(evt.id)}
+                                onClick={() => handleResolve(evt)}
                                 disabled={actionLoading === evt.id}
                                 className="inline-flex items-center gap-1.5 px-4 py-2 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors"
                               >
@@ -407,6 +479,15 @@ export function HypoglycemiaView() {
                                   <CheckCircle2 className="w-3.5 h-3.5" />
                                 )}
                                 Resolve
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleResolve(evt)}
+                                disabled={actionLoading === evt.id}
+                                title="Protocol incomplete — resolving requires a documented reason"
+                                className={`inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold rounded-xl transition-colors ${text.muted} hover:bg-white/5`}
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Resolve…
                               </button>
                             )}
                           </div>
@@ -421,9 +502,12 @@ export function HypoglycemiaView() {
                       className="px-4 pb-4 pt-2"
                       style={{ borderTop: borderStyle }}
                     >
-                      <p className={`text-xs font-bold mb-3 ${text.heading}`}>Select Treatment</p>
+                      <p className={`text-xs font-bold mb-1 ${text.heading}`}>Select Treatment</p>
+                      <p className={`text-[10px] mb-3 ${evt.neonatal ? 'text-fuchsia-400 font-bold' : text.muted}`}>
+                        {protocolHintFor(evt.neonatal)}
+                      </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {TREATMENT_OPTIONS.map((opt) => (
+                        {treatmentOptionsFor(evt.neonatal).map((opt) => (
                           <button
                             key={opt}
                             onClick={() => setSelectedTreatment(opt)}
@@ -530,6 +614,40 @@ export function HypoglycemiaView() {
                           </div>
                         );
                       })()}
+                    </div>
+                  )}
+
+                  {/* Guarded resolve — the protocol is incomplete (no recovered repeat
+                      glucose on record), so closing this event needs a documented reason. */}
+                  {isActive && workflowStep === 'resolve-reason' && (
+                    <div className="px-4 pb-4 pt-2" style={{ borderTop: borderStyle }}>
+                      <p className={`text-xs font-bold mb-1 ${text.heading}`}>Resolve without completed recheck</p>
+                      <p className={`text-[10px] mb-3 ${text.muted}`}>
+                        {evt.repeatGlucoseLevel == null
+                          ? 'No post-treatment repeat glucose is on record. Record it, or document why this event is being closed (e.g. patient departed, filed in error).'
+                          : 'The repeat glucose on record is still hypoglycemic. Document why this event is being closed (e.g. escalated to ICU care, ongoing dextrose infusion).'}
+                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          type="text"
+                          value={resolveReason}
+                          onChange={(e) => setResolveReason(e.target.value)}
+                          placeholder="Reason (required)"
+                          style={glassInner}
+                          className={`w-80 px-3 py-2 text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${text.body}`}
+                        />
+                        <button
+                          onClick={() => handleResolveWithReason(evt.id)}
+                          disabled={!resolveReason.trim() || actionLoading === evt.id}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {actionLoading === evt.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                          Resolve
+                        </button>
+                        <button onClick={closeWorkflow} className={`px-4 py-2 text-[11px] font-bold rounded-xl transition-colors ${text.body} hover:bg-white/5`}>
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

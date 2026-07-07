@@ -62,9 +62,10 @@ public class HypoglycemiaController {
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
             + "and @clinicalAuthz.canAccessHypoglycemiaEvent(authentication, #eventId)")
     public ResponseEntity<ApiResponse<HypoglycemiaEventResponse>> resolveEvent(
-            @PathVariable UUID eventId) {
+            @PathVariable UUID eventId,
+            @RequestBody(required = false) com.smartTriage.smartTriage_server.module.hypoglycemia.dto.ResolveEventRequest request) {
         HypoglycemiaEventResponse response = HypoglycemiaEventMapper.toResponse(
-                hypoglycemiaService.resolveEvent(eventId));
+                hypoglycemiaService.resolveEvent(eventId, request != null ? request.getReason() : null));
         return ResponseEntity.ok(ApiResponse.success("Event resolved", response));
     }
 

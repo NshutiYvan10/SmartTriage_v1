@@ -16,7 +16,7 @@ import {
 import { ClinicalSignsTab } from './ClinicalSignsTab';
 import { SepsisPanel } from './SepsisPanel';
 import { FastTrackPanel } from './FastTrackPanel';
-import { HypoglycemiaPanel } from './HypoglycemiaPanel';
+import { HypoglycemiaPanel, HypoglycemiaEventBanner } from './HypoglycemiaPanel';
 import { IsolationPanel, IsolationPrecautionBanner } from './IsolationPanel';
 import { PathwayPanel } from './PathwayPanel';
 import { HandoverPanel } from './HandoverPanel';
@@ -867,6 +867,10 @@ export function VisitDetailPage() {
             walk into the patient's room, and the precaution + PPE must be
             unmissable before they do. Renders nothing when not isolated. */}
         <IsolationPrecautionBanner visitId={visit.id} onOpen={() => setActiveTab('isolation')} />
+
+        {/* ── Open hypoglycemia event signage — fatal in minutes; the treatment
+            state + mandatory recheck clock must be visible from every tab. */}
+        <HypoglycemiaEventBanner visitId={visit.id} onOpen={() => setActiveTab('hypoglycemia')} />
 
         {/* ── Recent activity (shift-handover affordance) ──
             Shows what's new on this patient since the doctor came on

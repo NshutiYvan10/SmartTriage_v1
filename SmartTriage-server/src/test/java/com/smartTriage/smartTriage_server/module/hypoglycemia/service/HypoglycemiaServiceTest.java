@@ -274,4 +274,64 @@ class HypoglycemiaServiceTest {
         verify(eventRepo, never()).save(any(HypoglycemiaEvent.class));
         verify(alertRepo, never()).save(any(ClinicalAlert.class));
     }
+
+    // ────────────────────────────────────────────────────────────────
+    // RESOLVE GUARD (clinical policy): closing an event whose recheck
+    // protocol is incomplete requires a documented reason — a bare
+    // resolve would null the recheck clock and silence the monitor.
+    // ────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("RESOLVE GUARD: no repeat glucose on record + no reason → rejected")
+    void resolveWithoutRepeatAndWithoutReasonRejected() {
+        HypoglycemiaEvent event = openEvent();
+        when(eventRepo.findByIdAndIsActiveTrue(event.getId())).thenReturn(Optional.of(event));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> service.resolveEvent(event.getId(), null));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> service.resolveEvent(event.getId(), "  "));
+        verify(eventRepo, never()).save(any(HypoglycemiaEvent.class));
+    }
+
+    @Test
+    @DisplayName("RESOLVE GUARD: repeat still hypoglycemic + no reason → rejected; with reason → resolves + notes carry it")
+    void resolveWithStillLowRepeatNeedsReason() {
+        HypoglycemiaEvent event = openEvent();
+        event.setRepeatGlucoseLevel(2.8); // still hypoglycemic
+        when(eventRepo.findByIdAndIsActiveTrue(event.getId())).thenReturn(Optional.of(event));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> service.resolveEvent(event.getId(), null));
+
+        when(eventRepo.save(any(HypoglycemiaEvent.class))).thenAnswer(inv -> inv.getArgument(0));
+        HypoglycemiaEvent resolved = service.resolveEvent(event.getId(), "Escalated to ICU care");
+        assertTrue(resolved.isResolved());
+        assertNull(resolved.getRecheckDueAt());
+        assertNotNull(resolved.getNotes());
+        assertTrue(resolved.getNotes().contains("Resolved without completed recheck protocol — Escalated to ICU care"));
+    }
+
+    @Test
+    @DisplayName("RESOLVE GUARD: recovered repeat on record → resolve is free (no reason needed)")
+    void resolveWithRecoveredRepeatIsFree() {
+        HypoglycemiaEvent event = openEvent();
+        event.setRepeatGlucoseLevel(5.2); // recovered
+        when(eventRepo.findByIdAndIsActiveTrue(event.getId())).thenReturn(Optional.of(event));
+        when(eventRepo.save(any(HypoglycemiaEvent.class))).thenAnswer(inv -> inv.getArgument(0));
+        HypoglycemiaEvent resolved = service.resolveEvent(event.getId(), null);
+        assertTrue(resolved.isResolved());
+        assertNull(resolved.getNotes()); // no bypass note appended
+    }
+
+    @Test
+    @DisplayName("TRIGGER: a lone low reading records itself as the trigger (never a blank reason)")
+    void loneLowReadingRecordsItselfAsTrigger() {
+        when(eventRepo.existsByVisitIdAndResolvedFalseAndIsActiveTrue(visitId)).thenReturn(false);
+        when(eventRepo.save(any(HypoglycemiaEvent.class))).thenAnswer(inv -> inv.getArgument(0));
+        service.evaluateGlucoseReading(visit, 2.0, false, "TRIAGE");
+        ArgumentCaptor<HypoglycemiaEvent> captor = ArgumentCaptor.forClass(HypoglycemiaEvent.class);
+        verify(eventRepo, atLeastOnce()).save(captor.capture());
+        String reason = captor.getValue().getTriggerReason();
+        assertNotNull(reason);
+        assertFalse(reason.isBlank());
+    }
 }

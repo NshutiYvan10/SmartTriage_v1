@@ -16,7 +16,10 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
-import { hypoglycemiaApi, type HypoglycemiaEvent } from '@/api/hypoglycemia';
+import {
+  hypoglycemiaApi, protocolIncomplete, treatmentOptionsFor, protocolHintFor,
+  recheckCountdown, type HypoglycemiaEvent,
+} from '@/api/hypoglycemia';
 import { subscribeToHypoglycemia } from '@/api/websocket';
 import { useWebSocketGeneration } from '@/hooks/useWebSocket';
 import { ApiError } from '@/api/client';
@@ -31,19 +34,94 @@ const SEVERITY_CONFIG: Record<string, { color: string; bg: string; label: string
   PENDING_CHECK: { color: 'text-amber-500',   bg: 'bg-amber-500/10',   label: 'CHECK PENDING' },
 };
 
-const TREATMENT_OPTIONS = [
-  'IV Dextrose 50% 50ml',
-  'IV D10W infusion',
-  'Pediatric 10% dextrose 5ml/kg',
-  'Oral glucose (15–20g)',
-];
+/* Treatment options + recheck countdown come from api/hypoglycemia.ts (shared with
+   the hospital dashboard) — neonates are never offered 50% dextrose. */
 
-function recheckLabel(dueIso: string | null): { text: string; overdue: boolean } | null {
-  if (!dueIso) return null;
-  const ms = new Date(dueIso).getTime() - Date.now();
-  const mins = Math.round(ms / 60000);
-  if (mins <= 0) return { text: `recheck overdue by ${Math.abs(mins)}m`, overdue: true };
-  return { text: `recheck due in ${mins}m`, overdue: false };
+/* ═══════════════════════════════════════════════════════════════
+   HypoglycemiaEventBanner — page-level signage on the patient chart.
+
+   Rendered ABOVE the tab bar so an UNRESOLVED hypoglycemia event — fatal in
+   minutes — is visible from EVERY tab: severity + glucose value, treatment
+   state, and the mandatory 15-minute recheck countdown (pulsing red once
+   overdue). Previously the event was only visible inside the Glucose tab;
+   a doctor on Medications had no idea the patient was mid-protocol. Renders
+   nothing when the visit has no open event.
+   ═══════════════════════════════════════════════════════════════ */
+export function HypoglycemiaEventBanner({ visitId, onOpen }: { visitId: string; onOpen?: () => void }) {
+  const hospitalId = useAuthStore((s) => s.user?.hospitalId) || '';
+  const wsGen = useWebSocketGeneration();
+  const [open, setOpen] = useState<HypoglycemiaEvent[]>([]);
+  const [, setTick] = useState(0);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await hypoglycemiaApi.getForVisit(visitId);
+      setOpen((Array.isArray(data) ? data : []).filter((e) => !e.resolved));
+    } catch {
+      // Banner is best-effort signage — the Glucose tab surfaces load errors.
+      setOpen([]);
+    }
+  }, [visitId]);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!hospitalId) return;
+    const unsub = subscribeToHypoglycemia(hospitalId, (event: { visitId?: string }) => {
+      if (event?.visitId === visitId) load();
+    });
+    return () => unsub();
+  }, [hospitalId, visitId, load, wsGen]);
+  useEffect(() => {
+    const t = setInterval(() => setTick((v) => v + 1), 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  if (open.length === 0) return null;
+  // Show the most urgent open event: recheck-overdue first, then severest.
+  const evt = [...open].sort((a, b) => {
+    const ao = recheckCountdown(a.recheckDueAt)?.overdue ? 0 : 1;
+    const bo = recheckCountdown(b.recheckDueAt)?.overdue ? 0 : 1;
+    if (ao !== bo) return ao - bo;
+    const rank = (e: HypoglycemiaEvent) => (e.severity === 'SEVERE' ? 0 : e.severity === 'MODERATE' ? 1 : 2);
+    return rank(a) - rank(b);
+  })[0];
+  const sev = SEVERITY_CONFIG[evt.severity] || SEVERITY_FALLBACK;
+  const recheck = recheckCountdown(evt.recheckDueAt);
+
+  return (
+    <div className={`rounded-2xl px-4 py-3 ${sev.bg} border border-red-500/25 flex items-center gap-3 flex-wrap animate-fade-up`}>
+      <Droplets className={`w-5 h-5 shrink-0 ${sev.color}`} />
+      <span className={`text-xs font-black uppercase tracking-wide ${sev.color}`}>
+        {sev.label} HYPOGLYCEMIA{evt.glucoseLevel != null ? ` — ${evt.glucoseLevel.toFixed(1)} mmol/L` : ''}
+      </span>
+      {evt.neonatal && (
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-fuchsia-500/15 text-fuchsia-400">NEONATAL</span>
+      )}
+      {evt.treatmentGiven ? (
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-500 inline-flex items-center gap-1">
+          <Syringe className="w-3 h-3" /> {evt.treatmentGiven}
+        </span>
+      ) : (
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-500/15 text-amber-500 animate-pulse inline-flex items-center gap-1">
+          <AlertTriangle className="w-3 h-3" /> AWAITING TREATMENT
+        </span>
+      )}
+      <span className="ml-auto inline-flex items-center gap-2">
+        {recheck && (
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg inline-flex items-center gap-1 ${
+            recheck.overdue ? 'bg-red-600/20 text-red-600 animate-pulse' : 'bg-cyan-500/10 text-cyan-500'}`}>
+            <Timer className="w-3 h-3" /> {recheck.text}
+          </span>
+        )}
+        {onOpen && (
+          <button onClick={onOpen}
+            className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-red-500/15 text-red-500 hover:bg-red-500/25 transition-colors">
+            Manage
+          </button>
+        )}
+      </span>
+    </div>
+  );
 }
 
 interface HypoglycemiaPanelProps {
@@ -69,6 +147,8 @@ export function HypoglycemiaPanel({ visitId, onChanged }: HypoglycemiaPanelProps
   const [repeatFor, setRepeatFor] = useState<string | null>(null);
   const [repeatGlucose, setRepeatGlucose] = useState('');
   const [repeatUnit, setRepeatUnit] = useState<'MMOL_L' | 'MG_DL'>('MMOL_L');
+  const [resolveFor, setResolveFor] = useState<string | null>(null);
+  const [resolveReason, setResolveReason] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -137,7 +217,24 @@ export function HypoglycemiaPanel({ visitId, onChanged }: HypoglycemiaPanelProps
       () => { setRepeatFor(null); setRepeatGlucose(''); setRepeatUnit('MMOL_L'); });
   };
 
-  const resolve = (id: string) => runAction(() => hypoglycemiaApi.resolve(id), 'Failed to resolve event');
+  /* Resolving is FREE only when the recheck protocol completed; otherwise the
+     backend demands a documented reason — open the reason input instead. */
+  const resolve = (evt: HypoglycemiaEvent) => {
+    if (protocolIncomplete(evt)) {
+      setResolveFor(evt.id);
+      setResolveReason('');
+      return;
+    }
+    runAction(() => hypoglycemiaApi.resolve(evt.id), 'Failed to resolve event');
+  };
+
+  const resolveWithReason = (id: string) => {
+    if (!resolveReason.trim()) return;
+    runAction(
+      () => hypoglycemiaApi.resolve(id, resolveReason.trim()),
+      'Failed to resolve event',
+      () => { setResolveFor(null); setResolveReason(''); });
+  };
 
   const openEvents = events.filter((e) => !e.resolved);
   const history = events.filter((e) => e.resolved);
@@ -193,7 +290,7 @@ export function HypoglycemiaPanel({ visitId, onChanged }: HypoglycemiaPanelProps
         <>
           {openEvents.map((evt) => {
             const sev = SEVERITY_CONFIG[evt.severity] || SEVERITY_FALLBACK;
-            const recheck = recheckLabel(evt.recheckDueAt);
+            const recheck = recheckCountdown(evt.recheckDueAt);
             return (
               <div key={evt.id} className="rounded-2xl overflow-hidden" style={glassCard}>
                 <div className="px-5 py-4">
@@ -250,15 +347,46 @@ export function HypoglycemiaPanel({ visitId, onChanged }: HypoglycemiaPanelProps
                       <FlaskConical className="w-3.5 h-3.5" />Record Repeat Glucose
                     </button>
                   )}
-                  <button onClick={() => resolve(evt.id)} disabled={busy} className="inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
-                    {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}Resolve
+                  <button onClick={() => resolve(evt)} disabled={busy}
+                    title={protocolIncomplete(evt) ? 'Protocol incomplete — resolving requires a documented reason' : 'Resolve this event'}
+                    className={`inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold rounded-xl transition-colors disabled:opacity-50 ${
+                      protocolIncomplete(evt) ? `${text.muted} hover:bg-white/5` : 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20'}`}>
+                    {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                    {protocolIncomplete(evt) ? 'Resolve…' : 'Resolve'}
                   </button>
                 </div>
 
+                {/* Guarded resolve — protocol incomplete, reason required */}
+                {resolveFor === evt.id && (
+                  <div className="px-5 py-3 border-t" style={{ borderColor: isDark ? 'rgba(2,132,199,0.12)' : 'rgba(203,213,225,0.3)' }}>
+                    <p className={`text-[10px] mb-2 ${text.muted}`}>
+                      {evt.repeatGlucoseLevel == null
+                        ? 'No post-treatment repeat glucose is on record — record it, or document why this event is being closed (e.g. patient departed, filed in error).'
+                        : 'The repeat glucose on record is still hypoglycemic — document why this event is being closed (e.g. escalated to ICU care).'}
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input type="text" value={resolveReason} onChange={(e) => setResolveReason(e.target.value)}
+                        placeholder="Reason (required)" style={glassInner}
+                        className={`w-80 px-3 py-2 text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${text.body}`} />
+                      <button onClick={() => resolveWithReason(evt.id)} disabled={!resolveReason.trim() || busy}
+                        className="px-4 py-2 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors disabled:opacity-40">
+                        Resolve
+                      </button>
+                      <button onClick={() => { setResolveFor(null); setResolveReason(''); }}
+                        className={`px-4 py-2 text-[11px] font-bold rounded-xl transition-colors ${text.muted} hover:bg-white/5`}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {treatFor === evt.id && (
                   <div className="px-5 py-3 border-t" style={{ borderColor: isDark ? 'rgba(2,132,199,0.12)' : 'rgba(203,213,225,0.3)' }}>
+                    <p className={`text-[10px] mb-2 ${evt.neonatal ? 'text-fuchsia-400 font-bold' : text.muted}`}>
+                      {protocolHintFor(evt.neonatal)}
+                    </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-                      {TREATMENT_OPTIONS.map((opt) => (
+                      {treatmentOptionsFor(evt.neonatal).map((opt) => (
                         <button key={opt} onClick={() => setTreatment(opt)}
                           className={`px-3 py-2 text-[11px] font-medium rounded-xl border text-left transition-all ${treatment === opt ? 'bg-purple-500/15 border-purple-500/40 text-purple-500' : isDark ? 'border-white/10 text-slate-300 hover:bg-white/5' : 'border-slate-200 text-slate-600 hover:bg-purple-50'}`}>
                           <Syringe className="w-3 h-3 inline mr-1.5" />{opt}

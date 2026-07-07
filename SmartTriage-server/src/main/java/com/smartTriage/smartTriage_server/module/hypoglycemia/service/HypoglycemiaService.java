@@ -298,9 +298,48 @@ public class HypoglycemiaService {
     }
 
     @Transactional
+    /** Back-compat overload — resolve with no reason (only legal when the protocol completed). */
     public HypoglycemiaEvent resolveEvent(UUID eventId) {
+        return resolveEvent(eventId, null);
+    }
+
+    /**
+     * Resolve (close) a hypoglycemia event. Resolving is FREE only when the recheck
+     * protocol actually completed — a post-treatment repeat glucose is on record AND
+     * that repeat is no longer hypoglycemic. In every other state (no repeat glucose
+     * at all, or a repeat that is STILL low) the resolve is a protocol bypass: it
+     * nulls the recheck clock and silences the recheck monitor, so it requires a
+     * mandatory documented reason (audit-visible in the event notes). Previously this
+     * had NO guard — one click could close an untreated SEVERE event and the mandatory
+     * 15-minute recheck would simply never be chased.
+     */
+    @Transactional
+    public HypoglycemiaEvent resolveEvent(UUID eventId, String reason) {
         HypoglycemiaEvent event = hypoglycemiaEventRepository.findByIdAndIsActiveTrue(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("HypoglycemiaEvent", "id", eventId));
+
+        boolean repeatRecorded = event.getRepeatGlucoseLevel() != null;
+        boolean repeatRecovered = repeatRecorded && !enforcementEngine
+                .classify(event.getRepeatGlucoseLevel(), event.isNeonatal(), false)
+                .isHypoglycemic();
+        boolean protocolComplete = repeatRecorded && repeatRecovered;
+
+        if (!protocolComplete) {
+            if (reason == null || reason.isBlank()) {
+                throw new IllegalArgumentException(repeatRecorded
+                        ? "The repeat glucose on record is still hypoglycemic — resolving now requires a "
+                          + "documented reason (e.g. escalated to ICU care, ongoing dextrose infusion per protocol)."
+                        : "No post-treatment repeat glucose is on record — the mandatory recheck protocol is "
+                          + "incomplete. Record the repeat glucose, or resolve with a documented reason "
+                          + "(e.g. patient departed, event filed in error).");
+            }
+            String note = "Resolved without completed recheck protocol — " + reason.trim();
+            event.setNotes(event.getNotes() == null || event.getNotes().isBlank()
+                    ? note : event.getNotes() + "\n" + note);
+            log.warn("Hypoglycemia event {} resolved WITHOUT completed recheck protocol (repeatRecorded={}): {}",
+                    eventId, repeatRecorded, reason.trim());
+        }
+
         event.setResolved(true);
         event.setResolvedAt(Instant.now());
         event.setResolvedByName(resolveCurrentUserName());
@@ -368,11 +407,19 @@ public class HypoglycemiaService {
             return null;
         }
         Instant now = Instant.now();
+        // A hypoglycemic reading with no OTHER mandatory-check trigger (alert,
+        // non-diabetic patient) has an EMPTY trigger list — the low value itself
+        // is the trigger. Record it as such instead of persisting a blank reason
+        // (the dashboard used to show "Unknown trigger" for exactly these).
+        String triggerReason = String.join(", ", result.triggerReasons());
+        if (triggerReason.isBlank()) {
+            triggerReason = "low_glucose_reading (" + source.toLowerCase() + ")";
+        }
         HypoglycemiaEvent event = HypoglycemiaEvent.builder()
                 .visit(visit)
                 .detectedAt(now)
                 .glucoseLevel(result.glucoseValue())
-                .triggerReason(String.join(", ", result.triggerReasons()))
+                .triggerReason(triggerReason)
                 .severity(result.severity().name())
                 .glucoseSource(source)
                 .neonatal(result.neonatal())

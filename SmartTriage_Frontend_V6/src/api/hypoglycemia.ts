@@ -49,6 +49,59 @@ export interface HypoglycemiaCheckResponse {
   eventId?: string | null;
 }
 
+/* ── Shared clinical helpers (single source for the dashboard + chart panel) ── */
+
+/** Mirrors HypoglycemiaEnforcementEngine: recovered = ≥3.9 mmol/L adult/child, ≥2.6 neonate. */
+export function isRecoveredGlucose(mmol: number, neonatal: boolean): boolean {
+  return neonatal ? mmol >= 2.6 : mmol >= 3.9;
+}
+
+/**
+ * The recheck protocol is complete only when a post-treatment repeat glucose is on
+ * record AND it recovered. Anything else makes "Resolve" a protocol bypass that the
+ * backend will 422 without a documented reason.
+ */
+export function protocolIncomplete(evt: HypoglycemiaEvent): boolean {
+  return evt.repeatGlucoseLevel == null || !isRecoveredGlucose(evt.repeatGlucoseLevel, evt.neonatal);
+}
+
+/**
+ * Age-appropriate treatment options. Neonates must NEVER be offered 50% dextrose —
+ * the neonatal protocol is 2 mL/kg of 10% dextrose IV/IO then a D10 infusion
+ * (mirrors HypoglycemiaEnforcementEngine.treatmentProtocol).
+ */
+export function treatmentOptionsFor(neonatal: boolean): string[] {
+  if (neonatal) {
+    return [
+      'IV 10% dextrose 2 mL/kg bolus',
+      'IV D10W infusion',
+      'Buccal glucose gel',
+      'Feed (breast/formula)',
+    ];
+  }
+  return [
+    'IV Dextrose 50% 50ml',
+    'IV D10W infusion',
+    'Pediatric 10% dextrose 5ml/kg',
+    'Oral glucose (15–20g)',
+  ];
+}
+
+/** Protocol guidance line shown above the treatment options (engine-aligned). */
+export function protocolHintFor(neonatal: boolean): string {
+  return neonatal
+    ? 'NEONATAL: 2 mL/kg of 10% dextrose IV/IO bolus, then a 10% dextrose infusion. Recheck glucose in 15–30 minutes; involve pediatrics/neonatology. Do NOT use 50% dextrose.'
+    : 'ADULT: 50 mL of 50% dextrose IV (or 200 mL of 10%). Conscious and able to swallow → 15–20 g oral fast-acting carbohydrate. PEDIATRIC: 5 mL/kg of 10% dextrose IV. Recheck glucose in 15 minutes.';
+}
+
+/** Countdown label for the mandatory post-treatment recheck clock. */
+export function recheckCountdown(dueIso: string | null | undefined): { text: string; overdue: boolean } | null {
+  if (!dueIso) return null;
+  const mins = Math.round((new Date(dueIso).getTime() - Date.now()) / 60000);
+  if (mins <= 0) return { text: `recheck overdue by ${Math.abs(mins)}m`, overdue: true };
+  return { text: `recheck due in ${mins}m`, overdue: false };
+}
+
 export const hypoglycemiaApi = {
   // Trigger a glucose-check enforcement for a visit (backend path is /check, not /enforce).
   enforce: (visitId: string) =>
@@ -60,7 +113,11 @@ export const hypoglycemiaApi = {
   // lets a mg/dL glucometer reading be converted server-side (default mmol/L).
   recordRepeatGlucose: (id: string, data: { glucoseLevel: number; unit?: GlucoseUnitValue }) =>
     put<HypoglycemiaEvent>(`/hypoglycemia/${id}/repeat-glucose`, data),
-  resolve: (id: string) => put<HypoglycemiaEvent>(`/hypoglycemia/${id}/resolve`),
+  // Resolving is FREE only when the recheck protocol completed (repeat glucose on
+  // record AND recovered). Otherwise the backend requires a documented reason (422
+  // without one) — it is a protocol bypass that silences the recheck monitor.
+  resolve: (id: string, reason?: string) =>
+    put<HypoglycemiaEvent>(`/hypoglycemia/${id}/resolve`, reason ? { reason } : undefined),
   getForVisit: (visitId: string) => get<HypoglycemiaEvent[]>(`/hypoglycemia/visit/${visitId}`),
   // Backend path is /active (was wrongly /unresolved → the dashboard 404'd, always empty).
   // Optional zone → an on-shift clinician passes their covered zone and the
