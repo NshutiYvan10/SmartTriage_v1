@@ -9,11 +9,14 @@
    400'd and the register stayed empty.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useState } from 'react';
-import { ShieldAlert, Loader2, CheckCircle2, AlertTriangle, EyeOff } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ShieldAlert, Loader2, CheckCircle2, AlertTriangle, EyeOff, User, BedDouble } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
 import { safetyApi, INCIDENT_TYPES, INCIDENT_SEVERITIES } from '@/api/safety';
 import type { SafetyIncident } from '@/api/safety';
+import { visitApi } from '@/api/visits';
+import type { VisitResponse } from '@/api/types';
 import { ApiError } from '@/api/client';
 
 const SEVERITY_HELP: Record<string, string> = {
@@ -52,8 +55,50 @@ export function ReportIncidentForm({ hospitalId, visitId, visitNumber, onReporte
     isAnonymous: false,
   });
 
+  /* ── Patient picker (standalone path only — the chart path arrives visit-bound).
+     Investigations need to know exactly WHICH patient and WHICH bed: the caller-aware
+     visits endpoint returns the reporter's own zone's patients (charge nurses / shift
+     leads / admins get the whole hospital), and selecting one links the visit and
+     auto-fills zone + bed FROM THE SYSTEM instead of free text. ── */
+  const [visits, setVisits] = useState<VisitResponse[]>([]);
+  const [selectedVisitId, setSelectedVisitId] = useState<string>('');
+  // Cross-zone actors (admins / charge nurse / shift lead) pick from the WHOLE
+  // hospital via the oversight endpoint; zone clinicians use the caller-aware one
+  // (their own zone; empty when off-shift — /active/mine deliberately returns an
+  // empty page for shiftless callers, which includes every admin).
+  const access = useCanSeeAllZones();
+  useEffect(() => {
+    if (visitId || !hospitalId || access.isLoading) return; // chart path is already patient-bound
+    let alive = true;
+    const fetchVisits = access.canSeeAllZones
+      ? visitApi.getActiveByHospital(hospitalId, 0, 100)
+      : visitApi.getActiveForCallerByHospital(hospitalId, 0, 100);
+    fetchVisits
+      .then((page) => { if (alive) setVisits(page.content || []); })
+      .catch(() => { if (alive) setVisits([]); }); // picker is best-effort; free-text stays available
+    return () => { alive = false; };
+  }, [hospitalId, visitId, access.isLoading, access.canSeeAllZones]);
+
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
+
+  const visitLabel = (v: VisitResponse) => {
+    const where = [v.currentEdZone?.replace(/_/g, ' '), v.currentBedLabel ? `Bed ${v.currentBedLabel}` : null]
+      .filter(Boolean).join(' · ');
+    return `${v.patientName} — ${v.visitNumber}${where ? ` · ${where}` : ''}`;
+  };
+
+  const selectPatient = (vid: string) => {
+    setSelectedVisitId(vid);
+    const v = visits.find((x) => x.id === vid);
+    if (v) {
+      // Bed + zone come from the system, not memory. Still editable for extra
+      // detail (e.g. "corridor outside bay 2") — but the anchor is authoritative.
+      const loc = [v.currentEdZone?.replace(/_/g, ' '), v.currentBedLabel ? `Bed ${v.currentBedLabel}` : null]
+        .filter(Boolean).join(' · ');
+      setForm((f) => ({ ...f, locationInHospital: loc }));
+    }
+  };
 
   const submit = async () => {
     if (!form.description.trim()) return;
@@ -62,7 +107,7 @@ export function ReportIncidentForm({ hospitalId, visitId, visitNumber, onReporte
     try {
       const incident = await safetyApi.report({
         hospitalId,
-        visitId,
+        visitId: visitId ?? (selectedVisitId || undefined),
         incidentType: form.incidentType,
         severity: form.severity,
         incidentDateTime: new Date().toISOString(),
@@ -89,6 +134,7 @@ export function ReportIncidentForm({ hospitalId, visitId, visitNumber, onReporte
         <p className={`text-sm font-bold ${text.heading}`}>Incident reported</p>
         <p className={`text-xs mt-1 ${text.muted}`}>
           Registry number <span className="font-bold">{done.incidentNumber}</span>
+          {done.visitNumber ? <> · linked to visit <span className="font-bold">{done.visitNumber}</span></> : ''}
           {done.isAnonymous ? ' — filed anonymously.' : ''} Governance has been notified
           {(done.severity === 'SEVERE_HARM' || done.severity === 'DEATH') ? ' and paged (critical severity).' : '.'}
         </p>
@@ -104,11 +150,27 @@ export function ReportIncidentForm({ hospitalId, visitId, visitNumber, onReporte
 
   return (
     <div className="space-y-3">
-      {visitId && (
+      {visitId ? (
         <p className={`text-[11px] ${text.muted}`}>
           Linked to visit <span className="font-bold">{visitNumber || visitId}</span> — the incident will
           appear in this patient's governance timeline.
         </p>
+      ) : (
+        <div>
+          <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1 ${text.muted}`}>
+            <User className="w-3 h-3 inline mr-1" />Patient involved
+          </label>
+          <select value={selectedVisitId} onChange={(e) => selectPatient(e.target.value)}
+            style={glassInner} className={`w-full px-3 py-2 text-xs rounded-xl focus:outline-none ${text.body}`}>
+            <option value="">No patient involved / not patient-specific</option>
+            {visits.map((v) => <option key={v.id} value={v.id}>{visitLabel(v)}</option>)}
+          </select>
+          <p className={`text-[10px] mt-1 ${text.muted}`}>
+            {visits.length > 0
+              ? 'Patients in your covered zone(s). Selecting one links the incident to their visit and fills the bed from the system.'
+              : 'No active patients in your covered zone(s) — you can still report a non-patient incident.'}
+          </p>
+        </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -136,9 +198,13 @@ export function ReportIncidentForm({ hospitalId, visitId, visitNumber, onReporte
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <input type="text" value={form.locationInHospital} onChange={(e) => set('locationInHospital', e.target.value)}
-          placeholder="Location (e.g. Resus bay 2)" style={glassInner}
-          className={`px-3 py-2 text-xs rounded-xl focus:outline-none ${text.body}`} />
+        <div className="relative">
+          {selectedVisitId && <BedDouble className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-cyan-500" />}
+          <input type="text" value={form.locationInHospital} onChange={(e) => set('locationInHospital', e.target.value)}
+            placeholder="Location (e.g. Resus bay 2)" style={glassInner}
+            title={selectedVisitId ? 'Zone + bed filled from the system — add detail if needed' : undefined}
+            className={`w-full px-3 py-2 text-xs rounded-xl focus:outline-none ${text.body} ${selectedVisitId ? 'pl-8' : ''}`} />
+        </div>
         <input type="text" value={form.immediateActions} onChange={(e) => set('immediateActions', e.target.value)}
           placeholder="Immediate actions taken" style={glassInner}
           className={`px-3 py-2 text-xs rounded-xl focus:outline-none ${text.body}`} />

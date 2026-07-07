@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { safetyApi, INCIDENT_TYPES, INCIDENT_SEVERITIES, INCIDENT_STATUSES } from '@/api/safety';
+import { hospitalApi } from '@/api/hospitals';
+import type { HospitalResponse } from '@/api/types';
 import { saveBlob, ApiError } from '@/api/client';
 import type { SafetyIncident } from '@/api/safety';
 import { format } from 'date-fns';
@@ -88,8 +90,35 @@ type FilterType = 'ALL' | string;
 export function SafetyIncidentView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
-  const hospitalId = user?.hospitalId || '';
   const access = useCanSeeAllZones();
+
+  /* ── SUPER_ADMIN is a national role: its OWN hospitalId points at the system
+     hospital, whose register is empty forever — so a super admin who filed an
+     incident on a real hospital's patient (e.g. from a chart) saw "the register
+     is empty" here while that hospital's admin saw the incident. Give the super
+     admin a hospital selector (the MOH-reports pattern); everyone else stays
+     pinned to their own hospital. ── */
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const [hospitals, setHospitals] = useState<HospitalResponse[]>([]);
+  const [selectedHospitalId, setSelectedHospitalId] = useState<string>('');
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    hospitalApi.getAll(0, 50)
+      .then((page) => {
+        const rows = page.content || [];
+        setHospitals(rows);
+        // Default to the first hospital that is NOT the national role's own system
+        // hospital — that register is a phantom (opening onto it forever-empty was
+        // exactly the reported confusion). Fall back to own if it's the only one.
+        if (rows.length > 0) {
+          const firstReal = rows.find((h) => h.id !== user?.hospitalId) || rows[0];
+          setSelectedHospitalId((cur) => cur || firstReal.id);
+        }
+      })
+      .catch((err) => console.error('[SafetyIncidentView] hospitals load failed:', err));
+  }, [isSuperAdmin]);
+
+  const hospitalId = (isSuperAdmin ? selectedHospitalId : user?.hospitalId) || user?.hospitalId || '';
 
   // ── Data state ──
   const [incidents, setIncidents] = useState<SafetyIncident[]>([]);
@@ -282,6 +311,16 @@ export function SafetyIncidentView() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                {isSuperAdmin && hospitals.length > 0 && (
+                  <select
+                    value={selectedHospitalId}
+                    onChange={(e) => { setSelectedHospitalId(e.target.value); setPage(0); }}
+                    title="Which hospital's incident register to view (national role)"
+                    className="px-3 py-2 rounded-xl text-xs font-bold bg-white/10 text-white border border-white/15 focus:outline-none [&>option]:text-slate-800"
+                  >
+                    {hospitals.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+                  </select>
+                )}
                 {canWorkRegister && stats.severeOpen > 0 && (
                   <div className="bg-red-500/20 backdrop-blur rounded-xl px-3 py-1.5 flex items-center gap-2 border border-red-400/30">
                     <AlertTriangle className="w-3.5 h-3.5 text-red-300" />
