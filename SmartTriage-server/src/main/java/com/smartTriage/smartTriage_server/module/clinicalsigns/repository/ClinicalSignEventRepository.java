@@ -16,6 +16,9 @@ public interface ClinicalSignEventRepository extends JpaRepository<ClinicalSignE
     /** Full event history for a visit, oldest-first. */
     List<ClinicalSignEvent> findByVisitIdAndIsActiveTrueOrderByRecordedAtAsc(UUID visitId);
 
+    /** Identity merge: every sign event keyed to a patient (incl. inactive — history follows the person). */
+    List<ClinicalSignEvent> findByPatientId(UUID patientId);
+
     /**
      * Latest event per sign_code for a visit — drives the "current state"
      * view. Implemented via a correlated subquery: pick the row whose

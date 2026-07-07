@@ -55,6 +55,13 @@ public class PatientIdentityService {
     private final VisitRepository visitRepository;
     /** Phase 1 — link a resolved placeholder to the shared cross-hospital identity once it gains a national ID. */
     private final PersonIdentityService personIdentityService;
+    // Merge must re-point EVERYTHING keyed to the placeholder's patient id — not just
+    // visits. An allergy recorded on the placeholder and left behind is invisible to
+    // the prescribe-time allergy gate (it reads findActiveByPatientId on the SURVIVING
+    // patient), silently defeating the hard block.
+    private final com.smartTriage.smartTriage_server.module.patient.repository.PatientAllergyRepository patientAllergyRepository;
+    private final com.smartTriage.smartTriage_server.module.patient.repository.PatientChronicConditionRepository patientChronicConditionRepository;
+    private final com.smartTriage.smartTriage_server.module.clinicalsigns.repository.ClinicalSignEventRepository clinicalSignEventRepository;
 
     /**
      * Resolve a placeholder patient's identity. Returns the resulting
@@ -212,16 +219,71 @@ public class PatientIdentityService {
                             + ", target=" + target.getHospital().getHospitalCode() + ")");
         }
 
-        // Re-point every active visit on the placeholder to the target.
-        // Page through to avoid loading huge result sets in one shot, but
-        // for unidentified arrivals we expect 1 visit ~always.
-        var page = visitRepository.findByPatientIdAndIsActiveTrue(placeholder.getId(),
-                PageRequest.of(0, 50));
-        List<Visit> visits = page.getContent();
-        for (Visit visit : visits) {
-            visit.setPatient(target);
-            visitRepository.save(visit);
+        // Cross-hospital person identity: carry the placeholder's link (a resolved RFID
+        // card / national ID) onto the target when the target has none — otherwise the
+        // patient's card stops resolving the moment the placeholder is soft-deleted.
+        // Two DIFFERENT identities on the two records is an identity CONFLICT: merging
+        // would cross-link two people's cross-hospital records — fail closed.
+        if (placeholder.getPersonIdentity() != null) {
+            if (target.getPersonIdentity() == null) {
+                target.setPersonIdentity(placeholder.getPersonIdentity());
+            } else if (!target.getPersonIdentity().getId().equals(placeholder.getPersonIdentity().getId())) {
+                throw new com.smartTriage.smartTriage_server.common.exception.IdentityConflictException(
+                        "These two records are linked to DIFFERENT cross-hospital identities "
+                                + "(different national ID / card). Verify you selected the right patient "
+                                + "before merging — merging would cross-link two people's records.");
+            }
         }
+
+        // Free-text chronic-conditions capture (the diabetic trigger and chart summaries
+        // read it) — never lose what the desk wrote on the placeholder.
+        String phConditions = placeholder.getChronicConditions();
+        if (phConditions != null && !phConditions.isBlank()) {
+            String tgtConditions = target.getChronicConditions();
+            if (tgtConditions == null || tgtConditions.isBlank()) {
+                target.setChronicConditions(phConditions);
+            } else if (!tgtConditions.toLowerCase().contains(phConditions.toLowerCase())) {
+                target.setChronicConditions(tgtConditions + " | " + phConditions);
+            }
+        }
+
+        // Re-point EVERY visit on the placeholder to the target — loop until drained
+        // (the old code re-pointed only the first page of 50).
+        int visitCount = 0;
+        while (true) {
+            List<Visit> visits = visitRepository
+                    .findByPatientIdAndIsActiveTrue(placeholder.getId(), PageRequest.of(0, 50))
+                    .getContent();
+            if (visits.isEmpty()) break;
+            for (Visit visit : visits) {
+                visit.setPatient(target);
+                visitRepository.save(visit);
+                visitCount++;
+            }
+        }
+
+        // Re-point the clinical history keyed to the patient id — INCLUDING refuted
+        // allergies / resolved conditions: the history follows the person, and the
+        // prescribe-time allergy gate reads the surviving patient's rows.
+        int allergyCount = 0;
+        for (var allergy : patientAllergyRepository.findAllByPatientIdIncludingRefuted(placeholder.getId())) {
+            allergy.setPatient(target);
+            patientAllergyRepository.save(allergy);
+            allergyCount++;
+        }
+        int conditionCount = 0;
+        for (var condition : patientChronicConditionRepository.findAllByPatientIdIncludingResolved(placeholder.getId())) {
+            condition.setPatient(target);
+            patientChronicConditionRepository.save(condition);
+            conditionCount++;
+        }
+        int signCount = 0;
+        for (var sign : clinicalSignEventRepository.findByPatientId(placeholder.getId())) {
+            sign.setPatient(target);
+            clinicalSignEventRepository.save(sign);
+            signCount++;
+        }
+        patientRepository.save(target);
 
         // Mark the placeholder resolved + soft-deleted. Preserve
         // identified_at/by for audit even though the row is inactive.
@@ -233,12 +295,12 @@ public class PatientIdentityService {
         patientRepository.save(placeholder);
 
         log.info("[identity] Merged placeholder patient {} (label={}) into existing patient {} "
-                        + "({}, {} visits re-pointed) by {} at {}",
+                        + "({}; re-pointed {} visits, {} allergies, {} chronic conditions, {} sign events) by {} at {}",
                 placeholder.getId(),
                 placeholder.getPlaceholderLabel(),
                 target.getId(),
                 target.getFirstName() + " " + target.getLastName(),
-                visits.size(),
+                visitCount, allergyCount, conditionCount, signCount,
                 actor != null ? formatActorName(actor) : "system",
                 now);
 

@@ -45,8 +45,11 @@ public class PatientController {
     // triage, not reception. Non-triage nurses and registrars may still
     // register. Exclusion is by TODAY'S shift function, not permanent
     // designation, so a nurse not rostered to triage today is unaffected.
+    // Hospital scope: hospitalId comes from the client body — pin it to the caller's
+    // own hospital (SUPER_ADMIN excepted), same closure as /register.
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR') "
-            + "and !@clinicalAuthz.callerIsTodaysTriageNurse(authentication)")
+            + "and !@clinicalAuthz.callerIsTodaysTriageNurse(authentication) "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #request.hospitalId)")
     public ResponseEntity<ApiResponse<PatientResponse>> createPatient(
             @Valid @RequestBody CreatePatientRequest request) {
         PatientResponse response = patientService.createPatient(request);
@@ -60,8 +63,11 @@ public class PatientController {
      */
     @PostMapping("/register")
     // B9 — exclude the on-shift TRIAGE_NURSE from registration (see createPatient).
+    // Hospital scope: the request's hospitalId was previously TRUSTED from the client
+    // body — a user at hospital A could register patients/visits into hospital B.
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR') "
-            + "and !@clinicalAuthz.callerIsTodaysTriageNurse(authentication)")
+            + "and !@clinicalAuthz.callerIsTodaysTriageNurse(authentication) "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #request.hospitalId)")
     public ResponseEntity<ApiResponse<RegisterPatientResponse>> registerPatient(
             @Valid @RequestBody RegisterPatientRequest request) {
         RegisterPatientResponse response = patientService.registerPatientWithVisit(request);

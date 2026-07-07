@@ -88,7 +88,11 @@ public class DirectResusController {
     // ════════════════════════════════════════════════════════════════
 
     @PostMapping("/api/v1/patients/{patientId}/resolve-identity")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'REGISTRAR', 'PARAMEDIC')")
+    // Patient scope: previously role-gated only — a user at hospital A could resolve or
+    // MERGE hospital B's placeholder records. canAccessPatient pins it to the caller's
+    // hospital (SUPER_ADMIN excepted).
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'REGISTRAR', 'PARAMEDIC') "
+            + "and @clinicalAuthz.canAccessPatient(authentication, #patientId)")
     public ResponseEntity<ApiResponse<PatientResponse>> resolveIdentity(
             @PathVariable UUID patientId,
             @Valid @RequestBody ResolveIdentityRequest request) {

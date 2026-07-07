@@ -32,8 +32,15 @@ class PatientIdentityServiceTest {
     private final PatientRepository patientRepository = mock(PatientRepository.class);
     private final VisitRepository visitRepository = mock(VisitRepository.class);
     private final PersonIdentityService personIdentityService = mock(PersonIdentityService.class);
+    private final com.smartTriage.smartTriage_server.module.patient.repository.PatientAllergyRepository allergyRepository =
+            mock(com.smartTriage.smartTriage_server.module.patient.repository.PatientAllergyRepository.class);
+    private final com.smartTriage.smartTriage_server.module.patient.repository.PatientChronicConditionRepository conditionRepository =
+            mock(com.smartTriage.smartTriage_server.module.patient.repository.PatientChronicConditionRepository.class);
+    private final com.smartTriage.smartTriage_server.module.clinicalsigns.repository.ClinicalSignEventRepository signRepository =
+            mock(com.smartTriage.smartTriage_server.module.clinicalsigns.repository.ClinicalSignEventRepository.class);
     private final PatientIdentityService service =
-            new PatientIdentityService(patientRepository, visitRepository, personIdentityService);
+            new PatientIdentityService(patientRepository, visitRepository, personIdentityService,
+                    allergyRepository, conditionRepository, signRepository);
 
     private Patient placeholder() {
         Patient p = new Patient();
@@ -85,6 +92,85 @@ class PatientIdentityServiceTest {
         assertThat(result.getPersonIdentity()).isSameAs(created); // card anchor attached
         assertThat(result.isUnidentified()).isTrue();             // still no name → keep chasing
         assertThat(result.getIdentifiedAt()).isNull();
+    }
+
+    // ── Merge re-pointing (the orphaned-allergy fix) ─────────────────────
+
+    private Patient identified(String first, String last, com.smartTriage.smartTriage_server.module.hospital.entity.Hospital h) {
+        Patient p = new Patient();
+        p.setId(UUID.randomUUID());
+        p.setUnidentified(false);
+        p.setFirstName(first);
+        p.setLastName(last);
+        p.setHospital(h);
+        return p;
+    }
+
+    @Test
+    void merge_repointsAllergiesConditionsSignsAndAllVisits() {
+        var hospital = new com.smartTriage.smartTriage_server.module.hospital.entity.Hospital();
+        hospital.setId(UUID.randomUUID());
+        Patient ph = placeholder();
+        ph.setHospital(hospital);
+        Patient target = identified("Diane", "M", hospital);
+        when(patientRepository.findByIdAndIsActiveTrue(ph.getId())).thenReturn(Optional.of(ph));
+        when(patientRepository.findByIdAndIsActiveTrue(target.getId())).thenReturn(Optional.of(target));
+        when(patientRepository.save(any(Patient.class))).thenAnswer(i -> i.getArgument(0));
+
+        // One visit page then drained.
+        var visit = new com.smartTriage.smartTriage_server.module.visit.entity.Visit();
+        visit.setId(UUID.randomUUID());
+        visit.setPatient(ph);
+        when(visitRepository.findByPatientIdAndIsActiveTrue(eq(ph.getId()), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(visit)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of()));
+        when(visitRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        // The anaphylaxis allergy that used to be ORPHANED.
+        var allergy = com.smartTriage.smartTriage_server.module.patient.entity.PatientAllergy.builder()
+                .patient(ph).allergenName("Penicillin").build();
+        when(allergyRepository.findAllByPatientIdIncludingRefuted(ph.getId())).thenReturn(List.of(allergy));
+        when(allergyRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        var condition = com.smartTriage.smartTriage_server.module.patient.entity.PatientChronicCondition.builder()
+                .patient(ph).build();
+        when(conditionRepository.findAllByPatientIdIncludingResolved(ph.getId())).thenReturn(List.of(condition));
+        when(conditionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        var sign = new com.smartTriage.smartTriage_server.module.clinicalsigns.entity.ClinicalSignEvent();
+        sign.setPatient(ph);
+        when(signRepository.findByPatientId(ph.getId())).thenReturn(List.of(sign));
+        when(signRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        ResolveIdentityRequest req = ResolveIdentityRequest.builder()
+                .mergeIntoPatientId(target.getId()).build();
+        Patient result = service.resolveIdentity(ph.getId(), req);
+
+        assertThat(result).isSameAs(target);
+        assertThat(visit.getPatient()).isSameAs(target);   // visit re-pointed
+        assertThat(allergy.getPatient()).isSameAs(target); // allergy FOLLOWS the person (the fix)
+        assertThat(condition.getPatient()).isSameAs(target);
+        assertThat(sign.getPatient()).isSameAs(target);
+        assertThat(ph.isActive()).isFalse();               // placeholder soft-deleted
+    }
+
+    @Test
+    void merge_conflictingPersonIdentities_failClosed() {
+        var hospital = new com.smartTriage.smartTriage_server.module.hospital.entity.Hospital();
+        hospital.setId(UUID.randomUUID());
+        Patient ph = placeholder();
+        ph.setHospital(hospital);
+        var idA = new PersonIdentity(); idA.setId(UUID.randomUUID());
+        ph.setPersonIdentity(idA);
+        Patient target = identified("Diane", "M", hospital);
+        var idB = new PersonIdentity(); idB.setId(UUID.randomUUID());
+        target.setPersonIdentity(idB);
+        when(patientRepository.findByIdAndIsActiveTrue(ph.getId())).thenReturn(Optional.of(ph));
+        when(patientRepository.findByIdAndIsActiveTrue(target.getId())).thenReturn(Optional.of(target));
+
+        ResolveIdentityRequest req = ResolveIdentityRequest.builder()
+                .mergeIntoPatientId(target.getId()).build();
+        assertThatThrownBy(() -> service.resolveIdentity(ph.getId(), req))
+                .isInstanceOf(IdentityConflictException.class);
+        assertThat(ph.isActive()).isTrue(); // nothing merged
     }
 
     @Test
