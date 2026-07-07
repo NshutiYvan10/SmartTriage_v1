@@ -393,6 +393,100 @@ public final class PdfReport {
         } catch (Exception e) { /* non-fatal */ }
     }
 
+    /**
+     * Multi-column data table for register / trend reports (one row per record or
+     * per day). The header row REPEATS on every page when the table breaks across
+     * pages; body rows zebra-stripe for scannability. {@code rightAlignFrom} marks
+     * the first column index (0-based) from which cells are right-aligned — the
+     * convention for numeric columns; pass {@code headers.length} to left-align all.
+     * A null cell renders as an em-dash. Rows beyond a caller-side cap should be
+     * truncated BEFORE calling, with a visible "showing first N" note — this method
+     * renders exactly what it is given.
+     */
+    public void dataTable(String[] headers, float[] widths, List<String[]> rows, int rightAlignFrom) {
+        if (headers == null || headers.length == 0) return;
+        try {
+            PdfPTable t = new PdfPTable(widths != null && widths.length == headers.length
+                    ? widths : uniformWidths(headers.length));
+            t.setWidthPercentage(100);
+            t.setSpacingBefore(4f);
+            t.setHeaderRows(1); // repeat the header on every page the table spans
+            for (String h : headers) {
+                PdfPCell c = new PdfPCell(new Phrase(h != null ? h.toUpperCase() : "", F_LABEL));
+                c.setBackgroundColor(BAND);
+                c.setBorder(Rectangle.BOTTOM);
+                c.setBorderColor(BRAND);
+                c.setBorderWidth(0.8f);
+                c.setPadding(4.5f);
+                t.addCell(c);
+            }
+            if (rows == null || rows.isEmpty()) {
+                PdfPCell empty = new PdfPCell(new Phrase("No records in this period.", F_META));
+                empty.setColspan(headers.length);
+                empty.setBorder(Rectangle.NO_BORDER);
+                empty.setPadding(6f);
+                t.addCell(empty);
+            } else {
+                boolean stripe = false;
+                for (String[] row : rows) {
+                    for (int i = 0; i < headers.length; i++) {
+                        String v = row != null && i < row.length && row[i] != null ? row[i] : "—";
+                        PdfPCell c = new PdfPCell(new Phrase(v, F_VALUE));
+                        c.setBackgroundColor(stripe ? PANEL : Color.WHITE);
+                        c.setBorder(Rectangle.BOTTOM);
+                        c.setBorderColor(HAIRLINE);
+                        c.setBorderWidth(0.4f);
+                        c.setPadding(4f);
+                        if (i >= rightAlignFrom) c.setHorizontalAlignment(Element.ALIGN_RIGHT);
+                        t.addCell(c);
+                    }
+                    stripe = !stripe;
+                }
+            }
+            doc.add(t);
+        } catch (Exception e) {
+            throw new IllegalStateException("PDF dataTable failed", e);
+        }
+    }
+
+    private static float[] uniformWidths(int n) {
+        float[] w = new float[n];
+        java.util.Arrays.fill(w, 1f);
+        return w;
+    }
+
+    /**
+     * Signature block for clinical handoff artifacts — one signing line per party
+     * (e.g. "Outgoing shift lead", "Incoming shift lead"). Each party gets
+     * name / signature / date-time rules to complete BY HAND on the printed copy:
+     * a generated report becomes a clinical record only when its humans sign it.
+     */
+    public void signatureBlock(String... parties) {
+        if (parties == null || parties.length == 0) return;
+        try {
+            PdfPTable t = new PdfPTable(parties.length);
+            t.setWidthPercentage(100);
+            t.setSpacingBefore(14f);
+            for (String party : parties) {
+                PdfPCell cell = new PdfPCell();
+                cell.setBorder(Rectangle.NO_BORDER);
+                cell.setPaddingRight(14f);
+                Paragraph who = new Paragraph(party, F_LABEL);
+                who.setSpacingAfter(16f);
+                cell.addElement(who);
+                for (String line : new String[]{"Name", "Signature", "Date / time"}) {
+                    Paragraph p = new Paragraph(line + ":  ______________________________", F_VALUE);
+                    p.setLeading(15f);
+                    cell.addElement(p);
+                }
+                t.addCell(cell);
+            }
+            doc.add(t);
+        } catch (Exception e) {
+            throw new IllegalStateException("PDF signatureBlock failed", e);
+        }
+    }
+
     public void paragraph(String text, Font font) {
         if (text == null || text.isBlank()) return;
         try { doc.add(new Paragraph(text, font)); }

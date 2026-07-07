@@ -1,40 +1,31 @@
+/* ═══════════════════════════════════════════════════════════════
+   Report Center — server-generated operational reports + launcher.
+
+   Every "Generate" button downloads a REAL PDF rendered by the backend from
+   authoritative queries: branded masthead, report parameters, requested-by,
+   generated-at, page numbers, data tables, and (for the shift handover) a
+   signature block. The previous page's "Save as PDF" was window.print() — a
+   screenshot of the screen — and its "census" read the client-side store;
+   both are gone. Generation endpoints are authz-gated per report, so every
+   download is attributed in the hospital audit trail.
+   ═══════════════════════════════════════════════════════════════ */
+
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  FileText, TrendingUp, Users, AlertTriangle, BarChart3, Baby, Printer,
-  ChevronRight, FlaskConical, Siren, ShieldAlert, ClipboardList, Pill, UserX,
+  FileText, BarChart3, ChevronRight, FlaskConical, Siren, ShieldAlert,
+  ClipboardList, Pill, UserX, CalendarDays, Users2, Download, Loader2,
+  ClipboardCheck, Stethoscope, AlertTriangle,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
-import { usePatientStore } from '@/store/patientStore';
 import { useAuthStore } from '@/store/authStore';
+import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
 import { canAccessPage } from '@/types/roles';
 import type { AppPage } from '@/types/roles';
-import { Badge } from '@/components/ui/Badge';
-import { TriageCategory } from '@/types';
-import { getCategoryColor } from '@/utils/tewsCalculator';
-import {
-  PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer,
-} from 'recharts';
-
-/* ── Premium tooltip (donut) ── */
-function CustomTooltip({ active, payload }: any) {
-  const { isDark, text } = useTheme();
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="rounded-xl px-4 py-3" style={{
-      background: isDark ? 'rgba(8,47,73,0.92)' : 'rgba(255,255,255,0.92)',
-      backdropFilter: 'blur(16px)',
-      border: isDark ? '1px solid rgba(2,132,199,0.22)' : '1px solid rgba(255,255,255,0.7)',
-    }}>
-      {payload.map((entry: any, i: number) => (
-        <p key={i} className="text-[11px] flex items-center gap-2 py-0.5 font-medium" style={{ color: entry.color }}>
-          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-          <span className={text.body}>{entry.name}:</span>
-          <span className={`font-bold ${text.heading}`}>{entry.value}</span>
-        </p>
-      ))}
-    </div>
-  );
-}
+import { operationalReportApi } from '@/api/reports';
+import { hospitalApi } from '@/api/hospitals';
+import type { HospitalResponse } from '@/api/types';
+import { saveBlob, ApiError } from '@/api/client';
 
 /* ── The real report surfaces this hub launches into ── */
 interface ReportLink {
@@ -57,33 +48,157 @@ const REPORT_LINKS: ReportLink[] = [
   { page: 'registrar-reports', path: '/registrar-reports', name: 'Registrar Reporting', description: 'Intake log, identity-reconciliation queue & census (CSV)', icon: UserX, iconBg: 'rgba(20,184,166,0.12)', iconColor: 'text-teal-500' },
 ];
 
+const today = () => new Date().toISOString().slice(0, 10);
+const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+
+type ReportKey = 'daily' | 'shift' | 'period' | 'quality' | 'mine';
+
 export function ReportsView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const navigate = useNavigate();
-  const patients = usePatientStore((state) => state.patients);
-  const role = useAuthStore((s) => s.user?.role);
+  const user = useAuthStore((s) => s.user);
+  const role = user?.role;
+  const access = useCanSeeAllZones();
 
-  const stats = {
-    totalPatients: patients.length,
-    averageTEWS: patients.filter((p) => p.tewsScore !== undefined).length > 0
-      ? (patients.reduce((sum, p) => sum + (p.tewsScore || 0), 0) /
-        patients.filter((p) => p.tewsScore !== undefined).length).toFixed(1)
-      : '0',
-    criticalCases: patients.filter((p) => p.category === 'RED').length,
-    pediatricCases: patients.filter((p) => p.isPediatric).length,
-    categoryBreakdown: {
-      RED: patients.filter((p) => p.category === 'RED').length,
-      ORANGE: patients.filter((p) => p.category === 'ORANGE').length,
-      YELLOW: patients.filter((p) => p.category === 'YELLOW').length,
-      GREEN: patients.filter((p) => p.category === 'GREEN').length,
-      BLUE: patients.filter((p) => p.category === 'BLUE').length,
-    },
+  /* ── SUPER_ADMIN is a national role — let it generate for any hospital
+     (own hospitalId is the phantom system hospital). Everyone else is pinned. ── */
+  const isSuperAdmin = role === 'SUPER_ADMIN';
+  const [hospitals, setHospitals] = useState<HospitalResponse[]>([]);
+  const [selectedHospitalId, setSelectedHospitalId] = useState('');
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    hospitalApi.getAll(0, 50).then((page) => {
+      const rows = page.content || [];
+      setHospitals(rows);
+      const firstReal = rows.find((h) => h.id !== user?.hospitalId) || rows[0];
+      if (firstReal) setSelectedHospitalId((cur) => cur || firstReal.id);
+    }).catch((e) => console.error('[Reports] hospitals load failed:', e));
+  }, [isSuperAdmin, user?.hospitalId]);
+  const hospitalId = (isSuperAdmin ? selectedHospitalId : user?.hospitalId) || user?.hospitalId || '';
+
+  /* ── Parameters per report ── */
+  const [dailyDate, setDailyDate] = useState(today());
+  const [shiftDate, setShiftDate] = useState(today());
+  const [shiftPeriod, setShiftPeriod] = useState<'DAY' | 'NIGHT'>('DAY');
+  const [periodFrom, setPeriodFrom] = useState(daysAgo(30));
+  const [periodTo, setPeriodTo] = useState(today());
+  const [qualityFrom, setQualityFrom] = useState(daysAgo(30));
+  const [qualityTo, setQualityTo] = useState(today());
+  const [mineFrom, setMineFrom] = useState(daysAgo(30));
+  const [mineTo, setMineTo] = useState(today());
+
+  const [busy, setBusy] = useState<ReportKey | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = async (key: ReportKey, fn: () => Promise<{ blob: Blob; filename: string }>) => {
+    setBusy(key);
+    setError(null);
+    try {
+      const { blob, filename } = await fn();
+      saveBlob(blob, filename);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Report generation failed');
+      console.error('[Reports] generation failed:', err);
+    } finally {
+      setBusy(null);
+    }
   };
 
-  const pieData = (['RED', 'ORANGE', 'YELLOW', 'GREEN', 'BLUE'] as TriageCategory[])
-    .map((cat) => ({ name: cat, value: stats.categoryBreakdown[cat], color: getCategoryColor(cat) }))
-    .filter((d) => d.value > 0);
+  /* ── Role → catalog visibility (mirrors the endpoint authz) ── */
+  const opsLeadership = access.canSeeAllZones; // admin / CN / shift lead / super admin
+  const governance = opsLeadership || role === 'READ_ONLY';
+  const clinician = role === 'DOCTOR' || role === 'NURSE' || role === 'HOSPITAL_ADMIN' || role === 'SUPER_ADMIN';
 
+  interface CatalogEntry {
+    key: ReportKey;
+    show: boolean;
+    icon: typeof FileText;
+    iconBg: string;
+    iconColor: string;
+    name: string;
+    description: string;
+    params: React.ReactNode;
+    generate: () => void;
+  }
+
+  const dateInput = (value: string, onChange: (v: string) => void, title: string) => (
+    <input type="date" value={value} onChange={(e) => onChange(e.target.value)} title={title}
+      style={glassInner} className={`px-2.5 py-1.5 text-[11px] rounded-lg focus:outline-none ${text.body}`} />
+  );
+
+  const catalog: CatalogEntry[] = useMemo(() => [
+    {
+      key: 'daily', show: opsLeadership, icon: CalendarDays,
+      iconBg: 'rgba(6,182,212,0.12)', iconColor: 'text-cyan-600',
+      name: 'Daily ED Activity',
+      description: 'Arrivals, triage mix, dispositions, waits, module activity and census for one day.',
+      params: dateInput(dailyDate, setDailyDate, 'Report date'),
+      generate: () => run('daily', () => operationalReportApi.dailyActivity(hospitalId, dailyDate)),
+    },
+    {
+      key: 'shift', show: opsLeadership, icon: ClipboardCheck,
+      iconBg: 'rgba(99,102,241,0.12)', iconColor: 'text-indigo-500',
+      name: 'Shift Handover Summary',
+      description: 'Live census, open clinical work, shift-window activity, roster + signature block.',
+      params: (
+        <div className="flex items-center gap-1.5">
+          {dateInput(shiftDate, setShiftDate, 'Shift date')}
+          <select value={shiftPeriod} onChange={(e) => setShiftPeriod(e.target.value as 'DAY' | 'NIGHT')}
+            style={glassInner} className={`px-2 py-1.5 text-[11px] font-bold rounded-lg focus:outline-none ${text.body}`}>
+            <option value="DAY">DAY</option>
+            <option value="NIGHT">NIGHT</option>
+          </select>
+        </div>
+      ),
+      generate: () => run('shift', () => operationalReportApi.shiftHandoverSummary(hospitalId, shiftDate, shiftPeriod)),
+    },
+    {
+      key: 'period', show: governance, icon: BarChart3,
+      iconBg: 'rgba(34,197,94,0.12)', iconColor: 'text-emerald-600',
+      name: 'Period Activity (trend)',
+      description: 'Totals + per-day trend table over a date range (max 92 days).',
+      params: (
+        <div className="flex items-center gap-1.5">
+          {dateInput(periodFrom, setPeriodFrom, 'From')}
+          <span className={`text-[10px] ${text.muted}`}>→</span>
+          {dateInput(periodTo, setPeriodTo, 'To')}
+        </div>
+      ),
+      generate: () => run('period', () => operationalReportApi.periodActivity(hospitalId, periodFrom, periodTo)),
+    },
+    {
+      key: 'quality', show: governance, icon: Users2,
+      iconBg: 'rgba(244,63,94,0.10)', iconColor: 'text-rose-500',
+      name: 'Quality Metrics',
+      description: 'Daily KPI snapshots (waits, door-to-triage, mortality, LWBS, re-triages) over a period.',
+      params: (
+        <div className="flex items-center gap-1.5">
+          {dateInput(qualityFrom, setQualityFrom, 'From')}
+          <span className={`text-[10px] ${text.muted}`}>→</span>
+          {dateInput(qualityTo, setQualityTo, 'To')}
+        </div>
+      ),
+      generate: () => run('quality', () => operationalReportApi.qualityMetrics(hospitalId, qualityFrom, qualityTo)),
+    },
+    {
+      key: 'mine', show: clinician, icon: Stethoscope,
+      iconBg: 'rgba(168,85,247,0.12)', iconColor: 'text-purple-500',
+      name: 'My Clinical Activity',
+      description: 'Your own workload: patients attended, notes authored, medications prescribed.',
+      params: (
+        <div className="flex items-center gap-1.5">
+          {dateInput(mineFrom, setMineFrom, 'From')}
+          <span className={`text-[10px] ${text.muted}`}>→</span>
+          {dateInput(mineTo, setMineTo, 'To')}
+        </div>
+      ),
+      generate: () => run('mine', () => operationalReportApi.myActivity(mineFrom, mineTo)),
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [opsLeadership, governance, clinician, hospitalId, dailyDate, shiftDate, shiftPeriod,
+      periodFrom, periodTo, qualityFrom, qualityTo, mineFrom, mineTo, busy, glassInner, text]);
+
+  const visible = catalog.filter((c) => c.show);
   const links = REPORT_LINKS.filter((l) => role != null && canAccessPage(role, l.page));
 
   return (
@@ -93,109 +208,96 @@ export function ReportsView() {
         {/* ── Header ── */}
         <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center shadow-lg">
-                  <BarChart3 className="w-5 h-5 text-cyan-300" />
+                  <FileText className="w-5 h-5 text-cyan-300" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-white tracking-wide">Reports &amp; Analytics</h1>
-                  <p className="text-white/50 text-xs font-medium">A live snapshot plus a launcher to every reporting surface you can access</p>
+                  <h1 className="text-lg font-bold text-white tracking-wide">Report Center</h1>
+                  <p className="text-white/50 text-xs font-medium">
+                    Server-generated PDF reports from live clinical data — every generation is audit-logged
+                  </p>
                 </div>
               </div>
-              <button
-                onClick={() => window.print()}
-                title="Opens the print dialog — choose 'Save as PDF' as the destination for a clean report."
-                className="no-print inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-slate-800 bg-white hover:bg-gray-50 rounded-xl transition-all shadow-lg hover:-translate-y-0.5"
-              >
-                <Printer className="w-3.5 h-3.5" /> Save as PDF
-              </button>
+              {isSuperAdmin && hospitals.length > 0 && (
+                <select
+                  value={selectedHospitalId}
+                  onChange={(e) => setSelectedHospitalId(e.target.value)}
+                  title="Which hospital to report on (national role)"
+                  className="px-3 py-2 rounded-xl text-xs font-bold bg-white/10 text-white border border-white/15 focus:outline-none [&>option]:text-slate-800"
+                >
+                  {hospitals.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+                </select>
+              )}
             </div>
           </div>
         </div>
 
-        {/* ── Live census snapshot (real, from the patient store) ── */}
-        <div className="rounded-2xl p-5 animate-fade-up" style={{ ...glassCard, animationDelay: '0.08s' } as any}>
-          <h3 className={`text-base font-extrabold ${text.heading} tracking-tight mb-0.5`}>Current census</h3>
-          <p className={`text-xs ${text.body} font-medium mb-4`}>Live, from the active patient list</p>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              { label: 'Total Patients', value: stats.totalPatients, sublabel: 'In the system now', icon: Users, iconBg: 'rgba(6,182,212,0.12)', iconColor: 'text-cyan-600' },
-              { label: 'Average TEWS', value: stats.averageTEWS, sublabel: 'Severity index', icon: TrendingUp, iconBg: 'rgba(99,102,241,0.12)', iconColor: 'text-indigo-500' },
-              { label: 'Critical Cases', value: stats.criticalCases, sublabel: 'RED category', icon: AlertTriangle, iconBg: 'rgba(239,68,68,0.1)', iconColor: 'text-red-500' },
-              { label: 'Pediatric Cases', value: stats.pediatricCases, sublabel: 'Age < 15 years', icon: Baby, iconBg: 'rgba(236,72,153,0.1)', iconColor: 'text-pink-500' },
-            ].map((stat) => {
-              const Icon = stat.icon;
-              return (
-                <div key={stat.label} className="flex items-center gap-3 p-3 rounded-xl" style={glassInner}>
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: stat.iconBg }}>
-                    <Icon className={`w-[18px] h-[18px] ${stat.iconColor}`} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className={`text-lg font-extrabold ${text.heading} leading-none`}>{stat.value}</div>
-                    <div className={`text-[11px] ${text.muted} font-medium mt-0.5`}>{stat.sublabel}</div>
-                  </div>
-                </div>
-              );
-            })}
+        {error && (
+          <div className="rounded-2xl px-4 py-3 flex items-start gap-2 bg-red-500/10 border border-red-500/20 animate-fade-up">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+            <p className="text-[12px] font-semibold text-red-500">{error}</p>
           </div>
-        </div>
+        )}
 
-        {/* ── Triage distribution (real) ── */}
-        <div className="rounded-2xl p-5 animate-fade-up" style={{ ...glassCard, animationDelay: '0.15s' } as any}>
-          <div className="flex items-center gap-3 mb-1">
+        {/* ── Generate a report ── */}
+        <div className="rounded-2xl p-5 animate-fade-up" style={glassCard}>
+          <div className="flex items-center gap-3 mb-4">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'rgba(6,182,212,0.12)' }}>
-              <BarChart3 className="w-[18px] h-[18px] text-cyan-600" />
+              <Download className="w-[18px] h-[18px] text-cyan-600" />
             </div>
             <div>
-              <h2 className={`text-base font-extrabold ${text.heading} tracking-tight`}>Triage Distribution</h2>
-              <p className={`text-xs ${text.body} font-medium mt-0.5`}>Current breakdown by severity</p>
+              <h2 className={`text-base font-extrabold ${text.heading} tracking-tight`}>Generate a report</h2>
+              <p className={`text-xs ${text.body} font-medium mt-0.5`}>
+                Pick parameters and download — the PDF carries the parameters, who requested it, and when
+              </p>
             </div>
           </div>
-          {pieData.length === 0 ? (
-            <p className={`text-sm ${text.muted} py-8 text-center`}>No patients in the system yet.</p>
+          {visible.length === 0 ? (
+            <p className={`text-sm ${text.muted} py-6 text-center`}>Your role has no generatable reports.</p>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">
-              <div style={{ height: 200 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={4} dataKey="value" stroke="none">
-                      {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                    </Pie>
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend iconType="circle" iconSize={8}
-                      formatter={(value: string) => <span className={`text-[11px] font-medium ml-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{value}</span>} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="space-y-2.5">
-                {(['RED', 'ORANGE', 'YELLOW', 'GREEN'] as TriageCategory[]).map((category) => {
-                  const count = stats.categoryBreakdown[category];
-                  const percentage = stats.totalPatients > 0 ? (count / stats.totalPatients) * 100 : 0;
-                  return (
-                    <div key={category} className="flex items-center gap-2.5">
-                      <Badge category={category} size="sm" />
-                      <div className={`flex-1 rounded-full h-1.5 overflow-hidden ${isDark ? 'bg-slate-700/40' : 'bg-gray-100/60'}`}>
-                        <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${percentage}%`, backgroundColor: getCategoryColor(category) }} />
+            <div className="space-y-2.5">
+              {visible.map((c) => {
+                const Icon = c.icon;
+                return (
+                  <div key={c.key} className="flex items-center justify-between gap-3 p-3.5 rounded-xl flex-wrap" style={glassInner}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: c.iconBg }}>
+                        <Icon className={`w-[18px] h-[18px] ${c.iconColor}`} />
                       </div>
-                      <span className={`text-[11px] font-bold w-10 text-right tabular-nums ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{percentage.toFixed(0)}%</span>
+                      <div className="min-w-0">
+                        <div className={`text-[13px] font-bold ${text.heading}`}>{c.name}</div>
+                        <div className={`text-[11px] ${text.muted} font-medium`}>{c.description}</div>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {c.params}
+                      <button
+                        onClick={c.generate}
+                        disabled={busy !== null}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-[11px] font-bold rounded-xl bg-cyan-600 text-white hover:bg-cyan-700 transition-colors disabled:opacity-50 shadow-md"
+                      >
+                        {busy === c.key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                        PDF
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* ── Reports & exports hub (launcher to the real surfaces) ── */}
-        <div className="rounded-2xl p-5 animate-fade-up" style={{ ...glassCard, animationDelay: '0.2s' } as any}>
+        {/* ── Reports & exports hub (launcher to the specialised surfaces) ── */}
+        <div className="rounded-2xl p-5 animate-fade-up" style={{ ...glassCard, animationDelay: '0.1s' } as any}>
           <div className="flex items-center gap-3 mb-5">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'rgba(6,182,212,0.12)' }}>
               <FileText className="w-[18px] h-[18px] text-cyan-600" />
             </div>
             <div>
-              <h2 className={`text-base font-extrabold ${text.heading} tracking-tight`}>Reports &amp; exports</h2>
-              <p className={`text-xs ${text.body} font-medium mt-0.5`}>Open a reporting surface — each has its own live data, PDF, and/or CSV export</p>
+              <h2 className={`text-base font-extrabold ${text.heading} tracking-tight`}>Specialised reporting surfaces</h2>
+              <p className={`text-xs ${text.body} font-medium mt-0.5`}>Each has its own live register, filters, and PDF/CSV exports</p>
             </div>
           </div>
           {links.length === 0 ? (
@@ -227,7 +329,8 @@ export function ReportsView() {
             </div>
           )}
           <p className={`text-[11px] ${text.muted} mt-4`}>
-            Per-visit SBAR handover PDFs are available on each patient's chart (Handover tab).
+            Per-visit SBAR handover PDFs are on each patient's chart (Handover tab). Isolation, sepsis,
+            hypoglycemia and fast-track case registers live under Clinical Tools.
           </p>
         </div>
 
