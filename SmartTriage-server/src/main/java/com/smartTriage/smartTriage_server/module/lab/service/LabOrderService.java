@@ -979,6 +979,14 @@ public class LabOrderService {
         order.setVerificationOverrideReason(request.getReason());
         order.setVerificationOverrideByName(overrider);
         order.setVerificationOverrideAt(now);
+        // V110 — first-class identity: user id + role held at bypass time (name alone is
+        // ambiguous for incident forensics). Null-safe for non-user contexts.
+        User overridingUser = resolveCurrentUser();
+        if (overridingUser != null) {
+            order.setVerificationOverrideByUserId(overridingUser.getId());
+            order.setVerificationOverrideByRole(
+                    overridingUser.getRole() != null ? overridingUser.getRole().name() : null);
+        }
 
         log.warn("Verification BYPASSED for order {} by {} — reason: {}",
                 order.getOrderNumber(), overrider, request.getReason());

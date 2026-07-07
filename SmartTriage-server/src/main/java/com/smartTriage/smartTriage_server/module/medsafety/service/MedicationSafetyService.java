@@ -136,7 +136,8 @@ public class MedicationSafetyService {
             throw new ClinicalBusinessException("Override reason is required for safety check override");
         }
 
-        String actorName = formatUserName(resolveCurrentUser());
+        User actor = resolveCurrentUser();
+        String actorName = formatUserName(actor);
         if (actorName == null) {
             // Endpoint is authenticated (DOCTOR/SUPER_ADMIN); a missing principal means we
             // must not attribute the override to nobody — fail closed rather than record a lie.
@@ -144,6 +145,9 @@ public class MedicationSafetyService {
         }
 
         check.setOverriddenBy(actorName);
+        // V110 — first-class identity: the user id + the role held at override time.
+        check.setOverriddenByUserId(actor.getId());
+        check.setOverriddenByRole(actor.getRole() != null ? actor.getRole().name() : null);
         check.setOverrideReason(reason);
         check.setOverriddenAt(Instant.now());
 

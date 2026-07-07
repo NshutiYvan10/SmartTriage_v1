@@ -190,7 +190,7 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
           badge: unackAlertCount > 0 ? String(unackAlertCount) : undefined,
           badgeColor: criticalUnackCount > 0 ? 'bg-rose-500 animate-pulse' : 'bg-amber-500',
         },
-        { id: 'med-safety/overrides', label: 'Override Audit', icon: Pill, pageId: 'med-safety-overrides' as AppPage },
+        { id: 'med-safety/overrides', label: 'Med-Safety Reviews', icon: Pill, pageId: 'med-safety-overrides' as AppPage },
         { id: 'overrides', label: 'Override Register', icon: ShieldAlert, pageId: 'override-register' as AppPage },
         { id: 'quality', label: 'Quality Metrics', icon: BarChart3, pageId: 'quality' as AppPage },
         { id: 'audit-trail', label: 'Audit Trail', icon: ScrollText, pageId: 'audit-trail' as AppPage },

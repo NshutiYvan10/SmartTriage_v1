@@ -73,6 +73,8 @@ public class OverrideRegisterService {
             Visit v = c.getVisit();
             out.add(base("MED_SAFETY_CHECK", "Medication", "Overrode medication safety check", v)
                     .actorName(c.getOverriddenBy())
+                    .actorRole(c.getOverriddenByRole())
+                    .actorUserId(c.getOverriddenByUserId())
                     .occurredAt(c.getOverriddenAt())
                     .justification(c.getOverrideReason())
                     .detail(joinNonBlank(" • ", c.getDrugName(),
@@ -87,6 +89,8 @@ public class OverrideRegisterService {
             Visit v = o.getVisit();
             out.add(base("LAB_VERIFICATION_BYPASS", "Lab", "Released lab result without senior verification", v)
                     .actorName(o.getVerificationOverrideByName())
+                    .actorRole(o.getVerificationOverrideByRole())
+                    .actorUserId(o.getVerificationOverrideByUserId())
                     .occurredAt(o.getVerificationOverrideAt())
                     .justification(o.getVerificationOverrideReason())
                     .detail(joinNonBlank(" • ", o.getTestName(), "Order " + o.getOrderNumber()))
@@ -99,8 +103,11 @@ public class OverrideRegisterService {
         for (MedicationDose d : doseRepository.findOverriddenForHospital(hospitalId, rangeFrom, rangeTo)) {
             Visit v = d.getVisit();
             String drug = d.getMedication() != null ? d.getMedication().getDrugName() : null;
+            var giver = d.getGivenBy(); // User FK — id + role held now (best available)
             out.add(base("DOSE_ADMINISTRATION", "Medication", "Administered dose despite a safety gate", v)
                     .actorName(d.getGivenByName())
+                    .actorRole(giver != null && giver.getRole() != null ? giver.getRole().name() : null)
+                    .actorUserId(giver != null ? giver.getId() : null)
                     .occurredAt(d.getGivenAt())
                     .justification(d.getOverrideJustification())
                     .detail(drug)
@@ -111,9 +118,15 @@ public class OverrideRegisterService {
         // ── Prescription-time overrides (one row can carry up to three) ──
         for (MedicationAdministration m : medicationRepository.findOverridesForHospital(hospitalId, rangeFrom, rangeTo)) {
             Visit v = m.getVisit();
+            var prescriber = m.getPrescribedBy(); // User FK — id + role
+            String prescriberRole = prescriber != null && prescriber.getRole() != null
+                    ? prescriber.getRole().name() : null;
+            UUID prescriberId = prescriber != null ? prescriber.getId() : null;
             if (m.isEmergencyOverride()) {
                 out.add(base("EMERGENCY_APPROVAL", "Medication", "Skipped high-alert approval (emergency)", v)
                         .actorName(m.getPrescribedByName())
+                        .actorRole(prescriberRole)
+                        .actorUserId(prescriberId)
                         .occurredAt(m.getPrescribedAt())
                         .justification(m.getEmergencyJustification())
                         .detail(m.getDrugName())
@@ -124,6 +137,8 @@ public class OverrideRegisterService {
             if (Boolean.TRUE.equals(m.getPrescribedDespiteAllergy())) {
                 out.add(base("PRESCRIBE_ALLERGY", "Medication", "Prescribed despite documented allergy", v)
                         .actorName(m.getPrescribedByName())
+                        .actorRole(prescriberRole)
+                        .actorUserId(prescriberId)
                         .occurredAt(m.getAllergyOverrideAcknowledgedAt() != null
                                 ? m.getAllergyOverrideAcknowledgedAt() : m.getPrescribedAt())
                         .justification(m.getAllergyOverrideReason())
@@ -135,6 +150,8 @@ public class OverrideRegisterService {
             if (Boolean.TRUE.equals(m.getPrescribedDespiteInteraction())) {
                 out.add(base("PRESCRIBE_INTERACTION", "Medication", "Prescribed despite known interaction", v)
                         .actorName(m.getPrescribedByName())
+                        .actorRole(prescriberRole)
+                        .actorUserId(prescriberId)
                         .occurredAt(m.getInteractionOverrideAcknowledgedAt() != null
                                 ? m.getInteractionOverrideAcknowledgedAt() : m.getPrescribedAt())
                         .justification(m.getInteractionOverrideReason())
@@ -151,6 +168,7 @@ public class OverrideRegisterService {
                     .overrideType("BREAK_THE_GLASS").category("Privacy")
                     .label("Break-the-glass record access")
                     .actorName(e.getActorName()).actorRole(e.getActorRole())
+                    .actorUserId(e.getActorUserId())
                     .maskedSubject(maskNationalId(e.getPersonIdentity() != null
                             ? e.getPersonIdentity().getNationalId() : null))
                     .occurredAt(e.getAccessedAt())

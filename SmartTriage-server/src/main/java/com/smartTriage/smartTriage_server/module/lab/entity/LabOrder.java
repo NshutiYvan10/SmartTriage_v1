@@ -221,6 +221,14 @@ public class LabOrder extends BaseEntity {
     @Column(name = "verification_override_by_name", length = 255)
     private String verificationOverrideByName;
 
+    /** Authenticated user id of the bypassing technician (V110). */
+    @Column(name = "verification_override_by_user_id")
+    private java.util.UUID verificationOverrideByUserId;
+
+    /** Role held at the time of the bypass (V110). */
+    @Column(name = "verification_override_by_role", length = 30)
+    private String verificationOverrideByRole;
+
     @Column(name = "verification_override_at")
     private Instant verificationOverrideAt;
 

@@ -34,7 +34,8 @@ public class OverrideRecordResponse {
 
     // WHO
     private String actorName;
-    private String actorRole; // null when the source only captured a free-text name
+    private String actorRole;   // role held AT THE TIME of the override
+    private UUID actorUserId;   // forensic linkage (audit_logs.actor_user_id) — null on legacy rows
 
     // ON WHOM
     private String patientName;   // null for break-the-glass (privacy) — see maskedSubject

@@ -161,6 +161,37 @@ class OverrideRegisterServiceTest {
         assertThat(filtered.get(0).getOverrideType()).isEqualTo("MED_SAFETY_CHECK");
     }
 
+    @Test
+    @DisplayName("V110 — actor identity flows onto every row: stamped columns (safety check) and User FKs (prescriber)")
+    void actorIdentityFlows() {
+        UUID doctorId = UUID.randomUUID();
+        com.smartTriage.smartTriage_server.module.user.entity.User doc =
+                new com.smartTriage.smartTriage_server.module.user.entity.User();
+        doc.setId(doctorId);
+        doc.setRole(com.smartTriage.smartTriage_server.common.enums.Role.DOCTOR);
+
+        MedicationSafetyCheck c = MedicationSafetyCheck.builder()
+                .visit(visit()).drugName("X").overriddenBy("Dr C").overrideReason("r").overriddenAt(Instant.now())
+                .overriddenByUserId(doctorId).overriddenByRole("DOCTOR")
+                .build();
+        c.setId(UUID.randomUUID());
+        when(safetyCheckRepo.findOverriddenForHospital(any(), any(), any())).thenReturn(List.of(c));
+
+        MedicationAdministration m = MedicationAdministration.builder()
+                .visit(visit()).drugName("Amoxicillin").prescribedByName("Dr A").prescribedAt(Instant.now())
+                .prescribedBy(doc)
+                .prescribedDespiteAllergy(true).allergyOverrideReason("prior tolerance").allergyOverrideMatches("penicillin")
+                .build();
+        m.setId(UUID.randomUUID());
+        when(medicationRepo.findOverridesForHospital(any(), any(), any())).thenReturn(List.of(m));
+
+        Map<String, OverrideRecordResponse> byType = index(service.getOverrides(hospitalId, null, null, null, null));
+        assertThat(byType.get("MED_SAFETY_CHECK").getActorRole()).isEqualTo("DOCTOR");
+        assertThat(byType.get("MED_SAFETY_CHECK").getActorUserId()).isEqualTo(doctorId);
+        assertThat(byType.get("PRESCRIBE_ALLERGY").getActorRole()).isEqualTo("DOCTOR");
+        assertThat(byType.get("PRESCRIBE_ALLERGY").getActorUserId()).isEqualTo(doctorId);
+    }
+
     private Map<String, OverrideRecordResponse> index(List<OverrideRecordResponse> rows) {
         java.util.HashMap<String, OverrideRecordResponse> m = new java.util.HashMap<>();
         for (OverrideRecordResponse r : rows) m.put(r.getOverrideType(), r);

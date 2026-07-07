@@ -100,6 +100,14 @@ public class MedicationSafetyCheck extends BaseEntity {
     @Column(name = "overridden_by", length = 255)
     private String overriddenBy;
 
+    /** Authenticated user id of the overriding clinician (V110 — names are ambiguous). */
+    @Column(name = "overridden_by_user_id")
+    private java.util.UUID overriddenByUserId;
+
+    /** Role held AT THE TIME of the override (V110 — roles change; the record must remember). */
+    @Column(name = "overridden_by_role", length = 30)
+    private String overriddenByRole;
+
     /** Documented reason for the override */
     @Column(name = "override_reason", columnDefinition = "TEXT")
     private String overrideReason;

@@ -10,7 +10,8 @@ export interface OverrideRecord {
   category: string;     // Medication | Lab | Privacy
   label: string;
   actorName: string | null;
-  actorRole: string | null;
+  actorRole: string | null;   // role held at the time of the override
+  actorUserId: string | null; // forensic linkage to audit_logs.actorUserId
   patientName: string | null;
   visitNumber: string | null;
   visitId: string | null;
