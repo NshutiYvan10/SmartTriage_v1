@@ -22,6 +22,17 @@ export interface MohReport {
   icuAdmissionCount: number;
   pediatricVisitCount: number;
   malariaPositiveCount: number;
+  // Module indicators + IDSR section (V111) — populated by MohIndicatorQueries.
+  sepsisScreenedCount?: number | null;
+  isolationActivatedCount?: number | null;
+  topDiagnoses?: string | null;
+  topChiefComplaints?: string | null;
+  transferCount?: number | null;
+  leftWithoutBeingSeenCount?: number | null;
+  averageLengthOfStayMinutes?: number | null;
+  notifiableDiseaseCount?: number | null;
+  notifiableDiseaseBreakdown?: string | null;
+  publicHealthNotifiedCount?: number | null;
   reportDataJson: string | null;
 }
 
