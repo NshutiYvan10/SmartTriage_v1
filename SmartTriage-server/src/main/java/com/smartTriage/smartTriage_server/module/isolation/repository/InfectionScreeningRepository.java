@@ -35,6 +35,13 @@ public interface InfectionScreeningRepository extends JpaRepository<InfectionScr
     Optional<UUID> findVisitIdById(@Param("id") UUID id);
 
     /**
+     * Any active screening on file for the visit? Used by the front-door
+     * ISOLATION_SCREENING_REQUIRED prompt — once a human (or the auto path) has
+     * screened, their judgement stands and the prompt must not re-fire.
+     */
+    boolean existsByVisitIdAndIsActiveTrue(UUID visitId);
+
+    /**
      * Open isolations for a visit — isolation required and not yet ended. Used to
      * supersede/close a prior active isolation when a lower-risk re-screen clears it,
      * so a single visit never carries two conflicting active precautions.

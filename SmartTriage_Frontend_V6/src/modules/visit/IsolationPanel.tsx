@@ -60,6 +60,93 @@ function recheckLabel(dueIso: string | null): { text: string; overdue: boolean }
   return { text: `place within ${mins}m`, overdue: false };
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   IsolationPrecautionBanner — page-level staff-safety signage.
+
+   Rendered ABOVE the tab bar on the patient chart so an active precaution
+   (AIRBORNE / DROPLET / CONTACT / STRICT / PROTECTIVE) is visible from EVERY
+   tab — previously it only existed inside the Isolation tab, so a doctor on
+   Medications had no idea the patient was airborne-isolated. Shows the
+   precaution, suspected condition, required PPE, and the room (or the
+   pulsing placement clock when the patient is NOT yet in one). Renders
+   nothing when the visit has no open isolation.
+   ═══════════════════════════════════════════════════════════════ */
+export function IsolationPrecautionBanner({ visitId, onOpen }: { visitId: string; onOpen?: () => void }) {
+  const hospitalId = useAuthStore((s) => s.user?.hospitalId) || '';
+  const wsGen = useWebSocketGeneration();
+  const [active, setActive] = useState<InfectionScreening[]>([]);
+  const [, setTick] = useState(0);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await isolationApi.getForVisit(visitId);
+      setActive((Array.isArray(data) ? data : []).filter((s) => s.isolationType && !s.isolationEndedAt));
+    } catch {
+      // Banner is best-effort signage — the Isolation tab surfaces load errors.
+      setActive([]);
+    }
+  }, [visitId]);
+
+  useEffect(() => { load(); }, [load]);
+  // Every isolation mutation (screen / room / clear / notify) publishes a hospital
+  // isolation event — refetch on ours so the banner tracks the tab's actions live.
+  useEffect(() => {
+    if (!hospitalId) return;
+    const unsub = subscribeToIsolation(hospitalId, (event: { visitId?: string }) => {
+      if (event?.visitId === visitId) load();
+    });
+    return () => unsub();
+  }, [hospitalId, visitId, load, wsGen]);
+  // Keep the placement countdown moving.
+  useEffect(() => {
+    const t = setInterval(() => setTick((v) => v + 1), 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  if (active.length === 0) return null;
+  const s = active[0]; // service supersedes prior isolations — at most one open per visit
+  const iso = ISO_CONFIG[String(s.isolationType)] || ISO_FALLBACK;
+  const place = !s.isolationRoomAssigned ? recheckLabel(s.placementDueAt) : null;
+  const ppe = PPE_FIELDS.filter((p) => s[p.key]).map((p) => p.label);
+
+  return (
+    <div className={`rounded-2xl px-4 py-3 ${iso.bg} border border-red-500/25 flex items-center gap-3 flex-wrap animate-fade-up`}>
+      <Biohazard className={`w-5 h-5 shrink-0 ${iso.color}`} />
+      <span className={`text-xs font-black uppercase tracking-wide ${iso.color}`}>{iso.label} ISOLATION</span>
+      {s.suspectedCondition && (
+        <span className="text-[11px] font-semibold text-red-500">{s.suspectedCondition}</span>
+      )}
+      {s.notifiableDisease && (
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-fuchsia-500/15 text-fuchsia-400 inline-flex items-center gap-1">
+          <Megaphone className="w-3 h-3" /> NOTIFIABLE
+        </span>
+      )}
+      {ppe.length > 0 && (
+        <span className={`text-[10px] font-bold ${iso.color}`}>PPE: {ppe.join(' · ')}</span>
+      )}
+      <span className="ml-auto inline-flex items-center gap-2">
+        {s.isolationRoomAssigned ? (
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-500 inline-flex items-center gap-1">
+            <BedDouble className="w-3 h-3" /> Room {s.isolationRoomAssigned}
+          </span>
+        ) : place ? (
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg inline-flex items-center gap-1 ${place.overdue ? 'bg-red-600/20 text-red-600 animate-pulse' : 'bg-amber-500/15 text-amber-500'}`}>
+            <Timer className="w-3 h-3" /> {place.text}
+          </span>
+        ) : (
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-500/15 text-amber-500">NO ROOM ASSIGNED</span>
+        )}
+        {onOpen && (
+          <button onClick={onOpen}
+            className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-red-500/15 text-red-500 hover:bg-red-500/25 transition-colors">
+            Manage
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
 interface IsolationPanelProps {
   visitId: string;
   onChanged?: () => void;

@@ -222,6 +222,16 @@ public enum AlertType {
     ISOLATION_REQUIRED(AlertCategory.CLINICAL, true),
     ISOLATION_PLACEMENT_OVERDUE(AlertCategory.CLINICAL, true),
     NOTIFIABLE_DISEASE(AlertCategory.CLINICAL, true),
+    /**
+     * Front-door prompt: triage found infection suspicion (measured fever, or an
+     * infectious-sounding presenting complaint) but the structured red flags alone
+     * don't amount to a precaution, and NO infection screening exists for the visit —
+     * a human must run one. Deliberately NOT time-critical: it is a workflow nudge at
+     * MEDIUM severity; the dangerous structured combinations (purpuric rash, fever +
+     * haemorrhagic symptoms, paediatric infectious diarrhoea) auto-file a REAL
+     * screening with CRITICAL/HIGH ISOLATION_REQUIRED paging instead.
+     */
+    ISOLATION_SCREENING_REQUIRED(AlertCategory.CLINICAL, false),
 
     /**
      * Clinical-pathway protocol execution.

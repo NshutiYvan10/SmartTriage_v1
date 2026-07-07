@@ -12,7 +12,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useBedStore } from '@/store/bedStore';
-import { subscribeToBedChanges } from '@/api/websocket';
+import { subscribeToBedChanges, subscribeToIsolation } from '@/api/websocket';
+import { isolationApi, type InfectionScreening } from '@/api/isolation';
 import type { BedResponse, EdZone } from '@/api/types';
 import { useTheme } from '@/hooks/useTheme';
 import type { ThemeStyles } from '@/hooks/useTheme';
@@ -67,6 +68,29 @@ export function BedGridView({ initialZone = 'RESUS' }: BedGridViewProps) {
 
   const snap = zoneSnapshots.get(zone);
   const beds = snap?.beds ?? [];
+
+  // Infection-control overlay: visitId → active isolation for the selected zone,
+  // so an isolated occupant is flagged (biohazard + precaution) ON the bed tile —
+  // the board the charge nurse actually stares at. Zone-scoped call, same authz
+  // as the bed data itself. Best-effort: a failure just hides the chips.
+  const [isolationByVisit, setIsolationByVisit] = useState<Map<string, InfectionScreening>>(new Map());
+  const refreshIsolations = useCallback(async () => {
+    if (!hospitalId || !coveredZones.includes(zone)) return;
+    try {
+      const rows = await isolationApi.getActiveIsolations(hospitalId, zone);
+      const map = new Map<string, InfectionScreening>();
+      (Array.isArray(rows) ? rows : []).forEach((s) => { if (s.visitId) map.set(s.visitId, s); });
+      setIsolationByVisit(map);
+    } catch {
+      setIsolationByVisit(new Map());
+    }
+  }, [hospitalId, zone, coveredZones]);
+  useEffect(() => { refreshIsolations(); }, [refreshIsolations]);
+  useEffect(() => {
+    if (!hospitalId) return;
+    const unsub = subscribeToIsolation(hospitalId, () => { refreshIsolations(); });
+    return () => unsub();
+  }, [hospitalId, refreshIsolations]);
 
   const refresh = useCallback(async () => {
     // Never call a zone the caller can't cover — it would 403. The clamp
@@ -192,6 +216,7 @@ export function BedGridView({ initialZone = 'RESUS' }: BedGridViewProps) {
               <BedTile
                 key={b.id}
                 bed={b}
+                isolation={b.currentVisitId ? isolationByVisit.get(b.currentVisitId) ?? null : null}
                 onClick={() => setSelectedBed(b)}
                 selected={selectedBed?.id === b.id}
               />

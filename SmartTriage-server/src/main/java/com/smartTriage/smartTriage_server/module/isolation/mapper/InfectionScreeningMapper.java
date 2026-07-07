@@ -38,7 +38,7 @@ public final class InfectionScreeningMapper {
                 .hasContactWithInfectious(screening.isHasContactWithInfectious())
                 .contactDetails(screening.getContactDetails())
                 .hasBleedingSymptoms(screening.isHasBleedingSymptoms())
-                .isHealthcareWorker(screening.isHealthcareWorker())
+                .healthcareWorker(screening.isHealthcareWorker())
                 .immunocompromised(screening.isImmunocompromised())
                 .hasNeckStiffness(screening.isHasNeckStiffness())
                 .requiresN95(screening.isRequiresN95())

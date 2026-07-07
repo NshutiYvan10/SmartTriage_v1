@@ -5,6 +5,7 @@ import com.smartTriage.smartTriage_server.common.enums.AlertType;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.InfectionRiskLevel;
 import com.smartTriage.smartTriage_server.common.enums.IsolationType;
+import com.smartTriage.smartTriage_server.common.enums.NotifiableDisease;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
 import com.smartTriage.smartTriage_server.module.alert.mapper.ClinicalAlertMapper;
@@ -26,6 +27,7 @@ import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.visit.repository.VisitRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +36,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -60,6 +63,9 @@ public class InfectionIsolationService {
     /** Window within which a flagged patient must be in an isolation room before escalation. */
     static final Duration PLACEMENT_WINDOW = Duration.ofMinutes(30);
 
+    /** Objective fever threshold (°C) — a measured triage temperature at/above this is a fever fact. */
+    static final double FEVER_THRESHOLD_C = 38.0;
+
     private final InfectionScreeningRepository screeningRepository;
     private final VisitRepository visitRepository;
     private final TriageRecordRepository triageRecordRepository;
@@ -67,6 +73,10 @@ public class InfectionIsolationService {
     private final InfectionScreeningEngine screeningEngine;
     private final RealTimeEventPublisher realTimeEventPublisher;
     private final ShiftAssignmentService shiftAssignmentService;
+    /** Self-reference through the Spring proxy — the post-commit enforcement halves
+     *  ({@code autoScreenFromTriage} / {@code raiseScreeningRequired}) must start their
+     *  own transactions, which a plain {@code this} call would silently skip. */
+    private final ObjectProvider<InfectionIsolationService> self;
 
     /**
      * Run infection screening for a visit. Creates the screening record, raises
@@ -75,20 +85,38 @@ public class InfectionIsolationService {
      */
     @Transactional
     public InfectionScreeningResponse screenPatient(UUID visitId, InfectionScreeningRequest request) {
+        return screenPatientInternal(visitId, request, null);
+    }
+
+    /**
+     * Shared screening pipeline. {@code actorOverride} lets the triage auto path stamp
+     * "&lt;nurse&gt; (auto: triage red flags)" as the screener; manual calls pass null and
+     * keep the authenticated-user resolution.
+     */
+    private InfectionScreeningResponse screenPatientInternal(UUID visitId, InfectionScreeningRequest request,
+                                                             String actorOverride) {
         Visit visit = visitRepository.findByIdAndIsActiveTrue(visitId)
                 .orElseThrow(() -> new ResourceNotFoundException("Visit", "id", visitId));
 
+        // Triage is OPTIONAL: infection risk is often flagged at the door, before triage
+        // (previously this threw 404 and door-time screening was impossible). The engine
+        // and the derivation below are null-safe on a missing record.
         TriageRecord triage = triageRecordRepository
                 .findFirstByVisitIdAndIsActiveTrueOrderByTriageTimeDesc(visitId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "No triage record found for visit: " + visitId));
+                .orElse(null);
+
+        // Objective triage facts override subjective checkbox omissions: a clinician
+        // cannot understate a MEASURED 39 °C fever (or a structured hemoptysis /
+        // paediatric-diarrhoea flag) by leaving a box unticked.
+        applyTriageDerivedFacts(request, triage);
 
         Instant now = Instant.now();
         InfectionScreeningResult result = screeningEngine.screenPatient(visit, triage, request);
         PpeRequirements ppe = result.ppeRequirements();
 
-        // Actor is the authenticated user; fall back to the (optional) request name.
-        String actor = resolveCurrentUserName();
+        // Actor: explicit override (auto path) > authenticated user > (optional) request name.
+        String actor = actorOverride;
+        if (actor == null) actor = resolveCurrentUserName();
         if (actor == null) actor = request.getScreenedByName();
 
         // Never DOWNGRADE on re-screen: carry the strictest of any prior OPEN isolation
@@ -196,6 +224,133 @@ public class InfectionIsolationService {
         return InfectionScreeningMapper.toResponse(screening, result.findings());
     }
 
+    // ====================================================================
+    // FRONT-DOOR ENFORCEMENT — triage hook
+    // ====================================================================
+
+    /**
+     * Called by {@code TriageService} after every triage/re-triage (best-effort,
+     * never throws into the triage flow). Structured triage red flags that ALONE
+     * constitute an isolation need — purpuric rash, measured fever + haemorrhagic
+     * symptoms, paediatric infectious diarrhoea — auto-file a REAL screening:
+     * precaution, PPE, placement clock and owned alerts fire NOW instead of
+     * waiting for someone to open the Isolation tab. A fever (or an
+     * infectious-sounding complaint) that does NOT amount to a precaution never
+     * fabricates a "screened" record; it raises an ISOLATION_SCREENING_REQUIRED
+     * prompt for a human screening instead.
+     *
+     * <p>The DECISION is made here, inside the triage transaction (entities are
+     * attached); the WRITES are deferred to AFTER COMMIT and run in a fresh
+     * transaction through the Spring proxy. Running the screening pipeline inside
+     * the triage transaction and catching its failure would poison the whole
+     * triage commit (rollback-only → UnexpectedRollbackException — the bedded-RED
+     * re-triage bug pattern); post-commit, an enforcement failure can only ever
+     * lose the enforcement, never the triage.
+     */
+    public void enforceFromTriage(Visit visit, TriageRecord triage) {
+        try {
+            if (visit == null || triage == null) return;
+            final UUID visitId = visit.getId();
+
+            InfectionScreeningRequest derived = new InfectionScreeningRequest();
+            applyTriageDerivedFacts(derived, triage);
+            // Dry-run — the engine also reads the purpuric-rash flag straight off the triage record.
+            InfectionScreeningResult dryRun = screeningEngine.screenPatient(visit, triage, derived);
+
+            boolean flagged = (dryRun.isolationType() != null || dryRun.notifiableDisease() != null)
+                    && escalatesBeyondPrior(dryRun, screeningRepository.findOpenIsolationsForVisit(visitId));
+            String promptReason = flagged ? null : unexplainedInfectionSuspicion(visit, triage, derived);
+            if (!flagged && promptReason == null) return;
+
+            final String actor = resolveCurrentUserName();
+            final String reason = promptReason;
+            Runnable work = () -> {
+                try {
+                    if (flagged) {
+                        self.getObject().autoScreenFromTriage(visitId, derived, actor);
+                    } else {
+                        self.getObject().raiseScreeningRequired(visitId, reason);
+                    }
+                } catch (Exception e) {
+                    log.warn("Post-commit isolation enforcement failed for visit {}: {}", visitId, e.getMessage());
+                }
+            };
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override public void afterCommit() { work.run(); }
+                });
+            } else {
+                work.run();
+            }
+        } catch (Exception e) {
+            log.warn("Isolation triage enforcement failed for visit {}: {}",
+                    visit != null ? visit.getId() : null, e.getMessage());
+        }
+    }
+
+    /**
+     * Post-commit half of the auto path. MUST be REQUIRES_NEW: afterCommit callbacks
+     * still run with the ORIGINAL (already-committed) transaction's resources bound, so
+     * plain REQUIRED would silently join a transaction that will never commit again —
+     * every write would execute, log success, and be discarded on connection release.
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void autoScreenFromTriage(UUID visitId, InfectionScreeningRequest derived, String actorName) {
+        String note = "Auto-screened from triage red flags — complete a full infection screening "
+                + "(travel / contact / TB symptoms) to finish the assessment.";
+        derived.setNotes(derived.getNotes() == null || derived.getNotes().isBlank()
+                ? note : derived.getNotes() + "\n" + note);
+        String actor = (actorName != null ? actorName : "SmartTriage") + " (auto: triage red flags)";
+        log.debug("autoScreenFromTriage tx-state: active={}, readOnly={}, name={}",
+                TransactionSynchronizationManager.isActualTransactionActive(),
+                TransactionSynchronizationManager.isCurrentTransactionReadOnly(),
+                TransactionSynchronizationManager.getCurrentTransactionName());
+        InfectionScreeningResponse resp = screenPatientInternal(visitId, derived, actor);
+        log.warn("AUTO isolation screening from triage: visit={}, isolation={}, notifiable={}",
+                visitId, resp.getIsolationType(), resp.getNotifiableDisease());
+    }
+
+    /** Post-commit half of the prompt path — REQUIRES_NEW for the same reason as
+     *  {@link #autoScreenFromTriage} (afterCommit + REQUIRED = writes silently discarded). */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void raiseScreeningRequired(UUID visitId, String reason) {
+        log.debug("raiseScreeningRequired tx-state: active={}, readOnly={}, name={}",
+                TransactionSynchronizationManager.isActualTransactionActive(),
+                TransactionSynchronizationManager.isCurrentTransactionReadOnly(),
+                TransactionSynchronizationManager.getCurrentTransactionName());
+        Visit visit = visitRepository.findByIdAndIsActiveTrue(visitId).orElse(null);
+        if (visit == null) return;
+        // A screening on file (human or auto) means someone has judged this patient — don't prompt.
+        if (screeningRepository.existsByVisitIdAndIsActiveTrue(visitId)) return;
+        // An unacknowledged prompt is already on the board — don't stack duplicates.
+        if (clinicalAlertRepository.existsByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(
+                visitId, AlertType.ISOLATION_SCREENING_REQUIRED)) {
+            return;
+        }
+
+        UUID hospitalId = visit.getHospital() != null ? visit.getHospital().getId() : null;
+        EdZone zone = visit.getCurrentEdZone();
+        User zoneDoctor = resolveZoneDoctor(hospitalId, zone);
+        ClinicalAlert alert = ClinicalAlert.builder()
+                .visit(visit)
+                .alertType(AlertType.ISOLATION_SCREENING_REQUIRED)
+                .severity(AlertSeverity.MEDIUM)
+                .title("INFECTION SCREENING REQUIRED")
+                .message(String.format(
+                        "%s (Visit: %s): %s. Run an infection screening (patient chart → Isolation tab) "
+                        + "to assess isolation and IDSR notifiable-disease risk.",
+                        patientName(visit), visit.getVisitNumber(),
+                        reason != null ? reason : "Infection suspicion at triage"))
+                .targetZone(zone)
+                .targetDoctor(zoneDoctor)
+                .autoGenerated(true)
+                .escalationTier(1)
+                .build();
+        alert = clinicalAlertRepository.save(alert);
+        publishOwnedAlert(alert, hospitalId, zone, zoneDoctor);
+        log.info("ISOLATION_SCREENING_REQUIRED raised: visit={}, reason={}", visitId, reason);
+    }
+
     /** Assign an isolation room — records the room, the actor, and the time; stops the placement clock. */
     @Transactional
     public InfectionScreening assignIsolationRoom(UUID screeningId, String roomNumber) {
@@ -281,6 +436,97 @@ public class InfectionIsolationService {
     // ====================================================================
     // PRIVATE HELPERS
     // ====================================================================
+
+    /**
+     * OR structured triage facts into the screening request — objective data can only
+     * ever RAISE a flag, never clear one, and a clinician cannot understate a measured
+     * finding by leaving a checkbox unticked. Facts derived: fever (measured triage
+     * temperature ≥ {@value #FEVER_THRESHOLD_C} °C), haemorrhagic symptoms
+     * (coughing/vomiting blood — the VHF/TB bleeding signal), and diarrhoea (the
+     * paediatric diarrhoea/vomiting-with-dehydration composite). Each derivation is
+     * written into the notes so the record shows WHY a flag the screener didn't tick
+     * is set. Null-safe on a missing triage record (door-time screening).
+     */
+    private void applyTriageDerivedFacts(InfectionScreeningRequest request, TriageRecord triage) {
+        if (request == null || triage == null) return;
+        List<String> derived = new ArrayList<>();
+
+        Double temp = triage.getVitalSigns() != null ? triage.getVitalSigns().getTemperature() : null;
+        if (!request.isHasFever() && temp != null && temp >= FEVER_THRESHOLD_C) {
+            request.setHasFever(true);
+            derived.add(String.format("fever (measured %.1f °C at triage)", temp));
+        }
+        if (!request.isHasBleedingSymptoms() && triage.isVuCoughingVomitingBlood()) {
+            request.setHasBleedingSymptoms(true);
+            derived.add("bleeding symptoms (coughing/vomiting blood at triage)");
+        }
+        if (!request.isHasDiarrhea() && triage.isUrgPedsDiarrheaVomitingDehydration()) {
+            request.setHasDiarrhea(true);
+            derived.add("diarrhoea (paediatric diarrhoea/vomiting with dehydration at triage)");
+        }
+
+        if (!derived.isEmpty()) {
+            String note = "Derived from triage: " + String.join("; ", derived) + ".";
+            request.setNotes(request.getNotes() == null || request.getNotes().isBlank()
+                    ? note : request.getNotes() + "\n" + note);
+        }
+    }
+
+    /**
+     * Should the auto path file a NEW screening given what is already open? Always, when
+     * nothing is open; otherwise only when the dry-run STRICTLY escalates — a stricter
+     * precaution, or a more urgent notifiable disease than any already recorded. A
+     * re-triage of an already-isolated patient at the same level files nothing (no
+     * screening churn, no duplicate RBC paging).
+     */
+    private boolean escalatesBeyondPrior(InfectionScreeningResult result, List<InfectionScreening> priorOpen) {
+        if (priorOpen.isEmpty()) return true;
+        IsolationType priorStrictest = null;
+        NotifiableDisease priorMostUrgent = null;
+        for (InfectionScreening p : priorOpen) {
+            priorStrictest = InfectionScreeningEngine.strictest(priorStrictest, p.getIsolationType());
+            priorMostUrgent = InfectionScreeningEngine.moreUrgent(priorMostUrgent, p.getNotifiableDisease());
+        }
+        boolean stricterType = result.isolationType() != null
+                && InfectionScreeningEngine.strictest(result.isolationType(), priorStrictest) == result.isolationType()
+                && result.isolationType() != priorStrictest;
+        boolean moreUrgentDisease = result.notifiableDisease() != null
+                && (priorMostUrgent == null
+                    || (InfectionScreeningEngine.moreUrgent(result.notifiableDisease(), priorMostUrgent) == result.notifiableDisease()
+                        && result.notifiableDisease() != priorMostUrgent));
+        return stricterType || moreUrgentDisease;
+    }
+
+    /** Free-text markers that suggest an infectious presentation worth a human screening. */
+    private static final List<String> COMPLAINT_KEYWORDS = List.of(
+            "fever", "febrile", "diarr", "rash", "cough", "night sweat",
+            "coughing blood", "vomiting blood", "hemoptysis", "haemoptysis");
+
+    /**
+     * Infection suspicion that does NOT amount to a precaution on its own: a measured
+     * fever, or an infectious-sounding presenting complaint / additional triage sign.
+     * Returns a human-readable reason for the prompt, or null when there is none.
+     */
+    private String unexplainedInfectionSuspicion(Visit visit, TriageRecord triage, InfectionScreeningRequest derived) {
+        if (derived.isHasFever()) {
+            Double temp = triage.getVitalSigns() != null ? triage.getVitalSigns().getTemperature() : null;
+            return "Measured fever" + (temp != null ? String.format(" of %.1f °C", temp) : "")
+                    + " at triage with no infection screening on file";
+        }
+        String texts = String.join(" ",
+                visit.getChiefComplaint() != null ? visit.getChiefComplaint() : "",
+                triage.getAdditionalEmergencySigns() != null ? triage.getAdditionalEmergencySigns() : "",
+                triage.getAdditionalVeryUrgentSigns() != null ? triage.getAdditionalVeryUrgentSigns() : "",
+                triage.getAdditionalUrgentSigns() != null ? triage.getAdditionalUrgentSigns() : "")
+                .toLowerCase();
+        for (String kw : COMPLAINT_KEYWORDS) {
+            if (texts.contains(kw)) {
+                return "Presenting complaint suggests possible infection (\"" + kw
+                        + "\") with no infection screening on file";
+            }
+        }
+        return null;
+    }
 
     /**
      * Initialise every lazy association {@link InfectionScreeningMapper} reads (visit + its

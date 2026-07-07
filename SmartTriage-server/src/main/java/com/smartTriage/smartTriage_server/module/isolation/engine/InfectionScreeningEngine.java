@@ -109,7 +109,7 @@ public class InfectionScreeningEngine {
         // red flag and is frequently AFEBRILE (or hypothermic) in fulminant/infant
         // disease, so it is NOT fever-gated; neck stiffness/meningism also triggers.
         // ====================================================================
-        boolean purpura = triage.isHasPurpuricRash();
+        boolean purpura = triage != null && triage.isHasPurpuricRash();
         if (purpura || request.isHasNeckStiffness()) {
             riskLevel = maxRisk(riskLevel, purpura ? InfectionRiskLevel.HIGH_RISK : InfectionRiskLevel.MODERATE_RISK);
             isolationType = strictest(isolationType, IsolationType.DROPLET);
@@ -252,7 +252,7 @@ public class InfectionScreeningEngine {
     }
 
     /** Returns the more urgent of two notifiable diseases (never relabels VHF away). */
-    static NotifiableDisease moreUrgent(NotifiableDisease a, NotifiableDisease b) {
+    public static NotifiableDisease moreUrgent(NotifiableDisease a, NotifiableDisease b) {
         if (a == null) return b;
         if (b == null) return a;
         return notifRank(a) <= notifRank(b) ? a : b;

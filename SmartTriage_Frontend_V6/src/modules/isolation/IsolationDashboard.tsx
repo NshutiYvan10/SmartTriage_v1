@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ShieldAlert, RefreshCw, Loader2, CheckCircle2, Clock,
   AlertTriangle, Building2, Phone, DoorOpen,
-  Shield, Eye, Hand, Shirt, Footprints, ChevronRight,
+  Shield, Eye, Hand, Shirt, Footprints, ChevronRight, Timer,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useScopedView, fetchForScope } from '@/hooks/useScopedView';
@@ -57,6 +57,12 @@ export function IsolationDashboard() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Re-render every 30 s so the placement countdowns keep moving.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((v) => v + 1), 30000);
+    return () => clearInterval(t);
+  }, []);
 
   /* Room assignment state */
   const [assignRoomId, setAssignRoomId] = useState<string | null>(null);
@@ -150,7 +156,25 @@ export function IsolationDashboard() {
   const activeCount = isolations.length;
   const highCount = isolations.filter((i) => i.riskLevel === 'HIGH_RISK' || i.riskLevel === 'CONFIRMED').length;
   const moderateCount = isolations.filter((i) => i.riskLevel === 'MODERATE_RISK').length;
-  const lowCount = isolations.filter((i) => i.riskLevel === 'LOW_RISK').length;
+  const awaitingRoomCount = isolations.filter((i) => !i.isolationRoomAssigned).length;
+
+  /* ── Placement clock — flagged-but-not-roomed is the board's most urgent state:
+     the patient is still exposing the open ED. Unroomed cases sort FIRST (most
+     overdue on top); the chip mirrors the chart panel's countdown. ── */
+  const placementLabel = (s: InfectionScreening): { text: string; overdue: boolean } | null => {
+    if (s.isolationRoomAssigned || !s.placementDueAt) return null;
+    const mins = Math.round((new Date(s.placementDueAt).getTime() - Date.now()) / 60000);
+    if (mins <= 0) return { text: `placement overdue by ${Math.abs(mins)}m`, overdue: true };
+    return { text: `place within ${mins}m`, overdue: false };
+  };
+  const sortedIsolations = [...isolations].sort((a, b) => {
+    const aRoom = a.isolationRoomAssigned ? 1 : 0;
+    const bRoom = b.isolationRoomAssigned ? 1 : 0;
+    if (aRoom !== bRoom) return aRoom - bRoom; // unroomed first
+    const aDue = a.placementDueAt ? new Date(a.placementDueAt).getTime() : Infinity;
+    const bDue = b.placementDueAt ? new Date(b.placementDueAt).getTime() : Infinity;
+    return aDue - bDue; // most-overdue placement clock on top
+  });
 
   /* ── PPE badge helper ──────────────────────────────────── */
   const PpeBadge = ({ show, label, Icon }: { show: boolean; label: string; Icon: typeof Shield }) => {
@@ -215,22 +239,23 @@ export function IsolationDashboard() {
           </div>
         </div>
 
-        {/* ── Risk Level Summary Cards ───────────────────── */}
+        {/* ── Summary Cards — risk mix + the actionable one: cases still
+            exposing the open ED because no isolation room is assigned. ── */}
         <div className="grid grid-cols-3 gap-3 animate-fade-up" style={{ animationDelay: '0.05s' }}>
           {([
-            { label: 'HIGH', count: highCount, config: RISK_CONFIG.HIGH_RISK },
-            { label: 'MODERATE', count: moderateCount, config: RISK_CONFIG.MODERATE_RISK },
-            { label: 'LOW', count: lowCount, config: RISK_CONFIG.LOW_RISK },
-          ] as const).map(({ label, count, config }) => (
+            { label: 'HIGH RISK', count: highCount, config: RISK_CONFIG.HIGH_RISK, pulse: false },
+            { label: 'MODERATE RISK', count: moderateCount, config: RISK_CONFIG.MODERATE_RISK, pulse: false },
+            { label: 'AWAITING ROOM', count: awaitingRoomCount, config: RISK_CONFIG.MODERATE_RISK, pulse: awaitingRoomCount > 0 },
+          ] as const).map(({ label, count, config, pulse }) => (
             <div
               key={label}
               className="rounded-2xl p-4 text-center"
               style={glassCard}
             >
-              <div className={`w-10 h-10 rounded-xl ${config.darkBg} flex items-center justify-center mx-auto mb-2`}>
+              <div className={`w-10 h-10 rounded-xl ${config.darkBg} flex items-center justify-center mx-auto mb-2 ${pulse ? 'animate-pulse' : ''}`}>
                 <span className={`text-lg font-bold ${config.color}`}>{count}</span>
               </div>
-              <p className={`text-[10px] font-bold uppercase tracking-wider ${config.color}`}>{label} Risk</p>
+              <p className={`text-[10px] font-bold uppercase tracking-wider ${config.color}`}>{label}</p>
             </div>
           ))}
         </div>
@@ -253,10 +278,11 @@ export function IsolationDashboard() {
           </div>
         ) : (
           <div className="space-y-3">
-            {isolations.map((iso, i) => {
+            {sortedIsolations.map((iso, i) => {
               const risk = RISK_CONFIG[iso.riskLevel] || RISK_FALLBACK;
               const isoType = iso.isolationType ? (ISOLATION_TYPE_CONFIG[iso.isolationType] || ISO_TYPE_FALLBACK) : null;
               const isNotifiable = !!iso.notifiableDisease;
+              const place = placementLabel(iso);
 
               return (
                 <div
@@ -312,6 +338,16 @@ export function IsolationDashboard() {
                               style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
                             >
                               NOTIFIABLE
+                            </span>
+                          )}
+                          {place && (
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${
+                              place.overdue ? 'text-red-600 animate-pulse' : 'text-amber-600'}`}
+                              style={place.overdue
+                                ? { background: 'rgba(220,38,38,0.10)', border: '1px solid rgba(220,38,38,0.3)' }
+                                : { background: 'rgba(217,119,6,0.10)', border: '1px solid rgba(217,119,6,0.25)' }}
+                            >
+                              <Timer className="w-3 h-3" /> {place.text}
                             </span>
                           )}
                         </div>

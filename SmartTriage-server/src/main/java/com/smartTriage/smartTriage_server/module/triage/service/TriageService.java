@@ -96,6 +96,8 @@ public class TriageService {
     private final BedService bedService;
     /** Hypoglycemia enforcement at the front door — see the post-save hook in performTriage. */
     private final com.smartTriage.smartTriage_server.module.hypoglycemia.service.HypoglycemiaService hypoglycemiaService;
+    /** Infection-isolation enforcement at the front door — see the post-save hook in performTriage. */
+    private final com.smartTriage.smartTriage_server.module.isolation.service.InfectionIsolationService infectionIsolationService;
 
     /**
      * Perform initial triage or manual re-triage on a visit.
@@ -447,6 +449,17 @@ public class TriageService {
         // GLUCOSE CHECK REQUIRED now — previously both only happened if a
         // clinician later opened the Glucose tab and clicked Run Check.
         hypoglycemiaService.enforceFromTriage(visit, record);
+
+        // Infection-isolation enforcement at the FRONT DOOR (same never-propagates
+        // contract). Structured triage red flags — purpuric rash, measured fever +
+        // haemorrhagic symptoms, paediatric infectious diarrhoea — auto-file a REAL
+        // infection screening: precaution + PPE + placement clock + owned alerts fire
+        // NOW; an unexplained fever or infectious-sounding complaint raises an
+        // ISOLATION_SCREENING_REQUIRED prompt instead. Previously NONE of this happened
+        // unless a clinician opened the Isolation tab and screened by hand. The service
+        // decides in-transaction but WRITES after this transaction commits, so a failing
+        // enforcement can never poison the triage commit.
+        infectionIsolationService.enforceFromTriage(visit, record);
 
         // Bed assignment — Option A: auto-place in the destination zone
         // when a bed is available, in the same transaction as the triage.

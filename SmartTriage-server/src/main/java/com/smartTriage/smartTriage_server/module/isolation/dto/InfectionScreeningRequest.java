@@ -30,7 +30,17 @@ public class InfectionScreeningRequest {
     private boolean hasContactWithInfectious;
     private String contactDetails;
     private boolean hasBleedingSymptoms;
-    private boolean isHealthcareWorker;
+
+    /**
+     * Healthcare worker (occupational-exposure risk). Field is named {@code healthcareWorker}
+     * (not {@code isHealthcareWorker}) so Lombok's {@code isHealthcareWorker()} getter and the
+     * setter couple into ONE Jackson property; {@code @JsonProperty} pins the wire name the
+     * frontend has always sent. With the old {@code isHealthcareWorker} field name, Jackson
+     * derived the property {@code healthcareWorker} — the FE's {@code isHealthcareWorker} key
+     * matched nothing and the flag was silently dropped (always false in the IDSR record).
+     */
+    @com.fasterxml.jackson.annotation.JsonProperty("isHealthcareWorker")
+    private boolean healthcareWorker;
 
     /** Immunocompromised (e.g. advanced HIV, chemotherapy, transplant) — drives PROTECTIVE (reverse) isolation. */
     private boolean immunocompromised;

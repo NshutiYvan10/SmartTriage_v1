@@ -10,15 +10,30 @@
  */
 import { Badge } from '@/components/ui/Badge';
 import { useTheme } from '@/hooks/useTheme';
+import { Biohazard } from 'lucide-react';
 import type { BedResponse } from '@/api/types';
+import type { InfectionScreening } from '@/api/isolation';
+
+/* Precaution chip colour by isolation type — unknown falls back to red
+   (never downgrade an unrecognised precaution to a reassuring colour). */
+const ISO_CHIP_FALLBACK = { cls: 'text-red-600', rgb: '220,38,38' };
+const ISO_CHIP: Record<string, { cls: string; rgb: string }> = {
+  STRICT:     { cls: 'text-red-700',    rgb: '185,28,28' },
+  AIRBORNE:   { cls: 'text-red-600',    rgb: '220,38,38' },
+  DROPLET:    { cls: 'text-amber-600',  rgb: '217,119,6' },
+  CONTACT:    { cls: 'text-yellow-600', rgb: '202,138,4' },
+  PROTECTIVE: { cls: 'text-sky-600',    rgb: '2,132,199' },
+};
 
 interface BedTileProps {
   bed: BedResponse;
+  /** Active infection isolation for the bed's occupant (null when none / not occupied). */
+  isolation?: InfectionScreening | null;
   onClick?: (bed: BedResponse) => void;
   selected?: boolean;
 }
 
-export function BedTile({ bed, onClick, selected }: BedTileProps) {
+export function BedTile({ bed, isolation, onClick, selected }: BedTileProps) {
   const { isDark } = useTheme();
 
   const statusClass = getStatusClass(bed.status, isDark, !!bed.currentTriageCategory);
@@ -62,6 +77,22 @@ export function BedTile({ bed, onClick, selected }: BedTileProps) {
                 </span>
               )}
             </div>
+            {/* Infection-control signage — the occupant is under an active
+                precaution. Staff approaching this bed need PPE; hover shows
+                the precaution + suspected condition. */}
+            {isolation?.isolationType && (() => {
+              const chip = ISO_CHIP[String(isolation.isolationType)] || ISO_CHIP_FALLBACK;
+              return (
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${chip.cls}`}
+                  style={{ background: `rgba(${chip.rgb},0.10)`, border: `1px solid rgba(${chip.rgb},0.3)` }}
+                  title={`${isolation.isolationType} isolation${isolation.suspectedCondition ? ` — ${isolation.suspectedCondition}` : ''}`}
+                >
+                  <Biohazard className="h-3 w-3" />
+                  {isolation.isolationType}
+                </span>
+              );
+            })()}
           </>
         ) : (
           <div className={`text-xs italic ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>

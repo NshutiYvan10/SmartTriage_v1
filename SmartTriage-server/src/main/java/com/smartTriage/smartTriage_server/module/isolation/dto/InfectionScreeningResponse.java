@@ -48,7 +48,9 @@ public class InfectionScreeningResponse {
     private boolean hasContactWithInfectious;
     private String contactDetails;
     private boolean hasBleedingSymptoms;
-    private boolean isHealthcareWorker;
+    /** Wire name pinned to {@code isHealthcareWorker} — see the request DTO for the isX-field trap. */
+    @com.fasterxml.jackson.annotation.JsonProperty("isHealthcareWorker")
+    private boolean healthcareWorker;
     private boolean immunocompromised;
     private boolean hasNeckStiffness;
 

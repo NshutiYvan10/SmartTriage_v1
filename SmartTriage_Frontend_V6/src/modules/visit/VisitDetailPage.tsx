@@ -17,7 +17,7 @@ import { ClinicalSignsTab } from './ClinicalSignsTab';
 import { SepsisPanel } from './SepsisPanel';
 import { FastTrackPanel } from './FastTrackPanel';
 import { HypoglycemiaPanel } from './HypoglycemiaPanel';
-import { IsolationPanel } from './IsolationPanel';
+import { IsolationPanel, IsolationPrecautionBanner } from './IsolationPanel';
 import { PathwayPanel } from './PathwayPanel';
 import { HandoverPanel } from './HandoverPanel';
 import { CrossHospitalPanel } from './CrossHospitalPanel';
@@ -861,6 +861,12 @@ export function VisitDetailPage() {
             })}
           </div>
         </div>
+
+        {/* ── Isolation precaution signage — staff safety. Visible from EVERY
+            tab (not just Isolation): anyone opening this chart is about to
+            walk into the patient's room, and the precaution + PPE must be
+            unmissable before they do. Renders nothing when not isolated. */}
+        <IsolationPrecautionBanner visitId={visit.id} onOpen={() => setActiveTab('isolation')} />
 
         {/* ── Recent activity (shift-handover affordance) ──
             Shows what's new on this patient since the doctor came on
