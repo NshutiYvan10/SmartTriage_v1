@@ -14,7 +14,9 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { handoverApi } from '@/api/handover';
-import { saveBlob } from '@/api/client';
+import { visitApi } from '@/api/visits';
+import { userApi } from '@/api/users';
+import type { VisitResponse, UserResponse } from '@/api/types';
 import type { HandoverReport } from '@/api/handover';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
@@ -22,6 +24,7 @@ import { format } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
 import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
 import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
+import { PdfPreviewModal, usePdfPreview } from '@/components/PdfPreviewModal';
 
 // ── Constants ──
 
@@ -64,6 +67,7 @@ const REPORT_SECTIONS: { key: keyof HandoverReport; label: string; icon: typeof 
 
 export function HandoverView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const { showPdf, previewProps } = usePdfPreview();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
@@ -84,10 +88,47 @@ export function HandoverView() {
   const [generateReportType, setGenerateReportType] = useState('SHIFT_HANDOVER');
   const [generating, setGenerating] = useState(false);
 
+  // ── Patient picker (mirrors the safety-incident form): pick a CURRENT patient
+  //    from the live visit list instead of typing a visit ID. Best-effort — the
+  //    manual field below the dropdown stays available as a fallback.
+  const [pickerVisits, setPickerVisits] = useState<VisitResponse[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  useEffect(() => {
+    if (!showGenerateForm || !hospitalId || access.isLoading) return;
+    let alive = true;
+    setPickerLoading(true);
+    const fetchVisits = access.canSeeAllZones
+      ? visitApi.getActiveByHospital(hospitalId, 0, 100)
+      : visitApi.getActiveForCallerByHospital(hospitalId, 0, 100);
+    fetchVisits
+      .then((page) => { if (alive) setPickerVisits(page.content || []); })
+      .catch(() => { if (alive) setPickerVisits([]); })
+      .finally(() => { if (alive) setPickerLoading(false); });
+    return () => { alive = false; };
+  }, [showGenerateForm, hospitalId, access.isLoading, access.canSeeAllZones]);
+  const visitLabel = (v: VisitResponse) => {
+    const where = [v.currentEdZone?.replace(/_/g, ' '), v.currentBedLabel ? `Bed ${v.currentBedLabel}` : null]
+      .filter(Boolean).join(' \u00b7 ');
+    return `${v.patientName} \u2014 ${v.visitNumber}${where ? ` \u00b7 ${where}` : ''}`;
+  };
+
   // ── Acknowledge dialog ──
   const [ackDialog, setAckDialog] = useState<{ reportId: string } | null>(null);
   const [ackName, setAckName] = useState('');
   const [ackSubmitting, setAckSubmitting] = useState(false);
+  // Current hospital staff for the acknowledge dropdown (so the receiving
+  // clinician picks their name instead of typing it). Best-effort — the
+  // free-text field stays as a fallback for anyone not in the list.
+  const [ackStaff, setAckStaff] = useState<UserResponse[]>([]);
+  useEffect(() => {
+    if (!ackDialog || !hospitalId) return;
+    let alive = true;
+    userApi.getByHospital(hospitalId, 0, 200)
+      .then((page) => { if (alive) setAckStaff((page.content || []).filter((u) => u.accountStatus === 'ACTIVE')); })
+      .catch(() => { if (alive) setAckStaff([]); });
+    return () => { alive = false; };
+  }, [ackDialog, hospitalId]);
+  const staffName = (u: UserResponse) => `${u.firstName} ${u.lastName}`.trim();
 
   // ── Filter ──
   const [filterType, setFilterType] = useState<string>('ALL');
@@ -157,9 +198,17 @@ export function HandoverView() {
     }
   };
 
-  // ── Print hint ──
-  const handlePrint = () => {
-    window.print();
+  // Print the branded PDF for one report (opens the preview and pops the print dialog).
+  const handlePrintPdf = async (reportId: string) => {
+    setDownloadingId(reportId);
+    try {
+      const { blob, filename } = await handoverApi.downloadPdf(reportId);
+      showPdf(blob, filename, { print: true });
+    } catch (e) {
+      console.error('[Handover] PDF print failed', e);
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   // Download the professional, letterheaded PDF for this report.
@@ -168,7 +217,7 @@ export function HandoverView() {
     setDownloadingId(reportId);
     try {
       const { blob, filename } = await handoverApi.downloadPdf(reportId);
-      saveBlob(blob, filename);
+      showPdf(blob, filename);
     } catch (e) {
       console.error('[Handover] PDF download failed', e);
     } finally {
@@ -222,12 +271,6 @@ export function HandoverView() {
                     <span className="text-xs font-bold text-amber-200">{stats.pending} Pending</span>
                   </div>
                 )}
-                <button
-                  onClick={handlePrint}
-                  className="inline-flex items-center gap-2 px-3 py-2.5 text-xs font-bold text-white/80 bg-white/10 hover:bg-white/20 rounded-xl transition-all"
-                >
-                  <Printer className="w-3.5 h-3.5" /> Print
-                </button>
                 <button
                   onClick={() => setShowGenerateForm(true)}
                   className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-xl transition-all shadow-md"
@@ -416,12 +459,20 @@ export function HandoverView() {
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDownloadPdf(report.id); }}
                           disabled={downloadingId === report.id}
-                          title="Download as PDF"
+                          title="Preview / download the branded PDF"
                           className="print:hidden inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-cyan-700 bg-cyan-500/10 hover:bg-cyan-500/20 rounded-xl transition-all disabled:opacity-50"
                         >
                           {downloadingId === report.id
                             ? <Loader2 className="w-3 h-3 animate-spin" />
                             : <Download className="w-3 h-3" />} PDF
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handlePrintPdf(report.id); }}
+                          disabled={downloadingId === report.id}
+                          title="Print the branded handover document"
+                          className="print:hidden inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-cyan-700 bg-cyan-500/10 hover:bg-cyan-500/20 rounded-xl transition-all disabled:opacity-50"
+                        >
+                          <Printer className="w-3 h-3" /> Print
                         </button>
                         {!report.isAcknowledged && (
                           <button
@@ -508,7 +559,8 @@ export function HandoverView() {
           <div className="flex items-center gap-2.5">
             <Printer className={`w-4 h-4 ${text.muted}`} />
             <p className={`text-[11px] font-medium ${text.muted}`}>
-              Expand a report and use the Print button or Ctrl+P for a print-friendly view of the handover details.
+              Use a report's Print or PDF action \u2014 every printout is the branded SmartTriage handover
+              document, generated fresh from the clinical record.
             </p>
           </div>
         </div>
@@ -543,16 +595,34 @@ export function HandoverView() {
             </div>
 
             <div className="space-y-4">
-              {/* Visit ID */}
+              {/* Patient — pick from current visits (like the safety incident form) */}
               <div>
-                <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Visit ID *</label>
+                <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>Patient *</label>
+                <select
+                  value={generateVisitId}
+                  onChange={(e) => setGenerateVisitId(e.target.value)}
+                  autoFocus
+                  className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
+                    isDark ? 'text-white' : 'text-slate-800'
+                  }`}
+                  style={glassInner}
+                >
+                  <option value="">
+                    {pickerLoading ? 'Loading current patients\u2026'
+                      : pickerVisits.length === 0 ? 'No active patients found \u2014 paste a visit ID below'
+                      : 'Select a current patient\u2026'}
+                  </option>
+                  {pickerVisits.map((v) => (
+                    <option key={v.id} value={v.id}>{visitLabel(v)}</option>
+                  ))}
+                </select>
+                {/* Fallback for visits not on the active list (e.g. already departed). */}
                 <input
                   type="text"
                   value={generateVisitId}
                   onChange={(e) => setGenerateVisitId(e.target.value)}
-                  placeholder="Enter the patient visit ID"
-                  autoFocus
-                  className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
+                  placeholder="\u2026or paste a visit ID"
+                  className={`w-full mt-2 px-4 py-2 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
                     isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
                   }`}
                   style={glassInner}
@@ -638,13 +708,30 @@ export function HandoverView() {
                 <UserCheck className="w-3 h-3 inline mr-1" />
                 Receiving Clinician Name *
               </label>
+              <select
+                value={ackStaff.some((u) => staffName(u) === ackName) ? ackName : ''}
+                onChange={(e) => setAckName(e.target.value)}
+                autoFocus
+                className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
+                  isDark ? 'text-white' : 'text-slate-800'
+                }`}
+                style={glassInner}
+              >
+                <option value="">
+                  {ackStaff.length === 0 ? 'Loading staff\u2026 or type your name below' : 'Select the receiving clinician\u2026'}
+                </option>
+                {ackStaff.map((u) => (
+                  <option key={u.id} value={staffName(u)}>
+                    {staffName(u)}{u.designationLabel ? ` \u00b7 ${u.designationLabel}` : ` \u00b7 ${u.role.replace(/_/g, ' ')}`}
+                  </option>
+                ))}
+              </select>
               <input
                 type="text"
                 value={ackName}
                 onChange={(e) => setAckName(e.target.value)}
-                placeholder="Enter your full name"
-                autoFocus
-                className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
+                placeholder="\u2026or type a name not in the list"
+                className={`w-full mt-2 px-4 py-2 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${
                   isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
                 }`}
                 style={glassInner}
@@ -674,6 +761,7 @@ export function HandoverView() {
           </div>
         </div>
       )}
+      <PdfPreviewModal {...previewProps} />
     </div>
   );
 }

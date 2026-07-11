@@ -56,12 +56,13 @@ public class MohReportPdfService {
         }
 
         PdfReport report = PdfReport.begin(new PdfReport.Spec(
-                "MINISTRY OF HEALTH — EMERGENCY DEPARTMENT RETURN",
+                "Emergency Department Return",
                 "MOH Report",
                 orgName,
                 orgMeta,
                 exportedBy,
-                "Ministry of Health aggregate report"));
+                "Ministry of Health aggregate report",
+                "Ministry of Health · statutory"));
 
         // ── Report metadata ──
         report.subjectHeadline(
@@ -71,7 +72,6 @@ public class MohReportPdfService {
                             ? r.getHospital().getName() : "Hospital") + " — ED Return",
                 "Period " + fmtD(r.getReportPeriodStart()) + " to " + fmtD(r.getReportPeriodEnd()));
 
-        report.sectionHeader("Report");
         List<PdfReport.KeyVal> meta = new ArrayList<>();
         meta.add(PdfReport.kv("Level", str(r.getReportLevel())));
         meta.add(PdfReport.kv("Report type", str(r.getReportType())));
@@ -85,7 +85,7 @@ public class MohReportPdfService {
                     fmtDt(r.getSubmittedAt())
                             + (r.getSubmittedByName() != null ? " by " + r.getSubmittedByName() : "")));
         }
-        report.keyValues(meta);
+        report.metaStrip(meta);
 
         // ── Activity — headline counts as stat tiles; the key/values below carry only the
         //    detail NOT already in the tiles (avoids showing the same number twice). ──

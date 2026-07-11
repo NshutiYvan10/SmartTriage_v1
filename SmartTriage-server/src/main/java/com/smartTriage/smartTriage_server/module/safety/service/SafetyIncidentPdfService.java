@@ -1,12 +1,13 @@
 package com.smartTriage.smartTriage_server.module.safety.service;
 
+import com.smartTriage.smartTriage_server.common.enums.IncidentSeverity;
 import com.smartTriage.smartTriage_server.common.report.PdfReport;
-import com.smartTriage.smartTriage_server.common.report.PdfReport.KeyVal;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import com.smartTriage.smartTriage_server.module.safety.entity.SafetyIncident;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.awt.Color;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -18,9 +19,10 @@ import static com.smartTriage.smartTriage_server.common.report.PdfReport.kv;
 /**
  * Renders a {@link SafetyIncident} into a printable single-incident report PDF — the formal record
  * for the quality/governance file: classification, timeline, narrative, investigation, root cause,
- * corrective action, and closure. Built on the shared {@link PdfReport} house style so it reads as a
- * branded, consistent deliverable. Must run in an open transaction (reads the lazy hospital
- * association).
+ * corrective action, and closure. Built on the shared {@link PdfReport} house style — incident
+ * banner with a severity pill, patient-harm alert, labelled parameter strip, narrative panels —
+ * so it reads as a branded, consistent deliverable. Must run in an open transaction (reads the
+ * lazy hospital association).
  */
 @Slf4j
 @Service
@@ -48,67 +50,75 @@ public class SafetyIncidentPdfService {
                     ? h.getName() : "Hospital";
 
             PdfReport r = PdfReport.begin(new PdfReport.Spec(
-                    "PATIENT SAFETY INCIDENT REPORT",
+                    "Safety Incident Report",
                     "Safety Incident Report",
                     orgName,
                     orgMeta(h),
                     exportedBy,
-                    "patient-safety incident report"));
+                    "patient-safety incident report",
+                    "Patient safety & governance"));
 
-            // Subject line: incident number + at-a-glance classification.
-            String meta = "No. " + nz(i.getIncidentNumber())
-                    + "  ·  " + nz(name(i.getIncidentType()))
-                    + "  ·  Severity " + nz(name(i.getSeverity()))
-                    + "  ·  " + nz(name(i.getStatus()));
-            r.subjectHeadline("Incident " + nz(i.getIncidentNumber()), meta);
+            // Incident banner: number + at-a-glance identity, severity as a colored pill.
+            List<PdfReport.KeyVal> ids = new ArrayList<>();
+            ids.add(kv("Type", pretty(name(i.getIncidentType()))));
+            if (i.getIncidentDateTime() != null) ids.add(kv("Occurred", ts(i.getIncidentDateTime())));
+            if (i.getLocationInHospital() != null) ids.add(kv("Location", i.getLocationInHospital()));
+            if (i.getReportedByName() != null) ids.add(kv("Reported by", i.getReportedByName()));
+            IncidentSeverity sev = i.getSeverity();
+            r.patientBanner("Incident " + nz(i.getIncidentNumber()), ids,
+                    sev != null ? pretty(sev.name()) : null,
+                    sev != null ? "Severity" : null,
+                    sev != null ? severityColor(sev) : null);
 
-            // Prominent safety banners (patient harm and/or critical severity).
+            // Prominent safety banner (patient harm and/or critical severity).
             String banner = severityBanner(i);
             if (banner != null) r.alertBanner(banner);
 
-            r.sectionHeader("Classification");
-            r.keyValues(List.of(
-                    kv("Type", name(i.getIncidentType())),
-                    kv("Severity", name(i.getSeverity())),
-                    kv("Status", name(i.getStatus())),
+            // Report parameters at a glance.
+            r.metaStrip(List.of(
+                    kv("Status", pretty(name(i.getStatus()))),
                     kv("Patient harmed", tri(i.getPatientHarmed())),
-                    kv("Anonymous report", i.isAnonymous() ? "Yes" : null)));
-
-            r.sectionHeader("When & where");
-            r.keyValues(List.of(
-                    kv("Occurred", ts(i.getIncidentDateTime())),
-                    kv("Location", i.getLocationInHospital()),
                     kv("Reported", ts(i.getReportedAt())),
-                    kv("Reported by", i.getReportedByName()),
-                    kv("Reporter role", i.getReportedByRole())));
+                    kv("Reporter role", i.getReportedByRole()),
+                    kv("Anonymous report", i.isAnonymous() ? "Yes" : null)));
 
             narrativeSection(r, "Description", i.getDescription());
             narrativeSection(r, "Contributing factors", i.getContributingFactors());
             narrativeSection(r, "Immediate actions", i.getImmediateActions());
             narrativeSection(r, "Involved staff", i.getInvolvedStaffNames());
 
-            r.sectionHeader("Investigation");
-            r.keyValues(List.of(
-                    kv("Investigator", i.getInvestigatorName()),
-                    kv("Started", ts(i.getInvestigationStartedAt())),
-                    kv("Completed", ts(i.getInvestigationCompletedAt())),
-                    kv("Root cause category", i.getRootCauseCategory())));
-            narrativeSection(r, "Root cause analysis", i.getRootCauseAnalysis());
+            if (anyPresent(i.getInvestigatorName(), ts(i.getInvestigationStartedAt()),
+                    ts(i.getInvestigationCompletedAt()), i.getRootCauseCategory(), i.getRootCauseAnalysis())) {
+                r.sectionHeader("Investigation");
+                r.keyValues(List.of(
+                        kv("Investigator", i.getInvestigatorName()),
+                        kv("Started", ts(i.getInvestigationStartedAt())),
+                        kv("Completed", ts(i.getInvestigationCompletedAt())),
+                        kv("Root cause category", i.getRootCauseCategory())));
+                subNarrative(r, "Root cause analysis", i.getRootCauseAnalysis());
+            }
 
-            r.sectionHeader("Corrective action");
-            r.keyValues(List.of(
-                    kv("Action", i.getCorrectiveAction()),
-                    kv("Owner", i.getCorrectiveActionOwner()),
-                    kv("Deadline", ts(i.getCorrectiveActionDeadline())),
-                    kv("Completed", ts(i.getCorrectiveActionCompletedAt()))));
-            narrativeSection(r, "Preventive measures", i.getPreventiveMeasures());
+            if (anyPresent(i.getCorrectiveAction(), i.getCorrectiveActionOwner(),
+                    ts(i.getCorrectiveActionDeadline()), ts(i.getCorrectiveActionCompletedAt()),
+                    i.getPreventiveMeasures())) {
+                r.sectionHeader("Corrective action");
+                r.keyValues(List.of(
+                        kv("Action", i.getCorrectiveAction()),
+                        kv("Owner", i.getCorrectiveActionOwner()),
+                        kv("Deadline", ts(i.getCorrectiveActionDeadline())),
+                        kv("Completed", ts(i.getCorrectiveActionCompletedAt()))));
+                subNarrative(r, "Preventive measures", i.getPreventiveMeasures());
+            }
 
-            r.sectionHeader("Closure");
-            r.keyValues(List.of(
-                    kv("Closed", ts(i.getClosedAt())),
-                    kv("Closed by", i.getClosedByName())));
-            narrativeSection(r, "Lessons learned", i.getLessonsLearned());
-            narrativeSection(r, "Notes", i.getNotes());
+            if (i.getClosedAt() != null || i.getClosedByName() != null
+                    || notBlank(i.getLessonsLearned()) || notBlank(i.getNotes())) {
+                r.sectionHeader("Closure");
+                r.keyValues(List.of(
+                        kv("Closed", ts(i.getClosedAt())),
+                        kv("Closed by", i.getClosedByName())));
+                subNarrative(r, "Lessons learned", i.getLessonsLearned());
+                subNarrative(r, "Notes", i.getNotes());
+            }
 
             return r.finish();
         } catch (Exception e) {
@@ -119,11 +129,28 @@ public class SafetyIncidentPdfService {
 
     // ── helpers ──
 
-    /** A section header + narrative panel; renders nothing when the content is blank. */
+    /** A full section header + narrative panel; renders nothing when the content is blank. */
     private static void narrativeSection(PdfReport r, String label, String content) {
         if (content == null || content.isBlank()) return;
         r.sectionHeader(label);
         r.narrative(content);
+    }
+
+    /** A small sub-header + narrative panel inside an existing section. */
+    private static void subNarrative(PdfReport r, String label, String content) {
+        if (content == null || content.isBlank()) return;
+        r.subHeader(label);
+        r.narrative(content);
+    }
+
+    /** Severity → the semantic color of its pill (green = no harm … red = severe/death). */
+    private static Color severityColor(IncidentSeverity sev) {
+        return switch (sev) {
+            case NEAR_MISS, NO_HARM -> PdfReport.SATS_GREEN;
+            case MILD_HARM -> PdfReport.ACCENT;
+            case MODERATE_HARM -> PdfReport.SATS_ORANGE;
+            case SEVERE_HARM, DEATH -> PdfReport.DANGER;
+        };
     }
 
     /** Address / district / province / phone lines for the masthead (blank lines auto-dropped). */
@@ -144,9 +171,9 @@ public class SafetyIncidentPdfService {
         boolean harm = Boolean.TRUE.equals(i.getPatientHarmed());
         boolean critical = sev != null
                 && (sev.contains("SEVERE") || sev.contains("DEATH") || sev.contains("CRITICAL"));
-        if (harm && critical) return "** PATIENT HARM REPORTED · SEVERITY " + sev + " **";
-        if (harm) return "** PATIENT HARM REPORTED **";
-        if (critical) return "** SEVERITY " + sev + " **";
+        if (harm && critical) return "PATIENT HARM REPORTED · severity " + pretty(sev);
+        if (harm) return "PATIENT HARM REPORTED";
+        if (critical) return "SEVERITY " + pretty(sev).toUpperCase();
         return null;
     }
 
@@ -164,8 +191,22 @@ public class SafetyIncidentPdfService {
         return sb.toString();
     }
 
+    private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
+
+    private static boolean anyPresent(String... vals) {
+        for (String v : vals) if (notBlank(v)) return true;
+        return false;
+    }
+
     private static String tri(Boolean b) {
         return b != null ? (b ? "Yes" : "No") : null;
+    }
+
+    /** "MODERATE_HARM" → "Moderate harm". */
+    private static String pretty(String enumName) {
+        if (enumName == null || enumName.isBlank()) return null;
+        String s = enumName.replace('_', ' ').trim();
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1).toLowerCase();
     }
 
     private static String name(Enum<?> e) { return e != null ? e.name() : null; }

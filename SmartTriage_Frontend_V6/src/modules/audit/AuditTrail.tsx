@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { auditApi, AuditLogEntry } from '@/api/audit';
+import { saveBlob } from '@/api/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
 import { describeAuditEntry, CATEGORY_STYLE } from './auditEventLabels';
@@ -102,7 +103,11 @@ export function AuditTrail() {
     if (!hospitalId) return;
     setDownloading(true);
     try {
-      await auditApi.exportCsv(hospitalId, filterOpts()); // WYSIWYG — honours on-screen filters
+      // WYSIWYG — honours on-screen filters. exportCsv only FETCHES the
+      // blob; without saveBlob the bytes were discarded and the button
+      // appeared to do nothing.
+      const { blob, filename } = await auditApi.exportCsv(hospitalId, filterOpts());
+      saveBlob(blob, filename);
     } catch {
       setError('Failed to export the audit CSV.');
     } finally {

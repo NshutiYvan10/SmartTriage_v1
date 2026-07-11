@@ -30,6 +30,7 @@ import { format } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
 import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
 import { ReportIncidentForm } from './ReportIncidentForm';
+import { PdfPreviewModal, usePdfPreview } from '@/components/PdfPreviewModal';
 
 // ── Severity styling — keys MUST match the backend IncidentSeverity enum
 //    (harm scale). Unknown value falls back to the SEVERE look (never
@@ -89,6 +90,7 @@ type FilterType = 'ALL' | string;
 
 export function SafetyIncidentView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const { showPdf, previewProps } = usePdfPreview();
   const user = useAuthStore((s) => s.user);
   const access = useCanSeeAllZones();
 
@@ -190,7 +192,7 @@ export function SafetyIncidentView() {
     setDownloadingPdfId(id);
     try {
       const { blob, filename } = await safetyApi.downloadPdf(id);
-      saveBlob(blob, filename);
+      showPdf(blob, filename);
     } catch (err) {
       console.error('[SafetyIncidentView] PDF download failed:', err);
     } finally {
@@ -687,6 +689,7 @@ export function SafetyIncidentView() {
           </div>
         )}
       </div>
+      <PdfPreviewModal {...previewProps} />
     </div>
   );
 }

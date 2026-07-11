@@ -25,7 +25,8 @@ import type { AppPage } from '@/types/roles';
 import { operationalReportApi } from '@/api/reports';
 import { hospitalApi } from '@/api/hospitals';
 import type { HospitalResponse } from '@/api/types';
-import { saveBlob, ApiError } from '@/api/client';
+import { ApiError } from '@/api/client';
+import { PdfPreviewModal, usePdfPreview } from '@/components/PdfPreviewModal';
 
 /* ── The real report surfaces this hub launches into ── */
 interface ReportLink {
@@ -55,6 +56,7 @@ type ReportKey = 'daily' | 'shift' | 'period' | 'quality' | 'mine';
 
 export function ReportsView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const { showPdf, previewProps } = usePdfPreview();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const role = user?.role;
@@ -95,7 +97,7 @@ export function ReportsView() {
     setError(null);
     try {
       const { blob, filename } = await fn();
-      saveBlob(blob, filename);
+      showPdf(blob, filename);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Report generation failed');
       console.error('[Reports] generation failed:', err);
@@ -335,6 +337,7 @@ export function ReportsView() {
         </div>
 
       </div>
+      <PdfPreviewModal {...previewProps} />
     </div>
   );
 }

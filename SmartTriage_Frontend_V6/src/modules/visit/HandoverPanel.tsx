@@ -12,8 +12,8 @@ import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
 import { handoverApi } from '@/api/handover';
 import type { HandoverReport } from '@/api/handover';
-import { saveBlob } from '@/api/client';
 import { format } from 'date-fns';
+import { PdfPreviewModal, usePdfPreview } from '@/components/PdfPreviewModal';
 
 const REPORT_TYPES: { value: string; label: string }[] = [
   { value: 'SHIFT_HANDOVER', label: 'Shift Handover' },
@@ -28,6 +28,7 @@ const CLINICAL_ROLES = new Set(['SUPER_ADMIN', 'DOCTOR', 'NURSE', 'PARAMEDIC']);
 
 export function HandoverPanel({ visitId }: { visitId: string }) {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const { showPdf, previewProps } = usePdfPreview();
   const role = useAuthStore((s) => s.user?.role);
   const isClinical = role ? CLINICAL_ROLES.has(role) : false;
 
@@ -66,7 +67,7 @@ export function HandoverPanel({ visitId }: { visitId: string }) {
     setBusy(id); setError(null);
     try {
       const { blob, filename } = await handoverApi.downloadPdf(id);
-      saveBlob(blob, filename);   // was silently discarded — the fetched PDF never reached disk
+      showPdf(blob, filename);
     } catch {
       setError('Failed to download the handover PDF.');
     } finally {
@@ -154,6 +155,7 @@ export function HandoverPanel({ visitId }: { visitId: string }) {
           </div>
         </div>
       ))}
+      <PdfPreviewModal {...previewProps} />
     </div>
   );
 }

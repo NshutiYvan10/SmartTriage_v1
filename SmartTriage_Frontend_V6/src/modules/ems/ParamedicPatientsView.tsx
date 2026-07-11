@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { emsApi } from '@/api/ems';
 import type { EmsRun, EmsRunStatus, FieldTriageCategory } from '@/api/ems';
-import { saveBlob } from '@/api/client';
+import { PdfPreviewModal, usePdfPreview } from '@/components/PdfPreviewModal';
 import { chartPath } from '@/lib/chartNav';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
@@ -60,6 +60,7 @@ export function ParamedicPatientsView() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<StatusFilter>('ALL');
   const [downloadingPcr, setDownloadingPcr] = useState<string | null>(null);
+  const { showPdf, previewProps } = usePdfPreview();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -94,7 +95,9 @@ export function ParamedicPatientsView() {
     setDownloadingPcr(run.id);
     try {
       const { blob, filename } = await emsApi.downloadPcr(run.id);
-      saveBlob(blob, filename);
+      // Preview-first: open the PCR in the in-app viewer; download/print
+      // are secondary actions inside the modal (matches every other report).
+      showPdf(blob, filename);
     } catch (e) {
       console.error('[ParamedicPatients] PCR download failed', e);
     } finally {
@@ -265,6 +268,7 @@ export function ParamedicPatientsView() {
           </div>
         )}
       </div>
+      <PdfPreviewModal {...previewProps} />
     </div>
   );
 }

@@ -83,12 +83,13 @@ public class EmsPcrPdfService {
 
         try {
             PdfReport r = PdfReport.begin(new PdfReport.Spec(
-                    "PRE-HOSPITAL — PATIENT CARE REPORT (PCR)",
+                    "Patient Care Report (PCR)",
                     "Patient Care Report",
                     orgName,
                     orgMeta,
                     exportedBy,
-                    "EMS patient care report"));
+                    "EMS patient care report",
+                    "Pre-hospital · EMS"));
 
             renderSubject(r, run);
             r.sectionHeader("Run & Crew");
@@ -131,20 +132,47 @@ public class EmsPcrPdfService {
                 : "";
         if (patientName.isBlank()) patientName = "Unidentified field patient";
 
-        List<String> meta = new ArrayList<>();
-        if (run.getPatientAgeYears() != null) meta.add("Age " + run.getPatientAgeYears());
-        if (run.getPatientSex() != null && !run.getPatientSex().isBlank()) meta.add("Sex " + run.getPatientSex());
-        if (patient != null && patient.getNationalId() != null && !patient.getNationalId().isBlank()) {
-            meta.add("National ID " + patient.getNationalId());
-        }
+        List<KeyVal> ids = new ArrayList<>();
+        String ageSex = joinDot(
+                run.getPatientAgeYears() != null ? String.valueOf(run.getPatientAgeYears()) : null,
+                run.getPatientSex() != null && !run.getPatientSex().isBlank() ? run.getPatientSex() : null);
+        if (ageSex != null) ids.add(kv("Age / Sex", ageSex));
         if (patient != null && patient.getMedicalRecordNumber() != null && !patient.getMedicalRecordNumber().isBlank()) {
-            meta.add("MRN " + patient.getMedicalRecordNumber());
+            ids.add(kv("MRN", patient.getMedicalRecordNumber()));
         }
         Visit visit = safeVisit(run);
         if (visit != null && visit.getVisitNumber() != null && !visit.getVisitNumber().isBlank()) {
-            meta.add("ED Visit " + visit.getVisitNumber());
+            ids.add(kv("ED Visit", visit.getVisitNumber()));
         }
-        r.subjectHeadline(patientName, String.join("  ·  ", meta));
+        if (patient != null && patient.getNationalId() != null && !patient.getNationalId().isBlank()) {
+            ids.add(kv("National ID", patient.getNationalId()));
+        }
+        // Field triage category as the banner pill (SATS-colored), when captured.
+        String cat = run.getFieldTriageCategory();
+        r.patientBanner(patientName, ids,
+                cat != null && !cat.isBlank() ? cat.toUpperCase() : null,
+                cat != null && !cat.isBlank() ? "Field triage" : null,
+                satsColor(cat));
+    }
+
+    /** "a · b" from non-blank parts, or null. */
+    private static String joinDot(String a, String b) {
+        if (a == null && b == null) return null;
+        if (a == null) return b;
+        if (b == null) return a;
+        return a + " · " + b;
+    }
+
+    /** SATS category string → pill color (null-safe). */
+    private static java.awt.Color satsColor(String cat) {
+        if (cat == null) return null;
+        String k = cat.toUpperCase();
+        if (k.contains("RED")) return PdfReport.SATS_RED;
+        if (k.contains("ORANGE")) return PdfReport.SATS_ORANGE;
+        if (k.contains("YELLOW")) return PdfReport.SATS_YELLOW;
+        if (k.contains("GREEN")) return PdfReport.SATS_GREEN;
+        if (k.contains("BLUE")) return PdfReport.SATS_BLUE;
+        return PdfReport.SLATE_400;
     }
 
     // ── Sections ────────────────────────────────────────────────────

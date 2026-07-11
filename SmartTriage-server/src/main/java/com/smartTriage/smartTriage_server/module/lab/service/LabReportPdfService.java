@@ -38,15 +38,19 @@ public class LabReportPdfService {
                          List<LabOrder> orders, String exportedBy) {
         try {
             PdfReport r = PdfReport.begin(new PdfReport.Spec(
-                    "LABORATORY REPORTING PACK",
+                    "Laboratory Reporting Pack",
                     "Laboratory Report",
                     hospitalName != null ? hospitalName : "Hospital",
                     List.of(),
                     exportedBy,
-                    "laboratory report"));
+                    "laboratory report",
+                    "Laboratory reporting"));
 
-            r.subjectHeadline("Workload & turnaround summary",
-                    "Period: " + from + " to " + to + "  ·  " + orders.size() + " orders");
+            r.metaStrip(List.of(
+                    PdfReport.kv("Report", "Workload & turnaround summary"),
+                    PdfReport.kv("Period", from + " → " + to),
+                    PdfReport.kv("Orders", String.valueOf(orders.size())),
+                    PdfReport.kv("Requested by", exportedBy)));
 
             r.sectionHeader("Volume");
             r.statTiles(buildVolume(orders));

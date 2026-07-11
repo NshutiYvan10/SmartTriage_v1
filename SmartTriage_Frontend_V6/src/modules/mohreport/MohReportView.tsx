@@ -17,6 +17,7 @@ import type { MohReport } from '@/api/mohreport';
 import { hospitalApi } from '@/api/hospitals';
 import type { HospitalResponse } from '@/api/types';
 import { format } from 'date-fns';
+import { PdfPreviewModal, usePdfPreview } from '@/components/PdfPreviewModal';
 
 /** Sentinel scope value for the national (cross-hospital) rollup. */
 const NATIONAL = 'NATIONAL';
@@ -62,6 +63,7 @@ function getTypeLabel(type: string): string {
 
 export function MohReportView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const { showPdf, previewProps } = usePdfPreview();
   const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const user = useAuthStore((s) => s.user);
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
@@ -178,7 +180,8 @@ export function MohReportView() {
   const handleDownloadPdf = useCallback(async (id: string) => {
     setActionLoading(`pdf-${id}`);
     try {
-      await mohReportApi.downloadPdf(id);
+      const { blob, filename } = await mohReportApi.downloadPdf(id);
+      showPdf(blob, filename);
     } catch { /* handled */ } finally { setActionLoading(null); }
   }, []);
 
@@ -706,6 +709,7 @@ export function MohReportView() {
         )}
 
       </div>
+      <PdfPreviewModal {...previewProps} />
     </div>
   );
 }

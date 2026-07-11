@@ -18,11 +18,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.awt.Color;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -30,12 +32,14 @@ import java.util.UUID;
 /**
  * OperationalReportService — the server-side report catalog. Every report here is
  * generated from authoritative aggregate queries and rendered through the shared
- * branded {@link PdfReport} kit: masthead, report parameters, requested-by line,
- * generated-at timestamp, page numbering — never a snapshot of a screen.
+ * branded {@link PdfReport} kit: masthead, labelled parameter strip, KPI tiles,
+ * SATS acuity stacked bar + legend, proportional disposition bars, workload rows,
+ * a vector trend chart, data tables, requested-by attribution and page numbering
+ * — never a snapshot of a screen.
  *
  * <p>Catalog: DAILY ED ACTIVITY (one day's operational return), SHIFT HANDOVER
  * SUMMARY (department state + open work for a shift change, with signature block),
- * PERIOD ACTIVITY (date-range totals + per-day trend table), MY CLINICAL ACTIVITY
+ * PERIOD ACTIVITY (date-range totals + per-day trend), MY CLINICAL ACTIVITY
  * (the authenticated clinician's own workload — self-scoped by construction), and
  * QUALITY METRICS (KPI snapshots trend).
  *
@@ -54,6 +58,7 @@ public class OperationalReportService {
     private static final ZoneId KIGALI = ZoneId.of("Africa/Kigali");
     private static final DateTimeFormatter D = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(KIGALI);
     private static final DateTimeFormatter DT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(KIGALI);
+    private static final DateTimeFormatter D_SHORT = DateTimeFormatter.ofPattern("dd MMM");
 
     private final OperationalReportQueries queries;
     private final MohIndicatorQueries mohIndicatorQueries;
@@ -71,39 +76,47 @@ public class OperationalReportService {
         Instant from = date.atStartOfDay(KIGALI).toInstant();
         Instant to = date.plusDays(1).atStartOfDay(KIGALI).toInstant();
 
-        PdfReport r = begin("DAILY ED ACTIVITY REPORT", "Daily Activity", hospital,
-                List.of("Report date: " + date, "Scope: whole department, all zones"), requestedBy);
+        PdfReport r = begin("Daily ED Activity", "Daily Activity", "Operational report", hospital, requestedBy);
+        r.metaStrip(List.of(
+                PdfReport.kv("Report date", date.toString()),
+                PdfReport.kv("Scope", "Whole department · all zones"),
+                PdfReport.kv("Requested by", requestedBy),
+                PdfReport.kv("Source", "Live clinical records")));
 
         ActivityStats stats = queries.activityStats(hospitalId, from, to);
-        r.sectionHeader("Activity");
-        r.statTiles(List.of(
-                PdfReport.kv("Arrivals", String.valueOf(stats.arrivals())),
-                PdfReport.kv("Triaged", String.valueOf(stats.triaged())),
-                PdfReport.kv("Avg wait (min)", dec(stats.avgWaitMinutes())),
-                PdfReport.kv("Avg LOS (min)", dec(stats.avgLosMinutes()))));
-        r.keyValues(kvsOf(queries.categoryBreakdown(hospitalId, from, to), "Triage category — "));
+        r.sectionHeader("Activity at a glance");
+        r.kpiTiles(List.of(
+                PdfReport.kpi(grp(stats.arrivals()), null, "Arrivals"),
+                PdfReport.kpi(grp(stats.triaged()), null, "Triaged"),
+                PdfReport.kpi(dec(stats.avgWaitMinutes()), "min", "Avg wait"),
+                PdfReport.kpi(dec(stats.avgLosMinutes()), "min", "Avg length of stay")));
+
+        acuityMix(r, queries.categoryBreakdown(hospitalId, from, to), stats.triaged());
 
         r.sectionHeader("Dispositions");
         Map<String, Long> disp = queries.dispositions(hospitalId, from, to);
-        r.keyValues(disp.isEmpty()
-                ? List.of(PdfReport.kv("Dispositions", "None recorded on this date"))
-                : kvsOf(disp, ""));
+        if (disp.isEmpty()) {
+            r.paragraph("None recorded on this date.", PdfReport.F_META);
+        } else {
+            r.barList(dispositionBars(disp));
+        }
 
         r.sectionHeader("Clinical module activity");
         ModuleActivity mod = queries.moduleActivity(hospitalId, from, to);
         int sepsis = mohIndicatorQueries.countSepsisScreened(hospitalId, from, to);
         int isolation = mohIndicatorQueries.countIsolationActivated(hospitalId, from, to);
-        r.statTiles(List.of(
-                PdfReport.kv("Sepsis screens", String.valueOf(sepsis)),
-                PdfReport.kv("Isolations activated", String.valueOf(isolation)),
-                PdfReport.kv("Hypoglycemia events", String.valueOf(mod.hypoglycemiaEvents())),
-                PdfReport.kv("Fast-track activations", String.valueOf(mod.fastTrackActivations()))));
-        r.keyValues(List.of(
-                PdfReport.kv("Safety incidents reported", String.valueOf(mod.incidentsReported())),
-                PdfReport.kv("Severe-harm / death incidents", String.valueOf(mod.severeIncidents()))));
+        r.metricGrid(List.of(
+                new PdfReport.Metric(String.valueOf(sepsis), "Sepsis screens", PdfReport.MetricTone.NEUTRAL),
+                new PdfReport.Metric(String.valueOf(isolation), "Isolations activated", PdfReport.MetricTone.NEUTRAL),
+                new PdfReport.Metric(String.valueOf(mod.hypoglycemiaEvents()), "Hypoglycemia events", PdfReport.MetricTone.NEUTRAL),
+                new PdfReport.Metric(String.valueOf(mod.fastTrackActivations()), "Fast-track activations", PdfReport.MetricTone.NEUTRAL),
+                new PdfReport.Metric(String.valueOf(mod.incidentsReported()), "Safety incidents reported",
+                        mod.incidentsReported() > 0 ? PdfReport.MetricTone.ATTENTION : PdfReport.MetricTone.NEUTRAL),
+                new PdfReport.Metric(String.valueOf(mod.severeIncidents()), "Severe-harm / death incidents",
+                        mod.severeIncidents() == 0 ? PdfReport.MetricTone.GOOD : PdfReport.MetricTone.ATTENTION)));
 
-        r.sectionHeader("Department census at generation time");
-        r.keyValues(kvsOf(queries.censusByZone(hospitalId), "Zone — "));
+        r.sectionHeader("Department census", "at generation time");
+        censusTiles(r, queries.censusByZone(hospitalId));
 
         footerNote(r);
         return new RenderedPdf(r.finish(), "daily-activity-" + date + ".pdf");
@@ -124,50 +137,66 @@ public class OperationalReportService {
                 ? date.atTime(19, 0).atZone(KIGALI).toInstant()
                 : date.plusDays(1).atTime(7, 0).atZone(KIGALI).toInstant();
 
-        PdfReport r = begin("SHIFT HANDOVER SUMMARY", "Shift Handover", hospital,
-                List.of("Shift: " + p + " " + date, "Window: " + DT.format(from) + " → " + DT.format(to)),
-                requestedBy);
+        PdfReport r = begin("Shift Handover Summary", "Shift Handover", "Shift handover", hospital, requestedBy);
+        r.metaStrip(List.of(
+                PdfReport.kv("Shift", p + " · " + date),
+                PdfReport.kv("Window", DT.format(from) + " → " + DT.format(to)),
+                PdfReport.kv("Requested by", requestedBy),
+                PdfReport.kv("Source", "Live clinical records")));
 
-        r.sectionHeader("Department state at generation time");
-        r.keyValues(kvsOf(queries.censusByZone(hospitalId), "Zone — "));
-        r.keyValues(kvsOf(queries.acuityNow(hospitalId), "Acuity — "));
-
-        r.sectionHeader("Open work being handed over");
         OpenWork w = queries.openWork(hospitalId);
         if (w.criticalAlertsUnacked() > 0) {
             r.alertBanner(w.criticalAlertsUnacked() + " CRITICAL alert(s) UNACKNOWLEDGED — review before accepting handover");
         }
-        r.keyValues(List.of(
-                PdfReport.kv("Unacknowledged CRITICAL alerts", String.valueOf(w.criticalAlertsUnacked())),
-                PdfReport.kv("Sepsis bundles in progress", String.valueOf(w.sepsisBundlesOpen())),
-                PdfReport.kv("Active isolations", String.valueOf(w.isolationsActive())),
-                PdfReport.kv("Isolations awaiting a room", String.valueOf(w.isolationsUnroomed())),
-                PdfReport.kv("Unresolved hypoglycemia events", String.valueOf(w.hypoUnresolved())),
-                PdfReport.kv("… of which recheck OVERDUE", String.valueOf(w.hypoRecheckOverdue())),
-                PdfReport.kv("Open safety incidents", String.valueOf(w.incidentsOpen()))));
+
+        r.sectionHeader("Open work being handed over");
+        r.workRows(List.of(
+                workRow("Unacknowledged CRITICAL alerts", w.criticalAlertsUnacked(),
+                        PdfReport.WorkTone.CRIT, "Act now", "Clear", false),
+                workRow("Sepsis bundles in progress", w.sepsisBundlesOpen(),
+                        PdfReport.WorkTone.INFO, "In progress", "None", false),
+                workRow("Active isolations", w.isolationsActive(),
+                        PdfReport.WorkTone.INFO, "Ongoing", "None", false),
+                workRow("Isolations awaiting a room", w.isolationsUnroomed(),
+                        PdfReport.WorkTone.WARN, "Attention", "None", false),
+                workRow("Unresolved hypoglycemia events", w.hypoUnresolved(),
+                        PdfReport.WorkTone.INFO, "Monitor", "None", false),
+                workRow("… of which recheck OVERDUE", w.hypoRecheckOverdue(),
+                        PdfReport.WorkTone.OVER, "Overdue", "None", true),
+                workRow("Open safety incidents", w.incidentsOpen(),
+                        PdfReport.WorkTone.WARN, "Attention", "None", false)));
+
+        r.sectionHeader("Department state", "at generation time");
+        censusTiles(r, queries.censusByZone(hospitalId));
+        r.chipRow(acuityChips(queries.acuityNow(hospitalId)));
 
         r.sectionHeader("Activity during the shift window");
         ActivityStats stats = queries.activityStats(hospitalId, from, to);
-        r.statTiles(List.of(
-                PdfReport.kv("Arrivals", String.valueOf(stats.arrivals())),
-                PdfReport.kv("Triaged", String.valueOf(stats.triaged())),
-                PdfReport.kv("Avg wait (min)", dec(stats.avgWaitMinutes()))));
+        r.kpiTiles(List.of(
+                PdfReport.kpi(grp(stats.arrivals()), null, "Arrivals"),
+                PdfReport.kpi(grp(stats.triaged()), null, "Triaged"),
+                PdfReport.kpi(dec(stats.avgWaitMinutes()), "min", "Avg wait")), 3);
         Map<String, Long> disp = queries.dispositions(hospitalId, from, to);
-        if (!disp.isEmpty()) r.keyValues(kvsOf(disp, ""));
+        if (!disp.isEmpty()) {
+            List<PdfReport.Chip> flow = new ArrayList<>();
+            for (Map.Entry<String, Long> e : disp.entrySet()) {
+                flow.add(new PdfReport.Chip(null, pretty(e.getKey()), String.valueOf(e.getValue())));
+            }
+            r.chipRow(flow);
+        }
 
-        r.sectionHeader("Rostered staff — " + p + " shift");
+        r.sectionHeader("Rostered staff", p + " shift");
         List<Object[]> roster = queries.staffing(hospitalId, date, p);
         List<String[]> rows = new ArrayList<>();
         for (Object[] s : roster) {
             rows.add(new String[]{
-                    str(s[0]), str(s[1]).replace('_', ' '),
+                    str(s[0]), pretty(str(s[1])),
                     (str(s[2]) + " " + str(s[3])).trim() + (Boolean.TRUE.equals(s[4]) ? "  (SHIFT LEAD)" : "")});
         }
         r.dataTable(new String[]{"Zone", "Function", "Staff member"}, new float[]{20, 30, 50}, rows, 3);
 
         r.spacer(4f);
-        r.paragraph("Handover is complete only when both leads have reviewed the open work above and signed.",
-                PdfReport.F_META);
+        r.narrative("Handover is complete only when both leads have reviewed the open work above and signed.");
         r.signatureBlock("Outgoing shift lead", "Incoming shift lead");
 
         footerNote(r);
@@ -184,34 +213,64 @@ public class OperationalReportService {
         Instant f = from.atStartOfDay(KIGALI).toInstant();
         Instant t = to.plusDays(1).atStartOfDay(KIGALI).toInstant();
 
-        PdfReport r = begin("ED ACTIVITY REPORT — PERIOD", "Period Activity", hospital,
-                List.of("Period: " + from + " → " + to + " (inclusive)"), requestedBy);
+        PdfReport r = begin("Period Activity", "Period Activity", "Activity report — period", hospital, requestedBy);
+        r.metaStrip(List.of(
+                PdfReport.kv("Period", D_SHORT.format(from) + " → " + D_SHORT.format(to) + " " + to.getYear()),
+                PdfReport.kv("Days", (java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1) + " (inclusive)"),
+                PdfReport.kv("Requested by", requestedBy),
+                PdfReport.kv("Source", "Live clinical records")));
 
         ActivityStats stats = queries.activityStats(hospitalId, f, t);
         r.sectionHeader("Period totals");
-        r.statTiles(List.of(
-                PdfReport.kv("Arrivals", String.valueOf(stats.arrivals())),
-                PdfReport.kv("Triaged", String.valueOf(stats.triaged())),
-                PdfReport.kv("Avg wait (min)", dec(stats.avgWaitMinutes())),
-                PdfReport.kv("Avg LOS (min)", dec(stats.avgLosMinutes()))));
-        r.keyValues(kvsOf(queries.categoryBreakdown(hospitalId, f, t), "Triage category — "));
+        r.kpiTiles(List.of(
+                PdfReport.kpi(grp(stats.arrivals()), null, "Arrivals"),
+                PdfReport.kpi(grp(stats.triaged()), null, "Triaged"),
+                PdfReport.kpi(dec(stats.avgWaitMinutes()), "min", "Avg wait"),
+                PdfReport.kpi(dec(stats.avgLosMinutes()), "min", "Avg length of stay")));
+
+        Map<String, Long> cats = queries.categoryBreakdown(hospitalId, f, t);
+        acuityMix(r, cats, stats.triaged());
+
         Map<String, Long> disp = queries.dispositions(hospitalId, f, t);
         if (!disp.isEmpty()) {
             r.sectionHeader("Dispositions");
-            r.keyValues(kvsOf(disp, ""));
+            r.barList(dispositionBars(disp));
         }
 
-        r.sectionHeader("Per-day trend");
+        List<Object[]> trend = queries.dailyTrend(hospitalId, f, t);
+        if (trend.size() >= 2) {
+            double[] arrivals = new double[trend.size()];
+            double peak = 0, low = Double.MAX_VALUE;
+            for (int i = 0; i < trend.size(); i++) {
+                arrivals[i] = asLong(trend.get(i)[1]);
+                peak = Math.max(peak, arrivals[i]);
+                low = Math.min(low, arrivals[i]);
+            }
+            LocalDate mid = from.plusDays(java.time.temporal.ChronoUnit.DAYS.between(from, to) / 2);
+            r.sectionHeader("Daily arrivals — trend",
+                    trend.size() + " days · peak " + Math.round(peak) + " · low " + Math.round(low));
+            r.trendChart(arrivals, D_SHORT.format(from), D_SHORT.format(mid), D_SHORT.format(to));
+        }
+
+        r.sectionHeader("Per-day breakdown");
         List<String[]> rows = new ArrayList<>();
-        for (Object[] d : queries.dailyTrend(hospitalId, f, t)) {
+        for (Object[] d : trend) {
             rows.add(new String[]{
                     String.valueOf(d[0]), String.valueOf(d[1]), String.valueOf(d[2]),
                     String.valueOf(d[3]), String.valueOf(d[4]), String.valueOf(d[5]),
                     String.valueOf(d[6]), String.valueOf(d[7]), dec(asDouble(d[8]))});
         }
+        String[] totals = new String[]{
+                "Period total", grp(stats.arrivals()),
+                grp(satsCount(cats, "RED")), grp(satsCount(cats, "ORANGE")),
+                grp(satsCount(cats, "YELLOW")), grp(satsCount(cats, "GREEN")),
+                grp(dispCount(disp, "ADMIT")), grp(dispCount(disp, "LWBS", "LEFT")),
+                dec(stats.avgWaitMinutes())};
         r.dataTable(
                 new String[]{"Date", "Arrivals", "Red", "Orange", "Yellow", "Green", "Admitted", "LWBS", "Avg wait"},
-                new float[]{16, 11, 9, 10, 10, 10, 12, 9, 13}, rows, 1);
+                new Color[]{null, null, PdfReport.SATS_RED, PdfReport.SATS_ORANGE,
+                        PdfReport.SATS_YELLOW, PdfReport.SATS_GREEN, null, null, null},
+                new float[]{16, 11, 9, 10, 10, 10, 12, 9, 13}, rows, totals, 1);
 
         footerNote(r);
         return new RenderedPdf(r.finish(), "period-activity-" + from + "-to-" + to + ".pdf");
@@ -232,16 +291,18 @@ public class OperationalReportService {
         Instant t = to.plusDays(1).atStartOfDay(KIGALI).toInstant();
         String name = (caller.getFirstName() + " " + caller.getLastName()).trim();
 
-        PdfReport r = begin("MY CLINICAL ACTIVITY", "My Activity", hospital,
-                List.of("Clinician: " + name + " (" + caller.getRole() + ")",
-                        "Period: " + from + " → " + to + " (inclusive)"), name);
+        PdfReport r = begin("My Clinical Activity", "My Activity", "Clinician report", hospital, name);
+        r.metaStrip(List.of(
+                PdfReport.kv("Clinician", name + " (" + caller.getRole() + ")"),
+                PdfReport.kv("Period", from + " → " + to + " (inclusive)"),
+                PdfReport.kv("Source", "Live clinical records")));
 
         MyActivity a = queries.myActivity(caller.getId(), hospitalId, f, t);
         r.sectionHeader("Workload");
-        r.statTiles(List.of(
-                PdfReport.kv("Patients (primary clinician)", String.valueOf(a.primaryVisits())),
-                PdfReport.kv("Clinical notes authored", String.valueOf(a.notesAuthored())),
-                PdfReport.kv("Medications prescribed", String.valueOf(a.prescriptions()))));
+        r.kpiTiles(List.of(
+                PdfReport.kpi(grp(a.primaryVisits()), null, "Patients (primary clinician)"),
+                PdfReport.kpi(grp(a.notesAuthored()), null, "Clinical notes authored"),
+                PdfReport.kpi(grp(a.prescriptions()), null, "Medications prescribed")), 3);
 
         r.sectionHeader("Patients seen as primary clinician");
         List<Object[]> visitRows = queries.myVisitRows(caller.getId(), hospitalId, f, t, MY_VISITS_CAP);
@@ -250,13 +311,12 @@ public class OperationalReportService {
             rows.add(new String[]{
                     str(v[0]), str(v[1]),
                     v[2] != null ? DT.format(((java.sql.Timestamp) v[2]).toInstant()) : "—",
-                    str(v[3]), str(v[4]).replace('_', ' ')});
+                    str(v[3]), pretty(str(v[4]))});
         }
         r.dataTable(new String[]{"Visit", "Patient", "Arrival", "Category", "Disposition"},
                 new float[]{22, 28, 20, 12, 18}, rows, 5);
         if (a.primaryVisits() > MY_VISITS_CAP) {
-            r.paragraph("Showing the most recent " + MY_VISITS_CAP + " of " + a.primaryVisits()
-                    + " visits.", PdfReport.F_META);
+            r.tableNote("Showing the most recent " + MY_VISITS_CAP + " of " + a.primaryVisits() + " visits.");
         }
 
         footerNote(r);
@@ -271,9 +331,11 @@ public class OperationalReportService {
         validateRange(from, to);
         Hospital hospital = hospital(hospitalId);
 
-        PdfReport r = begin("ED QUALITY METRICS REPORT", "Quality Metrics", hospital,
-                List.of("Period: " + from + " → " + to + " (inclusive)",
-                        "Source: scheduled daily quality snapshots"), requestedBy);
+        PdfReport r = begin("Quality Metrics", "Quality Metrics", "Quality & governance", hospital, requestedBy);
+        r.metaStrip(List.of(
+                PdfReport.kv("Period", from + " → " + to + " (inclusive)"),
+                PdfReport.kv("Requested by", requestedBy),
+                PdfReport.kv("Source", "Scheduled daily quality snapshots")));
 
         // findByHospitalAndDateRange + Java filter rather than findDailySnapshotsInRange:
         // that finder compares the enum path to a string literal ('DAILY') and returned
@@ -288,14 +350,14 @@ public class OperationalReportService {
                     + "quality scheduler; pick a period that includes captured days.", PdfReport.F_BODY);
         } else {
             QualityMetricSnapshot latest = snaps.get(snaps.size() - 1);
-            r.sectionHeader("Latest captured day — " + latest.getSnapshotDate());
-            r.statTiles(List.of(
-                    PdfReport.kv("Patients", n(latest.getTotalPatients())),
-                    PdfReport.kv("Admissions", n(latest.getTotalAdmissions())),
-                    PdfReport.kv("LWBS", n(latest.getTotalLeftWithoutBeingSeen())),
-                    PdfReport.kv("Avg wait (min)", dec(latest.getAverageWaitTimeMinutes())),
-                    PdfReport.kv("Door→triage (min)", dec(latest.getAverageDoorToTriageMinutes())),
-                    PdfReport.kv("Avg TEWS", dec(latest.getAverageTewsScore()))));
+            r.sectionHeader("Latest captured day", String.valueOf(latest.getSnapshotDate()));
+            r.kpiTiles(List.of(
+                    PdfReport.kpi(n(latest.getTotalPatients()), null, "Patients"),
+                    PdfReport.kpi(n(latest.getTotalAdmissions()), null, "Admissions"),
+                    PdfReport.kpi(n(latest.getTotalLeftWithoutBeingSeen()), null, "LWBS"),
+                    PdfReport.kpi(dec(latest.getAverageWaitTimeMinutes()), "min", "Avg wait"),
+                    PdfReport.kpi(dec(latest.getAverageDoorToTriageMinutes()), "min", "Door → triage"),
+                    PdfReport.kpi(dec(latest.getAverageTewsScore()), null, "Avg TEWS")), 3);
 
             r.sectionHeader("Daily snapshots");
             List<String[]> rows = new ArrayList<>();
@@ -309,7 +371,8 @@ public class OperationalReportService {
             }
             r.dataTable(
                     new String[]{"Date", "Patients", "Red", "Orange", "Admitted", "Deaths", "LWBS", "Avg wait", "Re-triages"},
-                    new float[]{15, 11, 8, 10, 12, 10, 9, 12, 13}, rows, 1);
+                    new Color[]{null, null, PdfReport.SATS_RED, PdfReport.SATS_ORANGE, null, null, null, null, null},
+                    new float[]{15, 11, 8, 10, 12, 10, 9, 12, 13}, rows, null, 1);
         }
 
         footerNote(r);
@@ -317,7 +380,128 @@ public class OperationalReportService {
     }
 
     // ─────────────────────────────────────────────────────────────────
-    // helpers
+    // shared rendering helpers
+    // ─────────────────────────────────────────────────────────────────
+
+    /** The SATS acuity mix: section header w/ total, 100% stacked bar, legend. */
+    private void acuityMix(PdfReport r, Map<String, Long> cats, long triaged) {
+        long total = cats.values().stream().mapToLong(Long::longValue).sum();
+        r.sectionHeader("Triage acuity mix", grp(triaged) + " triaged · SATS");
+        if (total <= 0) {
+            r.paragraph("No triage records in this window.", PdfReport.F_META);
+            return;
+        }
+        List<PdfReport.Segment> segs = new ArrayList<>();
+        List<PdfReport.LegendItem> leg = new ArrayList<>();
+        for (String key : satsOrder(cats)) {
+            long v = cats.getOrDefault(key, 0L);
+            if (v <= 0) continue;
+            Color c = satsColor(key);
+            segs.add(new PdfReport.Segment(grp(v), v, c, c == PdfReport.SATS_YELLOW));
+            leg.add(new PdfReport.LegendItem(c, pretty(key), satsMeaning(key), grp(v), pct(v, total)));
+        }
+        r.stackedBar(segs);
+        r.legend(leg);
+    }
+
+    /** Census tiles per zone plus a highlighted in-department total. */
+    private void censusTiles(PdfReport r, Map<String, Long> census) {
+        if (census.isEmpty()) {
+            r.paragraph("No active visits right now.", PdfReport.F_META);
+            return;
+        }
+        List<PdfReport.KeyVal> zones = new ArrayList<>();
+        long total = 0;
+        for (Map.Entry<String, Long> e : census.entrySet()) {
+            zones.add(PdfReport.kv(pretty(e.getKey()), String.valueOf(e.getValue())));
+            total += e.getValue();
+        }
+        r.censusTiles(zones, PdfReport.kv("In department", grp(total)));
+    }
+
+    private static PdfReport.WorkRow workRow(String label, long value, PdfReport.WorkTone toneWhenPresent,
+                                             String pillWhenPresent, String pillWhenZero, boolean sub) {
+        boolean present = value > 0;
+        return new PdfReport.WorkRow(label, String.valueOf(value),
+                present ? toneWhenPresent : PdfReport.WorkTone.OK, sub,
+                present ? pillWhenPresent : pillWhenZero);
+    }
+
+    private static List<PdfReport.Chip> acuityChips(Map<String, Long> acuity) {
+        List<PdfReport.Chip> chips = new ArrayList<>();
+        Map<String, Long> ordered = new LinkedHashMap<>();
+        for (String k : satsOrder(acuity)) if (acuity.containsKey(k)) ordered.put(k, acuity.get(k));
+        for (Map.Entry<String, Long> e : ordered.entrySet()) {
+            chips.add(new PdfReport.Chip(satsColor(e.getKey()), pretty(e.getKey()), String.valueOf(e.getValue())));
+        }
+        return chips;
+    }
+
+    private static List<PdfReport.BarRow> dispositionBars(Map<String, Long> disp) {
+        long max = disp.values().stream().mapToLong(Long::longValue).max().orElse(1);
+        long total = disp.values().stream().mapToLong(Long::longValue).sum();
+        List<PdfReport.BarRow> rows = new ArrayList<>();
+        disp.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .forEach(e -> rows.add(new PdfReport.BarRow(
+                        pretty(e.getKey()), (double) e.getValue() / max,
+                        dispositionColor(e.getKey()), grp(e.getValue()), pct(e.getValue(), total))));
+        return rows;
+    }
+
+    /** SATS keys in clinical order (then anything unexpected, so nothing is dropped). */
+    private static List<String> satsOrder(Map<String, Long> map) {
+        List<String> order = new ArrayList<>(List.of("RED", "ORANGE", "YELLOW", "GREEN", "BLUE"));
+        for (String k : map.keySet()) {
+            if (!order.contains(k.toUpperCase())) order.add(k);
+        }
+        return order;
+    }
+
+    private static Color satsColor(String key) {
+        String k = key.toUpperCase();
+        if (k.contains("RED")) return PdfReport.SATS_RED;
+        if (k.contains("ORANGE")) return PdfReport.SATS_ORANGE;
+        if (k.contains("YELLOW")) return PdfReport.SATS_YELLOW;
+        if (k.contains("GREEN")) return PdfReport.SATS_GREEN;
+        if (k.contains("BLUE")) return PdfReport.SATS_BLUE;
+        return PdfReport.SLATE_400;
+    }
+
+    private static String satsMeaning(String key) {
+        return switch (key.toUpperCase()) {
+            case "RED" -> "Immediate";
+            case "ORANGE" -> "Very urgent";
+            case "YELLOW" -> "Urgent";
+            case "GREEN" -> "Routine";
+            case "BLUE" -> "Dead on arrival";
+            default -> "";
+        };
+    }
+
+    private static Color dispositionColor(String key) {
+        String k = key.toUpperCase();
+        if (k.contains("DISCHARG")) return PdfReport.SATS_GREEN;
+        if (k.contains("ADMIT")) return PdfReport.BRAND;
+        if (k.contains("LWBS") || k.contains("LEFT")) return PdfReport.ACCENT;
+        if (k.contains("DECEAS") || k.contains("DEAD") || k.contains("DEATH")) return PdfReport.DANGER;
+        return PdfReport.SLATE_400;
+    }
+
+    private static long satsCount(Map<String, Long> cats, String key) {
+        return cats.entrySet().stream()
+                .filter(e -> e.getKey().toUpperCase().contains(key))
+                .mapToLong(Map.Entry::getValue).sum();
+    }
+
+    private static long dispCount(Map<String, Long> disp, String... keys) {
+        return disp.entrySet().stream()
+                .filter(e -> { for (String k : keys) if (e.getKey().toUpperCase().contains(k)) return true; return false; })
+                .mapToLong(Map.Entry::getValue).sum();
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // plumbing helpers
     // ─────────────────────────────────────────────────────────────────
 
     private Hospital hospital(UUID hospitalId) {
@@ -325,14 +509,12 @@ public class OperationalReportService {
                 .orElseThrow(() -> new ResourceNotFoundException("Hospital", "id", hospitalId));
     }
 
-    private PdfReport begin(String title, String docType, Hospital hospital,
-                            List<String> paramLines, String requestedBy) {
+    private PdfReport begin(String title, String docType, String eyebrow, Hospital hospital, String requestedBy) {
         List<String> meta = new ArrayList<>();
-        if (hospital.getHospitalCode() != null) meta.add("Facility code: " + hospital.getHospitalCode());
-        meta.addAll(paramLines);
+        if (hospital.getHospitalCode() != null) meta.add("Facility code · " + hospital.getHospitalCode());
         return PdfReport.begin(new PdfReport.Spec(
                 title, docType, hospital.getName(), meta, requestedBy,
-                "Operational report — generated from live clinical data"));
+                "Operational report — generated from live clinical data", eyebrow));
     }
 
     private void footerNote(PdfReport r) {
@@ -352,17 +534,25 @@ public class OperationalReportService {
         }
     }
 
-    private static List<PdfReport.KeyVal> kvsOf(Map<String, Long> counts, String prefix) {
-        List<PdfReport.KeyVal> out = new ArrayList<>();
-        for (Map.Entry<String, Long> e : counts.entrySet()) {
-            out.add(PdfReport.kv(prefix + e.getKey().replace('_', ' '), String.valueOf(e.getValue())));
+    /** "LEFT_WITHOUT_BEING_SEEN" → "Left without being seen"; "RED" → "Red"; acronyms kept. */
+    private static String pretty(String key) {
+        if (key == null || key.isBlank()) return "—";
+        String s = key.replace('_', ' ').trim();
+        if (s.length() <= 4 && s.equals(s.toUpperCase()) && !s.contains(" ")
+                && !List.of("RED", "BLUE").contains(s)) {
+            return s; // short acronyms like LWBS / DOA stay uppercase
         }
-        return out;
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1).toLowerCase();
     }
 
     private static String str(Object v) { return v != null ? v.toString() : "—"; }
     private static String n(Integer v) { return v != null ? String.valueOf(v) : "0"; }
     private static String dec(Double v) { return v != null ? String.format("%.1f", v) : "—"; }
+    private static String grp(long v) { return String.format("%,d", v); }
+    private static String pct(long v, long total) {
+        return total > 0 ? String.format("%.1f%%", 100.0 * v / total) : "";
+    }
+    private static long asLong(Object v) { return v instanceof Number num ? num.longValue() : 0L; }
     private static Double asDouble(Object v) {
         if (v == null) return null;
         if (v instanceof Number num) return num.doubleValue();
