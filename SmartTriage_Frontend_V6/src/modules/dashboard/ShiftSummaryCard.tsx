@@ -76,9 +76,11 @@ export function ShiftSummaryCard() {
   useEffect(() => { load(); }, [load]);
 
   // Census by zone (untriaged → TRIAGE), from the live patient store.
+  // The patient's actual placed zone wins; category mapping is only a
+  // fallback for patients not yet placed anywhere.
   const censusByZone: Record<string, number> = {};
   for (const p of patients) {
-    const zone = (getZoneForCategory(p.category) ?? 'TRIAGE') as string;
+    const zone = (p.currentEdZone ?? getZoneForCategory(p.category) ?? 'TRIAGE') as string;
     censusByZone[zone] = (censusByZone[zone] ?? 0) + 1;
   }
   // Staff grouped by zone (active assignments only).

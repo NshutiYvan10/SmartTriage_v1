@@ -12,6 +12,7 @@ import {
   Wind, Droplets, Brain, Clock, User, AlertTriangle, ChevronRight,
   Plus, Send, CheckCircle2, XCircle, Eye, Loader2, RefreshCw, LogOut,
   TrendingUp, Sparkles, Siren, UserCheck, ShieldAlert, Zap, Route, Globe,
+  MapPin,
 } from 'lucide-react';
 import { ClinicalSignsTab } from './ClinicalSignsTab';
 import { SepsisPanel } from './SepsisPanel';
@@ -900,7 +901,7 @@ export function VisitDetailPage() {
 
         {/* ── Tab Content ── */}
         <div className="animate-fade-up" style={{ animationDelay: '0.05s' }}>
-          {activeTab === 'overview' && <OverviewTab visit={visit} latestVitals={latestVitals} latestTriage={latestTriage} notes={notes} diagnoses={diagnoses} investigations={investigations} medications={medications} alerts={visitAlerts} pendingTransfer={pendingTransfer} reload={loadData} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
+          {activeTab === 'overview' && <OverviewTab visit={visit} latestVitals={latestVitals} latestTriage={latestTriage} notes={notes} diagnoses={diagnoses} investigations={investigations} medications={medications} alerts={visitAlerts} pendingTransfer={pendingTransfer} reload={loadData} navigate={navigate} onOpenTab={(tab: TabId) => setActiveTab(tab)} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'pre-hospital' && <PrehospitalTab visitId={visit.id} edTriageCategory={latestTriage?.triageCategory ?? null} />}
           {activeTab === 'vitals' && <VitalsTab visitId={visit.id} vitals={vitals} latestVitals={latestVitals} glassCard={glassCard} isDark={isDark} text={text} />}
           {activeTab === 'triage' && <TriageTab visit={visit} triageHistory={triageHistory} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
@@ -1009,8 +1010,16 @@ export function VisitDetailPage() {
 }
 
 // ═══════ OVERVIEW TAB ═══════
-function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, investigations, medications, alerts, pendingTransfer, reload, navigate, glassCard, glassInner, isDark, text }: any) {
+function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, investigations, medications, alerts, pendingTransfer, reload, navigate, onOpenTab, glassCard, glassInner, isDark, text }: any) {
   const unackAlerts = alerts.filter((a: ClinicalAlertResponse) => !a.acknowledged).length;
+
+  // Hero strip — the acuity picture at a glance. Prefers the formal ED triage;
+  // falls back to the paramedic's field category / server-cached TEWS for a
+  // patient who hasn't passed the triage desk yet.
+  const heroCategory: string | null = latestTriage?.triageCategory ?? visit.currentTriageCategory ?? null;
+  const heroIsFieldOnly = !latestTriage && !!visit.currentTriageCategory;
+  const heroCatColor = heroCategory ? (CATEGORY_COLORS[heroCategory] ?? CATEGORY_COLORS.GREEN) : null;
+  const heroTews: number | null = latestTriage?.tewsScore ?? visit.currentTewsScore ?? null;
   // RBAC — only users whose TODAY'S shift gives them triage authority can
   // click the "Re-triage now" button. Zone Nurses (including those with
   // permanent Charge Nurse designation working a non-CN shift) see the
@@ -1224,6 +1233,94 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
         text={text}
       />
     )}
+
+    {/* ── Hero strip — the one-glance acuity band. Leads with the triage
+        category + TEWS (the two numbers that order an ED), then where the
+        patient physically is, visit status, and how/when they arrived.
+        Chief complaint gets its own full-width line — it is the sentence
+        every inheriting clinician reads first. */}
+    <div className="rounded-2xl p-5" style={glassCard}>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+        {/* Acuity: category chip + TEWS */}
+        <div className="flex items-center gap-4">
+          {heroCatColor ? (
+            <span className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-sm font-black tracking-wide ${heroCatColor.bg} ${heroCatColor.text} ${heroCatColor.border}`}>
+              <span className={`w-2.5 h-2.5 rounded-full ${heroCatColor.dot} ${heroCategory === 'RED' ? 'animate-pulse' : ''}`} />
+              {heroCategory}
+              {heroIsFieldOnly && <span className="text-[9px] font-bold uppercase tracking-wider opacity-80">field</span>}
+            </span>
+          ) : (
+            <span className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-slate-400/40 text-sm font-black tracking-wide ${text.muted}`}>
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
+              NOT TRIAGED
+            </span>
+          )}
+          <div>
+            <p className={`text-3xl font-black leading-none ${heroCatColor ? heroCatColor.text : text.heading}`}>
+              {heroTews ?? '—'}
+            </p>
+            <p className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 ${text.muted}`}>TEWS</p>
+          </div>
+        </div>
+
+        <div className="hidden sm:block w-px h-10 self-center" style={{ background: isDark ? 'rgba(148,163,184,0.25)' : 'rgba(100,116,139,0.25)' }} />
+
+        {/* Where the patient is */}
+        <div className="flex items-center gap-2">
+          <MapPin className={`w-4 h-4 ${text.muted}`} />
+          <div>
+            <p className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Zone / Bed</p>
+            <p className={`text-sm font-bold ${text.heading}`}>
+              {visit.currentEdZone ?? 'Unassigned'}{visit.currentBedLabel ? ` · ${visit.currentBedLabel}` : ''}
+            </p>
+          </div>
+        </div>
+
+        {/* Visit status */}
+        <div className="flex items-center gap-2">
+          <Activity className={`w-4 h-4 ${text.muted}`} />
+          <div>
+            <p className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Status</p>
+            <p className={`text-sm font-bold ${text.heading}`}>{visit.status.replace(/_/g, ' ')}</p>
+          </div>
+        </div>
+
+        {/* Arrival time + mode */}
+        <div className="flex items-center gap-2">
+          <Clock className={`w-4 h-4 ${text.muted}`} />
+          <div>
+            <p className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Arrival</p>
+            <p className={`text-sm font-bold ${text.heading}`}>
+              {visit.arrivalTime ? format(new Date(visit.arrivalTime), 'dd MMM yyyy HH:mm') : '—'}
+              {visit.arrivalMode ? <span className={`font-semibold ${text.body}`}> · {visit.arrivalMode.replace(/_/g, ' ')}</span> : null}
+            </p>
+          </div>
+        </div>
+
+        {/* Flags — pushed to the right edge on wide screens */}
+        {(visit.isPediatric || visit.retriageCount > 0) && (
+          <div className="flex items-center gap-2 ml-auto">
+            {visit.isPediatric && (
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-violet-500/15 text-violet-500 border border-violet-500/30">
+                Pediatric
+              </span>
+            )}
+            {visit.retriageCount > 0 && (
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-500 border border-amber-500/30">
+                Re-triaged ×{visit.retriageCount}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Chief complaint — full-width, prominent */}
+      <div className="mt-4 pt-3" style={{ borderTop: isDark ? '1px solid rgba(148,163,184,0.15)' : '1px solid rgba(100,116,139,0.15)' }}>
+        <p className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Chief Complaint</p>
+        <p className={`text-base font-bold mt-0.5 ${text.heading}`}>{visit.chiefComplaint || '—'}</p>
+      </div>
+    </div>
+
     {/* Patient profile — persistent facts (allergies, chronic conditions,
         blood type, guardian). Safety-critical: rendered first so a doctor
         can't reach the form / orders without seeing the allergy list.
@@ -1242,15 +1339,15 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
           </div>
           <h3 className={`text-sm font-extrabold tracking-tight ${text.heading}`}>Visit Information</h3>
         </div>
+        {/* Status / arrival / chief complaint / pediatric moved to the hero
+            strip above — this card keeps the identifiers + care-team facts. */}
         <div className="space-y-2.5">
-          <InfoRow label="Visit #" value={visit.visitNumber} isDark={isDark} />
-          <InfoRow label="Patient" value={visit.patientName} isDark={isDark} />
-          <InfoRow label="Status" value={visit.status.replace(/_/g, ' ')} isDark={isDark} />
-          <InfoRow label="Arrival" value={visit.arrivalTime ? format(new Date(visit.arrivalTime), 'dd MMM yyyy HH:mm') : '—'} isDark={isDark} />
-          <InfoRow label="Arrival Mode" value={visit.arrivalMode?.replace(/_/g, ' ') || '—'} isDark={isDark} />
-          <InfoRow label="Chief Complaint" value={visit.chiefComplaint || '—'} isDark={isDark} />
-          <InfoRow label="Pediatric" value={visit.isPediatric ? 'Yes' : 'No'} isDark={isDark} />
-          <InfoRow label="Re-triage Count" value={String(visit.retriageCount)} isDark={isDark} />
+          <InfoRow label="Visit #" value={visit.visitNumber} isDark={isDark} text={text} />
+          <InfoRow label="Patient" value={visit.patientName} isDark={isDark} text={text} />
+          <InfoRow label="Primary Clinician" value={visit.primaryClinicianName || 'Not yet assigned'} isDark={isDark} text={text} />
+          {visit.referringFacility && (
+            <InfoRow label="Referred From" value={visit.referringFacility} isDark={isDark} text={text} />
+          )}
         </div>
       </div>
 
@@ -1261,15 +1358,20 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
             <Activity className="w-4 h-4 text-emerald-500" />
           </div>
           <h3 className={`text-sm font-extrabold tracking-tight ${text.heading}`}>Latest Vitals</h3>
+          {latestVitals?.recordedAt && (
+            <span className={`ml-auto text-[10px] font-semibold ${text.muted}`}>
+              Recorded {format(new Date(latestVitals.recordedAt), 'dd MMM HH:mm')}
+            </span>
+          )}
         </div>
         {latestVitals ? (
           <div className="grid grid-cols-2 gap-3">
-            <VitalTile icon={Heart} label="Heart Rate" value={`${latestVitals.heartRate || '—'} bpm`} color="text-red-500" bg="bg-red-500/10" glassInner={glassInner} isDark={isDark} />
-            <VitalTile icon={Droplets} label="SpO2" value={`${latestVitals.spo2 || '—'}%`} color="text-cyan-500" bg="bg-cyan-500/10" glassInner={glassInner} isDark={isDark} />
-            <VitalTile icon={Wind} label="Resp Rate" value={`${latestVitals.respiratoryRate || '—'} /min`} color="text-blue-500" bg="bg-blue-500/10" glassInner={glassInner} isDark={isDark} />
-            <VitalTile icon={Thermometer} label="Temp" value={`${latestVitals.temperature || '—'} °C`} color="text-amber-500" bg="bg-amber-500/10" glassInner={glassInner} isDark={isDark} />
-            <VitalTile icon={Activity} label="Blood Pressure" value={`${latestVitals.systolicBp || '—'}/${latestVitals.diastolicBp || '—'} mmHg`} color="text-violet-500" bg="bg-violet-500/10" glassInner={glassInner} isDark={isDark} />
-            <VitalTile icon={Brain} label="AVPU" value={latestVitals.avpu || '—'} color="text-emerald-500" bg="bg-emerald-500/10" glassInner={glassInner} isDark={isDark} />
+            <VitalTile icon={Heart} label="Heart Rate" value={`${latestVitals.heartRate || '—'} bpm`} color="text-red-500" bg="bg-red-500/10" glassInner={glassInner} isDark={isDark} text={text} />
+            <VitalTile icon={Droplets} label="SpO2" value={`${latestVitals.spo2 || '—'}%`} color="text-cyan-500" bg="bg-cyan-500/10" glassInner={glassInner} isDark={isDark} text={text} />
+            <VitalTile icon={Wind} label="Resp Rate" value={`${latestVitals.respiratoryRate || '—'} /min`} color="text-blue-500" bg="bg-blue-500/10" glassInner={glassInner} isDark={isDark} text={text} />
+            <VitalTile icon={Thermometer} label="Temp" value={`${latestVitals.temperature || '—'} °C`} color="text-amber-500" bg="bg-amber-500/10" glassInner={glassInner} isDark={isDark} text={text} />
+            <VitalTile icon={Activity} label="Blood Pressure" value={`${latestVitals.systolicBp || '—'}/${latestVitals.diastolicBp || '—'} mmHg`} color="text-violet-500" bg="bg-violet-500/10" glassInner={glassInner} isDark={isDark} text={text} />
+            <VitalTile icon={Brain} label="AVPU" value={latestVitals.avpu || '—'} color="text-emerald-500" bg="bg-emerald-500/10" glassInner={glassInner} isDark={isDark} text={text} />
           </div>
         ) : (
           <p className={`text-sm ${text.muted}`}>No vitals recorded yet</p>
@@ -1285,12 +1387,13 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
           <h3 className={`text-sm font-extrabold tracking-tight ${text.heading}`}>Triage Summary</h3>
         </div>
         {latestTriage ? (
+          /* Category + TEWS live in the hero strip — this card keeps the
+             provenance: how the decision was reached, by whom, and when. */
           <div className="space-y-2.5">
-            <InfoRow label="Category" value={latestTriage.triageCategory} isDark={isDark} />
-            <InfoRow label="TEWS Score" value={String(latestTriage.tewsScore)} isDark={isDark} />
-            <InfoRow label="Decision Path" value={latestTriage.decisionPath || '—'} isDark={isDark} />
-            <InfoRow label="Triaged By" value={latestTriage.triagedByName || '—'} isDark={isDark} />
-            <InfoRow label="Time" value={latestTriage.triageTime ? format(new Date(latestTriage.triageTime), 'dd MMM yyyy HH:mm') : '—'} isDark={isDark} />
+            <InfoRow label="Decision Path" value={latestTriage.decisionPath || '—'} isDark={isDark} text={text} />
+            <InfoRow label="Triaged By" value={latestTriage.triagedByName || '—'} isDark={isDark} text={text} />
+            <InfoRow label="Time" value={latestTriage.triageTime ? format(new Date(latestTriage.triageTime), 'dd MMM yyyy HH:mm') : '—'} isDark={isDark} text={text} />
+            <InfoRow label="Re-triage Count" value={String(visit.retriageCount)} isDark={isDark} text={text} />
           </div>
         ) : (
           <p className={`text-sm ${text.muted}`}>Not yet triaged</p>
@@ -1305,17 +1408,25 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
           </div>
           <h3 className={`text-sm font-extrabold tracking-tight ${text.heading}`}>Clinical Summary</h3>
         </div>
+        {/* Each count is a shortcut into its tab — same shell as the tab bar,
+            without a scroll back up to the tab strip. */}
         <div className="grid grid-cols-2 gap-3">
-          <StatCard label="Clinical Notes" count={notes.length} color="text-blue-500" bg="bg-blue-500/10" glassInner={glassInner} isDark={isDark} />
-          <StatCard label="Diagnoses" count={diagnoses.length} color="text-purple-500" bg="bg-purple-500/10" glassInner={glassInner} isDark={isDark} />
-          <StatCard label="Investigations" count={investigations.length} color="text-amber-500" bg="bg-amber-500/10" glassInner={glassInner} isDark={isDark} />
-          <StatCard label="Medications" count={medications.length} color="text-emerald-500" bg="bg-emerald-500/10" glassInner={glassInner} isDark={isDark} />
+          <StatCard label="Clinical Notes" count={notes.length} color="text-blue-500" bg="bg-blue-500/10" glassInner={glassInner} isDark={isDark} text={text} onClick={onOpenTab ? () => onOpenTab('notes') : undefined} />
+          <StatCard label="Diagnoses" count={diagnoses.length} color="text-purple-500" bg="bg-purple-500/10" glassInner={glassInner} isDark={isDark} text={text} onClick={onOpenTab ? () => onOpenTab('diagnoses') : undefined} />
+          <StatCard label="Investigations" count={investigations.length} color="text-amber-500" bg="bg-amber-500/10" glassInner={glassInner} isDark={isDark} text={text} onClick={onOpenTab ? () => onOpenTab('investigations') : undefined} />
+          <StatCard label="Medications" count={medications.length} color="text-emerald-500" bg="bg-emerald-500/10" glassInner={glassInner} isDark={isDark} text={text} onClick={onOpenTab ? () => onOpenTab('medications') : undefined} />
         </div>
         {unackAlerts > 0 && (
-          <div className="mt-3 p-3 rounded-xl flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
+          <button
+            type="button"
+            onClick={onOpenTab ? () => onOpenTab('alerts') : undefined}
+            className={`mt-3 p-3 rounded-xl flex items-center gap-2 w-full text-left transition-all ${onOpenTab ? 'hover:-translate-y-0.5 cursor-pointer' : 'cursor-default'}`}
+            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}
+          >
             <AlertTriangle className="w-4 h-4 text-red-500" />
             <span className="text-red-400 text-xs font-bold">{unackAlerts} unacknowledged alert{unackAlerts > 1 ? 's' : ''}</span>
-          </div>
+            {onOpenTab && <ChevronRight className="w-4 h-4 text-red-400 ml-auto" />}
+          </button>
         )}
       </div>
     </div>
@@ -2944,32 +3055,53 @@ function PendingTransferBanner({
   );
 }
 
-function InfoRow({ label, value, isDark }: { label: string; value: string; isDark: boolean }) {
+/** `text` (theme tokens) is optional so existing call sites that only pass
+ *  `isDark` (e.g. the Triage tab) keep working unchanged — the isDark
+ *  ternaries remain as the fallback. */
+function InfoRow({ label, value, isDark, text }: { label: string; value: string; isDark: boolean; text?: { heading: string; body: string; muted: string } }) {
   return (
     <div className="flex items-center justify-between py-1.5" style={{ borderBottom: isDark ? '1px solid rgba(2,132,199,0.08)' : '1px solid rgba(203,213,225,0.2)' }}>
-      <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</span>
-      <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>{value}</span>
+      <span className={`text-xs font-medium ${text ? text.muted : (isDark ? 'text-slate-400' : 'text-slate-500')}`}>{label}</span>
+      <span className={`text-xs font-bold text-right ${text ? text.heading : (isDark ? 'text-white' : 'text-slate-800')}`}>{value}</span>
     </div>
   );
 }
 
-function VitalTile({ icon: Icon, label, value, color, bg, glassInner, isDark }: any) {
+function VitalTile({ icon: Icon, label, value, color, bg, glassInner, isDark, text }: any) {
   return (
     <div className="rounded-xl p-3" style={glassInner}>
       <div className={`w-7 h-7 rounded-lg ${bg} flex items-center justify-center mb-1.5`}>
         <Icon className={`w-3.5 h-3.5 ${color}`} />
       </div>
-      <p className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>{value}</p>
-      <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</p>
+      <p className={`text-xs font-bold ${text ? text.heading : (isDark ? 'text-white' : 'text-slate-800')}`}>{value}</p>
+      <p className={`text-[10px] ${text ? text.muted : (isDark ? 'text-slate-400' : 'text-slate-500')}`}>{label}</p>
     </div>
   );
 }
 
-function StatCard({ label, count, color, bg, glassInner, isDark }: any) {
+/** With `onClick` the card renders as a button that jumps to its tab —
+ *  count tiles stop being dead ends. Without it, the original static tile. */
+function StatCard({ label, count, color, bg, glassInner, isDark, text, onClick }: any) {
+  const labelCls = `text-[10px] font-bold uppercase tracking-wider ${text ? text.muted : (isDark ? 'text-slate-400' : 'text-slate-500')}`;
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title={`Open ${label}`}
+        className="group relative rounded-xl p-3 text-center w-full transition-all hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+        style={glassInner}
+      >
+        <ChevronRight className={`absolute top-2 right-2 w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all ${color}`} />
+        <p className={`text-xl font-black ${color}`}>{count}</p>
+        <p className={labelCls}>{label}</p>
+      </button>
+    );
+  }
   return (
     <div className="rounded-xl p-3 text-center" style={glassInner}>
       <p className={`text-xl font-black ${color}`}>{count}</p>
-      <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</p>
+      <p className={labelCls}>{label}</p>
     </div>
   );
 }

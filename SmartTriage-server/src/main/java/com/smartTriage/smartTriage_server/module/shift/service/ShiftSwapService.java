@@ -74,6 +74,16 @@ public class ShiftSwapService {
             throw new ClinicalBusinessException(
                     "Both sides of the swap belong to the same user");
         }
+        // Like-for-like: a swap must exchange equivalent cover — a nurse
+        // cannot take over a doctor's shift. Same Role is the eligibility
+        // floor; designation seniority is still weighed by the Charge
+        // Nurse at approval.
+        if (requesterAssignment.getUser().getRole() != partnerAssignment.getUser().getRole()) {
+            throw new ClinicalBusinessException(
+                    "Swaps must be like-for-like: both clinicians must hold the same role ("
+                    + requesterAssignment.getUser().getRole() + " cannot swap with "
+                    + partnerAssignment.getUser().getRole() + ")");
+        }
 
         // Don't propose against a row that's already in an open swap.
         swapRepository.findOpenForAssignment(requesterAssignment.getId())

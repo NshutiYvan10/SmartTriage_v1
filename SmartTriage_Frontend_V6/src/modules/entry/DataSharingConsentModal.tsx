@@ -14,6 +14,7 @@ import {
   type DataSharingConsentStatus,
 } from '@/api/crossHospital';
 import { ApiError } from '@/api/client';
+import { useTheme } from '@/hooks/useTheme';
 
 const GRANTORS: { value: ConsentGrantor; label: string }[] = [
   { value: 'PATIENT', label: 'Patient' },
@@ -30,6 +31,8 @@ interface Props {
 }
 
 export function DataSharingConsentModal({ nationalId, patientName, onClose }: Props) {
+  const { glassCard, glassInner, isDark, text } = useTheme();
+  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const [history, setHistory] = useState<DataSharingConsent[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -93,7 +96,7 @@ export function DataSharingConsentModal({ nationalId, patientName, onClose }: Pr
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
     >
-      <div className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden bg-white animate-scale-in">
+      <div style={glassCard} className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto animate-scale-in">
         <div className="bg-gradient-to-r from-cyan-700 to-emerald-700 px-5 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2 text-white">
             <FileSignature className="w-5 h-5" />
@@ -103,23 +106,23 @@ export function DataSharingConsentModal({ nationalId, patientName, onClose }: Pr
         </div>
 
         <div className="p-5 space-y-4">
-          <p className="text-xs text-slate-500">
-            {patientName ? <span className="font-semibold text-slate-700">{patientName} — </span> : null}
+          <p className={`text-xs ${text.muted}`}>
+            {patientName ? <span className={`font-semibold ${text.body}`}>{patientName} — </span> : null}
             Records the patient's decision to share their deep clinical record across SmartTriage
             hospitals. The safety summary is always available regardless of this choice.
           </p>
 
           {/* Current effective consent */}
           {loading ? (
-            <div className="flex items-center gap-2 text-xs text-slate-500">
+            <div className={`flex items-center gap-2 text-xs ${text.muted}`}>
               <Loader2 className="w-4 h-4 animate-spin" /> Loading current consent…
             </div>
           ) : effective ? (
-            <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 flex items-start gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+            <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/25 p-3 flex items-start gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0 text-xs">
-                <p className="font-bold text-emerald-800">Sharing currently GRANTED</p>
-                <p className="text-emerald-700/80 mt-0.5">
+                <p className={`font-bold ${isDark ? 'text-emerald-300' : 'text-emerald-800'}`}>Sharing currently GRANTED</p>
+                <p className={isDark ? 'text-emerald-300/70 mt-0.5' : 'text-emerald-700/80 mt-0.5'}>
                   By {effective.obtainedByName ?? 'clinician'}
                   {effective.obtainedAt ? ` · ${new Date(effective.obtainedAt).toLocaleString()}` : ''}
                 </p>
@@ -127,13 +130,13 @@ export function DataSharingConsentModal({ nationalId, patientName, onClose }: Pr
               <button
                 type="button" disabled={submitting}
                 onClick={() => withdraw(effective.id)}
-                className="text-xs font-semibold text-red-600 hover:text-red-800 px-2 py-1 rounded-xl hover:bg-red-50 disabled:opacity-50"
+                className="text-xs font-semibold text-red-500 hover:text-red-400 px-2 py-1 rounded-xl hover:bg-red-500/10 disabled:opacity-50"
               >
                 Withdraw
               </button>
             </div>
           ) : (
-            <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 flex items-center gap-2 text-xs text-slate-600">
+            <div style={glassInner} className={`rounded-lg p-3 flex items-center gap-2 text-xs ${text.muted}`}>
               <ShieldOff className="w-4 h-4 text-slate-400" /> No active sharing consent on file.
             </div>
           )}
@@ -147,7 +150,7 @@ export function DataSharingConsentModal({ nationalId, patientName, onClose }: Pr
                   className={`flex-1 px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${
                     status === s
                       ? (s === 'GRANTED' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-red-600 text-white border-red-600')
-                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+                      : `${isDark ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-slate-300 hover:bg-slate-50'} ${text.body}`}`}
                 >
                   {s === 'GRANTED' ? 'Grant sharing' : 'Refuse sharing'}
                 </button>
@@ -155,10 +158,11 @@ export function DataSharingConsentModal({ nationalId, patientName, onClose }: Pr
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">Consent given by</label>
+              <label className={`block text-[11px] font-bold uppercase tracking-wide mb-1 ${text.label}`}>Consent given by</label>
               <select
                 value={grantor} onChange={(e) => setGrantor(e.target.value as ConsentGrantor)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                style={glassInner}
+                className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
               >
                 {GRANTORS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
               </select>
@@ -166,33 +170,35 @@ export function DataSharingConsentModal({ nationalId, patientName, onClose }: Pr
 
             {grantor !== 'PATIENT' && (
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">Grantor name</label>
+                <label className={`block text-[11px] font-bold uppercase tracking-wide mb-1 ${text.label}`}>Grantor name</label>
                 <input
                   type="text" value={grantorName} onChange={(e) => setGrantorName(e.target.value)}
                   placeholder="Name of the person giving consent"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                  style={glassInner}
+                  className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">Notes (optional)</label>
+              <label className={`block text-[11px] font-bold uppercase tracking-wide mb-1 ${text.label}`}>Notes (optional)</label>
               <textarea
                 value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                style={glassInner}
+                className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`}
               />
             </div>
           </div>
 
           {error && (
-            <div className="rounded-lg bg-red-50 border border-red-200 p-2.5 text-xs font-semibold text-red-700">
+            <div className={`rounded-lg bg-red-500/10 border border-red-500/25 p-2.5 text-xs font-semibold ${isDark ? 'text-red-300' : 'text-red-700'}`}>
               {error}
             </div>
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-100">
-          <button onClick={onClose} disabled={submitting} className="px-4 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">
+        <div className="flex items-center justify-end gap-2 px-5 py-3" style={{ borderTop: borderStyle }}>
+          <button onClick={onClose} disabled={submitting} className={`px-4 py-1.5 rounded-xl text-xs font-bold hover:bg-white/5 ${text.body}`}>
             Close
           </button>
           <button

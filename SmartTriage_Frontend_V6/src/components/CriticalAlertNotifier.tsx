@@ -42,6 +42,15 @@ interface ToastEntry {
   spawnedAt: number;
 }
 
+/** Personal work notice (e.g. acting-CN delegation) — visit-less, not ack-able. */
+interface NoticeEntry {
+  id: string;
+  title: string;
+  message: string;
+  spawnedAt: number;
+}
+const NOTICE_DURATION_MS = 20_000;
+
 export function CriticalAlertNotifier() {
   const alerts = useAlertStore((s) => s.alerts);
   const navigate = useNavigate();
@@ -49,6 +58,34 @@ export function CriticalAlertNotifier() {
 
   const [flashing, setFlashing] = useState(false);
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
+  const [notices, setNotices] = useState<NoticeEntry[]>([]);
+
+  // Personal work notices pushed on /topic/alerts/user/{id} without a visit
+  // (routed here by useWebSocket) — e.g. "you are now acting Charge Nurse".
+  useEffect(() => {
+    const onNotice = (e: Event) => {
+      const d = (e as CustomEvent).detail ?? {};
+      playAlertTone();
+      setNotices((prev) => [...prev, {
+        id: `N${Date.now()}${Math.random().toString(36).slice(2, 7)}`,
+        title: String(d.title ?? 'Notification'),
+        message: String(d.message ?? ''),
+        spawnedAt: Date.now(),
+      }]);
+    };
+    window.addEventListener('smarttriage:user-notice', onNotice);
+    return () => window.removeEventListener('smarttriage:user-notice', onNotice);
+  }, []);
+
+  // Auto-expire notices (longer than critical toasts — they are rarer and
+  // carry standing information; still manually dismissible).
+  useEffect(() => {
+    if (notices.length === 0) return;
+    const iv = window.setInterval(() => {
+      setNotices((prev) => prev.filter((n) => Date.now() - n.spawnedAt < NOTICE_DURATION_MS));
+    }, 1_000);
+    return () => window.clearInterval(iv);
+  }, [notices.length]);
 
   // Track the (alert, escalation-tier) pairs we've already announced so re-renders /
   // store reorders don't double-fire — BUT a re-escalation (same id, higher tier) is a
@@ -155,6 +192,28 @@ export function CriticalAlertNotifier() {
 
       {/* Toast stack — top right, below sidebar header. */}
       <div className="fixed top-4 right-4 z-[9998] flex flex-col gap-2 max-w-sm">
+        {notices.map((n) => (
+          <div
+            key={n.id}
+            className="bg-cyan-700 text-white rounded-xl shadow-2xl border-2 border-cyan-300 p-3 animate-fade-down"
+          >
+            <div className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-widest opacity-80">
+                  {n.title}
+                </div>
+                <div className="text-xs opacity-95">{n.message}</div>
+              </div>
+              <button
+                onClick={() => setNotices((prev) => prev.filter((x) => x.id !== n.id))}
+                className="opacity-70 hover:opacity-100"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        ))}
         {toasts.map((t) => (
           <div
             key={t.alertId}

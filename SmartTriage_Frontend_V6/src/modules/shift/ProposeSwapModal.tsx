@@ -110,6 +110,10 @@ export function ProposeSwapModal({
     return candidates
       .filter((c) => c.id !== myAssignment.id)   // not yourself
       .filter((c) => c.active)                    // only active rows
+      // Like-for-like eligibility: swaps exchange equivalent cover, so
+      // only colleagues holding the same role are valid partners (the
+      // backend rejects mismatches; don't show them in the first place).
+      .filter((c) => c.userRole === myAssignment.userRole)
       .sort((a, b) => {
         // Group by period (DAY first), then zone, then user name.
         if (a.shiftPeriod !== b.shiftPeriod) {
@@ -118,7 +122,7 @@ export function ProposeSwapModal({
         if (a.zone !== b.zone) return a.zone.localeCompare(b.zone);
         return a.userName.localeCompare(b.userName);
       });
-  }, [candidates, myAssignment.id]);
+  }, [candidates, myAssignment.id, myAssignment.userRole]);
 
   const selected = filteredCandidates.find(c => c.id === selectedId) ?? null;
 

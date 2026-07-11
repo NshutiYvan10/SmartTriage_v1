@@ -49,6 +49,7 @@ import type {
 } from '@/api/types';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 const ALL_ZONES: EdZone[] = [
   'RESUS', 'ACUTE', 'GENERAL', 'AMBULATORY', 'TRIAGE',
@@ -238,7 +239,7 @@ export function ShiftCalendarPage() {
                     className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-white transition-colors inline-flex items-center gap-1.5"
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    Apply Template
+                    Apply Plan
                   </button>
                   <span className="w-px h-6 bg-white/15 mx-1" />
                 </>
@@ -268,8 +269,9 @@ export function ShiftCalendarPage() {
         </div>
 
         {toast && (
-          <div className="rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 px-4 py-2 text-sm">
-            {toast}
+          <div className="rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 px-4 py-2 text-sm flex items-center gap-3">
+            <span className="flex-1">{toast}</span>
+            <button type="button" onClick={() => setToast(null)} aria-label="Dismiss notification" className="p-0.5 rounded hover:opacity-70"><X className="w-3.5 h-3.5" /></button>
           </div>
         )}
 
@@ -386,7 +388,7 @@ export function ShiftCalendarPage() {
               result.slotsSkipped > 0 ? `${result.slotsSkipped} skipped` : null,
               result.rowsCreated > 0 ? `${result.rowsCreated} row(s)` : null,
             ].filter(Boolean).join(', ');
-            showToast(`Apply template: ${parts || 'no changes'}.`);
+            showToast(`Apply plan: ${parts || 'no changes'}.`);
             // Trigger calendar reload AFTER the toast so the re-fetch fires
             // post-commit (small but real defence against any read-after-
             // write timing). The async ordering is what makes the calendar
@@ -523,17 +525,30 @@ function DayDetailPanel({
     return () => { cancelled = true; };
   }, [hospitalId, dateIso, reloadKey]);
 
-  const handleRemove = useCallback(async (assignmentId: string, label: string) => {
-    if (!confirm(`Remove ${label} from this shift?`)) return;
+  // In-app confirmation before removing someone from the roster — the
+  // browser-native confirm() is unstyled and easy to reflex-click through.
+  const [pendingRemove, setPendingRemove] = useState<{ assignmentId: string; label: string } | null>(null);
+  const [removing, setRemoving] = useState(false);
+
+  const handleRemove = useCallback((assignmentId: string, label: string) => {
+    setPendingRemove({ assignmentId, label });
+  }, []);
+
+  const confirmRemove = useCallback(async () => {
+    if (!pendingRemove) return;
+    setRemoving(true);
     try {
-      await shiftApi.remove(assignmentId);
-      onToast(`Removed ${label}.`);
+      await shiftApi.remove(pendingRemove.assignmentId);
+      onToast(`Removed ${pendingRemove.label}.`);
       reload();
       onChange();
     } catch (e: any) {
       onToast(`Failed to remove: ${e?.message ?? 'server error'}`);
+    } finally {
+      setRemoving(false);
+      setPendingRemove(null);
     }
-  }, [onToast, reload, onChange]);
+  }, [pendingRemove, onToast, reload, onChange]);
 
   const dayLeaves = useMemo(() => {
     const target = new Date(dateIso + 'T00:00:00');
@@ -610,6 +625,16 @@ function DayDetailPanel({
       )}
 
       {loading && <div className={`text-xs ${text.muted}`}>Loading…</div>}
+
+      <ConfirmDialog
+        open={pendingRemove !== null}
+        title="Remove from roster"
+        message={`Are you sure you want to remove ${pendingRemove?.label ?? 'this staff member'} from this shift? Their zone will lose this coverage immediately.`}
+        confirmLabel="Remove"
+        busy={removing}
+        onConfirm={confirmRemove}
+        onClose={() => setPendingRemove(null)}
+      />
     </aside>
   );
 }
@@ -1306,9 +1331,9 @@ function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: Ap
   };
 
   return (
-    <ModalShell title="Apply Template" subtitle="Materialise a template across a date range." onClose={onClose}>
+    <ModalShell title="Apply Plan" subtitle="Materialise a shift plan across a date range." onClose={onClose}>
       <div className="space-y-3 text-sm">
-        <Field label="Template">
+        <Field label="Plan">
           <select
             value={templateId}
             onChange={(e) => setTemplateId(e.target.value)}
@@ -1325,7 +1350,7 @@ function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: Ap
           </select>
           {!loadingTpls && templates.length === 0 && (
             <div className={`text-[11px] mt-1 ${text.muted}`}>
-              No active templates. Create one in Shift Templates first.
+              No active plans. Create one in Shift Planner first.
             </div>
           )}
         </Field>
@@ -1352,8 +1377,8 @@ function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: Ap
         {selected && (
           <div className={`text-[11px] ${text.muted}`}>
             Will materialise <strong>{selected.shiftPeriod}</strong> shifts only —
-            the template's own period. To stage day + night together, run
-            this twice with the matching template for each.
+            the plan's own period. To stage day + night together, run
+            this twice with the matching plan for each.
           </div>
         )}
         {/* V55 — overwrite-by-default with explicit opt-out for fill-empty.
@@ -1371,7 +1396,7 @@ function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: Ap
             <span className={`block ${text.muted}`}>
               {skipExisting
                 ? 'Existing rosters will be left untouched. Only empty slots are filled.'
-                : 'Existing rosters on these dates will be replaced with this template (default).'}
+                : 'Existing rosters on these dates will be replaced with this plan (default).'}
             </span>
           </span>
         </label>
@@ -1380,7 +1405,7 @@ function ApplyTemplateModal({ hospitalId, defaultFromDate, onClose, onDone }: Ap
       <ModalActions
         submitting={submitting}
         disabled={!templateId}
-        submitLabel="Apply template"
+        submitLabel="Apply plan"
         onCancel={onClose}
         onSubmit={submit}
       />

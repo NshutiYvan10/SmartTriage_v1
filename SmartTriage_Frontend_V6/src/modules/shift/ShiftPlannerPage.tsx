@@ -13,7 +13,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   CalendarDays, Loader2, RefreshCw, Save, Trash2, UserPlus,
   Crown, Users, Search, AlertCircle, CheckCircle2, Info,
-  Sun, Moon, FileText, Plus,
+  Sun, Moon, FileText, Plus, X,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
@@ -204,7 +204,7 @@ export function ShiftPlannerPage() {
       setDraft(existing ? toDraft(existing) : emptyDraft(activePeriod));
     } else {
       console.error('[ShiftPlanner] Templates load failed:', tplResult.reason);
-      showToast('Failed to load shift templates', 'error');
+      showToast('Failed to load shift plans', 'error');
     }
 
     if (userResult.status === 'fulfilled') {
@@ -240,7 +240,7 @@ export function ShiftPlannerPage() {
   const addUserToDraft = (u: UserResponse) => {
     if (isReadOnly) return;
     if (draft.assignments.some((a) => a.userId === u.id)) {
-      showToast(`${u.firstName} ${u.lastName} is already in this template`, 'error');
+      showToast(`${u.firstName} ${u.lastName} is already in this plan`, 'error');
       return;
     }
     const fn = defaultFunctionFor(u.role);
@@ -297,7 +297,7 @@ export function ShiftPlannerPage() {
       return;
     }
     if (!draft.name.trim()) {
-      showToast('Template name is required', 'error');
+      showToast('Plan name is required', 'error');
       return;
     }
 
@@ -322,12 +322,12 @@ export function ShiftPlannerPage() {
       setTemplates((prev) => ({ ...prev, [saved.shiftPeriod]: saved }));
       setDraft(toDraft(saved));
       showToast(
-        draft.id ? 'Template updated' : 'Template created — will materialize at next shift boundary',
+        draft.id ? 'Plan updated' : 'Plan created — will materialize at next shift boundary',
         'success',
       );
     } catch (err: any) {
       console.error('[ShiftPlanner] Save failed:', err);
-      showToast(err?.message || 'Failed to save template', 'error');
+      showToast(err?.message || 'Failed to save plan', 'error');
     } finally {
       setSaving(false);
     }
@@ -335,7 +335,7 @@ export function ShiftPlannerPage() {
 
   const handleDelete = async () => {
     if (!draft.id) return;
-    if (!window.confirm(`Delete the ${activePeriod.toLowerCase()} shift template? This cannot be undone.`)) {
+    if (!window.confirm(`Delete the ${activePeriod.toLowerCase()} shift plan? This cannot be undone.`)) {
       return;
     }
     setDeleting(true);
@@ -343,10 +343,10 @@ export function ShiftPlannerPage() {
       await shiftTemplateApi.remove(draft.id);
       setTemplates((prev) => ({ ...prev, [activePeriod]: null }));
       setDraft(emptyDraft(activePeriod));
-      showToast('Template deleted', 'success');
+      showToast('Plan deleted', 'success');
     } catch (err: any) {
       console.error('[ShiftPlanner] Delete failed:', err);
-      showToast(err?.message || 'Failed to delete template', 'error');
+      showToast(err?.message || 'Failed to delete plan', 'error');
     } finally {
       setDeleting(false);
     }
@@ -429,7 +429,7 @@ export function ShiftPlannerPage() {
             toast.type === 'success' ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'
           }`}
         >
-          {toast.msg}
+          <span className="inline-flex items-center gap-3">{toast.msg} <button type="button" onClick={() => setToast(null)} aria-label="Dismiss notification" className="p-0.5 rounded hover:opacity-70"><X className="w-3.5 h-3.5" /></button></span>
         </div>
       )}
 
@@ -494,7 +494,7 @@ export function ShiftPlannerPage() {
                             hasTemplate ? 'text-emerald-500' : 'text-slate-400'
                           }`}
                         >
-                          {hasTemplate ? '✓ Template set' : 'No template'}
+                          {hasTemplate ? '✓ Plan set' : 'No plan'}
                         </span>
                       </div>
                     </div>
@@ -516,8 +516,8 @@ export function ShiftPlannerPage() {
         <div className="flex items-start gap-3">
           <Info className="w-4 h-4 text-cyan-500 mt-0.5 flex-shrink-0" />
           <p className={`text-xs leading-relaxed ${text.body}`}>
-            Templates apply automatically at the next shift boundary. For the <strong>current</strong> shift, use{' '}
-            <strong>Shift Zones</strong> to make one-off adjustments. If no template exists, the scheduler copies the
+            Plans apply automatically at the next shift boundary. For the <strong>current</strong> shift, use{' '}
+            <strong>Shift Zones</strong> to make one-off adjustments. If no plan exists, the scheduler copies the
             previous shift's roster forward as a fallback.
           </p>
         </div>
@@ -541,10 +541,10 @@ export function ShiftPlannerPage() {
                 <PeriodIcon className={`w-5 h-5 ${text.heading}`} />
                 <div className="flex-1">
                   <h2 className={`text-sm font-bold ${text.heading}`}>
-                    {periodMeta.label} Template
+                    {periodMeta.label} Plan
                   </h2>
                   <p className={`text-[11px] ${text.muted}`}>
-                    {draft.id ? 'Editing existing template' : 'Creating new template'}
+                    {draft.id ? 'Editing existing plan' : 'Creating new plan'}
                   </p>
                 </div>
                 {leadRow && (
@@ -562,7 +562,7 @@ export function ShiftPlannerPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className={`text-[10px] font-bold uppercase tracking-wider ${text.muted} mb-1.5 block`}>
-                      Template Name
+                      Plan Name
                     </label>
                     <input
                       type="text"
@@ -640,7 +640,7 @@ export function ShiftPlannerPage() {
                     }`}
                   >
                     <UserPlus className={`w-8 h-8 mx-auto mb-2 opacity-30 ${text.muted}`} />
-                    <p className={`text-sm ${text.muted}`}>No staff in this template yet</p>
+                    <p className={`text-sm ${text.muted}`}>No staff in this plan yet</p>
                     <p className={`text-[11px] mt-1 ${text.muted}`}>
                       Pick users from the staff pool on the right →
                     </p>
@@ -760,7 +760,7 @@ export function ShiftPlannerPage() {
                             {/* Remove */}
                             <button
                               onClick={() => removeFromDraft(a.userId)}
-                              title="Remove from template"
+                              title="Remove from plan"
                               className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
                                 isDark ? 'hover:bg-red-500/20 text-red-400' : 'hover:bg-red-50 text-red-500'
                               }`}
@@ -812,7 +812,7 @@ export function ShiftPlannerPage() {
                   >
                     <span className="flex items-center gap-1.5">
                       {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                      Delete template
+                      Delete plan
                     </span>
                   </button>
                 )}
@@ -826,7 +826,7 @@ export function ShiftPlannerPage() {
                   >
                     <span className="flex items-center gap-2">
                       {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      {draft.id ? 'Save changes' : 'Create template'}
+                      {draft.id ? 'Save changes' : 'Create plan'}
                     </span>
                   </button>
                 )}
@@ -879,7 +879,7 @@ export function ShiftPlannerPage() {
                 <div className={`text-center py-8 ${text.muted}`}>
                   <Users className="w-6 h-6 mx-auto mb-2 opacity-30" />
                   <p className="text-xs italic">
-                    {search ? 'No matching staff' : 'All clinicians are in this template'}
+                    {search ? 'No matching staff' : 'All clinicians are in this plan'}
                   </p>
                 </div>
               ) : (

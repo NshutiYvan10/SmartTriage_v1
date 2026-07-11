@@ -20,7 +20,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Radio, Plus, RefreshCw, Loader2, Copy, Check, KeyRound, Power,
-  CircleDot, PauseCircle, BatteryMedium, Clock, HeartPulse,
+  CircleDot, PauseCircle, BatteryMedium, Clock, HeartPulse, X,
 } from 'lucide-react';
 import { iotApi } from '@/api/iot';
 import type { DeviceResponse, DeviceLatestVitalsResponse } from '@/api/types';
@@ -179,7 +179,8 @@ export function MonitorManagementView() {
           <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold animate-fade-up ${
             toast.type === 'ok' ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/20'
               : 'bg-rose-500/15 text-rose-500 border border-rose-500/20'}`}>
-            {toast.text}
+            <span className="flex-1">{toast.text}</span>
+            <button type="button" onClick={() => setToast(null)} aria-label="Dismiss notification" className="p-0.5 rounded hover:opacity-70"><X className="w-3.5 h-3.5" /></button>
           </div>
         )}
 

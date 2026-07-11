@@ -16,11 +16,10 @@ import { useNavigate } from 'react-router-dom';
 import {
   Siren, Plus, RefreshCw, Loader2, CheckCircle2, AlertOctagon,
   Send, MapPin, Clock, Activity, ClipboardList, Wifi, WifiOff,
-  ShieldAlert, HeartPulse, ChevronDown, ChevronUp, Download, ExternalLink,
+  ShieldAlert, HeartPulse, ChevronDown, ChevronUp, Download, ExternalLink, X,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { emsApi } from '@/api/ems';
-import { saveBlob } from '@/api/client';
 import { chartPath } from '@/lib/chartNav';
 import type { EmsRun, EmsRunStatus, FieldTriageCategory, PatientHistory } from '@/api/ems';
 import { subscribeToEmsRuns, getStompClient } from '@/api/websocket';
@@ -29,6 +28,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { EmsRunForm } from './EmsRunForm';
+import { PdfPreviewModal, usePdfPreview } from '@/components/PdfPreviewModal';
 
 const STATUS_LABEL: Record<EmsRunStatus, string> = {
   DISPATCHED: 'Dispatched', EN_ROUTE: 'En route', ARRIVED: 'At ED',
@@ -54,6 +54,7 @@ function triageColor(c: FieldTriageCategory | null): string {
 
 export function ParamedicDashboard() {
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const { showPdf, previewProps } = usePdfPreview();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
@@ -161,6 +162,7 @@ export function ParamedicDashboard() {
     <RunCard
       key={run.id} run={run} glassCard={glassCard} glassInner={glassInner} text={text} isDark={isDark}
       canAct={canCreateRun}
+      onPreviewPdf={showPdf}
       onOpenChart={() => { if (run.visitId) navigate(chartPath(run.visitId)); }}
       onOpen={() => { setEditing(run); setShowForm(true); }}
       onPreregister={async () => {
@@ -227,7 +229,8 @@ export function ParamedicDashboard() {
             toast.type === 'ok' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
               : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}`}>
             {toast.type === 'ok' ? <CheckCircle2 className="w-5 h-5" /> : <AlertOctagon className="w-5 h-5" />}
-            {toast.text}
+            <span className="flex-1">{toast.text}</span>
+            <button type="button" onClick={() => setToast(null)} aria-label="Dismiss notification" className="p-0.5 rounded hover:opacity-70"><X className="w-3.5 h-3.5" /></button>
           </div>
         )}
 
@@ -317,6 +320,7 @@ export function ParamedicDashboard() {
           onSaved={() => { setShowForm(false); setEditing(null); load(); flash('ok', 'Saved'); }}
         />
       )}
+      <PdfPreviewModal {...previewProps} />
     </div>
   );
 }
@@ -346,7 +350,7 @@ function ConnectivityPill({ online, lastSync, syncFailed }: { online: boolean; l
 // Cards
 // ─────────────────────────────────────────────────────────────────
 
-function RunCard({ run, glassCard, glassInner, text, isDark, canAct = true, onOpen, onOpenChart, onPreregister, onConfirmArrival, onToggleLights }: any) {
+function RunCard({ run, glassCard, glassInner, text, isDark, canAct = true, onOpen, onOpenChart, onPreregister, onConfirmArrival, onToggleLights, onPreviewPdf }: any) {
   const stat: EmsRunStatus = run.status;
   const [showHistory, setShowHistory] = useState(false);
   const [downloadingPcr, setDownloadingPcr] = useState(false);
@@ -363,7 +367,7 @@ function RunCard({ run, glassCard, glassInner, text, isDark, canAct = true, onOp
     setDownloadingPcr(true);
     try {
       const { blob, filename } = await emsApi.downloadPcr(run.id);
-      saveBlob(blob, filename);
+      onPreviewPdf?.(blob, filename);
     } catch (e) {
       console.error('[EMS] PCR download failed', e);
     } finally {
@@ -558,4 +562,3 @@ function Stat({ label, value, text }: { label: string; value: any; text: any }) 
     </div>
   );
 }
-

@@ -98,9 +98,12 @@ public class BedController {
         return ResponseEntity.ok(ApiResponse.success(bedService.getBedsForHospital(hospitalId)));
     }
 
+    // Bed READS are hospital-wide for any hospital member: finding a free bed
+    // for a cross-zone transfer is a core ED task, so the zone-coverage gate
+    // (canReceiveZoneAlerts) was reverted here at the product owner's request.
+    // Placement / discharge / transfer WRITES keep their stricter authz below.
     @GetMapping("/hospital/{hospitalId}/zone/{zone}")
-    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId) and "
-            + "@clinicalAuthz.canReceiveZoneAlerts(authentication, #hospitalId, #zone)")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<BedResponse>>> getBedsByZone(
             @PathVariable UUID hospitalId,
             @PathVariable EdZone zone) {
@@ -112,8 +115,7 @@ public class BedController {
      * bed-grid header ("6 of 8 occupied"). One call per zone view.
      */
     @GetMapping("/hospital/{hospitalId}/zone/{zone}/occupancy")
-    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId) and "
-            + "@clinicalAuthz.canReceiveZoneAlerts(authentication, #hospitalId, #zone)")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<ZoneOccupancyResponse>> getZoneOccupancy(
             @PathVariable UUID hospitalId,
             @PathVariable EdZone zone) {

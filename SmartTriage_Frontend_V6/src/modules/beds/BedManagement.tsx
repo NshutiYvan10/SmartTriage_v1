@@ -332,7 +332,8 @@ export function BedManagement() {
           }`}
         >
           {toast.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-          {toast.message}
+          <span className="flex-1">{toast.message}</span>
+          <button type="button" onClick={() => setToast(null)} aria-label="Dismiss notification" className="p-0.5 rounded hover:opacity-70"><X className="w-3.5 h-3.5" /></button>
         </div>
       )}
 

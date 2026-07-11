@@ -16,7 +16,7 @@ import {
   FlaskConical, Clock, AlertTriangle, Loader2, RefreshCw,
   Inbox, Activity, Beaker, CheckCircle2, XCircle, Phone,
   ClipboardCheck, AlertOctagon, History as HistoryIcon, Search,
-  ChevronLeft, ChevronRight, Download, FileText, ExternalLink,
+  ChevronLeft, ChevronRight, Download, FileText, ExternalLink, X,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { saveBlob } from '@/api/client';
@@ -31,6 +31,7 @@ import { ResultEntryModal } from './ResultEntryModal';
 import { RejectSpecimenModal } from './RejectSpecimenModal';
 import { AcknowledgeCriticalModal } from './AcknowledgeCriticalModal';
 import { VerifyResultModal, RejectVerificationModal, OverrideVerificationModal } from './VerificationModals';
+import { PdfPreviewModal, usePdfPreview } from '@/components/PdfPreviewModal';
 
 type TechTab = 'inbox' | 'in-progress' | 'verification' | 'critical' | 'history';
 
@@ -90,6 +91,7 @@ function slaInfo(order: LabOrder): { elapsed: number; target: number; overdueBy:
 export function LabOrdersView() {
   const navigate = useNavigate();
   const { glassCard, glassInner, isDark, text } = useTheme();
+  const { showPdf, previewProps } = usePdfPreview();
   const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
@@ -117,6 +119,10 @@ export function LabOrdersView() {
 
   // Senior tech privilege — drives the Verify / Reject buttons
   const isHeadLabTech = user?.designation === 'HEAD_LAB_TECHNICIAN';
+  // Lab reporting pack is a lab-departmental / governance function; the backend
+  // restricts it to these roles, so only show the buttons to who can actually use them
+  // (a NURSE has the lab page but would get a 403 on generate).
+  const canLabReport = ['SUPER_ADMIN', 'LAB_TECHNICIAN', 'HOSPITAL_ADMIN'].includes(user?.role ?? '');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [reportBusy, setReportBusy] = useState(false);
@@ -134,7 +140,7 @@ export function LabOrdersView() {
     try {
       const { from, to } = reportRange();
       const { blob, filename } = await labApi.downloadReportPdf(hospitalId, from, to);
-      saveBlob(blob, filename);
+      showPdf(blob, filename);
     } catch { /* surfaced via toast below */ setToast({ type: 'err', text: 'Report download failed' }); }
     finally { setReportBusy(false); }
   };
@@ -373,22 +379,26 @@ export function LabOrdersView() {
                     <span className="text-white text-xs font-bold">{critical.length} CRITICAL UNACK</span>
                   </div>
                 )}
-                <button
-                  onClick={handleReportPdf}
-                  disabled={reportBusy}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 text-white text-xs font-bold hover:bg-white/25 transition-colors disabled:opacity-50"
-                  title="Lab reporting pack (PDF) — last 30 days"
-                >
-                  {reportBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />} Report PDF
-                </button>
-                <button
-                  onClick={handleReportCsv}
-                  disabled={reportBusy}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 text-white text-xs font-bold hover:bg-white/25 transition-colors disabled:opacity-50"
-                  title="Lab orders CSV — last 30 days"
-                >
-                  <Download className="w-3.5 h-3.5" /> CSV
-                </button>
+                {canLabReport && (
+                  <>
+                    <button
+                      onClick={handleReportPdf}
+                      disabled={reportBusy}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 text-white text-xs font-bold hover:bg-white/25 transition-colors disabled:opacity-50"
+                      title="Lab reporting pack (PDF) — last 30 days"
+                    >
+                      {reportBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />} Report PDF
+                    </button>
+                    <button
+                      onClick={handleReportCsv}
+                      disabled={reportBusy}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 text-white text-xs font-bold hover:bg-white/25 transition-colors disabled:opacity-50"
+                      title="Lab orders CSV — last 30 days"
+                    >
+                      <Download className="w-3.5 h-3.5" /> CSV
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={load}
                   className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center hover:bg-white/25 transition-colors"
@@ -409,7 +419,8 @@ export function LabOrdersView() {
               : 'bg-rose-500/15 text-rose-500 border border-rose-500/20'
           }`}>
             {toast.type === 'ok' ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-            {toast.text}
+            <span className="flex-1">{toast.text}</span>
+            <button type="button" onClick={() => setToast(null)} aria-label="Dismiss notification" className="p-0.5 rounded hover:opacity-70"><X className="w-3.5 h-3.5" /></button>
           </div>
         )}
 
@@ -554,6 +565,7 @@ export function LabOrdersView() {
           onSaved={() => { setOverrideTarget(null); load(); }}
         />
       )}
+      <PdfPreviewModal {...previewProps} />
     </div>
   );
 }

@@ -18,6 +18,7 @@ import {
 import { labApi, type LabReportDocument } from '@/api/lab';
 import { investigationApi } from '@/api/investigations';
 import { useTheme } from '@/hooks/useTheme';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,.tif,.tiff,application/pdf,image/png,image/jpeg,image/tiff';
 const MAX_BYTES = 15 * 1024 * 1024;
@@ -121,12 +122,16 @@ export const LabDocuments = forwardRef<LabDocumentsHandle, {
     finally { setBusyId(null); }
   };
 
+  // Deleting an attached diagnostic report is destructive and has no undo —
+  // gate it behind an in-app confirmation instead of firing on one click.
+  const [pendingDelete, setPendingDelete] = useState<LabReportDocument | null>(null);
+
   const doDelete = async (d: LabReportDocument) => {
     setBusyId(d.id);
     setErr(null);
     try { await doc.remove(d.id); await load(); }
     catch (e) { setErr(e instanceof Error ? e.message : 'Remove failed'); }
-    finally { setBusyId(null); }
+    finally { setBusyId(null); setPendingDelete(null); }
   };
 
   return (
@@ -163,7 +168,7 @@ export const LabDocuments = forwardRef<LabDocumentsHandle, {
                 {busyId === d.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
               </button>
               {canManage && (
-                <button type="button" onClick={() => doDelete(d)} disabled={busyId === d.id}
+                <button type="button" onClick={() => setPendingDelete(d)} disabled={busyId === d.id}
                   className="p-1.5 rounded-lg hover:bg-rose-500/15 text-rose-500" title="Remove">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -199,6 +204,16 @@ export const LabDocuments = forwardRef<LabDocumentsHandle, {
           </p>
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Remove report document"
+        message={`Are you sure you want to permanently remove "${pendingDelete?.fileName ?? ''}"? This attached report cannot be recovered.`}
+        confirmLabel="Remove document"
+        busy={busyId === pendingDelete?.id}
+        onConfirm={() => pendingDelete && doDelete(pendingDelete)}
+        onClose={() => setPendingDelete(null)}
+      />
     </div>
   );
 });

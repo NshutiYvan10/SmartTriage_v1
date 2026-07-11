@@ -34,6 +34,7 @@ import { leaveApi } from '@/api';
 import type { LeaveType, StaffLeaveResponse } from '@/api/types';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 export function LeaveApprovalsPage() {
   const { glassCard, text } = useTheme();
@@ -157,23 +158,16 @@ function LeaveApprovalRow({
     finally { setBusy(false); }
   };
 
-  const approve = () => {
-    // Optional note for approval — we don't force one. Most CN
-    // approvals are silent rubber-stamps.
-    const note = window.prompt('Optional note for approval (visible to requester, leave blank for none):');
-    // null means user hit cancel; treat as abort.
-    if (note === null) return;
-    return wrap(() => leaveApi.approve(leave.id, note.trim() ? { note: note.trim() } : undefined));
-  };
+  // In-app decision dialogs (previously window.prompt, which is
+  // unstyleable, truncates on mobile and looks nothing like the app).
+  const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
 
-  const reject = () => {
-    const note = window.prompt('Reason for rejecting (required, visible to requester):');
-    if (note === null) return;
-    if (!note.trim()) {
-      setErr('A rejection reason is required.');
-      return;
-    }
-    return wrap(() => leaveApi.reject(leave.id, { note: note.trim() }));
+  const approve = (note?: string) =>
+    wrap(() => leaveApi.approve(leave.id, note ? { note } : undefined)).then(() => setDecision(null));
+
+  const reject = (note?: string) => {
+    if (!note) { setErr('A rejection reason is required.'); return; }
+    return wrap(() => leaveApi.reject(leave.id, { note })).then(() => setDecision(null));
   };
 
   return (
@@ -227,7 +221,7 @@ function LeaveApprovalRow({
         ) : (
           <>
             <button
-              onClick={reject}
+              onClick={() => setDecision('reject')}
               disabled={busy}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-300 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 disabled:opacity-50"
             >
@@ -235,7 +229,7 @@ function LeaveApprovalRow({
               Reject
             </button>
             <button
-              onClick={approve}
+              onClick={() => setDecision('approve')}
               disabled={busy}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50"
             >
@@ -245,6 +239,33 @@ function LeaveApprovalRow({
           </>
         )}
       </div>
+
+      <ConfirmDialog
+        open={decision === 'approve'}
+        title="Approve leave"
+        message={`Approve ${leave.userName}'s ${String(leave.leaveType).toLowerCase().replace(/_/g, ' ')} leave? They will be excused from the roster for the requested dates.`}
+        confirmLabel="Approve leave"
+        tone="primary"
+        withReason
+        reasonLabel="Note to requester"
+        reasonPlaceholder="Optional note, visible to the requester"
+        busy={busy}
+        onConfirm={(note) => approve(note)}
+        onClose={() => setDecision(null)}
+      />
+      <ConfirmDialog
+        open={decision === 'reject'}
+        title="Reject leave request"
+        message={`Reject ${leave.userName}'s leave request? The reason below is shown to the requester.`}
+        confirmLabel="Reject request"
+        withReason
+        reasonRequired
+        reasonLabel="Rejection reason"
+        reasonPlaceholder="e.g. Insufficient cover for those dates"
+        busy={busy}
+        onConfirm={(note) => reject(note)}
+        onClose={() => setDecision(null)}
+      />
     </li>
   );
 }

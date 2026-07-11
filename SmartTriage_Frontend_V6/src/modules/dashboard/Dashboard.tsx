@@ -83,7 +83,10 @@ function HospitalDashboard() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [arrivalFilter, setArrivalFilter] = useState('all');
-  const [timeFilter, setTimeFilter] = useState('today');
+  // Default 'all': the metric cards are a live census of who is IN the
+  // department — a patient boarding for 30 hours must still be counted.
+  // 'today'/'week'/'month' are explicit arrival-window filters only.
+  const [timeFilter, setTimeFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -152,6 +155,9 @@ function HospitalDashboard() {
   const zonePatients = useMemo(() => {
     if (!myZone || user?.role === 'SUPER_ADMIN' || user?.role === 'HOSPITAL_ADMIN') return patients;
     return patients.filter(p => {
+      // The patient's actual placed zone wins — a transferred/placed patient
+      // belongs to the zone they are physically in, whatever their category.
+      if (p.currentEdZone) return p.currentEdZone === myZone;
       if (!p.category) {
         // Untriaged patients only visible to TRIAGE zone staff
         return myZone === 'TRIAGE';
@@ -222,7 +228,7 @@ function HospitalDashboard() {
   // True when any filter-bar control is narrowing the population (drives the Clear button).
   const filtersActive =
     searchQuery.trim() !== '' || statusFilter !== 'all' || categoryFilter !== 'all' ||
-    arrivalFilter !== 'all' || timeFilter !== 'today';
+    arrivalFilter !== 'all' || timeFilter !== 'all';
 
   // Real arrivals-by-hour over the last 12 hours, from each patient's arrival timestamp.
   const arrivalsByHour = useMemo(() => {
@@ -267,9 +273,13 @@ function HospitalDashboard() {
             they land on the page. Self-hides when off-shift, when
             cross-zone admin (no shift assignment), or when the user
             has dismissed it for this specific shift. */}
+        {/* Feed the raw zone census, NOT displayPatients: the header search
+            box and the filter bar (which defaults to a 24h "today" window)
+            must never make the shift-start briefing claim the zone is empty
+            while patients are present. */}
         <ShiftStartBanner
           assignment={myShiftAssignment}
-          patients={displayPatients}
+          patients={zonePatients}
         />
 
         {/* Charge-nurse / shift-lead shift summary (R10) — live census by zone, staffing &
@@ -569,9 +579,10 @@ function HospitalDashboard() {
                 className={`appearance-none rounded-full px-3 py-1.5 pr-7 text-[12px] font-semibold ${isDark ? 'text-slate-200' : 'text-slate-700'} focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300 cursor-pointer`}
                 style={glassSelectStyle}
               >
-                <option value="today">Today</option>
-                <option value="week">This Week</option>
-                <option value="month">This Month</option>
+                <option value="all">All Active</option>
+                <option value="today">Arrived last 24h</option>
+                <option value="week">Arrived this week</option>
+                <option value="month">Arrived this month</option>
               </select>
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
             </div>
@@ -589,7 +600,7 @@ function HospitalDashboard() {
               <button
                 onClick={() => {
                   setSearchQuery(''); setStatusFilter('all'); setCategoryFilter('all');
-                  setArrivalFilter('all'); setTimeFilter('today');
+                  setArrivalFilter('all'); setTimeFilter('all');
                 }}
                 className="inline-flex items-center gap-1 px-2.5 h-8 rounded-xl text-[11px] font-semibold text-cyan-700 hover:text-white hover:bg-cyan-600 bg-cyan-50 transition-all duration-300"
               >

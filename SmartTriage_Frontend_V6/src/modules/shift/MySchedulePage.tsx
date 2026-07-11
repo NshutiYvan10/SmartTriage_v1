@@ -28,7 +28,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   CalendarClock, ClipboardList, AlertTriangle, ArrowRightLeft,
   CheckCircle2, XCircle, Plus, Loader2, UserMinus, Sun, Moon,
-  ShieldAlert,
+  ShieldAlert, ChevronDown, MapPin,
 } from 'lucide-react';
 import { leaveApi, swapApi, shiftApi } from '@/api';
 import type {
@@ -54,6 +54,45 @@ function fmtIso(d: Date): string {
 }
 
 function todayIso() { return fmtIso(new Date()); }
+
+/* ─── Presentation-only date formatting helpers ─── */
+
+function addDaysIso(baseIso: string, days: number): string {
+  const d = new Date(baseIso + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return fmtIso(d);
+}
+
+/** "Today" / "Tomorrow" chip text for a date, or null when neither. */
+function relDayLabel(iso: string): 'Today' | 'Tomorrow' | null {
+  const today = todayIso();
+  if (iso === today) return 'Today';
+  if (iso === addDaysIso(today, 1)) return 'Tomorrow';
+  return null;
+}
+
+/** "Mon 13 Jul" */
+function fmtDayHeader(iso: string): string {
+  const d = new Date(iso + 'T00:00:00');
+  const wk = d.toLocaleDateString('en-US', { weekday: 'short' });
+  const mo = d.toLocaleDateString('en-US', { month: 'short' });
+  return `${wk} ${d.getDate()} ${mo}`;
+}
+
+/** "13–17 Jul" · "28 Jul – 2 Aug" · "30 Dec 2026 – 2 Jan 2027" */
+function fmtRange(startIso: string, endIso: string): string {
+  const s = new Date(startIso + 'T00:00:00');
+  const e = new Date(endIso + 'T00:00:00');
+  const mo = (d: Date) => d.toLocaleDateString('en-US', { month: 'short' });
+  if (startIso === endIso) return `${s.getDate()} ${mo(s)} ${s.getFullYear()}`;
+  if (s.getFullYear() !== e.getFullYear()) {
+    return `${s.getDate()} ${mo(s)} ${s.getFullYear()} – ${e.getDate()} ${mo(e)} ${e.getFullYear()}`;
+  }
+  if (s.getMonth() !== e.getMonth()) {
+    return `${s.getDate()} ${mo(s)} – ${e.getDate()} ${mo(e)} ${e.getFullYear()}`;
+  }
+  return `${s.getDate()}–${e.getDate()} ${mo(s)} ${s.getFullYear()}`;
+}
 
 /* ═══════════════════════ Page ═══════════════════════ */
 
@@ -260,8 +299,34 @@ function UpcomingShiftsCard({
   loading: boolean;
   onProposeSwap: (s: ShiftAssignmentResponse) => void;
 }) {
-  const { glassCard, isDark, text } = useTheme();
-  const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
+  const { glassCard, glassInner, isDark, text } = useTheme();
+
+  /* Presentation-only grouping of the same capped list the card always showed */
+  const dayGroups = useMemo(() => {
+    const groups: { date: string; rows: ShiftAssignmentResponse[] }[] = [];
+    for (const s of shifts.slice(0, 14)) {
+      const last = groups[groups.length - 1];
+      if (last && last.date === s.shiftDate) last.rows.push(s);
+      else groups.push({ date: s.shiftDate, rows: [s] });
+    }
+    return groups;
+  }, [shifts]);
+
+  /* Next 7 calendar days, flagged with any scheduled periods */
+  const weekStrip = useMemo(() => {
+    const today = todayIso();
+    return Array.from({ length: 7 }, (_, i) => {
+      const iso = addDaysIso(today, i);
+      const dayShifts = shifts.filter((s) => s.shiftDate === iso);
+      return {
+        iso,
+        isToday: i === 0,
+        hasDay: dayShifts.some((s) => s.shiftPeriod === 'DAY'),
+        hasNight: dayShifts.some((s) => s.shiftPeriod !== 'DAY'),
+      };
+    });
+  }, [shifts]);
+
   return (
     <section className="rounded-2xl p-5" style={glassCard}>
       <div className="flex items-center gap-2 mb-3">
@@ -269,45 +334,114 @@ function UpcomingShiftsCard({
         <h2 className={`text-sm font-bold ${text.heading}`}>Upcoming shifts</h2>
         <span className={`text-[10px] font-semibold ${text.muted}`}>({shifts.length})</span>
       </div>
+
+      {/* Next-7-days strip */}
+      <div className="grid grid-cols-7 gap-1.5 mb-4">
+        {weekStrip.map((d) => {
+          const scheduled = d.hasDay || d.hasNight;
+          const date = new Date(d.iso + 'T00:00:00');
+          return (
+            <div
+              key={d.iso}
+              title={`${fmtDayHeader(d.iso)}${scheduled ? ' — on shift' : ''}`}
+              className={`rounded-lg px-1 py-1.5 text-center border ${
+                scheduled
+                  ? 'bg-cyan-500/15 border-cyan-500/30'
+                  : isDark ? 'bg-white/[0.03] border-white/5' : 'bg-slate-50/60 border-slate-200/60'
+              } ${d.isToday ? 'ring-1 ring-cyan-400/60' : ''}`}
+            >
+              <div className={`text-[9px] font-bold uppercase tracking-wider ${
+                d.isToday ? (isDark ? 'text-cyan-300' : 'text-cyan-600') : text.muted
+              }`}>
+                {date.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 2)}
+              </div>
+              <div className={`text-xs font-bold leading-tight ${scheduled ? text.heading : text.muted}`}>
+                {date.getDate()}
+              </div>
+              <div className="h-3 flex items-center justify-center gap-0.5">
+                {d.hasDay && <Sun className="w-2.5 h-2.5 text-amber-500" />}
+                {d.hasNight && <Moon className="w-2.5 h-2.5 text-indigo-400" />}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
       {loading && shifts.length === 0 && (
         <div className={`text-xs ${text.muted}`}>Loading…</div>
       )}
       {!loading && shifts.length === 0 && (
         <div className={`text-xs italic ${text.muted}`}>Nothing scheduled.</div>
       )}
-      <ul>
-        {shifts.slice(0, 14).map((s) => (
-          <li key={s.id} className="py-2.5 flex items-center justify-between gap-3 text-sm" style={{ borderTop: borderStyle }}>
-            <div className="min-w-0">
-              <div className={`font-semibold ${text.heading}`}>
-                {new Date(s.shiftDate + 'T00:00:00').toLocaleDateString('en-US', {
-                  weekday: 'short', month: 'short', day: 'numeric',
-                })}
-              </div>
-              <div className={`text-[11px] ${text.body}`}>
-                {s.shiftPeriod} · {s.zone} · {s.shiftFunction.replace(/_/g, ' ')}
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {s.isShiftLead && (
-                <span className="text-[10px] font-bold text-violet-300 bg-violet-500/20 border border-violet-500/30 px-1.5 py-0.5 rounded">
-                  Shift Lead
+
+      <div className="space-y-3.5">
+        {dayGroups.map((g) => {
+          const rel = relDayLabel(g.date);
+          return (
+            <div key={g.date}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className={`text-[11px] font-bold uppercase tracking-wider ${text.label}`}>
+                  {fmtDayHeader(g.date)}
                 </span>
-              )}
-              {s.active && (
-                <button
-                  onClick={() => onProposeSwap(s)}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-cyan-400 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/30 transition-colors"
-                  title="Propose a swap from this shift"
-                >
-                  <ArrowRightLeft className="w-3 h-3" />
-                  Swap
-                </button>
-              )}
+                {rel && (
+                  <span
+                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider text-cyan-600"
+                    style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}
+                  >
+                    {rel}
+                  </span>
+                )}
+              </div>
+              <ul className="space-y-1.5">
+                {g.rows.map((s) => (
+                  <li key={s.id} className="rounded-xl px-3 py-2 flex items-center gap-3" style={glassInner}>
+                    <span
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        s.shiftPeriod === 'DAY' ? 'bg-amber-500/15 text-amber-500' : 'bg-indigo-500/15 text-indigo-400'
+                      }`}
+                    >
+                      {s.shiftPeriod === 'DAY' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className={`text-xs font-semibold ${text.heading}`}>
+                        {s.shiftPeriod === 'DAY' ? '07:00 – 19:00' : '19:00 – 07:00'}
+                        <span className={`ml-1.5 font-medium ${text.muted}`}>{s.shiftPeriod}</span>
+                      </div>
+                      <div className={`mt-1 flex items-center gap-1.5 text-xs ${text.body}`}>
+                        <span
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${text.label}`}
+                          style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.2)' }}
+                        >
+                          <MapPin className="w-2.5 h-2.5" />
+                          {s.zone}
+                        </span>
+                        <span className="truncate">{s.shiftFunction.replace(/_/g, ' ')}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {s.isShiftLead && (
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-violet-400 bg-violet-500/15 border border-violet-500/30 px-1.5 py-0.5 rounded">
+                          Shift Lead
+                        </span>
+                      )}
+                      {s.active && (
+                        <button
+                          onClick={() => onProposeSwap(s)}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-cyan-400 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/30 transition-colors"
+                          title="Propose a swap from this shift"
+                        >
+                          <ArrowRightLeft className="w-3 h-3" />
+                          Swap
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
-          </li>
-        ))}
-      </ul>
+          );
+        })}
+      </div>
     </section>
   );
 }
@@ -323,13 +457,28 @@ function SwapsCard({
   loading: boolean;
   onChange: () => Promise<void>;
 }) {
-  const { glassCard, text } = useTheme();
+  const { glassCard, glassInner, text } = useTheme();
+
+  /* Presentation-only ordering: swaps waiting on MY decision surface first */
+  const needsMe = open.filter((s) => s.partnerSide.userId === userId && s.status === 'PENDING_PARTNER_ACCEPT');
+  const rest = open.filter((s) => !(s.partnerSide.userId === userId && s.status === 'PENDING_PARTNER_ACCEPT'));
+  const pastSwaps = history.filter((h) => !open.some((o) => o.id === h.id));
+
   return (
     <section className="rounded-2xl p-5" style={glassCard}>
       <div className="flex items-center gap-2 mb-3">
         <ArrowRightLeft className={`w-4 h-4 ${text.muted}`} />
         <h2 className={`text-sm font-bold ${text.heading}`}>My swap requests</h2>
         <span className={`text-[10px] font-semibold ${text.muted}`}>({open.length} open)</span>
+        {needsMe.length > 0 && (
+          <span
+            className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider text-amber-600"
+            style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)' }}
+          >
+            <AlertTriangle className="w-3 h-3" />
+            {needsMe.length} need{needsMe.length === 1 ? 's' : ''} your decision
+          </span>
+        )}
       </div>
 
       {loading && open.length === 0 && (
@@ -340,26 +489,29 @@ function SwapsCard({
       )}
 
       <ul className="space-y-3">
-        {open.map((s) => (
+        {[...needsMe, ...rest].map((s) => (
           <SwapRow key={s.id} swap={s} userId={userId} onChange={onChange} />
         ))}
       </ul>
 
-      {history.filter(h => !open.some(o => o.id === h.id)).length > 0 && (
-        <details className="mt-4">
-          <summary className={`text-[11px] font-bold uppercase cursor-pointer ${text.muted} hover:${text.body}`}>
+      {pastSwaps.length > 0 && (
+        <details className="group mt-4">
+          <summary className={`list-none [&::-webkit-details-marker]:hidden flex items-center gap-1.5 cursor-pointer select-none text-[11px] font-bold uppercase tracking-wider ${text.label}`}>
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform group-open:rotate-180 ${text.muted}`} />
             History
+            <span className={`text-[10px] font-semibold normal-case tracking-normal ${text.muted}`}>({pastSwaps.length})</span>
           </summary>
-          <ul className="mt-2 space-y-2">
-            {history
-              .filter(h => !open.some(o => o.id === h.id))
-              .slice(0, 10)
-              .map((s) => (
-                <li key={s.id} className={`text-[11px] flex justify-between ${text.body}`}>
-                  <span>{describeSwap(s, userId)}</span>
-                  <SwapStatusPill status={s.status} />
-                </li>
-              ))}
+          <ul className="mt-2 space-y-1.5">
+            {pastSwaps.slice(0, 10).map((s) => (
+              <li
+                key={s.id}
+                className={`text-xs flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 ${text.body}`}
+                style={glassInner}
+              >
+                <span className="truncate">{describeSwap(s, userId)}</span>
+                <SwapStatusPill status={s.status} />
+              </li>
+            ))}
           </ul>
         </details>
       )}
@@ -380,6 +532,7 @@ function SwapRow({
 
   const isPartner = swap.partnerSide.userId === userId;
   const isRequester = swap.requesterSide.userId === userId;
+  const needsMyDecision = isPartner && swap.status === 'PENDING_PARTNER_ACCEPT';
 
   const wrap = async (fn: () => Promise<unknown>) => {
     setBusy(true); setErr(null);
@@ -389,19 +542,28 @@ function SwapRow({
   };
 
   return (
-    <li className="rounded-xl p-3 text-sm" style={glassInner}>
+    <li
+      className={`rounded-xl p-3 text-sm ${needsMyDecision ? 'ring-1 ring-amber-400/50' : ''}`}
+      style={glassInner}
+    >
+      {needsMyDecision && (
+        <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-500">
+          <AlertTriangle className="w-3 h-3" />
+          Awaiting your decision
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3">
-        <div className={`text-[12px] flex-1 ${text.body}`}>
-          <div className={`font-semibold ${text.heading}`}>
+        <div className={`text-xs flex-1 min-w-0 ${text.body}`}>
+          <div className={`text-sm font-semibold ${text.heading}`}>
             {isRequester ? 'You ↔ ' + swap.partnerSide.userName : swap.requesterSide.userName + ' ↔ You'}
           </div>
-          <div className={`text-[11px] mt-0.5 ${text.muted}`}>
-            <span className="font-mono">{swap.requesterSide.shiftDate}</span> {swap.requesterSide.shiftPeriod} {swap.requesterSide.zone}
-            <span className={`mx-1 ${text.muted}`}>↔</span>
-            <span className="font-mono">{swap.partnerSide.shiftDate}</span> {swap.partnerSide.shiftPeriod} {swap.partnerSide.zone}
+          <div className={`text-xs mt-1 ${text.muted}`}>
+            {fmtDayHeader(swap.requesterSide.shiftDate)} {swap.requesterSide.shiftPeriod} · {swap.requesterSide.zone}
+            <span className="mx-1.5">↔</span>
+            {fmtDayHeader(swap.partnerSide.shiftDate)} {swap.partnerSide.shiftPeriod} · {swap.partnerSide.zone}
           </div>
           {swap.requestReason && (
-            <div className={`text-[11px] mt-1 italic ${text.muted}`}>“{swap.requestReason}”</div>
+            <div className={`text-xs mt-1 italic ${text.muted}`}>“{swap.requestReason}”</div>
           )}
         </div>
         <SwapStatusPill status={swap.status} />
@@ -414,21 +576,23 @@ function SwapRow({
       )}
 
       {/* Action buttons by role + state */}
-      <div className="mt-2 flex flex-wrap gap-1.5">
+      <div className={`flex flex-wrap gap-1.5 ${needsMyDecision ? 'mt-3' : 'mt-2'}`}>
         {isPartner && swap.status === 'PENDING_PARTNER_ACCEPT' && (
           <>
             <ActionButton
               variant="primary"
+              size="md"
               busy={busy}
-              icon={<CheckCircle2 className="w-3 h-3" />}
+              icon={<CheckCircle2 className="w-3.5 h-3.5" />}
               onClick={() => wrap(() => swapApi.partnerAccept(swap.id))}
             >
               Accept
             </ActionButton>
             <ActionButton
               variant="danger"
+              size="md"
               busy={busy}
-              icon={<XCircle className="w-3 h-3" />}
+              icon={<XCircle className="w-3.5 h-3.5" />}
               onClick={() => {
                 const note = window.prompt('Reason for declining (visible to requester):');
                 if (note === null) return;
@@ -461,7 +625,7 @@ function describeSwap(s: ShiftSwapResponse, userId: string): string {
   const other = s.requesterSide.userId === userId
     ? s.partnerSide.userName
     : s.requesterSide.userName;
-  return `${s.requesterSide.shiftDate} ${s.requesterSide.shiftPeriod} with ${other}`;
+  return `${fmtDayHeader(s.requesterSide.shiftDate)} ${s.requesterSide.shiftPeriod} · with ${other}`;
 }
 
 function isTerminal(s: SwapStatus) {
@@ -539,21 +703,22 @@ function LeaveRow({
     && (leave.leaveStatus === 'REQUESTED' || leave.leaveStatus === 'APPROVED');
 
   return (
-    <li className="py-2.5 text-sm" style={{ borderTop: borderStyle }}>
+    <li className="py-3 text-sm" style={{ borderTop: borderStyle }}>
       <div className="flex items-start justify-between gap-3">
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className={`font-semibold ${text.heading}`}>{prettyType(leave.leaveType)}</span>
+            <span className={`text-sm font-semibold ${text.heading}`}>{prettyType(leave.leaveType)}</span>
             <LeaveStatusPill status={leave.leaveStatus} />
           </div>
-          <div className={`text-[11px] mt-0.5 ${text.muted}`}>
-            <span className="font-mono">{leave.startsOn}</span> → <span className="font-mono">{leave.endsOn}</span>
+          <div className={`text-xs mt-1 flex items-center gap-1.5 ${text.body}`}>
+            <CalendarClock className={`w-3 h-3 ${text.muted}`} />
+            {fmtRange(leave.startsOn, leave.endsOn)}
           </div>
           {leave.reason && (
-            <div className={`text-[11px] mt-0.5 italic ${text.muted}`}>“{leave.reason}”</div>
+            <div className={`text-xs mt-1 italic ${text.muted}`}>“{leave.reason}”</div>
           )}
           {leave.rejectionReason && (
-            <div className="text-[11px] text-rose-300 mt-0.5">
+            <div className="text-xs text-rose-300 mt-1">
               Rejected: {leave.rejectionReason}
             </div>
           )}
@@ -745,24 +910,28 @@ function FormRow({ label, children }: { label: string; children: React.ReactNode
 /* ─── Action button helper ─── */
 
 function ActionButton({
-  variant, busy, icon, children, onClick,
+  variant, busy, icon, children, onClick, size = 'sm',
 }: {
   variant: 'primary' | 'danger' | 'ghost';
   busy: boolean;
   icon: React.ReactNode;
   children: React.ReactNode;
   onClick: () => void | Promise<void>;
+  size?: 'sm' | 'md';
 }) {
   const cls = variant === 'primary'
     ? 'bg-cyan-600 text-white hover:bg-cyan-700'
     : variant === 'danger'
     ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/30'
     : 'bg-white/10 text-slate-300 border border-white/10 hover:bg-white/15';
+  const pad = size === 'md'
+    ? 'gap-1.5 px-3 py-1.5 text-xs'
+    : 'gap-1 px-2 py-1 text-[11px]';
   return (
     <button
       disabled={busy}
       onClick={onClick}
-      className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold transition-colors disabled:opacity-50 ${cls}`}
+      className={`inline-flex items-center rounded-lg font-bold transition-colors disabled:opacity-50 ${pad} ${cls}`}
     >
       {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : icon}
       {children}

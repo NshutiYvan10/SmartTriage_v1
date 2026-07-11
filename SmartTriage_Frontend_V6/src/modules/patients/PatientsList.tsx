@@ -15,6 +15,8 @@ import {
   Filter,
 } from 'lucide-react';
 import { usePatientStore } from '@/store/patientStore';
+import { patientApi } from '@/api/patients';
+import type { PatientResponse } from '@/api/types';
 import { useAuthStore } from '@/store/authStore';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
@@ -35,6 +37,11 @@ interface RegistryPatient extends Patient {
   province?: string;
   district?: string;
   registeredAt?: Date;
+}
+
+/** Debounce archive search keystrokes; empty query fetches immediately. */
+function q_delay(q: string): number {
+  return q.trim() ? 350 : 0;
 }
 
 function formatDate(date: Date): string {
@@ -61,8 +68,41 @@ export function PatientsList() {
     fetchActiveVisits(hospitalId);
   }, [fetchActiveVisits, user?.hospitalId]);
 
+
   const [search, setSearch] = useState('');
   const [arrivalFilter, setArrivalFilter] = useState<string>('all');
+  // 'active' = patients with an active visit (live board, default);
+  // 'all' = every patient ever registered at this hospital (archive).
+  const [view, setView] = useState<'active' | 'all'>('active');
+  const [archive, setArchive] = useState<PatientResponse[]>([]);
+  const [archiveTotal, setArchiveTotal] = useState(0);
+  const [archivePage, setArchivePage] = useState(0);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveSearch, setArchiveSearch] = useState('');
+
+  // Archive view: server-side page of ALL registered patients (with
+  // server-side search). Debounced so typing doesn't hammer the API.
+  useEffect(() => {
+    if (view !== 'all' || !user?.hospitalId) return;
+    const hospitalId = user.hospitalId;
+    let cancelled = false;
+    setArchiveLoading(true);
+    const t = window.setTimeout(() => {
+      const q = archiveSearch.trim();
+      const call = q
+        ? patientApi.search(hospitalId, q, archivePage, 50)
+        : patientApi.listByHospital(hospitalId, archivePage, 50);
+      call
+        .then((page) => {
+          if (cancelled) return;
+          setArchive(page.content);
+          setArchiveTotal(page.totalElements);
+        })
+        .catch(() => { if (!cancelled) { setArchive([]); setArchiveTotal(0); } })
+        .finally(() => { if (!cancelled) setArchiveLoading(false); });
+    }, q_delay(archiveSearch));
+    return () => { cancelled = true; window.clearTimeout(t); };
+  }, [view, user?.hospitalId, archivePage, archiveSearch]);
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'time' | 'name' | 'age'>('time');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -167,24 +207,43 @@ export function PatientsList() {
               </div>
               <div>
                 <h1 className="text-lg font-bold text-white tracking-tight leading-tight">
-                  Patient Registry
+                  {view === 'active' ? 'Active Patients' : 'Patient Archive'}
                 </h1>
                 <p className="text-sm text-white/50 mt-0.5 font-medium">
-                  {allPatients.length} total patients registered
+                  {view === 'active'
+                    ? `${allPatients.length} currently in the department`
+                    : `${archiveTotal} patients have visited this hospital`}
                 </p>
               </div>
             </div>
 
-            <button
-              onClick={() => navigate('/entry')}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-sm font-bold transition-all duration-300 shadow-lg shadow-cyan-500/25 hover:-translate-y-1 hover:shadow-xl"
-            >
-              <UserPlus className="w-4 h-4" />
-              New Patient
-            </button>
+            <div className="flex items-center gap-3">
+              {/* Active-visits / all-patients toggle */}
+              <div className="flex items-center rounded-xl overflow-hidden border border-white/20">
+                {(['active', 'all'] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setView(v)}
+                    className={`px-3.5 py-2 text-xs font-bold transition-colors ${
+                      view === v ? 'bg-cyan-600 text-white' : 'text-white/60 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {v === 'active' ? 'Active visits' : 'All patients'}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => navigate('/entry')}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-sm font-bold transition-all duration-300 shadow-lg shadow-cyan-500/25 hover:-translate-y-1 hover:shadow-xl"
+              >
+                <UserPlus className="w-4 h-4" />
+                New Patient
+              </button>
+            </div>
           </div>
         </div>
 
+        {view === 'active' && (<>
         {/* ── Quick Summary Bar ── */}
         <div className="rounded-3xl p-4 animate-fade-up" style={{ ...glassCard, animationDelay: '0.05s' }}>
           <div className="flex items-center gap-5 flex-wrap">
@@ -490,6 +549,95 @@ export function PatientsList() {
             <span className={`text-[10px] ${text.muted}`}>Sorted by {sortBy === 'time' ? 'registration time' : sortBy === 'name' ? 'name' : 'age'}</span>
           </div>
         </div>
+        </>)}
+
+        {/* ── Archive: every patient ever registered here ── */}
+        {view === 'all' && (
+          <div className="rounded-3xl overflow-hidden animate-fade-up" style={glassCard}>
+            <div className="px-5 py-3.5 flex flex-wrap items-center gap-3" style={{ borderBottom: borderStyle }}>
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${text.muted}`}>All registered patients</span>
+              <span
+                className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded-lg text-cyan-600"
+                style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}
+              >
+                {archiveTotal}
+              </span>
+              <div className="relative flex-1 min-w-[220px]">
+                <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${text.muted}`} />
+                <input
+                  type="text"
+                  value={archiveSearch}
+                  onChange={(e) => { setArchiveSearch(e.target.value); setArchivePage(0); }}
+                  placeholder="Search all patients by name or ID..."
+                  className={`w-full pl-9 pr-4 py-2 rounded-xl text-xs ${text.label} placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20`}
+                  style={glassInner}
+                />
+              </div>
+            </div>
+
+            {archiveLoading ? (
+              <div className={`px-6 py-12 text-center text-sm ${text.muted}`}>Loading patients…</div>
+            ) : archive.length === 0 ? (
+              <div className={`px-6 py-12 text-center text-sm ${text.muted}`}>
+                {archiveSearch.trim() ? 'No patients match that search.' : 'No patients registered yet.'}
+              </div>
+            ) : (
+              <div>
+                {archive.map((p) => (
+                  <div
+                    key={p.id}
+                    className="px-5 py-3 flex flex-wrap items-center gap-x-5 gap-y-1"
+                    style={{ borderBottom: borderStyle }}
+                  >
+                    <div className="min-w-[200px]">
+                      <p className={`text-sm font-bold ${text.heading}`}>{p.firstName} {p.lastName}</p>
+                      <p className={`text-[10px] ${text.muted}`}>MRN {p.medicalRecordNumber || '—'}</p>
+                    </div>
+                    <span className={`text-xs ${text.body}`}>{p.gender === 'MALE' ? 'M' : p.gender === 'FEMALE' ? 'F' : '—'} · {p.ageInYears} yrs</span>
+                    {p.nationalId && (
+                      <span className={`inline-flex items-center gap-1.5 text-xs ${text.muted}`}>
+                        <CreditCard className="w-3 h-3 opacity-70" /> {p.nationalId}
+                      </span>
+                    )}
+                    {p.phoneNumber && (
+                      <span className={`inline-flex items-center gap-1.5 text-xs ${text.muted}`}>
+                        <Phone className="w-3 h-3 opacity-70" /> {p.phoneNumber}
+                      </span>
+                    )}
+                    {p.address && (
+                      <span className={`inline-flex items-center gap-1.5 text-xs ${text.muted} truncate max-w-[260px]`}>
+                        <MapPin className="w-3 h-3 opacity-70 flex-shrink-0" /> {p.address}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Pager */}
+            <div className={`px-5 py-3 flex items-center justify-between text-xs ${text.muted} font-medium`} style={{ borderTop: borderStyle }}>
+              <span>Page {archivePage + 1} of {Math.max(1, Math.ceil(archiveTotal / 50))}</span>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={archivePage === 0 || archiveLoading}
+                  onClick={() => setArchivePage((n) => Math.max(0, n - 1))}
+                  className={`px-3 py-1.5 rounded-lg font-bold disabled:opacity-40 ${text.body}`}
+                  style={glassInner}
+                >
+                  Previous
+                </button>
+                <button
+                  disabled={archiveLoading || (archivePage + 1) * 50 >= archiveTotal}
+                  onClick={() => setArchivePage((n) => n + 1)}
+                  className={`px-3 py-1.5 rounded-lg font-bold disabled:opacity-40 ${text.body}`}
+                  style={glassInner}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

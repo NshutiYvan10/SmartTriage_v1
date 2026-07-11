@@ -122,7 +122,7 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
       items: [
         { id: 'my-schedule',     label: 'My Schedule',     icon: CalendarClock,   pageId: 'my-schedule'     as AppPage },
         { id: 'shift-calendar',  label: 'Shift Calendar',  icon: CalendarDays,    pageId: 'shift-calendar'  as AppPage },
-        { id: 'shift-planner',   label: 'Shift Templates', icon: CalendarDays,    pageId: 'shift-planner'   as AppPage },
+        { id: 'shift-planner',   label: 'Shift Planner',   icon: CalendarDays,    pageId: 'shift-planner'   as AppPage },
         { id: 'zone-transfers',  label: 'Zone Transfers',  icon: ArrowRightLeft,  pageId: 'shift-assignment' as AppPage },
         { id: 'swap-approvals',  label: 'Swap Approvals',  icon: ClipboardCheck,  pageId: 'swap-approvals'  as AppPage },
         { id: 'leave-approvals', label: 'Leave Approvals', icon: ClipboardCheck,  pageId: 'leave-approvals' as AppPage },
@@ -173,7 +173,7 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         // start/stop recording, live status. Extracted from the Siren page.
         { id: 'monitor', label: 'Monitor', icon: Monitor, pageId: 'monitor' as AppPage },
         { id: 'documentation', label: 'Documentation', icon: FileText, pageId: 'documentation' as AppPage },
-        { id: 'consent-referrals', label: 'Consent & Referrals', icon: ShieldCheck, pageId: 'documentation' as AppPage },
+        { id: 'consent-referrals', label: 'Consent & Consultations', icon: ShieldCheck, pageId: 'documentation' as AppPage },
         { id: 'handover', label: 'Handover', icon: ClipboardCheck, pageId: 'handover' as AppPage },
       ],
     },

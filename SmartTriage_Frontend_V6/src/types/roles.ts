@@ -198,7 +198,7 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   // is ever needed, an admin would impersonate a HOSPITAL_ADMIN, not
   // see shift management as a default sidebar item.
   SUPER_ADMIN: [
-    'dashboard', 'admin', 'admin-hospitals', 'admin-users', 'iot-devices',
+    'dashboard', 'admin', 'admin-hospitals', 'admin-users',
     'settings', 'notifications', 'profile',
     'audit-trail', 'reports', 'quality',
     'moh-reports', 'governance', 'safety-incidents',
@@ -216,10 +216,9 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
   // pages are intentionally not surfaced in the admin sidebar.
   HOSPITAL_ADMIN: [
     'dashboard', 'admin', 'admin-users', 'iot-devices', 'admin-beds',
-    'registration-desk',
     'settings', 'notifications', 'profile',
-    'audit-trail', 'reports', 'quality', 'registrar-reports',
-    'safety-incidents', 'med-safety-overrides', 'override-register', 'moh-reports',
+    'audit-trail', 'reports', 'quality',
+    'safety-incidents', 'med-safety-overrides', 'override-register', 'moh-reports', 'governance',
     // Shift management — READ-ONLY governance view. The editor UI
     // suppresses mutate controls when role === 'HOSPITAL_ADMIN'; the
     // backend ShiftAssignmentAuthz.canAssign denies mutation attempts

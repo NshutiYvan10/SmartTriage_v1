@@ -275,6 +275,19 @@ export function RwandaLocationPicker({
   const nameOf = (opts: LocationOption[], id?: string) =>
     opts.find((o) => o.id === id)?.name;
 
+  // Every emit re-derives the display names of ALL still-selected levels
+  // from the loaded option lists. The consumer's `value` prop typically
+  // carries only the IDs, so spreading `...value` alone would silently
+  // drop the upper-level names on each deeper selection — the review
+  // screen then showed Province/District as blank even though the IDs
+  // saved correctly.
+  const upperNames = () => ({
+    provinceName: nameOf(provinces, value.provinceId),
+    districtName: nameOf(districts, value.districtId),
+    sectorName: nameOf(sectors, value.sectorId),
+    cellName: nameOf(cells, value.cellId),
+  });
+
   const onProvince = (id: string) => onChange({
     provinceId: id || undefined,
     provinceName: nameOf(provinces, id),
@@ -285,6 +298,7 @@ export function RwandaLocationPicker({
   });
   const onDistrict = (id: string) => onChange({
     ...value,
+    ...upperNames(),
     districtId: id || undefined,
     districtName: nameOf(districts, id),
     sectorId: undefined, sectorName: undefined,
@@ -293,6 +307,7 @@ export function RwandaLocationPicker({
   });
   const onSector = (id: string) => onChange({
     ...value,
+    ...upperNames(),
     sectorId: id || undefined,
     sectorName: nameOf(sectors, id),
     cellId: undefined, cellName: undefined,
@@ -300,12 +315,14 @@ export function RwandaLocationPicker({
   });
   const onCell = (id: string) => onChange({
     ...value,
+    ...upperNames(),
     cellId: id || undefined,
     cellName: nameOf(cells, id),
     villageId: undefined, villageName: undefined,
   });
   const onVillage = (id: string) => onChange({
     ...value,
+    ...upperNames(),
     villageId: id || undefined,
     villageName: nameOf(villages, id),
   });

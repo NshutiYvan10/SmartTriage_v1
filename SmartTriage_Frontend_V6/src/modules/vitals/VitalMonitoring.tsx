@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { usePatientStore } from '@/store/patientStore';
 import { useVitalStore } from '@/store/vitalStore';
+import type { VitalReading } from '@/types';
 import { useDeviceStore } from '@/store/deviceStore';
 import { useAuthStore } from '@/store/authStore';
 import { Badge } from '@/components/ui/Badge';
@@ -131,6 +132,30 @@ export function VitalMonitoring() {
     temp: getVitalHistory(patientId!, 'temperature'),
     ecg: getVitalHistory(patientId!, 'ecg'),
     glucose: getVitalHistory(patientId!, 'glucose'),
+  } : null;
+
+  // Real trend from the reading history (was hardcoded "stable" on every
+  // card — a deteriorating patient must never be labelled stable by
+  // default). Compares the latest reading against the average of the
+  // preceding window; a relative deadband absorbs measurement noise.
+  const computeTrend = (readings: Array<Pick<VitalReading, 'value'> & { timestamp: string | Date }>, deadbandPct = 0.05): 'up' | 'down' | 'stable' | undefined => {
+    if (!readings || readings.length < 2) return undefined; // not enough data to claim anything
+    const last = readings[readings.length - 1].value;
+    const window = readings.slice(-6, -1); // up to 5 prior readings
+    const baseline = window.reduce((sum, r) => sum + r.value, 0) / window.length;
+    if (baseline === 0) return undefined;
+    const delta = (last - baseline) / Math.abs(baseline);
+    if (delta > deadbandPct) return 'up';
+    if (delta < -deadbandPct) return 'down';
+    return 'stable';
+  };
+  const trends = vitalHistory ? {
+    hr: computeTrend(vitalHistory.hr),
+    rr: computeTrend(vitalHistory.rr),
+    spo2: computeTrend(vitalHistory.spo2, 0.02),   // SpO2 moves in a narrow band
+    bp: computeTrend(vitalHistory.bp),
+    temp: computeTrend(vitalHistory.temp, 0.01),   // 0.4°C on 37°C matters
+    glucose: computeTrend(vitalHistory.glucose),
   } : null;
 
  return (
@@ -643,9 +668,8 @@ export function VitalMonitoring() {
                   thresholds?.heartRate.min || 60,
                   thresholds?.heartRate.max || 100
                 )}
-                trend="stable"
+                trend={trends?.hr}
                 range="60-100 bpm"
-                subtitle="Regular rhythm"
               />
               
               {/* Respiratory Rate */}
@@ -659,9 +683,8 @@ export function VitalMonitoring() {
                   thresholds?.respiratoryRate.min || 12,
                   thresholds?.respiratoryRate.max || 20
                 )}
-                trend="stable"
+                trend={trends?.rr}
                 range="12-20 /min"
-                subtitle="Clear breath sounds"
               />
               
               {/* SpO2 */}
@@ -671,9 +694,8 @@ export function VitalMonitoring() {
                 unit="%"
                 icon={Droplet}
                 status={getVitalStatus(currentVitals.spo2, thresholds?.spo2Threshold || 92, 100)}
-                trend="stable"
+                trend={trends?.spo2}
                 range="95-100%"
-                subtitle="On room air"
               />
               
               {/* Blood Pressure */}
@@ -683,9 +705,8 @@ export function VitalMonitoring() {
                 unit="mmHg"
                 icon={Activity}
                 status={getVitalStatus(currentVitals.systolicBP, thresholds?.systolicBP.min || 90, 140)}
-                trend="stable"
+                trend={trends?.bp}
                 range="90-140/60-90"
-                subtitle="Sitting position"
               />
               
               {/* Temperature */}
@@ -695,9 +716,8 @@ export function VitalMonitoring() {
                 unit="°C"
                 icon={Thermometer}
                 status={getVitalStatus(currentVitals.temperature, 36.1, 37.2)}
-                trend="stable"
+                trend={trends?.temp}
                 range="36.1-37.2°C"
-                subtitle="Oral measurement"
               />
               
               {/* ECG — ST-segment deviation (mV).
@@ -712,9 +732,8 @@ export function VitalMonitoring() {
                 unit="mV"
                 icon={Zap}
                 status={getVitalStatus(currentVitals.ecg ?? 0, -0.5, 0.5)}
-                trend="stable"
                 range="-0.5 – 0.5 mV"
-                subtitle={currentVitals.ecgRhythm ?? 'Normal sinus rhythm'}
+                subtitle={currentVitals.ecgRhythm ?? undefined}
               />
               
               {/* Glucose — stored/streamed in mmol/L (the unit every threshold uses).
@@ -728,9 +747,8 @@ export function VitalMonitoring() {
                   unit="mmol/L"
                   icon={Candy}
                   status={getVitalStatus(currentVitals.glucose, 3.9, 11.0)}
-                  trend="stable"
+                  trend={trends?.glucose}
                   range="3.9-11.0 mmol/L"
-                  subtitle="Random"
                 />
               )}
             </div>

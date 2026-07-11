@@ -166,6 +166,20 @@ export function useWebSocket(myZone?: EdZone | null) {
       // and the paramedic's personal run notices — ED ack / handover / triage confirm)
       if (user.id) {
         const unsubUser = subscribeToUserAlerts(user.id, (alert: ClinicalAlertResponse) => {
+          // Visit-less payloads on the user topic are personal work notices
+          // (e.g. an acting-CN delegation), NOT clinical alerts. They have no
+          // backing alert row, so pushing them into the ack-able Alert Center
+          // pipeline would 404 on acknowledge — route them to the dismissible
+          // notice toast instead (CriticalAlertNotifier listens for this).
+          if (!(alert as any).visitId) {
+            window.dispatchEvent(new CustomEvent('smarttriage:user-notice', {
+              detail: {
+                title: (alert as any).title ?? 'Notification',
+                message: (alert as any).message ?? '',
+              },
+            }));
+            return;
+          }
           dedupeAndAdd(alert);
         });
         unsubFns.current.push(unsubUser);

@@ -4,8 +4,12 @@ import com.smartTriage.smartTriage_server.common.enums.Designation;
 import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
+import com.smartTriage.smartTriage_server.common.enums.AlertSeverity;
+import com.smartTriage.smartTriage_server.common.enums.AlertType;
+import com.smartTriage.smartTriage_server.module.alert.dto.ClinicalAlertResponse;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import com.smartTriage.smartTriage_server.module.hospital.repository.HospitalRepository;
+import com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher;
 import com.smartTriage.smartTriage_server.module.shift.dto.ChargeNurseDelegationDtos;
 import com.smartTriage.smartTriage_server.module.shift.entity.ChargeNurseDelegation;
 import com.smartTriage.smartTriage_server.module.shift.mapper.ChargeNurseDelegationMapper;
@@ -16,6 +20,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+import java.time.format.DateTimeFormatter;
+import java.time.ZoneId;
 
 import java.time.Instant;
 import java.util.List;
@@ -27,9 +36,8 @@ import java.util.UUID;
  * <p>Authority model:
  * <ul>
  *   <li>Only the on-duty Charge Nurse for a hospital may create a delegation
- *       on their own behalf. (HOSPITAL_ADMIN can also create one — used when
- *       the CN themselves is incapacitated and a managerial decision is
- *       needed to fill the gap.)</li>
+ *       on their own behalf. HOSPITAL_ADMIN is view-only — the authz gate
+ *       (ShiftAssignmentAuthz.canAssign) denies admin delegation writes.</li>
  *   <li>Only the original delegating CN, the delegate, or HOSPITAL_ADMIN /
  *       SUPER_ADMIN may revoke a delegation. The delegate revoking
  *       represents "I'm handing the hat back" — common when the CN returns
@@ -53,6 +61,7 @@ public class ChargeNurseDelegationService {
     private final ChargeNurseDelegationRepository delegationRepository;
     private final HospitalRepository hospitalRepository;
     private final UserRepository userRepository;
+    private final RealTimeEventPublisher realTimeEventPublisher;
 
     /**
      * Create a new acting-CN delegation. The {@code delegatingUser} is
@@ -100,6 +109,11 @@ public class ChargeNurseDelegationService {
         log.info("Charge-nurse delegation created: {} → {} at {} (window {} → {})",
                 delegatingUser.getEmail(), delegate.getEmail(),
                 hospital.getName(), row.getStartsAt(), row.getEndsAt());
+        notifyDelegate(row, delegatingUser,
+                "Acting Charge Nurse delegation",
+                delegatingUser.getFirstName() + " " + delegatingUser.getLastName()
+                        + " has delegated Charge Nurse authority to you"
+                        + windowText(row) + ".");
         return ChargeNurseDelegationMapper.toResponse(row);
     }
 
@@ -139,6 +153,17 @@ public class ChargeNurseDelegationService {
 
         log.info("Charge-nurse delegation {} revoked by {} (reason: {})",
                 delegationId, actor.getEmail(), row.getRevocationReason());
+        // Tell the delegate their acting-CN authority has ended — unless they
+        // revoked it themselves ("handing the hat back" needs no notice).
+        if (!actor.getId().equals(row.getDelegate().getId())) {
+            notifyDelegate(row, actor,
+                    "Acting Charge Nurse delegation revoked",
+                    actor.getFirstName() + " " + actor.getLastName()
+                            + " has revoked your acting Charge Nurse delegation"
+                            + (row.getRevocationReason() != null && !row.getRevocationReason().isBlank()
+                                    ? " — " + row.getRevocationReason() : "")
+                            + ".");
+        }
         return ChargeNurseDelegationMapper.toResponse(row);
     }
 
@@ -182,5 +207,51 @@ public class ChargeNurseDelegationService {
             log.info("Note: delegate {} already has CHARGE_NURSE designation — "
                     + "delegation is redundant but accepted", delegate.getEmail());
         }
+    }
+
+    /* ── Delegate notification ─────────────────────────────────────────
+     * Real-time push to /topic/alerts/user/{delegateId}. The payload is a
+     * SYNTHETIC (non-persisted) ClinicalAlertResponse: delegations are not
+     * visit-bound, and clinical_alerts.visit_id is NOT NULL by design, so
+     * no alert row is written. The frontend routes visit-less payloads on
+     * the user topic to a dismissible notice toast rather than the
+     * ack-able Alert Center pipeline. Fires only after the surrounding
+     * transaction commits — a rolled-back delegation must never notify.
+     */
+    private void notifyDelegate(ChargeNurseDelegation row, User actorForLog, String title, String message) {
+        UUID delegateId = row.getDelegate().getId();
+        ClinicalAlertResponse payload = ClinicalAlertResponse.builder()
+                .id(row.getId())
+                .alertType(AlertType.DOCTOR_NOTIFICATION)
+                .severity(AlertSeverity.MEDIUM)
+                .title(title)
+                .message(message)
+                .targetDoctorId(delegateId)
+                .autoGenerated(true)
+                .createdAt(Instant.now())
+                .build();
+        Runnable fire = () -> {
+            try {
+                realTimeEventPublisher.publishUserAlert(delegateId, payload);
+            } catch (Exception e) {
+                log.warn("Delegation notification push failed for {} (by {}): {}",
+                        delegateId, actorForLog.getEmail(), e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { fire.run(); }
+            });
+        } else {
+            fire.run();
+        }
+    }
+
+    private static String windowText(ChargeNurseDelegation row) {
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("d MMM HH:mm").withZone(ZoneId.systemDefault());
+        if (row.getEndsAt() != null) {
+            return " from " + fmt.format(row.getStartsAt()) + " until " + fmt.format(row.getEndsAt());
+        }
+        return " starting " + fmt.format(row.getStartsAt()) + " (open-ended)";
     }
 }

@@ -311,6 +311,12 @@ export function LabTestDetailModal({ visitId, investigationId, testName, onClose
                 <div className="flex items-center gap-2 flex-wrap">
                   <Link
                     to={chartPathForRole(user?.role, order.visitId ?? visitId)}
+                    // Close the modal on navigate: for a LAB_TECHNICIAN the
+                    // target is the lab record page this modal is already
+                    // sitting on, so without onClose the click was a no-op
+                    // (router same-URL navigation does nothing and the modal
+                    // stayed open, hiding the record underneath).
+                    onClick={onClose}
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-bold text-white bg-cyan-600 hover:bg-cyan-700"
                   >
                     <ExternalLink className="w-3.5 h-3.5" /> {user?.role === 'LAB_TECHNICIAN' ? 'Open lab record' : 'Open full chart'}
