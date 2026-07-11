@@ -12,6 +12,10 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { documentationApi } from '@/api/documentation';
 import type { ClinicalDocument, CreateDocumentRequest } from '@/api/documentation';
+import { visitApi } from '@/api/visits';
+import type { VisitResponse } from '@/api/types';
+import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
+import { ApiError } from '@/api/client';
 import { format } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
 
@@ -76,6 +80,15 @@ export function ClinicalDocumentation() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
+  const access = useCanSeeAllZones();
+
+  // Action-error surfacing (was previously swallowed to console).
+  const [error, setError] = useState<string | null>(null);
+  // Caller-aware CURRENT-PATIENT picker so a clinician selects a patient
+  // instead of pasting a raw visit UUID (same pattern as the safety-incident
+  // and handover screens). Cross-zone roles see the whole hospital.
+  const [pickerVisits, setPickerVisits] = useState<VisitResponse[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
 
   // ── State ──
   const [documents, setDocuments] = useState<ClinicalDocument[]>([]);
@@ -127,6 +140,25 @@ export function ClinicalDocumentation() {
 
   useEffect(() => { loadDocuments(); }, [loadDocuments]);
 
+  useEffect(() => {
+    if (!hospitalId || access.isLoading) return;
+    let alive = true;
+    setPickerLoading(true);
+    const fetchVisits = access.canSeeAllZones
+      ? visitApi.getActiveByHospital(hospitalId, 0, 200)
+      : visitApi.getActiveForCallerByHospital(hospitalId, 0, 200);
+    fetchVisits
+      .then((pageRes) => { if (alive) setPickerVisits(pageRes.content || []); })
+      .catch(() => { if (alive) setPickerVisits([]); })
+      .finally(() => { if (alive) setPickerLoading(false); });
+    return () => { alive = false; };
+  }, [hospitalId, access.isLoading, access.canSeeAllZones]);
+  const visitLabel = (v: VisitResponse) => {
+    const where = [v.currentEdZone?.replace(/_/g, ' '), v.currentBedLabel ? `Bed ${v.currentBedLabel}` : null]
+      .filter(Boolean).join(' · ');
+    return `${v.patientName} — ${v.visitNumber}${where ? ` · ${where}` : ''}`;
+  };
+
   // ── Search visit ──
   const handleSearchVisit = useCallback(() => {
     if (!visitIdInput.trim()) return;
@@ -162,6 +194,7 @@ export function ClinicalDocumentation() {
   const handleCreate = useCallback(async () => {
     if (!activeVisitId || !createForm.title || !createForm.content || !createForm.documentType) return;
     setCreating(true);
+    setError(null);
     try {
       // No author fields are sent — the backend records the authenticated user as author.
       const isProcedure = createForm.documentType === 'PROCEDURE_NOTE' || createForm.documentType === 'OPERATIVE_NOTE';
@@ -191,7 +224,7 @@ export function ClinicalDocumentation() {
       setCreateForm({ documentType: 'PROGRESS_NOTE', title: '', content: '' });
       loadDocuments();
     } catch (err) {
-      console.error('[ClinicalDocumentation] Create failed:', err);
+      setError(err instanceof ApiError ? err.message : 'Failed to create document.');
     } finally {
       setCreating(false);
     }
@@ -208,6 +241,7 @@ export function ClinicalDocumentation() {
   const handleSignSubmit = useCallback(async () => {
     if (!signDocId) return;
     setSigning(true);
+    setError(null);
     try {
       if (signDialogMode === 'sign') {
         // Signer = authenticated user; no name/license is sent.
@@ -220,7 +254,7 @@ export function ClinicalDocumentation() {
       setSignDialogOpen(false);
       loadDocuments();
     } catch (err) {
-      console.error('[ClinicalDocumentation] Sign action failed:', err);
+      setError(err instanceof ApiError ? err.message : 'Action failed.');
     } finally {
       setSigning(false);
     }
@@ -234,7 +268,7 @@ export function ClinicalDocumentation() {
       await documentationApi.generateDischargeSummary(activeVisitId);
       loadDocuments();
     } catch (err) {
-      console.error('[ClinicalDocumentation] Generate discharge summary failed:', err);
+      setError(err instanceof ApiError ? err.message : 'Failed to generate discharge summary.');
     } finally {
       setGenerating(null);
     }
@@ -247,7 +281,7 @@ export function ClinicalDocumentation() {
       await documentationApi.generateHandover(activeVisitId);
       loadDocuments();
     } catch (err) {
-      console.error('[ClinicalDocumentation] Generate handover failed:', err);
+      setError(err instanceof ApiError ? err.message : 'Failed to generate handover.');
     } finally {
       setGenerating(null);
     }
@@ -290,17 +324,35 @@ export function ClinicalDocumentation() {
           </div>
         </div>
 
-        {/* ── Visit ID Search ── */}
+        {/* ── Patient / Visit picker ── */}
         <div className="rounded-2xl p-4 animate-fade-up" style={glassCard}>
+          <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${text.muted}`}>
+            Patient — load their clinical documents
+          </label>
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="relative flex-1">
+            <select
+              value={activeVisitId}
+              onChange={(e) => { setActiveVisitId(e.target.value); setPage(0); setExpandedDocId(null); setError(null); }}
+              className={`flex-1 px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all ${
+                isDark ? 'text-white' : 'text-slate-800'
+              }`}
+              style={glassInner}
+            >
+              <option value="">
+                {pickerLoading ? 'Loading current patients…'
+                  : pickerVisits.length === 0 ? 'No active patients found — paste a visit ID below'
+                  : 'Select a current patient…'}
+              </option>
+              {pickerVisits.map((v) => <option key={v.id} value={v.id}>{visitLabel(v)}</option>)}
+            </select>
+            <div className="relative sm:w-64">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 value={visitIdInput}
                 onChange={(e) => setVisitIdInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearchVisit()}
-                placeholder="Enter Visit ID to load documents..."
+                placeholder="…or paste a visit ID"
                 className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all ${
                   isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
                 }`}
@@ -311,10 +363,17 @@ export function ClinicalDocumentation() {
               onClick={handleSearchVisit}
               className="px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 text-white text-xs font-bold rounded-xl hover:shadow-lg transition-all"
             >
-              Load Documents
+              Load
             </button>
           </div>
         </div>
+
+        {error && (
+          <div className="rounded-2xl px-4 py-3 flex items-start gap-2 bg-red-500/10 border border-red-500/20 animate-fade-up">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+            <p className="text-[12px] font-semibold text-red-500">{error}</p>
+          </div>
+        )}
 
         {/* ── Stats ── */}
         {activeVisitId && (
@@ -750,7 +809,8 @@ export function ClinicalDocumentation() {
                             <CheckCircle className="w-3.5 h-3.5" /> Sign Document
                           </button>
                         )}
-                        {doc.isSigned && !doc.coSignedByName && (
+                        {doc.isSigned && !doc.coSignedByName &&
+                          ['ED_HEAD', 'CONSULTANT', 'SENIOR_MEDICAL_OFFICER', 'MEDICAL_OFFICER'].includes(user?.designation ?? '') && (
                           <button
                             onClick={() => openSignDialog('cosign', doc.id)}
                             className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl transition-all ${

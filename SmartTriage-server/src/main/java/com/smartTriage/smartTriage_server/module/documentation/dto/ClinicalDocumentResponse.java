@@ -1,9 +1,11 @@
 package com.smartTriage.smartTriage_server.module.documentation.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.smartTriage.smartTriage_server.common.enums.ClinicalDocumentType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
@@ -35,6 +37,10 @@ public class ClinicalDocumentResponse {
     private String authorRole;
     private String authorLicenseNumber;
     private Instant signedAt;
+    // Pin the wire name on the GETTER (not the field): Lombok's isSigned() getter would
+    // otherwise serialize as "signed", and annotating the field instead emits BOTH keys.
+    // The frontend reads `isSigned` — the whole sign/co-sign UI depends on this.
+    @Getter(onMethod_ = {@JsonProperty("isSigned")})
     private boolean isSigned;
     private UUID coSignedByUserId;
     private String coSignedByName;
@@ -46,6 +52,7 @@ public class ClinicalDocumentResponse {
     private UUID vitalSignsId;
 
     // Amendment tracking
+    @Getter(onMethod_ = {@JsonProperty("isAmendment")})
     private boolean isAmendment;
     private String amendmentReason;
     private UUID originalDocumentId;
