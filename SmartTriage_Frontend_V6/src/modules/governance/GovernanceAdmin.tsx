@@ -10,37 +10,40 @@ import {
   Search, History, User, AlertTriangle, ArrowRight, Filter, X,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useAuthStore } from '@/store/authStore';
 import { governanceApi } from '@/api/governance';
 import type { ClinicalPolicy, PolicyAuditLog } from '@/api/governance';
+import { hospitalApi } from '@/api/hospitals';
+import type { HospitalResponse } from '@/api/types';
 import { format } from 'date-fns';
 
 /* -- Constants ---------------------------------------------------- */
 
 const POLICY_TYPES = [
-  { value: 'TRIAGE_PROTOCOL', label: 'Triage Protocol' },
-  { value: 'MEDICATION_GUIDELINE', label: 'Medication Guideline' },
+  { value: 'TRIAGE_RULE', label: 'Triage Rule' },
+  { value: 'DRUG_PROTOCOL', label: 'Drug Protocol' },
+  { value: 'CLINICAL_GUIDELINE', label: 'Clinical Guideline' },
   { value: 'INFECTION_CONTROL', label: 'Infection Control' },
-  { value: 'ICU_CRITERIA', label: 'ICU Criteria' },
-  { value: 'DOCUMENTATION_STANDARD', label: 'Documentation Standard' },
-  { value: 'SAFETY_PROTOCOL', label: 'Safety Protocol' },
+  { value: 'STAFFING_REQUIREMENT', label: 'Staffing Requirement' },
+  { value: 'EQUIPMENT_PROTOCOL', label: 'Equipment Protocol' },
   { value: 'QUALITY_STANDARD', label: 'Quality Standard' },
-  { value: 'TRAINING_REQUIREMENT', label: 'Training Requirement' },
-  { value: 'EQUIPMENT_MAINTENANCE', label: 'Equipment Maintenance' },
-  { value: 'STAFFING_GUIDELINE', label: 'Staffing Guideline' },
+  { value: 'CONSENT_FORM', label: 'Consent Form' },
+  { value: 'DISCHARGE_CRITERIA', label: 'Discharge Criteria' },
+  { value: 'OTHER', label: 'Other' },
 ] as const;
 
 const POLICY_TYPE_CONFIG: Record<string, { color: string; bg: string; border: string }> = {
-  TRIAGE_PROTOCOL:         { color: 'text-blue-600',    bg: 'rgba(59,130,246,0.08)',  border: '1px solid rgba(59,130,246,0.2)' },
-  MEDICATION_GUIDELINE:    { color: 'text-emerald-600', bg: 'rgba(16,185,129,0.08)',  border: '1px solid rgba(16,185,129,0.2)' },
-  INFECTION_CONTROL:       { color: 'text-red-600',     bg: 'rgba(239,68,68,0.08)',   border: '1px solid rgba(239,68,68,0.2)' },
-  ICU_CRITERIA:            { color: 'text-orange-600',  bg: 'rgba(249,115,22,0.08)',  border: '1px solid rgba(249,115,22,0.2)' },
-  DOCUMENTATION_STANDARD:  { color: 'text-slate-600',   bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' },
-  SAFETY_PROTOCOL:         { color: 'text-amber-600',   bg: 'rgba(245,158,11,0.08)',  border: '1px solid rgba(245,158,11,0.2)' },
-  QUALITY_STANDARD:        { color: 'text-violet-600',  bg: 'rgba(139,92,246,0.08)',  border: '1px solid rgba(139,92,246,0.2)' },
-  TRAINING_REQUIREMENT:    { color: 'text-cyan-600',    bg: 'rgba(6,182,212,0.08)',   border: '1px solid rgba(6,182,212,0.2)' },
-  EQUIPMENT_MAINTENANCE:   { color: 'text-teal-600',    bg: 'rgba(20,184,166,0.08)',  border: '1px solid rgba(20,184,166,0.2)' },
-  STAFFING_GUIDELINE:      { color: 'text-pink-600',    bg: 'rgba(236,72,153,0.08)',  border: '1px solid rgba(236,72,153,0.2)' },
+  TRIAGE_RULE:           { color: 'text-blue-600',    bg: 'rgba(59,130,246,0.08)',  border: '1px solid rgba(59,130,246,0.2)' },
+  DRUG_PROTOCOL:         { color: 'text-emerald-600', bg: 'rgba(16,185,129,0.08)',  border: '1px solid rgba(16,185,129,0.2)' },
+  CLINICAL_GUIDELINE:    { color: 'text-cyan-600',    bg: 'rgba(6,182,212,0.08)',   border: '1px solid rgba(6,182,212,0.2)' },
+  INFECTION_CONTROL:     { color: 'text-red-600',     bg: 'rgba(239,68,68,0.08)',   border: '1px solid rgba(239,68,68,0.2)' },
+  STAFFING_REQUIREMENT:  { color: 'text-pink-600',    bg: 'rgba(236,72,153,0.08)',  border: '1px solid rgba(236,72,153,0.2)' },
+  EQUIPMENT_PROTOCOL:    { color: 'text-teal-600',    bg: 'rgba(20,184,166,0.08)',  border: '1px solid rgba(20,184,166,0.2)' },
+  QUALITY_STANDARD:      { color: 'text-violet-600',  bg: 'rgba(139,92,246,0.08)',  border: '1px solid rgba(139,92,246,0.2)' },
+  CONSENT_FORM:          { color: 'text-amber-600',   bg: 'rgba(245,158,11,0.08)',  border: '1px solid rgba(245,158,11,0.2)' },
+  DISCHARGE_CRITERIA:    { color: 'text-orange-600',  bg: 'rgba(249,115,22,0.08)',  border: '1px solid rgba(249,115,22,0.2)' },
+  OTHER:                 { color: 'text-slate-600',   bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' },
 };
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string; label: string }> = {
@@ -67,7 +70,22 @@ type TabId = 'policies' | 'audit';
 export function GovernanceAdmin() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const user = useAuthStore((s) => s.user);
-  const hospitalId = user?.hospitalId || '';
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  // SUPER_ADMIN is a national role — its own hospitalId is the phantom system
+  // hospital, so it picks a target hospital (mirrors ReportsView). Everyone else
+  // is pinned to their own hospital.
+  const [hospitals, setHospitals] = useState<HospitalResponse[]>([]);
+  const [selectedHospitalId, setSelectedHospitalId] = useState('');
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    hospitalApi.getAll(0, 50).then((page) => {
+      const rows = page.content || [];
+      setHospitals(rows);
+      const firstReal = rows.find((h) => h.id !== user?.hospitalId) || rows[0];
+      if (firstReal) setSelectedHospitalId((cur) => cur || firstReal.id);
+    }).catch((e) => console.error('[Governance] hospitals load failed:', e));
+  }, [isSuperAdmin, user?.hospitalId]);
+  const hospitalId = (isSuperAdmin ? selectedHospitalId : user?.hospitalId) || '';
 
   /* -- Shared state ----------------------------------------------- */
   const [activeTab, setActiveTab] = useState<TabId>('policies');
@@ -83,7 +101,8 @@ export function GovernanceAdmin() {
   const [showCreateForm, setShowCreateForm] = useState(false);
 
   /* Create form */
-  const [formType, setFormType] = useState('TRIAGE_PROTOCOL');
+  const [formType, setFormType] = useState('TRIAGE_RULE');
+  const [formError, setFormError] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
   const [formCode, setFormCode] = useState('');
   const [formDesc, setFormDesc] = useState('');
@@ -115,12 +134,8 @@ export function GovernanceAdmin() {
     if (!hospitalId) return;
     setLoading(true);
     try {
-      const res = await governanceApi.getAll(hospitalId, page);
-      let filtered = res.content;
-      if (statusFilter) {
-        filtered = filtered.filter((p) => p.status === statusFilter);
-      }
-      setPolicies(filtered);
+      const res = await governanceApi.getAll(hospitalId, page, statusFilter || undefined);
+      setPolicies(res.content);
       setTotalElements(res.totalElements);
     } catch {
       /* keep existing data */
@@ -163,6 +178,7 @@ export function GovernanceAdmin() {
   const handleCreate = useCallback(async () => {
     if (!hospitalId || !formName || !formContent || !formEffective) return;
     setActionLoading('create');
+    setFormError(null);
     try {
       await governanceApi.create({
         hospitalId,
@@ -171,7 +187,9 @@ export function GovernanceAdmin() {
         policyCode: formCode || null,
         description: formDesc || null,
         policyContent: formContent,
-        effectiveFrom: formEffective,
+        // <input type="date"> yields 'yyyy-MM-dd'; the API expects an ISO instant.
+        effectiveFrom: new Date(`${formEffective}T00:00:00`).toISOString(),
+        createdByName: user?.fullName || undefined,
       });
       setShowCreateForm(false);
       setFormName('');
@@ -180,8 +198,10 @@ export function GovernanceAdmin() {
       setFormContent('');
       setFormEffective('');
       await loadPolicies();
-    } catch { /* */ } finally { setActionLoading(null); }
-  }, [hospitalId, formType, formName, formCode, formDesc, formContent, formEffective, loadPolicies]);
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Failed to create policy.');
+    } finally { setActionLoading(null); }
+  }, [hospitalId, formType, formName, formCode, formDesc, formContent, formEffective, user?.fullName, loadPolicies]);
 
   const handleSubmitForApproval = useCallback(async (id: string) => {
     setActionLoading(id);
@@ -220,10 +240,15 @@ export function GovernanceAdmin() {
     } catch { /* */ } finally { setActionLoading(null); }
   }, [suspendTarget, suspendReason, loadPolicies]);
 
+  // Archiving retires a clinical policy — confirm in-app first (the
+  // neighbouring Suspend action already has a reason dialog; Archive
+  // previously fired on a single click).
+  const [archiveTarget, setArchiveTarget] = useState<string | null>(null);
+
   const handleArchive = useCallback(async (id: string) => {
     setActionLoading(id);
     try { await governanceApi.archive(id); await loadPolicies(); }
-    catch { /* */ } finally { setActionLoading(null); }
+    catch { /* */ } finally { setActionLoading(null); setArchiveTarget(null); }
   }, [loadPolicies]);
 
   const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
@@ -250,6 +275,16 @@ export function GovernanceAdmin() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                {isSuperAdmin && hospitals.length > 0 && (
+                  <select
+                    value={selectedHospitalId}
+                    onChange={(e) => { setSelectedHospitalId(e.target.value); setPage(0); }}
+                    title="Which hospital's policies to manage (national role)"
+                    className="px-3 py-2 rounded-xl text-xs font-bold bg-white/15 text-white border border-white/15 focus:outline-none [&>option]:text-slate-800"
+                  >
+                    {hospitals.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+                  </select>
+                )}
                 <button
                   onClick={() => { setShowCreateForm(!showCreateForm); setActiveTab('policies'); }}
                   className="flex items-center gap-2 px-4 py-2 bg-white/15 hover:bg-white/25 backdrop-blur rounded-xl text-white text-xs font-semibold transition-all duration-300 border border-white/10"
@@ -417,9 +452,16 @@ export function GovernanceAdmin() {
                   />
                 </div>
 
+                {formError && (
+                  <div className="mt-4 flex items-start gap-2 rounded-xl px-3 py-2.5 bg-red-500/10 border border-red-500/20">
+                    <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                    <p className="text-[12px] font-semibold text-red-500">{formError}</p>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-end gap-3 mt-4 pt-3" style={{ borderTop: borderStyle }}>
                   <button
-                    onClick={() => setShowCreateForm(false)}
+                    onClick={() => { setShowCreateForm(false); setFormError(null); }}
                     className={`px-4 py-2 text-xs font-semibold ${text.body} hover:opacity-80 transition-all duration-300 rounded-xl`}
                   >
                     Cancel
@@ -616,7 +658,7 @@ export function GovernanceAdmin() {
                               )}
                               {(policy.status === 'SUSPENDED' || policy.status === 'ACTIVE') && (
                                 <button
-                                  onClick={() => handleArchive(policy.id)}
+                                  onClick={() => setArchiveTarget(policy.id)}
                                   disabled={isLoading}
                                   className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
                                 >
@@ -637,7 +679,7 @@ export function GovernanceAdmin() {
 
                               {/* Audit log link */}
                               <button
-                                onClick={() => { setAuditPolicyId(policy.id); setActiveTab('audit'); loadAuditLog(policy.id, 0); }}
+                                onClick={() => { setAuditPolicyId(policy.id); setAuditPage(0); setActiveTab('audit'); loadAuditLog(policy.id, 0); }}
                                 className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold ${text.body} hover:opacity-80 transition-all duration-300 rounded-xl`}
                                 style={glassInner}
                               >
@@ -957,6 +999,15 @@ export function GovernanceAdmin() {
           </div>
         )}
 
+        <ConfirmDialog
+          open={archiveTarget !== null}
+          title="Archive policy"
+          message="Are you sure you want to archive this policy? It will no longer be active for clinical use and this cannot be undone from this screen."
+          confirmLabel="Archive policy"
+          busy={actionLoading === archiveTarget}
+          onConfirm={() => archiveTarget && handleArchive(archiveTarget)}
+          onClose={() => setArchiveTarget(null)}
+        />
       </div>
     </div>
   );

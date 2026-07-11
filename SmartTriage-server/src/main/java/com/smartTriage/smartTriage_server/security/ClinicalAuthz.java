@@ -13,6 +13,7 @@ import com.smartTriage.smartTriage_server.module.clinical.repository.DiagnosisRe
 import com.smartTriage.smartTriage_server.module.clinical.repository.InvestigationRepository;
 import com.smartTriage.smartTriage_server.module.consent.repository.InformedConsentRepository;
 import com.smartTriage.smartTriage_server.module.documentation.repository.ClinicalDocumentRepository;
+import com.smartTriage.smartTriage_server.module.governance.repository.ClinicalPolicyRepository;
 import com.smartTriage.smartTriage_server.module.handover.repository.HandoverReportRepository;
 import com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository;
 import com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository;
@@ -124,6 +125,7 @@ public class ClinicalAuthz {
     private final MedicationSafetyCheckRepository medicationSafetyCheckRepository;
     private final IoTDeviceRepository ioTDeviceRepository;
     private final com.smartTriage.smartTriage_server.module.safety.repository.SafetyIncidentRepository safetyIncidentRepository;
+    private final ClinicalPolicyRepository clinicalPolicyRepository;
     /**
      * V107 patient-centric audit: authorization is the one place that already
      * resolves WHICH VISIT every clinical request targets (all resource-keyed
@@ -1238,6 +1240,71 @@ public class ClinicalAuthz {
         } catch (Exception e) {
             log.error("canAccessInvestigation error for investigation {}: {}",
                     investigationId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /* ──────────────────────── governance policies ─────────────────── */
+
+    /**
+     * Object-level READ gate for a clinical policy by id. SUPER_ADMIN sees all;
+     * a system-wide (NULL-hospital) policy is readable by any governance role;
+     * a hospital-scoped policy requires membership of that hospital. Denies
+     * unknown/inactive ids (no cross-tenant existence leak).
+     */
+    @Transactional(readOnly = true)
+    public boolean canAccessPolicy(Authentication authentication, UUID policyId) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null || policyId == null) {
+                return false;
+            }
+            if (user.getRole() == Role.SUPER_ADMIN) {
+                return true;
+            }
+            java.util.List<UUID> rows = clinicalPolicyRepository.findHospitalIdByPolicyId(policyId);
+            if (rows.isEmpty()) {
+                return false; // no such active policy
+            }
+            UUID hospitalId = rows.get(0);
+            if (hospitalId == null) {
+                return true;  // system-wide default — readable by governance roles
+            }
+            return belongsToHospital(user, hospitalId);
+        } catch (Exception e) {
+            log.error("canAccessPolicy error for policy {}: {}", policyId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Object-level WRITE gate for a clinical policy by id. SUPER_ADMIN manages all;
+     * a system-wide (NULL-hospital) policy is SUPER_ADMIN-only (a hospital admin must
+     * not edit a national default); a hospital-scoped policy requires membership of
+     * that hospital. (The role floor — SUPER_ADMIN/HOSPITAL_ADMIN — is applied
+     * alongside this in the controller's @PreAuthorize.)
+     */
+    @Transactional(readOnly = true)
+    public boolean canManagePolicy(Authentication authentication, UUID policyId) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null || policyId == null) {
+                return false;
+            }
+            if (user.getRole() == Role.SUPER_ADMIN) {
+                return true;
+            }
+            java.util.List<UUID> rows = clinicalPolicyRepository.findHospitalIdByPolicyId(policyId);
+            if (rows.isEmpty()) {
+                return false;
+            }
+            UUID hospitalId = rows.get(0);
+            if (hospitalId == null) {
+                return false; // system-wide default: SUPER_ADMIN only (already returned true above)
+            }
+            return belongsToHospital(user, hospitalId);
+        } catch (Exception e) {
+            log.error("canManagePolicy error for policy {}: {}", policyId, e.getMessage(), e);
             return false;
         }
     }

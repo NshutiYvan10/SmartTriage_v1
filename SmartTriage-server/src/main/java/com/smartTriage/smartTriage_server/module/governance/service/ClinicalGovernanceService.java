@@ -11,10 +11,13 @@ import com.smartTriage.smartTriage_server.module.governance.repository.ClinicalP
 import com.smartTriage.smartTriage_server.module.governance.repository.PolicyAuditLogRepository;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import com.smartTriage.smartTriage_server.module.hospital.repository.HospitalRepository;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +29,10 @@ import java.util.UUID;
 /**
  * Service for managing clinical governance policies — creation, approval workflow,
  * activation, suspension, archival, and version tracking with full audit trail.
+ *
+ * <p>The audit actor is always resolved server-side from the authenticated principal
+ * (never trusted from the request body), so every {@code policy_audit_logs} row names
+ * the person who actually performed the action.
  */
 @Slf4j
 @Service
@@ -38,7 +45,9 @@ public class ClinicalGovernanceService {
     private final HospitalRepository hospitalRepository;
 
     /**
-     * Create a new draft policy.
+     * Create a new draft policy. The creator is stamped from the authenticated
+     * principal (the request body's createdByName is ignored — server is the
+     * source of truth). Hospital scoping is enforced at the controller.
      */
     @Transactional
     public ClinicalPolicy createPolicy(CreatePolicyRequest request) {
@@ -49,6 +58,8 @@ public class ClinicalGovernanceService {
             hospital = hospitalRepository.findByIdAndIsActiveTrue(request.getHospitalId())
                     .orElseThrow(() -> new ResourceNotFoundException("Hospital", "id", request.getHospitalId()));
         }
+
+        String actor = currentActorName();
 
         ClinicalPolicy policy = ClinicalPolicy.builder()
                 .hospital(hospital)
@@ -61,15 +72,14 @@ public class ClinicalGovernanceService {
                 .effectiveTo(request.getEffectiveTo())
                 .policyVersion(request.getPolicyVersion() != null ? request.getPolicyVersion() : "1.0")
                 .status(PolicyStatus.DRAFT)
-                .createdByName(request.getCreatedByName())
+                .createdByName(actor)
                 .changeReason(request.getChangeReason())
                 .notes(request.getNotes())
                 .build();
 
         policy = policyRepository.save(policy);
 
-        createAuditLog(policy, "CREATED", request.getCreatedByName(),
-                null, policy.getPolicyContent(), request.getChangeReason());
+        createAuditLog(policy, "CREATED", actor, null, policy.getPolicyContent(), request.getChangeReason());
 
         log.info("Policy created with ID: {}", policy.getId());
         return policy;
@@ -89,40 +99,20 @@ public class ClinicalGovernanceService {
 
         String previousContent = policy.getPolicyContent();
 
-        if (request.getPolicyType() != null) {
-            policy.setPolicyType(request.getPolicyType());
-        }
-        if (request.getPolicyName() != null) {
-            policy.setPolicyName(request.getPolicyName());
-        }
-        if (request.getPolicyCode() != null) {
-            policy.setPolicyCode(request.getPolicyCode());
-        }
-        if (request.getDescription() != null) {
-            policy.setDescription(request.getDescription());
-        }
-        if (request.getPolicyContent() != null) {
-            policy.setPolicyContent(request.getPolicyContent());
-        }
-        if (request.getEffectiveFrom() != null) {
-            policy.setEffectiveFrom(request.getEffectiveFrom());
-        }
-        if (request.getEffectiveTo() != null) {
-            policy.setEffectiveTo(request.getEffectiveTo());
-        }
-        if (request.getPolicyVersion() != null) {
-            policy.setPolicyVersion(request.getPolicyVersion());
-        }
-        if (request.getChangeReason() != null) {
-            policy.setChangeReason(request.getChangeReason());
-        }
-        if (request.getNotes() != null) {
-            policy.setNotes(request.getNotes());
-        }
+        if (request.getPolicyType() != null) policy.setPolicyType(request.getPolicyType());
+        if (request.getPolicyName() != null) policy.setPolicyName(request.getPolicyName());
+        if (request.getPolicyCode() != null) policy.setPolicyCode(request.getPolicyCode());
+        if (request.getDescription() != null) policy.setDescription(request.getDescription());
+        if (request.getPolicyContent() != null) policy.setPolicyContent(request.getPolicyContent());
+        if (request.getEffectiveFrom() != null) policy.setEffectiveFrom(request.getEffectiveFrom());
+        if (request.getEffectiveTo() != null) policy.setEffectiveTo(request.getEffectiveTo());
+        if (request.getPolicyVersion() != null) policy.setPolicyVersion(request.getPolicyVersion());
+        if (request.getChangeReason() != null) policy.setChangeReason(request.getChangeReason());
+        if (request.getNotes() != null) policy.setNotes(request.getNotes());
 
         policy = policyRepository.save(policy);
 
-        createAuditLog(policy, "UPDATED", policy.getCreatedByName(),
+        createAuditLog(policy, "UPDATED", currentActorName(),
                 previousContent, policy.getPolicyContent(), request.getChangeReason());
 
         log.info("Policy {} updated", policyId);
@@ -144,7 +134,7 @@ public class ClinicalGovernanceService {
         policy.setStatus(PolicyStatus.PENDING_APPROVAL);
         policy = policyRepository.save(policy);
 
-        createAuditLog(policy, "SUBMITTED_FOR_APPROVAL", policy.getCreatedByName(),
+        createAuditLog(policy, "SUBMITTED_FOR_APPROVAL", currentActorName(),
                 null, null, "Submitted for approval");
 
         log.info("Policy {} submitted for approval", policyId);
@@ -152,7 +142,7 @@ public class ClinicalGovernanceService {
     }
 
     /**
-     * Approve a pending policy.
+     * Approve a pending policy. The approver name defaults to the authenticated caller.
      */
     @Transactional
     public ClinicalPolicy approvePolicy(UUID policyId, String approverName, String notes) {
@@ -163,22 +153,26 @@ public class ClinicalGovernanceService {
                     "Only PENDING_APPROVAL policies can be approved. Current status: " + policy.getStatus());
         }
 
+        String actor = currentActorName();
+        String approver = (approverName != null && !approverName.isBlank()) ? approverName : actor;
+
         policy.setStatus(PolicyStatus.APPROVED);
-        policy.setApprovedByName(approverName);
+        policy.setApprovedByName(approver);
         policy.setApprovedAt(Instant.now());
         policy.setApprovalNotes(notes);
 
         policy = policyRepository.save(policy);
 
-        createAuditLog(policy, "APPROVED", approverName, null, null, notes);
+        createAuditLog(policy, "APPROVED", actor, null, null, notes);
 
-        log.info("Policy {} approved by {}", policyId, approverName);
+        log.info("Policy {} approved by {}", policyId, approver);
         return policy;
     }
 
     /**
-     * Activate an approved policy. Deactivates any previous active version of the same
-     * policy type and code for the same hospital.
+     * Activate an approved policy. Any previous ACTIVE version of the same type+code
+     * (for the same hospital, or system-wide when the policy is system-wide) is archived
+     * and linked as the previous version.
      */
     @Transactional
     public ClinicalPolicy activatePolicy(UUID policyId) {
@@ -189,17 +183,21 @@ public class ClinicalGovernanceService {
                     "Only APPROVED policies can be activated. Current status: " + policy.getStatus());
         }
 
-        // Deactivate previous active version of same type+code for hospital
-        if (policy.getPolicyCode() != null && policy.getHospital() != null) {
-            Optional<ClinicalPolicy> currentActive = policyRepository.findActiveByHospitalAndCodeAndType(
-                    policy.getHospital().getId(), policy.getPolicyCode(), policy.getPolicyType());
+        String actor = currentActorName();
 
-            if (currentActive.isPresent()) {
+        if (policy.getPolicyCode() != null) {
+            Optional<ClinicalPolicy> currentActive = (policy.getHospital() != null)
+                    ? policyRepository.findActiveByHospitalAndCodeAndType(
+                            policy.getHospital().getId(), policy.getPolicyCode(), policy.getPolicyType())
+                    : policyRepository.findSystemWideActiveByCodeAndType(
+                            policy.getPolicyCode(), policy.getPolicyType());
+
+            if (currentActive.isPresent() && !currentActive.get().getId().equals(policy.getId())) {
                 ClinicalPolicy previous = currentActive.get();
                 previous.setStatus(PolicyStatus.ARCHIVED);
                 policyRepository.save(previous);
 
-                createAuditLog(previous, "ARCHIVED", policy.getApprovedByName(),
+                createAuditLog(previous, "ARCHIVED", actor,
                         null, null, "Superseded by policy version " + policy.getPolicyVersion());
 
                 policy.setPreviousVersion(previous);
@@ -210,14 +208,14 @@ public class ClinicalGovernanceService {
         policy.setStatus(PolicyStatus.ACTIVE);
         policy = policyRepository.save(policy);
 
-        createAuditLog(policy, "ACTIVATED", policy.getApprovedByName(), null, null, "Policy activated");
+        createAuditLog(policy, "ACTIVATED", actor, null, null, "Policy activated");
 
         log.info("Policy {} activated", policyId);
         return policy;
     }
 
     /**
-     * Suspend an active policy.
+     * Suspend an active policy (temporary hold; can be reactivated).
      */
     @Transactional
     public ClinicalPolicy suspendPolicy(UUID policyId, String reason) {
@@ -229,12 +227,32 @@ public class ClinicalGovernanceService {
         }
 
         policy.setStatus(PolicyStatus.SUSPENDED);
-
         policy = policyRepository.save(policy);
 
-        createAuditLog(policy, "SUSPENDED", policy.getApprovedByName(), null, null, reason);
+        createAuditLog(policy, "SUSPENDED", currentActorName(), null, null, reason);
 
         log.info("Policy {} suspended: {}", policyId, reason);
+        return policy;
+    }
+
+    /**
+     * Reactivate a suspended policy back to ACTIVE (lifts a temporary hold).
+     */
+    @Transactional
+    public ClinicalPolicy reactivatePolicy(UUID policyId) {
+        ClinicalPolicy policy = findPolicy(policyId);
+
+        if (policy.getStatus() != PolicyStatus.SUSPENDED) {
+            throw new IllegalStateException(
+                    "Only SUSPENDED policies can be reactivated. Current status: " + policy.getStatus());
+        }
+
+        policy.setStatus(PolicyStatus.ACTIVE);
+        policy = policyRepository.save(policy);
+
+        createAuditLog(policy, "REACTIVATED", currentActorName(), null, null, "Suspension lifted");
+
+        log.info("Policy {} reactivated", policyId);
         return policy;
     }
 
@@ -252,7 +270,7 @@ public class ClinicalGovernanceService {
         policy.setStatus(PolicyStatus.ARCHIVED);
         policy = policyRepository.save(policy);
 
-        createAuditLog(policy, "ARCHIVED", policy.getCreatedByName(), null, null, "Policy archived");
+        createAuditLog(policy, "ARCHIVED", currentActorName(), null, null, "Policy archived");
 
         log.info("Policy {} archived", policyId);
         return policy;
@@ -270,11 +288,17 @@ public class ClinicalGovernanceService {
         return policies;
     }
 
+    /** All ACTIVE policies for a hospital (+ system-wide), across every type — single query. */
+    public List<ClinicalPolicy> getAllActive(UUID hospitalId) {
+        return policyRepository.findAllActiveForHospital(hospitalId);
+    }
+
     /**
-     * Get all policies for a hospital with pagination.
+     * Get policies for a hospital (and system-wide defaults) with pagination and an
+     * optional status filter.
      */
-    public Page<ClinicalPolicy> getAllPolicies(UUID hospitalId, Pageable pageable) {
-        return policyRepository.findByHospitalIdAndIsActiveTrueOrderByCreatedAtDesc(hospitalId, pageable);
+    public Page<ClinicalPolicy> getAllPolicies(UUID hospitalId, PolicyStatus status, Pageable pageable) {
+        return policyRepository.findForHospital(hospitalId, status, pageable);
     }
 
     /**
@@ -307,6 +331,20 @@ public class ClinicalGovernanceService {
     private ClinicalPolicy findPolicy(UUID policyId) {
         return policyRepository.findByIdAndIsActiveTrue(policyId)
                 .orElseThrow(() -> new ResourceNotFoundException("ClinicalPolicy", "id", policyId));
+    }
+
+    /** Display name of the authenticated caller, for audit attribution; "SYSTEM" if unresolved. */
+    private String currentActorName() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getPrincipal() instanceof User u) {
+                String name = (u.getFirstName() + " " + u.getLastName()).trim();
+                return name.isBlank() ? u.getEmail() : name;
+            }
+        } catch (Exception ignored) {
+            // fall through to SYSTEM
+        }
+        return "SYSTEM";
     }
 
     private void createAuditLog(ClinicalPolicy policy, String action, String actionByName,

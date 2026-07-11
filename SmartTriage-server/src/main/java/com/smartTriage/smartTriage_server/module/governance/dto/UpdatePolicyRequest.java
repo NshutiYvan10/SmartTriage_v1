@@ -1,6 +1,7 @@
 package com.smartTriage.smartTriage_server.module.governance.dto;
 
 import com.smartTriage.smartTriage_server.common.enums.PolicyType;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,8 +21,10 @@ public class UpdatePolicyRequest {
 
     private PolicyType policyType;
 
+    @Size(max = 255, message = "Policy name must be at most 255 characters")
     private String policyName;
 
+    @Size(max = 50, message = "Policy code must be at most 50 characters")
     private String policyCode;
 
     private String description;
@@ -32,6 +35,7 @@ public class UpdatePolicyRequest {
 
     private Instant effectiveTo;
 
+    @Size(max = 20, message = "Policy version must be at most 20 characters")
     private String policyVersion;
 
     private String changeReason;

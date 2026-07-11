@@ -38,7 +38,7 @@ public class ClinicalPolicy extends BaseEntity {
     @Column(name = "policy_name", nullable = false)
     private String policyName;
 
-    @Column(name = "policy_code")
+    @Column(name = "policy_code", length = 50)
     private String policyCode;
 
     @Column(name = "description", columnDefinition = "TEXT")

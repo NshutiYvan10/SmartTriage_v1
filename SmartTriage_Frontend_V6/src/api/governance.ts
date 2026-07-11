@@ -36,7 +36,9 @@ export const governanceApi = {
   suspend: (id: string, reason: string) => put<ClinicalPolicy>(`/governance/policies/${id}/suspend`, { reason }),
   archive: (id: string) => put<ClinicalPolicy>(`/governance/policies/${id}/archive`),
   getActive: (hospitalId: string, type?: string) => get<ClinicalPolicy[]>(`/governance/policies/hospital/${hospitalId}/active${type ? `?type=${type}` : ''}`),
-  getAll: (hospitalId: string, page = 0) => get<{ content: ClinicalPolicy[]; totalElements: number }>(`/governance/policies/hospital/${hospitalId}?page=${page}&size=20`),
+  getAll: (hospitalId: string, page = 0, status?: string) =>
+    get<{ content: ClinicalPolicy[]; totalElements: number }>(
+      `/governance/policies/hospital/${hospitalId}?page=${page}&size=20${status ? `&status=${status}` : ''}`),
   get: (id: string) => get<ClinicalPolicy>(`/governance/policies/${id}`),
   getHistory: (id: string) => get<ClinicalPolicy[]>(`/governance/policies/${id}/history`),
   getAuditLog: (id: string, page = 0) => get<{ content: PolicyAuditLog[]; totalElements: number }>(`/governance/policies/${id}/audit?page=${page}&size=20`),

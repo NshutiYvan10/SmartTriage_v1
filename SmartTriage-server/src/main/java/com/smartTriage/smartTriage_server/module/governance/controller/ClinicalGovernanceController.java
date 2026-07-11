@@ -1,6 +1,7 @@
 package com.smartTriage.smartTriage_server.module.governance.controller;
 
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
+import com.smartTriage.smartTriage_server.common.enums.PolicyStatus;
 import com.smartTriage.smartTriage_server.common.enums.PolicyType;
 import com.smartTriage.smartTriage_server.module.governance.dto.*;
 import com.smartTriage.smartTriage_server.module.governance.entity.ClinicalPolicy;
@@ -22,11 +23,13 @@ import java.util.stream.Collectors;
 
 /**
  * REST controller for clinical governance policy management.
- * Supports full lifecycle: create, update, approve, activate, suspend, archive.
+ * Supports full lifecycle: create, update, approve, activate, suspend, reactivate, archive.
  *
- * RBAC fix — entire controller is admin / governance-only. Charge Nurses
- * may participate in policy review (per the canSeeAllZonesAtHospital
- * authority list) but only admins can write.
+ * <p>Authorization: writes are SUPER_ADMIN / HOSPITAL_ADMIN; reads add READ_ONLY / NURSE /
+ * DOCTOR. Because a method-level {@code @PreAuthorize} REPLACES the class-level one, every
+ * method carries its OWN complete expression (role gate AND object-level scope), and the
+ * class-level annotation is only a floor for any method without its own. Object-level gates
+ * ({@code canManagePolicy} / {@code canAccessPolicy}) close cross-hospital access by policy id.
  */
 @Slf4j
 @RestController
@@ -35,13 +38,19 @@ import java.util.stream.Collectors;
 @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'READ_ONLY', 'NURSE', 'DOCTOR')")
 public class ClinicalGovernanceController {
 
+    private static final String ROLE_WRITE = "hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')";
+    private static final String ROLE_READ = "hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'READ_ONLY', 'NURSE', 'DOCTOR')";
+
     private final ClinicalGovernanceService governanceService;
 
     /**
-     * Create a new draft policy.
+     * Create a new draft policy. A hospital-scoped policy requires access to that hospital;
+     * a system-wide policy (no hospitalId) is SUPER_ADMIN-only.
      */
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
+    @PreAuthorize(ROLE_WRITE + " and (#request.hospitalId == null "
+            + "? hasRole('SUPER_ADMIN') "
+            + ": @clinicalAuthz.canAccessHospital(authentication, #request.hospitalId))")
     public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> createPolicy(
             @Valid @RequestBody CreatePolicyRequest request) {
         log.info("Creating policy: {}", request.getPolicyName());
@@ -50,11 +59,8 @@ public class ClinicalGovernanceController {
                 "Policy created", ClinicalPolicyMapper.toResponse(policy)));
     }
 
-    /**
-     * Update a draft policy.
-     */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
+    @PreAuthorize(ROLE_WRITE + " and @clinicalAuthz.canManagePolicy(authentication, #id)")
     public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> updatePolicy(
             @PathVariable UUID id,
             @Valid @RequestBody UpdatePolicyRequest request) {
@@ -64,24 +70,17 @@ public class ClinicalGovernanceController {
                 "Policy updated", ClinicalPolicyMapper.toResponse(policy)));
     }
 
-    /**
-     * Submit a draft policy for approval.
-     */
     @PutMapping("/{id}/submit")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
-    public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> submitForApproval(
-            @PathVariable UUID id) {
+    @PreAuthorize(ROLE_WRITE + " and @clinicalAuthz.canManagePolicy(authentication, #id)")
+    public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> submitForApproval(@PathVariable UUID id) {
         log.info("Submitting policy {} for approval", id);
         ClinicalPolicy policy = governanceService.submitForApproval(id);
         return ResponseEntity.ok(ApiResponse.success(
                 "Policy submitted for approval", ClinicalPolicyMapper.toResponse(policy)));
     }
 
-    /**
-     * Approve a pending policy.
-     */
     @PutMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
+    @PreAuthorize(ROLE_WRITE + " and @clinicalAuthz.canManagePolicy(authentication, #id)")
     public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> approvePolicy(
             @PathVariable UUID id,
             @Valid @RequestBody ApprovePolicyRequest request) {
@@ -92,24 +91,17 @@ public class ClinicalGovernanceController {
                 "Policy approved", ClinicalPolicyMapper.toResponse(policy)));
     }
 
-    /**
-     * Activate an approved policy.
-     */
     @PutMapping("/{id}/activate")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
-    public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> activatePolicy(
-            @PathVariable UUID id) {
+    @PreAuthorize(ROLE_WRITE + " and @clinicalAuthz.canManagePolicy(authentication, #id)")
+    public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> activatePolicy(@PathVariable UUID id) {
         log.info("Activating policy {}", id);
         ClinicalPolicy policy = governanceService.activatePolicy(id);
         return ResponseEntity.ok(ApiResponse.success(
                 "Policy activated", ClinicalPolicyMapper.toResponse(policy)));
     }
 
-    /**
-     * Suspend an active policy.
-     */
     @PutMapping("/{id}/suspend")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
+    @PreAuthorize(ROLE_WRITE + " and @clinicalAuthz.canManagePolicy(authentication, #id)")
     public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> suspendPolicy(
             @PathVariable UUID id,
             @Valid @RequestBody SuspendPolicyRequest request) {
@@ -119,13 +111,18 @@ public class ClinicalGovernanceController {
                 "Policy suspended", ClinicalPolicyMapper.toResponse(policy)));
     }
 
-    /**
-     * Archive a policy.
-     */
+    @PutMapping("/{id}/reactivate")
+    @PreAuthorize(ROLE_WRITE + " and @clinicalAuthz.canManagePolicy(authentication, #id)")
+    public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> reactivatePolicy(@PathVariable UUID id) {
+        log.info("Reactivating policy {}", id);
+        ClinicalPolicy policy = governanceService.reactivatePolicy(id);
+        return ResponseEntity.ok(ApiResponse.success(
+                "Policy reactivated", ClinicalPolicyMapper.toResponse(policy)));
+    }
+
     @PutMapping("/{id}/archive")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')")
-    public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> archivePolicy(
-            @PathVariable UUID id) {
+    @PreAuthorize(ROLE_WRITE + " and @clinicalAuthz.canManagePolicy(authentication, #id)")
+    public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> archivePolicy(@PathVariable UUID id) {
         log.info("Archiving policy {}", id);
         ClinicalPolicy policy = governanceService.archivePolicy(id);
         return ResponseEntity.ok(ApiResponse.success(
@@ -133,59 +130,48 @@ public class ClinicalGovernanceController {
     }
 
     /**
-     * Get active policies for a hospital by type.
+     * Get active policies for a hospital, optionally filtered by type.
      */
     @GetMapping("/hospital/{hospitalId}/active")
-    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    @PreAuthorize(ROLE_READ + " and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<List<ClinicalPolicyResponse>>> getActivePolicies(
             @PathVariable UUID hospitalId,
             @RequestParam(required = false) PolicyType type) {
-        List<ClinicalPolicyResponse> policies;
-        if (type != null) {
-            policies = governanceService.getActivePolicies(hospitalId, type).stream()
-                    .map(ClinicalPolicyMapper::toResponse)
-                    .collect(Collectors.toList());
-        } else {
-            // Return all active policies across all types
-            List<ClinicalPolicyResponse> allActive = new java.util.ArrayList<>();
-            for (PolicyType pt : PolicyType.values()) {
-                governanceService.getActivePolicies(hospitalId, pt).stream()
-                        .map(ClinicalPolicyMapper::toResponse)
-                        .forEach(allActive::add);
-            }
-            policies = allActive;
-        }
+        List<ClinicalPolicyResponse> policies = (type != null
+                ? governanceService.getActivePolicies(hospitalId, type)
+                : governanceService.getAllActive(hospitalId))
+                .stream()
+                .map(ClinicalPolicyMapper::toResponse)
+                .collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.success(policies));
     }
 
     /**
-     * Get all policies for a hospital with pagination.
+     * Get all policies for a hospital (+ system-wide defaults), paginated, with an
+     * optional status filter.
      */
     @GetMapping("/hospital/{hospitalId}")
-    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    @PreAuthorize(ROLE_READ + " and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<ClinicalPolicyResponse>>> getAllPolicies(
-            @PathVariable UUID hospitalId, Pageable pageable) {
+            @PathVariable UUID hospitalId,
+            @RequestParam(required = false) PolicyStatus status,
+            Pageable pageable) {
         Page<ClinicalPolicyResponse> policies = governanceService
-                .getAllPolicies(hospitalId, pageable)
+                .getAllPolicies(hospitalId, status, pageable)
                 .map(ClinicalPolicyMapper::toResponse);
         return ResponseEntity.ok(ApiResponse.success(policies));
     }
 
-    /**
-     * Get a single policy by ID.
-     */
     @GetMapping("/{id}")
+    @PreAuthorize(ROLE_READ + " and @clinicalAuthz.canAccessPolicy(authentication, #id)")
     public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> getPolicy(@PathVariable UUID id) {
         ClinicalPolicy policy = governanceService.getPolicy(id);
         return ResponseEntity.ok(ApiResponse.success(ClinicalPolicyMapper.toResponse(policy)));
     }
 
-    /**
-     * Get version history for a policy by its code.
-     */
     @GetMapping("/{id}/history")
-    public ResponseEntity<ApiResponse<List<ClinicalPolicyResponse>>> getPolicyHistory(
-            @PathVariable UUID id) {
+    @PreAuthorize(ROLE_READ + " and @clinicalAuthz.canAccessPolicy(authentication, #id)")
+    public ResponseEntity<ApiResponse<List<ClinicalPolicyResponse>>> getPolicyHistory(@PathVariable UUID id) {
         ClinicalPolicy policy = governanceService.getPolicy(id);
         UUID hospitalId = policy.getHospital() != null ? policy.getHospital().getId() : null;
         String policyCode = policy.getPolicyCode();
@@ -201,10 +187,8 @@ public class ClinicalGovernanceController {
         return ResponseEntity.ok(ApiResponse.success(history));
     }
 
-    /**
-     * Get audit log for a specific policy.
-     */
     @GetMapping("/{id}/audit")
+    @PreAuthorize(ROLE_READ + " and @clinicalAuthz.canAccessPolicy(authentication, #id)")
     public ResponseEntity<ApiResponse<Page<PolicyAuditLogResponse>>> getAuditLog(
             @PathVariable UUID id, Pageable pageable) {
         Page<PolicyAuditLogResponse> auditLog = governanceService

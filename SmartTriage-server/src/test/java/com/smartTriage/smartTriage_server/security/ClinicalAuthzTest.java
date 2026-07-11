@@ -114,6 +114,7 @@ class ClinicalAuthzTest {
                 medicationSafetyCheckRepository,
                 ioTDeviceRepository,
                 mock(com.smartTriage.smartTriage_server.module.safety.repository.SafetyIncidentRepository.class),
+                mock(com.smartTriage.smartTriage_server.module.governance.repository.ClinicalPolicyRepository.class),
                 new com.smartTriage.smartTriage_server.module.audit.context.AuditContext());
     }
 
