@@ -141,15 +141,21 @@ private:
   struct Cell { char last[20] = ""; };
   Cell cells_[14];
 
+  // Only fonts 2 and 4 are used for data (the fonts the previously working
+  // build proved are enabled in this project's User_Setup.h); `size` scales
+  // font 4 up for the big numerics. Fonts 6/7 are avoided deliberately —
+  // they lack the '/' glyph a BP reading needs, and may not be loaded.
   void cell(int id, int x, int y, int w, int h, const char *txt,
-            uint16_t color, uint8_t font) {
+            uint16_t color, uint8_t font, uint8_t size = 1) {
     if (!forceRedraw_ && strcmp(cells_[id].last, txt) == 0) return;
     strlcpy(cells_[id].last, txt, sizeof(cells_[id].last));
     val_.createSprite(w, h);
     val_.fillSprite(TFT_BLACK);
     val_.setTextColor(color, TFT_BLACK);
     val_.setTextDatum(MC_DATUM);
+    val_.setTextSize(size);
     val_.drawString(txt, w / 2, h / 2, font);
+    val_.setTextSize(1);
     val_.pushSprite(x, y);
     val_.deleteSprite();
   }
@@ -189,22 +195,22 @@ private:
     char t[20];
     // HR (+ source tag)
     snprintf(t, sizeof(t), s.hr > 0 ? "%.0f" : "--", s.hr);
-    cell(0, 6 + 8, top + 24, tileW - 16, tileH - 46,
-         t, bandColor(s.hr, ALM_HR_WARN_LOW, ALM_HR_WARN_HIGH, ALM_HR_CRIT_LOW, ALM_HR_CRIT_HIGH), 7);
+    cell(0, 6 + 8, top + 22, tileW - 16, tileH - 42,
+         t, bandColor(s.hr, ALM_HR_WARN_LOW, ALM_HR_WARN_HIGH, ALM_HR_CRIT_LOW, ALM_HR_CRIT_HIGH), 4, 2);
     cell(10, 6 + 8, top + tileH - 20, tileW - 16, 16,
          s.hr <= 0 ? "" : (s.hrFromEcg ? "ECG" : "PULSE-OX"), TFT_DARKGREY, 1);
 
     snprintf(t, sizeof(t), s.spo2 > 0 ? "%.0f" : "--", s.spo2);
-    cell(1, 12 + tileW + 8, top + 24, tileW - 16, tileH - 46,
-         t, bandColor(s.spo2, ALM_SPO2_WARN, 101, ALM_SPO2_CRIT, 101), 7);
+    cell(1, 12 + tileW + 8, top + 22, tileW - 16, tileH - 42,
+         t, bandColor(s.spo2, ALM_SPO2_WARN, 101, ALM_SPO2_CRIT, 101), 4, 2);
 
     snprintf(t, sizeof(t), s.temp > 0 ? "%.1f" : "--.-", s.temp);
-    cell(2, 6 + 8, top + tileH + 6 + 24, tileW - 16, tileH - 46,
-         t, bandColor(s.temp, ALM_TEMP_WARN_LOW, ALM_TEMP_WARN_HIGH, ALM_TEMP_CRIT_LOW, ALM_TEMP_CRIT_HIGH), 7);
+    cell(2, 6 + 8, top + tileH + 6 + 22, tileW - 16, tileH - 42,
+         t, bandColor(s.temp, ALM_TEMP_WARN_LOW, ALM_TEMP_WARN_HIGH, ALM_TEMP_CRIT_LOW, ALM_TEMP_CRIT_HIGH), 4, 2);
 
     snprintf(t, sizeof(t), s.rr > 0 ? "%.0f" : "--", s.rr);
-    cell(3, 12 + tileW + 8, top + tileH + 6 + 24, tileW - 16, tileH - 46,
-         t, bandColor(s.rr, ALM_RR_WARN_LOW, ALM_RR_WARN_HIGH, 1, 99), 7);
+    cell(3, 12 + tileW + 8, top + tileH + 6 + 22, tileW - 16, tileH - 42,
+         t, bandColor(s.rr, ALM_RR_WARN_LOW, ALM_RR_WARN_HIGH, 1, 99), 4, 2);
 
     // BP strip
     int by = top + 2 * (tileH + 6);
@@ -216,12 +222,12 @@ private:
       }
       snprintf(t, sizeof(t), "%d/%d", s.bpLast.sys, s.bpLast.dia);
       uint16_t c = (s.bpLast.sys > ALM_SYS_CRIT_HIGH || s.bpLast.sys < ALM_SYS_CRIT_LOW) ? TFT_RED : TFT_GREEN;
-      cell(4, 16, by + 22, 150, 34, t, c, 6);
-      char meta[40];
+      cell(4, 16, by + 22, 150, 34, t, c, 4);
+      char meta[56];
       snprintf(meta, sizeof(meta), "MAP %d   at %s%s", s.bpLast.map, when, s.bpCalibrated ? "" : "  UNCAL");
       cell(5, 176, by + 30, W - 196, 18, meta, TFT_SILVER, 2);
     } else {
-      cell(4, 16, by + 22, 150, 34, "--/--", TFT_DARKGREY, 6);
+      cell(4, 16, by + 22, 150, 34, "--/--", TFT_DARKGREY, 4);
       cell(5, 176, by + 30, W - 196, 18, "no reading - use BP page", TFT_DARKGREY, 2);
     }
 
@@ -279,7 +285,7 @@ private:
     char t[16];
     snprintf(t, sizeof(t), s.hr > 0 ? "%.0f" : "--", s.hr);
     cell(8, W - numW, ecgY + 14, numW - 4, 40, t,
-         bandColor(s.hr, ALM_HR_WARN_LOW, ALM_HR_WARN_HIGH, ALM_HR_CRIT_LOW, ALM_HR_CRIT_HIGH), 6);
+         bandColor(s.hr, ALM_HR_WARN_LOW, ALM_HR_WARN_HIGH, ALM_HR_CRIT_LOW, ALM_HR_CRIT_HIGH), 4);
     if (forceRedraw_) { tft_.setTextColor(TFT_SILVER, TFT_BLACK); tft_.drawString("HR bpm", W - numW + 8, ecgY + 2, 1); }
 
     snprintf(t, sizeof(t), s.spo2 > 0 ? "%.0f%%" : "--", s.spo2);
@@ -426,7 +432,7 @@ private:
     char t[32];
     if (busy) {
       snprintf(t, sizeof(t), "%.0f", s.cuffPressure);
-      cell(11, W / 2 - 110, top + 30, 220, 56, t, TFT_ORANGE, 7);
+      cell(11, W / 2 - 110, top + 30, 220, 56, t, TFT_ORANGE, 4, 2);
       cell(12, W / 2 - 110, top + 92, 220, 18, "cuff mmHg", TFT_SILVER, 2);
       const char *phase = s.bpPhase == BpPhase::INFLATING ? "Inflating..."
                         : s.bpPhase == BpPhase::MEASURING ? "Measuring - hold still"
@@ -443,7 +449,7 @@ private:
       tft_.fillRect(40, top + 146, W - 80, 16, TFT_BLACK);
     } else if (s.bpLast.valid) {
       snprintf(t, sizeof(t), "%d/%d", s.bpLast.sys, s.bpLast.dia);
-      cell(11, W / 2 - 140, top + 30, 280, 56, t, TFT_GREEN, 7);
+      cell(11, W / 2 - 140, top + 30, 280, 56, t, TFT_GREEN, 4, 2);
       char meta[48];
       char when[10] = "--:--";
       if (s.bpLast.at > 0) { struct tm tmv; localtime_r(&s.bpLast.at, &tmv); snprintf(when, sizeof(when), "%02d:%02d", tmv.tm_hour, tmv.tm_min); }

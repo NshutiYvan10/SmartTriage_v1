@@ -19,7 +19,11 @@ five-page touch UI, on-device alarms, and real transmission into SmartTriage.
 
 ## Libraries (Arduino Library Manager)
 
-- `TFT_eSPI` (configure `User_Setup.h` for your panel — the previous build's setup works)
+- `TFT_eSPI` — **keep your existing `User_Setup.h` unchanged**: the display is
+  driven exactly like the previously working build (same `init()`, rotation 1,
+  same touch calibration). All value text uses fonts 2 and 4 (the fonts that
+  build already proved); tiny labels use the GLCD font — keep `LOAD_GLCD`,
+  `LOAD_FONT2`, `LOAD_FONT4` enabled (they are by default).
 - `SparkFun MAX3010x Pulse and Proximity Sensor Library` — **not** the MAX30100 library; that chip is register-incompatible and was why HR/SpO2 never worked
 - `ArduinoJson` (v7)
 
