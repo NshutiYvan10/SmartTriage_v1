@@ -51,4 +51,23 @@ public interface HypoglycemiaEventRepository extends JpaRepository<HypoglycemiaE
 
     /** All unresolved active events — the recheck monitor scans these for overdue rechecks. */
     List<HypoglycemiaEvent> findByResolvedFalseAndIsActiveTrue();
+
+    // ── glucose due-clock scan support (GlucoseScheduleService) ──
+
+    /** Visits with an UNRESOLVED event — the due-clock must skip them (the 15-min recheck clock owns them). */
+    @Query("SELECT DISTINCT h.visit.id FROM HypoglycemiaEvent h WHERE h.resolved = false AND h.isActive = true")
+    List<UUID> findVisitIdsWithUnresolvedEvents();
+
+    /** Latest resolution time per visit for events resolved after {@code cutoff} — arms the q1h post-hypo observation tier. */
+    @Query("SELECT h.visit.id, MAX(h.resolvedAt) FROM HypoglycemiaEvent h " +
+            "WHERE h.visit.id IN :visitIds AND h.isActive = true AND h.resolved = true AND h.resolvedAt > :cutoff " +
+            "GROUP BY h.visit.id")
+    List<Object[]> latestResolvedAfterByVisit(@Param("visitIds") java.util.Collection<UUID> visitIds,
+                                              @Param("cutoff") java.time.Instant cutoff);
+
+    /** Latest event-borne glucose timestamp per visit (repeat reading when present, else detection reading). */
+    @Query("SELECT h.visit.id, MAX(COALESCE(h.repeatGlucoseAt, h.detectedAt)) FROM HypoglycemiaEvent h " +
+            "WHERE h.visit.id IN :visitIds AND h.isActive = true " +
+            "GROUP BY h.visit.id")
+    List<Object[]> latestEventGlucoseAtByVisit(@Param("visitIds") java.util.Collection<UUID> visitIds);
 }

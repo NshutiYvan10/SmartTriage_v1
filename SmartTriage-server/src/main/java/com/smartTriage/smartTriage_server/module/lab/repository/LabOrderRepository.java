@@ -266,6 +266,30 @@ public interface LabOrderRepository extends JpaRepository<LabOrder, UUID> {
             "AND u.designation = com.smartTriage.smartTriage_server.common.enums.Designation.HEAD_LAB_TECHNICIAN")
     long countActiveHeadLabTechs(@Param("hospitalId") UUID hospitalId);
 
+    // ── glucose due-clock support (GlucoseReadingLookup) ──
+    // Name matching mirrors LabOrderService.isGlucoseName (glucose / blood sugar /
+    // rbs / fbs / glu) — keep the two in sync. Glucose analytes nested inside a
+    // PANEL are not covered here (the panel's component rows carry no per-analyte
+    // result time); a panel glucose still reaches hypoglycemia DETECTION via the
+    // lab bridge, it just doesn't reset the measurement due-clock.
+
+    /** Latest resulted single-order glucose per visit — the glucose due-clock scan. */
+    @Query("SELECT o.visit.id, MAX(o.resultedAt) FROM LabOrder o WHERE o.visit.id IN :visitIds " +
+            "AND o.isActive = true AND o.resultNumeric IS NOT NULL AND o.resultedAt IS NOT NULL " +
+            "AND (LOWER(o.testName) LIKE '%glucose%' OR LOWER(o.testName) LIKE '%blood sugar%' " +
+            "     OR LOWER(o.testName) IN ('rbs','fbs','glu')) " +
+            "GROUP BY o.visit.id")
+    List<Object[]> latestGlucoseResultAtByVisit(@Param("visitIds") java.util.Collection<UUID> visitIds);
+
+    /** Resulted glucose orders for ONE visit, newest first — pass PageRequest.of(0,1) for the latest. */
+    @Query("SELECT o FROM LabOrder o WHERE o.visit.id = :visitId " +
+            "AND o.isActive = true AND o.resultNumeric IS NOT NULL AND o.resultedAt IS NOT NULL " +
+            "AND (LOWER(o.testName) LIKE '%glucose%' OR LOWER(o.testName) LIKE '%blood sugar%' " +
+            "     OR LOWER(o.testName) IN ('rbs','fbs','glu')) " +
+            "ORDER BY o.resultedAt DESC")
+    List<LabOrder> findGlucoseResultsForVisit(@Param("visitId") UUID visitId,
+                                              org.springframework.data.domain.Pageable pageable);
+
     /** Override register (V109): lab orders released via verification bypass, hospital-scoped + ranged. */
     @org.springframework.data.jpa.repository.Query("SELECT o FROM LabOrder o JOIN o.visit v "
             + "WHERE v.hospital.id = :hospitalId AND o.verificationOverride = true "

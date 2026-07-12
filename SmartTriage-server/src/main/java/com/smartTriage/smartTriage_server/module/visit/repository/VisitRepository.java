@@ -146,6 +146,23 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
         List<Visit> findAllActiveVisitsByStatuses(@Param("statuses") List<VisitStatus> statuses);
 
         /**
+         * In-department visits (status NOT terminal) with patient/hospital/bed fetched —
+         * the glucose due-clock scan reads chronic conditions, triage category, zone and
+         * bed off every row, so the associations are fetched up front (OSIV is off).
+         */
+        @Query("SELECT v FROM Visit v JOIN FETCH v.patient JOIN FETCH v.hospital LEFT JOIN FETCH v.currentBed " +
+                        "WHERE v.isActive = true AND v.status NOT IN :terminalStatuses")
+        List<Visit> findInDepartmentWithPatient(
+                        @Param("terminalStatuses") java.util.Collection<VisitStatus> terminalStatuses);
+
+        /** Hospital-scoped variant of {@link #findInDepartmentWithPatient} — the due-list endpoint. */
+        @Query("SELECT v FROM Visit v JOIN FETCH v.patient JOIN FETCH v.hospital LEFT JOIN FETCH v.currentBed " +
+                        "WHERE v.hospital.id = :hospitalId AND v.isActive = true AND v.status NOT IN :terminalStatuses")
+        List<Visit> findInDepartmentWithPatientByHospital(
+                        @Param("hospitalId") UUID hospitalId,
+                        @Param("terminalStatuses") java.util.Collection<VisitStatus> terminalStatuses);
+
+        /**
          * Most recent arrival time across all active visits for a patient.
          * Used by the patient-lookup service to surface "last seen at" when a
          * triage nurse is choosing among ranked candidates. Returns empty if

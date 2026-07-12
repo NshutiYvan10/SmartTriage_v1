@@ -93,56 +93,120 @@ public class HypoglycemiaService {
     private final HypoglycemiaEnforcementEngine enforcementEngine;
     private final RealTimeEventPublisher realTimeEventPublisher;
     private final ShiftAssignmentService shiftAssignmentService;
+    private final GlucoseReadingLookup readingLookup;
+    private final GlucoseScheduleService glucoseScheduleService;
 
     /**
-     * Run hypoglycemia enforcement for a visit from the latest TRIAGE record.
+     * Run hypoglycemia enforcement for a visit. Interprets the LATEST glucose from
+     * ANY source (vitals, triage, lab, event recheck — previously triage-only, so a
+     * fresher POC/lab value was ignored), and applies the STALENESS guard: for a
+     * patient on a measurement schedule, a reading older than their required
+     * interval must never reassure — severity downgrades to PENDING_CHECK and a
+     * recheck is demanded. Asymmetric on purpose: a stale LOW stays loud (the
+     * open-event machinery), only stale COMFORT is invalidated. Patients with no
+     * schedule (tier 7) get no staleness nagging.
      */
     @Transactional
     public HypoglycemiaCheckResponse checkAndEnforce(UUID visitId) {
         Visit visit = visitRepository.findByIdAndIsActiveTrue(visitId)
                 .orElseThrow(() -> new ResourceNotFoundException("Visit", "id", visitId));
+        Instant now = Instant.now();
         // Triage is OPTIONAL: a glucose check must be runnable at the door, before
         // triage (previously this threw 404 — "Run glucose check" on an un-triaged
         // patient just failed). The engine is already null-safe on a missing record
         // (no triage signs → no mandatory triggers; known-diabetic still evaluates
         // from the patient's chronic conditions).
-        TriageRecord triage = triageRecordRepository
-                .findFirstByVisitIdAndIsActiveTrueOrderByTriageTimeDesc(visitId)
+        List<TriageRecord> triageRecords = triageRecordRepository.findAllByVisitIds(List.of(visitId));
+        TriageRecord triage = triageRecords.stream()
+                .filter(t -> t.getTriageTime() != null)
+                .max(java.util.Comparator.comparing(TriageRecord::getTriageTime))
                 .orElse(null);
 
         HypoglycemiaCheckResult result = enforcementEngine.enforceGlucoseCheck(visit, triage);
 
+        // Re-interpret from the LATEST cross-source reading (a superset of the triage
+        // glucose, so when triage IS the latest this is a no-op). Neuroglycopenia is
+        // passed as checkMandatory — the two coincide by construction in
+        // enforceGlucoseCheck (all four mandatory triggers are neuroglycopenic).
+        GlucoseReadingLookup.Reading reading = readingLookup.latestForVisit(visitId, triageRecords).orElse(null);
+        if (reading != null && reading.mmol() != null) {
+            result = enforcementEngine.interpret(visit, reading.mmol(), result.checkMandatory(),
+                    result.requiresCheck(), result.checkMandatory(), result.triggerReasons());
+        }
+
+        // Measurement-schedule state (empty when no tier applies, or when an
+        // unresolved event's 15-minute recheck clock owns the patient).
+        GlucoseScheduleService.DueEntry schedule =
+                glucoseScheduleService.computeForVisit(visit, triageRecords, now).orElse(null);
+        boolean stale = schedule != null && reading != null && reading.at() != null
+                && reading.at().plus(schedule.tier().interval()).isBefore(now);
+
         HypoglycemiaCheckResponse.HypoglycemiaCheckResponseBuilder responseBuilder = HypoglycemiaCheckResponse.builder()
                 .visitId(visitId)
-                .requiresCheck(result.requiresCheck())
+                .requiresCheck(result.requiresCheck() || schedule != null)
                 .checkMandatory(result.checkMandatory())
                 .glucoseValue(result.glucoseValue())
                 .hypoglycemic(result.isHypoglycemic())
                 .severity(result.severity().name())
                 .treatmentProtocol(result.treatmentProtocol())
-                .triggerReasons(result.triggerReasons());
+                .triggerReasons(result.triggerReasons())
+                .glucoseSource(reading != null ? reading.source() : null)
+                .glucoseAt(reading != null ? reading.at() : null)
+                .readingAgeMinutes(reading != null && reading.at() != null
+                        ? java.time.Duration.between(reading.at(), now).toMinutes() : null)
+                .monitoringTier(schedule != null ? schedule.tier().label() : null)
+                .monitoringIntervalMinutes(schedule != null ? schedule.tier().interval().toMinutes() : null)
+                .nextDueAt(schedule != null ? schedule.dueAt() : null);
 
         // A PRESENT hypoglycemic value ALWAYS files the event + owned alert + recheck
-        // clock — regardless of whether a check was "required". The previous gate
-        // returned early on !requiresCheck BEFORE testing the value, so a
-        // non-diabetic, alert patient with a severe-low triage glucose produced a
-        // response saying SEVERE while filing NOTHING (no event, no page, no
-        // 15-minute recheck). Requiredness gates the "missing glucose" nag only —
-        // never the interpretation of a real reading.
+        // clock — regardless of whether a check was "required" and regardless of AGE
+        // (an untreated old low is more alarming, not less; the duplicate-event guard
+        // makes a re-fire harmless). Requiredness gates the "missing glucose" nag
+        // only — never the interpretation of a real reading.
         if (result.isHypoglycemic()) {
-            HypoglycemiaEvent event = createEventAndAlert(visit, result, "TRIAGE");
+            HypoglycemiaEvent event = createEventAndAlert(visit, result,
+                    reading != null ? reading.source() : "TRIAGE");
             if (event != null) responseBuilder.eventId(event.getId());
-        } else if (result.requiresCheck() && result.glucoseValue() == null) {
-            // A check is required (mandatory OR recommended-for-known-diabetic) but no
-            // glucose is on file — surface the glucose-check-required alert in BOTH cases
-            // (previously only the mandatory branch alerted, so a diabetic with no glucose
-            // was silent).
-            if (generateGlucoseCheckRequiredAlert(visit, result)) {
+        } else if (stale) {
+            // Stale comfort: the value classifies fine, but it is older than this
+            // patient's required measurement interval — do NOT reassure from it.
+            responseBuilder
+                    .staleReading(true)
+                    .hypoglycemic(false)
+                    .severity(com.smartTriage.smartTriage_server.common.enums.HypoglycemiaSeverity.PENDING_CHECK.name())
+                    .requiresCheck(true);
+            HypoglycemiaCheckResult nag = withExtraReason(result, String.format(
+                    "stale_glucose_reading (%d min old; %s requires every %d min)",
+                    java.time.Duration.between(reading.at(), now).toMinutes(),
+                    schedule.tier().label().toLowerCase(),
+                    schedule.tier().interval().toMinutes()));
+            responseBuilder.triggerReasons(nag.triggerReasons());
+            if (generateGlucoseCheckRequiredAlert(visit, nag)) {
+                log.warn("Glucose reading STALE for visit {} — {} min old against a {}-min {} schedule",
+                        visitId, java.time.Duration.between(reading.at(), now).toMinutes(),
+                        schedule.tier().interval().toMinutes(), schedule.tier().key());
+            }
+        } else if ((result.requiresCheck() || schedule != null) && result.glucoseValue() == null) {
+            // A check is required (mandatory trigger, known diabetic, OR a measurement
+            // schedule with no reading on record anywhere) but no glucose is on file.
+            HypoglycemiaCheckResult nag = schedule != null && !result.requiresCheck()
+                    ? withExtraReason(result, "scheduled_glucose_monitoring (" + schedule.tier().label() + ")")
+                    : result;
+            responseBuilder.triggerReasons(nag.triggerReasons());
+            if (generateGlucoseCheckRequiredAlert(visit, nag)) {
                 log.warn("Glucose check required but not performed for visit {} ({})",
-                        visitId, String.join(", ", result.triggerReasons()));
+                        visitId, String.join(", ", nag.triggerReasons()));
             }
         }
         return responseBuilder.build();
+    }
+
+    /** Copy of a check result carrying one extra trigger reason (for the nag alert + response). */
+    private static HypoglycemiaCheckResult withExtraReason(HypoglycemiaCheckResult result, String reason) {
+        List<String> reasons = new java.util.ArrayList<>(result.triggerReasons());
+        reasons.add(reason);
+        return new HypoglycemiaCheckResult(true, result.checkMandatory(), result.glucoseValue(),
+                result.severity(), result.neonatal(), result.treatmentProtocol(), reasons);
     }
 
     /**

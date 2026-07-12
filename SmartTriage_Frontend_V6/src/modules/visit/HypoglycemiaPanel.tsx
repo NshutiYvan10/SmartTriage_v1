@@ -300,11 +300,13 @@ export function HypoglycemiaPanel({ visitId, onChanged }: HypoglycemiaPanelProps
           const r = checkResult;
           const tone = r.isHypoglycemic
             ? { bg: 'bg-red-500/10 border-red-500/25', text: 'text-red-500', Icon: AlertTriangle }
-            : r.glucoseValue == null && r.requiresCheck
+            : r.staleReading
               ? { bg: 'bg-amber-500/10 border-amber-500/25', text: 'text-amber-500', Icon: Timer }
-              : r.glucoseValue == null
-                ? { bg: 'bg-slate-500/10 border-slate-500/20', text: text.body, Icon: FlaskConical }
-                : { bg: 'bg-emerald-500/10 border-emerald-500/25', text: 'text-emerald-500', Icon: CheckCircle2 };
+              : r.glucoseValue == null && r.requiresCheck
+                ? { bg: 'bg-amber-500/10 border-amber-500/25', text: 'text-amber-500', Icon: Timer }
+                : r.glucoseValue == null
+                  ? { bg: 'bg-slate-500/10 border-slate-500/20', text: text.body, Icon: FlaskConical }
+                  : { bg: 'bg-emerald-500/10 border-emerald-500/25', text: 'text-emerald-500', Icon: CheckCircle2 };
           const Icon = tone.Icon;
           return (
             <div className={`mt-3 rounded-xl px-3 py-2.5 border ${tone.bg}`}>
@@ -318,6 +320,21 @@ export function HypoglycemiaPanel({ visitId, onChanged }: HypoglycemiaPanelProps
                       </p>
                       {r.treatmentProtocol && <p className={`text-[10px] mt-1 ${text.muted}`}>{r.treatmentProtocol}</p>}
                     </>
+                  ) : r.staleReading ? (
+                    <>
+                      <p className={`text-[11px] font-bold ${tone.text}`}>
+                        STALE READING — latest glucose {r.glucoseValue?.toFixed(1)} mmol/L
+                        {r.glucoseSource ? ` (${r.glucoseSource.toLowerCase()})` : ''} is{' '}
+                        {r.readingAgeMinutes != null && r.readingAgeMinutes >= 90
+                          ? `${Math.floor(r.readingAgeMinutes / 60)} h ${r.readingAgeMinutes % 60} min`
+                          : `${r.readingAgeMinutes ?? '?'} min`} old.
+                      </p>
+                      <p className={`text-[10px] mt-1 ${text.muted}`}>
+                        This patient is on {r.monitoringTier?.toLowerCase() ?? 'scheduled'} glucose monitoring
+                        (every {r.monitoringIntervalMinutes} min) — an old value cannot reassure.
+                        Recheck a bedside glucose now; the zone has been reminded.
+                      </p>
+                    </>
                   ) : r.glucoseValue == null && r.requiresCheck ? (
                     <p className={`text-[11px] font-bold ${tone.text}`}>
                       GLUCOSE CHECK {r.checkMandatory ? 'REQUIRED' : 'RECOMMENDED'} — no reading on file
@@ -330,9 +347,20 @@ export function HypoglycemiaPanel({ visitId, onChanged }: HypoglycemiaPanelProps
                       diabetic). Nothing filed — record a bedside glucose in Vitals to screen.
                     </p>
                   ) : (
-                    <p className={`text-[11px] font-bold ${tone.text}`}>
-                      Latest glucose {r.glucoseValue.toFixed(1)} mmol/L — {r.severity}. No event filed.
-                    </p>
+                    <>
+                      <p className={`text-[11px] font-bold ${tone.text}`}>
+                        Latest glucose {r.glucoseValue.toFixed(1)} mmol/L
+                        {r.glucoseSource ? ` (${r.glucoseSource.toLowerCase()}` : ''}
+                        {r.glucoseSource && r.readingAgeMinutes != null ? `, ${r.readingAgeMinutes} min ago)` : r.glucoseSource ? ')' : ''}
+                        {' '}— {r.severity}. No event filed.
+                      </p>
+                      {r.monitoringTier && r.nextDueAt && (
+                        <p className={`text-[10px] mt-1 ${text.muted}`}>
+                          On scheduled monitoring: {r.monitoringTier.toLowerCase()}, every {r.monitoringIntervalMinutes} min —
+                          next reading due {new Date(r.nextDueAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
                 <button onClick={() => setCheckResult(null)} className={`text-[10px] font-bold ${text.muted} hover:opacity-70`}>✕</button>

@@ -22,7 +22,7 @@ import { subscribeToHypoglycemia } from '@/api/websocket';
 import { useWebSocketGeneration } from '@/hooks/useWebSocket';
 import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
 import { ApiError } from '@/api/client';
-import type { HypoglycemiaEvent } from '@/api/hypoglycemia';
+import type { HypoglycemiaEvent, GlucoseDueEntry } from '@/api/hypoglycemia';
 import { format } from 'date-fns';
 
 /* ── Severity colour map — keys MUST match the backend HypoglycemiaSeverity enum
@@ -62,6 +62,7 @@ export function HypoglycemiaView() {
 
   const wsGen = useWebSocketGeneration();
   const [events, setEvents] = useState<HypoglycemiaEvent[]>([]);
+  const [dueList, setDueList] = useState<GlucoseDueEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +91,18 @@ export function HypoglycemiaView() {
       // zone — primary ∪ additional — merged) / restricted (empty).
       const data = await fetchForScope(scope, (zone) => hypoglycemiaApi.getActive(hospitalId, zone));
       setEvents(data);
+      // The measurement worklist rides the same load: patients on a glucose
+      // schedule (insulin / post-hypo / critical / diabetic) with their due-clocks.
+      // Best-effort — a worklist failure must not blank the events board.
+      try {
+        // fetchForScope dedups merged zone results by `id` — alias visitId (one row per visit).
+        const due = await fetchForScope(scope, (zone) =>
+          hypoglycemiaApi.getDueList(hospitalId, zone).then((rows) => rows.map((r) => ({ ...r, id: r.visitId }))));
+        setDueList(due);
+      } catch (dueErr) {
+        console.error('Failed to load glucose due-list:', dueErr);
+        setDueList([]);
+      }
       setError(null);
     } catch (err) {
       // Surface the failure — never render a green "all clear" empty state when
@@ -653,6 +666,91 @@ export function HypoglycemiaView() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* ── Scheduled glucose checks — the PROACTIVE worklist. Glucose is the one
+            vital the bedside monitor can't capture, so patients on a measurement
+            schedule (insulin infusion q1h, post-hypo q1h, insulin / critically-ill
+            q4h, diabetic q6h) are listed here with a live due-clock. Recording a
+            glucose anywhere (vitals, POC, lab) re-arms the clock automatically. ── */}
+        {!loading && dueList.length > 0 && (
+          <div className="rounded-2xl overflow-hidden animate-fade-up" style={glassCard}>
+            <div className="px-5 py-4 flex items-center gap-3" style={{ borderBottom: borderStyle }}>
+              <div className="w-9 h-9 rounded-xl bg-cyan-500/15 flex items-center justify-center shrink-0">
+                <Timer className="w-4.5 h-4.5 text-cyan-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className={`text-sm font-extrabold tracking-tight ${text.heading}`}>Scheduled glucose checks</h2>
+                <p className={`text-[11px] ${text.muted}`}>
+                  Patients whose blood glucose must be measured on a clock — record a reading to re-arm it.
+                </p>
+              </div>
+              {(() => {
+                const overdue = dueList.filter((d) => d.status === 'OVERDUE').length;
+                const due = dueList.filter((d) => d.status === 'DUE').length;
+                return (
+                  <div className="flex items-center gap-2 shrink-0">
+                    {overdue > 0 && (
+                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-red-500/15 text-red-500 animate-pulse">
+                        {overdue} OVERDUE
+                      </span>
+                    )}
+                    {due > 0 && (
+                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-500">
+                        {due} DUE
+                      </span>
+                    )}
+                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg ${isDark ? 'bg-white/5' : 'bg-slate-100'} ${text.muted}`}>
+                      {dueList.length} on schedule
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
+            <div>
+              {dueList.map((d, i) => {
+                const chip = d.status === 'OVERDUE'
+                  ? { cls: 'bg-red-500/15 text-red-500 animate-pulse', label: `overdue by ${Math.abs(d.minutesUntilDue)}m` }
+                  : d.status === 'DUE'
+                    ? { cls: 'bg-amber-500/15 text-amber-500', label: 'due now' }
+                    : { cls: 'bg-cyan-500/10 text-cyan-500', label: `due in ${d.minutesUntilDue}m` };
+                return (
+                  <div key={d.visitId}
+                    className="px-5 py-3 flex items-center gap-3 flex-wrap"
+                    style={i > 0 ? { borderTop: borderStyle } : undefined}>
+                    <button
+                      type="button"
+                      onClick={() => navigate(chartPath(d.visitId))}
+                      className="group flex items-center gap-1.5 min-w-0 text-left hover:opacity-80 transition-opacity"
+                      title="Open patient chart"
+                    >
+                      <PatientContextLine
+                        patientName={d.patientName}
+                        zone={d.currentZone ? d.currentZone.replace(/_/g, ' ') : null}
+                        bedLabel={d.currentBedLabel}
+                        visitNumber={d.visitNumber}
+                        className={`text-[13px] ${text.heading}`}
+                      />
+                      <ChevronRight className={`w-4 h-4 shrink-0 ${text.muted} group-hover:translate-x-0.5 transition-transform`} />
+                    </button>
+                    <div className="flex items-center gap-2 flex-wrap ml-auto">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg ${isDark ? 'bg-white/5' : 'bg-slate-100'} ${text.muted}`}>
+                        {d.tierLabel} · q{d.intervalMinutes >= 60 && d.intervalMinutes % 60 === 0 ? `${d.intervalMinutes / 60}h` : `${d.intervalMinutes}m`}
+                      </span>
+                      <span className={`text-[10px] ${text.muted}`}>
+                        {d.lastReadingAt
+                          ? `last ${format(new Date(d.lastReadingAt), 'HH:mm')}`
+                          : 'no reading yet'}
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg inline-flex items-center gap-1 ${chip.cls}`}>
+                        <Timer className="w-3 h-3" />{chip.label}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

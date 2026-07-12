@@ -45,4 +45,13 @@ public interface TriageRecordRepository extends JpaRepository<TriageRecord, UUID
             @Param("visitId") UUID visitId,
             @Param("since") Instant since,
             @Param("categories") java.util.Collection<TriageCategory> categoriesAtOrAbove);
+
+    /**
+     * All active triage records for a set of visits, one query — the glucose
+     * due-clock scan derives per-visit mandatory-trigger state (latest record)
+     * and triage-borne glucose timestamps from these in-memory (records per
+     * visit are few; a grouped fetch beats N+1 findFirst calls).
+     */
+    @Query("SELECT t FROM TriageRecord t WHERE t.visit.id IN :visitIds AND t.isActive = true")
+    java.util.List<TriageRecord> findAllByVisitIds(@Param("visitIds") java.util.Collection<UUID> visitIds);
 }

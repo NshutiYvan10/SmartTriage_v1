@@ -143,6 +143,28 @@ public interface MedicationAdministrationRepository extends JpaRepository<Medica
             @Param("priority") com.smartTriage.smartTriage_server.common.enums.MedicationPriority priority,
             @Param("cutoff") java.time.Instant cutoff);
 
+    /**
+     * Live insulin exposure per visit — drives the glucose due-clock's insulin
+     * tiers (q1h for a CONTINUOUS infusion, q4h otherwise). "Live" = PRESCRIBED
+     * or ADMINISTERED (an SC dose keeps acting for hours after it's given), not
+     * past its endAt, and prescribed/administered within the last 24 h so a
+     * long-boarding patient's ancient one-time dose doesn't demand serial
+     * fingersticks forever. Drug matching is by name — the same primary
+     * mechanism the teratogen/allergy gates use.
+     */
+    @Query("SELECT m.visit.id, m.prescriptionType, COALESCE(m.administeredAt, m.prescribedAt) " +
+           "FROM MedicationAdministration m " +
+           "WHERE m.visit.id IN :visitIds AND m.isActive = true " +
+           "AND m.status IN (com.smartTriage.smartTriage_server.common.enums.MedicationStatus.PRESCRIBED, " +
+           "                 com.smartTriage.smartTriage_server.common.enums.MedicationStatus.ADMINISTERED) " +
+           "AND LOWER(m.drugName) LIKE '%insulin%' " +
+           "AND (m.endAt IS NULL OR m.endAt > :now) " +
+           "AND COALESCE(m.administeredAt, m.prescribedAt) > :recencyCutoff")
+    List<Object[]> findInsulinExposureByVisit(
+            @Param("visitIds") java.util.Collection<UUID> visitIds,
+            @Param("now") java.time.Instant now,
+            @Param("recencyCutoff") java.time.Instant recencyCutoff);
+
     /** Override register (V109): prescriptions carrying an emergency / allergy / interaction override. */
     @org.springframework.data.jpa.repository.Query("SELECT m FROM MedicationAdministration m JOIN m.visit v "
             + "WHERE v.hospital.id = :hospitalId AND m.isActive = true AND m.prescribedAt BETWEEN :from AND :to "

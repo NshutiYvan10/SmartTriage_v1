@@ -51,6 +51,8 @@ class HypoglycemiaServiceTest {
     private ShiftAssignmentService shiftService;
     private VisitRepository visitRepo;
     private TriageRecordRepository triageRepo;
+    private GlucoseReadingLookup readingLookup;
+    private GlucoseScheduleService scheduleService;
     private HypoglycemiaService service;
 
     private final UUID visitId = UUID.randomUUID();
@@ -65,9 +67,15 @@ class HypoglycemiaServiceTest {
         shiftService = mock(ShiftAssignmentService.class);
         visitRepo = mock(VisitRepository.class);
         triageRepo = mock(TriageRecordRepository.class);
+        // Due-clock collaborators: no cross-source reading and no schedule by default,
+        // so the pinned pre-schedule behaviors (triage-only interpretation) still hold.
+        readingLookup = mock(GlucoseReadingLookup.class);
+        scheduleService = mock(GlucoseScheduleService.class);
+        when(readingLookup.latestForVisit(any(), any())).thenReturn(Optional.empty());
+        when(scheduleService.computeForVisit(any(), any(), any())).thenReturn(Optional.empty());
         service = new HypoglycemiaService(eventRepo, visitRepo,
                 triageRepo, alertRepo, new HypoglycemiaEnforcementEngine(),
-                publisher, shiftService);
+                publisher, shiftService, readingLookup, scheduleService);
 
         Hospital h = new Hospital();
         h.setId(hospitalId);
@@ -212,6 +220,8 @@ class HypoglycemiaServiceTest {
         var t = new com.smartTriage.smartTriage_server.module.triage.entity.TriageRecord();
         t.setBloodGlucose(glucose);
         t.setHasComa(coma);
+        t.setTriageTime(Instant.now());
+        t.setVisit(visit);
         return t;
     }
 
@@ -220,8 +230,9 @@ class HypoglycemiaServiceTest {
             + "(non-diabetic, alert patient) — the old gate returned early and filed NOTHING")
     void checkAndEnforce_hypoglycemicValueAlwaysFilesEvent() {
         when(visitRepo.findByIdAndIsActiveTrue(visitId)).thenReturn(Optional.of(visit));
-        when(triageRepo.findFirstByVisitIdAndIsActiveTrueOrderByTriageTimeDesc(visitId))
-                .thenReturn(Optional.of(triageWith(2.1, false))); // no triggers, not diabetic
+        // checkAndEnforce now loads ALL triage records for the visit (cross-source lookup).
+        when(triageRepo.findAllByVisitIds(any()))
+                .thenReturn(java.util.List.of(triageWith(2.1, false))); // no triggers, not diabetic
         when(eventRepo.existsByVisitIdAndResolvedFalseAndIsActiveTrue(visitId)).thenReturn(false);
 
         var response = service.checkAndEnforce(visitId);
@@ -231,6 +242,70 @@ class HypoglycemiaServiceTest {
         verify(eventRepo).save(cap.capture());
         assertEquals("TRIAGE", cap.getValue().getGlucoseSource());
         verify(alertRepo).save(any(ClinicalAlert.class));
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // Staleness guard (glucose due-clock) — RATIFIED asymmetry: stale comfort
+    // is invalidated, stale danger stays loud.
+    // ────────────────────────────────────────────────────────────────────
+
+    private GlucoseScheduleService.DueEntry scheduleEntry(Instant readingAt) {
+        var tier = new com.smartTriage.smartTriage_server.module.hypoglycemia.engine.GlucoseScheduleEngine.Tier(
+                "INSULIN_INFUSION", "Insulin infusion",
+                java.time.Duration.ofMinutes(60), java.time.Duration.ofMinutes(15));
+        Instant due = readingAt.plus(java.time.Duration.ofMinutes(60));
+        return new GlucoseScheduleService.DueEntry(visit, tier, readingAt, due, due.plus(java.time.Duration.ofMinutes(15)));
+    }
+
+    @Test
+    @DisplayName("STALE NORMAL cannot reassure: a 3h-old normal reading on a q1h patient downgrades to "
+            + "PENDING_CHECK, demands a recheck, and pages GLUCOSE CHECK REQUIRED")
+    void checkAndEnforce_staleNormalCannotReassure() {
+        Instant threeHoursAgo = Instant.now().minus(java.time.Duration.ofHours(3));
+        when(visitRepo.findByIdAndIsActiveTrue(visitId)).thenReturn(Optional.of(visit));
+        when(triageRepo.findAllByVisitIds(any())).thenReturn(java.util.List.of());
+        when(readingLookup.latestForVisit(eq(visitId), any()))
+                .thenReturn(Optional.of(new GlucoseReadingLookup.Reading(5.5, threeHoursAgo, "VITALS")));
+        when(scheduleService.computeForVisit(any(), any(), any()))
+                .thenReturn(Optional.of(scheduleEntry(threeHoursAgo)));
+        when(alertRepo.existsByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(
+                visitId, AlertType.HYPOGLYCEMIA_CRITICAL)).thenReturn(false);
+
+        var response = service.checkAndEnforce(visitId);
+
+        assertTrue(response.isStaleReading());
+        assertEquals("PENDING_CHECK", response.getSeverity());
+        assertFalse(response.isHypoglycemic());
+        assertTrue(response.isRequiresCheck());
+        assertEquals(5.5, response.getGlucoseValue());
+        assertEquals("VITALS", response.getGlucoseSource());
+        assertEquals("Insulin infusion", response.getMonitoringTier());
+        assertTrue(response.getTriggerReasons().stream().anyMatch(r -> r.startsWith("stale_glucose_reading")));
+        verify(alertRepo).save(any(ClinicalAlert.class)); // GLUCOSE CHECK REQUIRED nag
+        verify(eventRepo, never()).save(any(HypoglycemiaEvent.class)); // no phantom event
+    }
+
+    @Test
+    @DisplayName("STALE LOW stays loud: an old hypoglycemic reading still files the event — "
+            + "staleness only invalidates comfort, never danger")
+    void checkAndEnforce_staleLowStaysLoud() {
+        Instant threeHoursAgo = Instant.now().minus(java.time.Duration.ofHours(3));
+        when(visitRepo.findByIdAndIsActiveTrue(visitId)).thenReturn(Optional.of(visit));
+        when(triageRepo.findAllByVisitIds(any())).thenReturn(java.util.List.of());
+        when(readingLookup.latestForVisit(eq(visitId), any()))
+                .thenReturn(Optional.of(new GlucoseReadingLookup.Reading(2.4, threeHoursAgo, "VITALS")));
+        when(scheduleService.computeForVisit(any(), any(), any()))
+                .thenReturn(Optional.of(scheduleEntry(threeHoursAgo)));
+        when(eventRepo.existsByVisitIdAndResolvedFalseAndIsActiveTrue(visitId)).thenReturn(false);
+
+        var response = service.checkAndEnforce(visitId);
+
+        assertTrue(response.isHypoglycemic());
+        assertEquals("MODERATE", response.getSeverity());
+        assertFalse(response.isStaleReading());
+        ArgumentCaptor<HypoglycemiaEvent> cap = ArgumentCaptor.forClass(HypoglycemiaEvent.class);
+        verify(eventRepo).save(cap.capture());
+        assertEquals("VITALS", cap.getValue().getGlucoseSource());
     }
 
     @Test

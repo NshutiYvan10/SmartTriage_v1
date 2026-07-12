@@ -79,14 +79,8 @@ public class HypoglycemiaEnforcementEngine {
             }
         }
 
-        boolean isKnownDiabetic = false;
-        if (visit.getPatient() != null && visit.getPatient().getChronicConditions() != null) {
-            String conditions = visit.getPatient().getChronicConditions().toLowerCase();
-            if (conditions.contains("diabetes") || conditions.contains("diabetic") || conditions.contains("dm")) {
-                triggerReasons.add("known_diabetic");
-                isKnownDiabetic = true;
-            }
-        }
+        boolean isKnownDiabetic = isKnownDiabetic(visit.getPatient());
+        if (isKnownDiabetic) triggerReasons.add("known_diabetic");
 
         boolean requiresCheck = checkMandatory || isKnownDiabetic;
         Double glucoseValue = triage != null ? resolveGlucoseValue(triage) : null;
@@ -136,6 +130,17 @@ public class HypoglycemiaEnforcementEngine {
         return HypoglycemiaSeverity.MILD;
     }
 
+    /**
+     * Known-diabetic detection from the patient's chronic conditions (free text) —
+     * shared with {@link GlucoseScheduleEngine}'s q6h diabetic surveillance tier so
+     * the two features can never disagree on who counts as diabetic.
+     */
+    public static boolean isKnownDiabetic(com.smartTriage.smartTriage_server.module.patient.entity.Patient patient) {
+        if (patient == null || patient.getChronicConditions() == null) return false;
+        String conditions = patient.getChronicConditions().toLowerCase();
+        return conditions.contains("diabetes") || conditions.contains("diabetic") || conditions.contains("dm");
+    }
+
     private boolean isNeonate(Visit visit) {
         try {
             if (visit.getPatient() != null && visit.getPatient().getDateOfBirth() != null) {
@@ -148,7 +153,10 @@ public class HypoglycemiaEnforcementEngine {
         return false;
     }
 
-    private Double resolveGlucoseValue(TriageRecord triage) {
+    /** The glucose a triage record carries, if any (checks all four capture fields).
+     *  Shared with {@code GlucoseReadingLookup} so the due-clock and the check path
+     *  agree on what counts as a triage-borne reading. */
+    public static Double resolveGlucoseValue(TriageRecord triage) {
         if (triage.getBloodGlucose() != null) return triage.getBloodGlucose();
         if (triage.getConvulsionGlucose() != null) return triage.getConvulsionGlucose();
         if (triage.getComaGlucose() != null) return triage.getComaGlucose();

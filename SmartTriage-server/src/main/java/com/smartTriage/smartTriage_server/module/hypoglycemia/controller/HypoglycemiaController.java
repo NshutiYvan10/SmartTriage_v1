@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 public class HypoglycemiaController {
 
     private final HypoglycemiaService hypoglycemiaService;
+    private final com.smartTriage.smartTriage_server.module.hypoglycemia.service.GlucoseScheduleService glucoseScheduleService;
 
     @PostMapping("/check/{visitId}")
     // Authz sweep — clinical roles + visit scope.
@@ -97,6 +98,28 @@ public class HypoglycemiaController {
         List<HypoglycemiaEventResponse> responses = hypoglycemiaService.getActiveEvents(hospitalId, zone)
                 .stream()
                 .map(HypoglycemiaEventMapper::toResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.success(responses));
+    }
+
+    /**
+     * The glucose-measurement worklist: every in-department patient on a
+     * measurement schedule (insulin infusion q1h, post-hypo q1h, insulin /
+     * critically-ill q4h, diabetic q6h) with their due-clock state — computed
+     * live, nothing stored. Same zone-scoping contract as {@code /active}:
+     * zone param for on-shift clinicians, cross-zone authority without it.
+     */
+    @GetMapping("/hospital/{hospitalId}/glucose-due")
+    @PreAuthorize("@clinicalAuthz.canAccessHospital(authentication, #hospitalId) and "
+            + "((#zone != null and @clinicalAuthz.canReceiveZoneAlerts(authentication, #hospitalId, #zone)) "
+            + "or (#zone == null and @clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)))")
+    public ResponseEntity<ApiResponse<List<GlucoseDueResponse>>> getGlucoseDueList(
+            @PathVariable UUID hospitalId,
+            @RequestParam(required = false) com.smartTriage.smartTriage_server.common.enums.EdZone zone) {
+        java.time.Instant now = java.time.Instant.now();
+        List<GlucoseDueResponse> responses = glucoseScheduleService.computeForHospital(hospitalId, zone, now)
+                .stream()
+                .map(entry -> GlucoseDueResponse.from(entry, now))
                 .collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.success(responses));
     }

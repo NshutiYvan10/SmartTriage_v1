@@ -256,6 +256,12 @@ public interface ClinicalAlertRepository extends JpaRepository<ClinicalAlert, UU
          */
         boolean existsByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(UUID visitId, AlertType alertType);
 
+        /** Any alert of a type filed after an instant, acknowledged or not — the glucose
+         *  due-clock's "one reminder per due-cycle" dedup (a reading re-arms dueAt, so
+         *  alerts from the previous cycle predate it and don't suppress the new one). */
+        boolean existsByVisitIdAndAlertTypeAndIsActiveTrueAndCreatedAtAfter(
+                        UUID visitId, AlertType alertType, java.time.Instant after);
+
         /** The open (unacknowledged, active) alert of a type for a visit — used to
          *  acknowledge the FAST_TRACK_ACTIVATED alert when the pathway is accepted. */
         java.util.Optional<ClinicalAlert> findFirstByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(

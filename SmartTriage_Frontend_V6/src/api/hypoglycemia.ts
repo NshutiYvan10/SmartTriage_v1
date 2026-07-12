@@ -47,6 +47,34 @@ export interface HypoglycemiaCheckResponse {
   treatmentProtocol: string | null;
   triggerReasons: string[];
   eventId?: string | null;
+  /** Which door the interpreted reading came through: TRIAGE / VITALS / LAB / EVENT / RECHECK. */
+  glucoseSource?: string | null;
+  glucoseAt?: string | null;
+  readingAgeMinutes?: number | null;
+  /** Reading is older than the patient's scheduled interval — it must never reassure. */
+  staleReading?: boolean;
+  /** Present when the patient is on a glucose measurement schedule. */
+  monitoringTier?: string | null;
+  monitoringIntervalMinutes?: number | null;
+  nextDueAt?: string | null;
+}
+
+/** One row of the glucose-measurement worklist (backend GlucoseDueResponse). */
+export interface GlucoseDueEntry {
+  visitId: string;
+  visitNumber: string | null;
+  patientName: string | null;
+  currentZone: string | null;
+  currentBedLabel: string | null;
+  tierKey: string;
+  tierLabel: string;
+  intervalMinutes: number;
+  lastReadingAt: string | null;
+  dueAt: string;
+  escalateAt: string;
+  /** Negative once past due. */
+  minutesUntilDue: number;
+  status: 'OVERDUE' | 'DUE' | 'SCHEDULED';
 }
 
 /* ── Shared clinical helpers (single source for the dashboard + chart panel) ── */
@@ -131,4 +159,11 @@ export const hypoglycemiaApi = {
   // read authority is guaranteed).
   getUnresolved: (hospitalId: string) =>
     get<HypoglycemiaEvent[]>(`/hypoglycemia/hospital/${hospitalId}/active`),
+  // The measurement worklist: every patient on a glucose schedule with their
+  // due-clock state, computed live server-side. Same zone-scoping contract as
+  // getActive (zone for on-shift clinicians, omitted for oversight roles).
+  getDueList: (hospitalId: string, zone?: string) =>
+    get<GlucoseDueEntry[]>(
+      `/hypoglycemia/hospital/${hospitalId}/glucose-due${zone ? `?zone=${zone}` : ''}`,
+    ),
 };

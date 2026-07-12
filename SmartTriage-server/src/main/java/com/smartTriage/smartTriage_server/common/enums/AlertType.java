@@ -218,6 +218,19 @@ public enum AlertType {
     HYPOGLYCEMIA_RECHECK_OVERDUE(AlertCategory.CLINICAL, true),
 
     /**
+     * Scheduled glucose measurement (glucose is nurse-entered — the bedside
+     * monitor never captures it, so the system must chase the measurement itself).
+     *  - GLUCOSE_MEASUREMENT_DUE: a scheduled bedside glucose has reached its due
+     *    time (q1h insulin infusion / post-hypo, q4h insulin / critically ill,
+     *    q6h known diabetic). Zone nurses' task; one reminder per due-cycle.
+     *  - GLUCOSE_MEASUREMENT_OVERDUE: due + grace elapsed and still no reading
+     *    from ANY source — escalated to the zone doctor + charge nurse.
+     *    Time-critical: acknowledging without recording a glucose re-pages.
+     */
+    GLUCOSE_MEASUREMENT_DUE(AlertCategory.CLINICAL, false),
+    GLUCOSE_MEASUREMENT_OVERDUE(AlertCategory.CLINICAL, true),
+
+    /**
      * Infection isolation (staff + patient exposure control).
      *  - ISOLATION_REQUIRED: a screening flagged an isolation need (airborne /
      *    droplet / contact / strict / protective). Owned by the zone doctor +

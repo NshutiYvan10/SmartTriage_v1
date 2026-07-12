@@ -34,4 +34,13 @@ public interface VitalSignsRepository extends JpaRepository<VitalSigns, UUID> {
             @Param("visitId") UUID visitId,
             @Param("from") Instant from,
             @Param("to") Instant to);
+
+    /** Latest vitals row carrying a glucose for ONE visit — the glucose staleness check. */
+    Optional<VitalSigns> findFirstByVisitIdAndIsActiveTrueAndBloodGlucoseIsNotNullOrderByRecordedAtDesc(UUID visitId);
+
+    /** Latest glucose-bearing vitals timestamp PER visit — the glucose due-clock scan (no N+1). */
+    @Query("SELECT v.visit.id, MAX(v.recordedAt) FROM VitalSigns v " +
+            "WHERE v.visit.id IN :visitIds AND v.isActive = true AND v.bloodGlucose IS NOT NULL " +
+            "GROUP BY v.visit.id")
+    List<Object[]> latestGlucoseAtByVisit(@Param("visitIds") java.util.Collection<UUID> visitIds);
 }
