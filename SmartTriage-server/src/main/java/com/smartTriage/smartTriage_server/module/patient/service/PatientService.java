@@ -47,6 +47,10 @@ public class PatientService {
     private final PatientRepository patientRepository;
     private final VisitRepository visitRepository;
     private final HospitalService hospitalService;
+    /** Lazy — retroactive teratogen re-screen when pregnancy is confirmed mid-visit.
+     *  ObjectProvider avoids any patient↔medication construction-time cycle. */
+    private final org.springframework.beans.factory.ObjectProvider<
+            com.smartTriage.smartTriage_server.module.medication.service.MedicationService> medicationServiceProvider;
     /** Durable, per-hospital, restart-proof MRN + visit-number sequences. Replace the old static
      *  in-memory AtomicLong counters that reset on restart and re-issued numbers that already
      *  existed (the post-restart "conflicts with existing data" registration failure). */
@@ -382,6 +386,9 @@ public class PatientService {
         PregnancyStatus previous = patient.getPregnancyStatus();
         patient.setPregnancyStatus(request.getPregnancyStatus());
         patient.setPregnancyStatusRecordedAt(Instant.now());
+        if (request.getGestationalAgeWeeks() != null) {
+            patient.setGestationalAgeWeeks(request.getGestationalAgeWeeks());
+        }
         patient = patientRepository.save(patient);
 
         log.info("Pregnancy status updated for patient {} (MRN {}): {} → {}",
@@ -389,6 +396,39 @@ public class PatientService {
                 patient.getMedicalRecordNumber(),
                 previous,
                 patient.getPregnancyStatus());
+
+        // Phase 13c — retroactive medication re-screen. If the patient has just
+        // BECOME (possibly) pregnant — i.e. a transition INTO a pregnant state, not a
+        // no-op re-save — any orders already standing on an active visit were never
+        // checked against this pregnancy. Re-screen them and alert on contraindications.
+        // Deferred to AFTER COMMIT so the alerts reflect a persisted status, and run in
+        // MedicationService's own (REQUIRES_NEW) transaction; ObjectProvider keeps the
+        // patient→medication reference lazy so there is no construction-time cycle.
+        boolean nowPregnant = request.getPregnancyStatus() == PregnancyStatus.PREGNANT
+                || request.getPregnancyStatus() == PregnancyStatus.POSSIBLY_PREGNANT;
+        boolean wasPregnant = previous == PregnancyStatus.PREGNANT
+                || previous == PregnancyStatus.POSSIBLY_PREGNANT;
+        if (nowPregnant && !wasPregnant) {
+            final UUID pid = patient.getId();
+            final String reason = "confirmed/updated after orders were placed";
+            Runnable rescreen = () -> {
+                try {
+                    var meds = medicationServiceProvider.getObject();
+                    visitRepository.findByPatientIdAndIsActiveTrue(pid, org.springframework.data.domain.PageRequest.of(0, 10))
+                            .forEach(v -> meds.rescreenPregnancyRisk(v.getId(), reason));
+                } catch (Exception e) {
+                    log.warn("Post-status-change pregnancy re-screen failed for patient {}: {}", pid, e.getMessage());
+                }
+            };
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                        new org.springframework.transaction.support.TransactionSynchronization() {
+                            @Override public void afterCommit() { rescreen.run(); }
+                        });
+            } else {
+                rescreen.run();
+            }
+        }
 
         return PatientMapper.toResponse(patient);
     }

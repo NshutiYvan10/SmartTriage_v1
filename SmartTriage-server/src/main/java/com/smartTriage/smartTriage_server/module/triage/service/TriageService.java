@@ -122,6 +122,22 @@ public class TriageService {
             }
         }
 
+        // Phase 13c — capture pregnancy status at the front door. Additive by design:
+        // a meaningful value (anything except a null request field or bare UNKNOWN)
+        // updates the patient's structured status + timestamp so the teratogen gate
+        // sees it immediately; a null/UNKNOWN request never downgrades an existing
+        // recorded status (a nurse leaving the field alone must not erase "PREGNANT").
+        var pregPatient = visit.getPatient();
+        if (pregPatient != null && request.getPregnancyStatus() != null
+                && request.getPregnancyStatus() != com.smartTriage.smartTriage_server.common.enums.PregnancyStatus.UNKNOWN) {
+            pregPatient.setPregnancyStatus(request.getPregnancyStatus());
+            pregPatient.setPregnancyStatusRecordedAt(Instant.now());
+            if (request.getGestationalAgeWeeks() != null) {
+                pregPatient.setGestationalAgeWeeks(request.getGestationalAgeWeeks());
+            }
+            patientRepository.save(pregPatient);
+        }
+
         User currentUser = resolveCurrentUser();
         boolean isPediatric = visit.isPediatric();
 

@@ -114,6 +114,21 @@ public class PrescribeMedicationRequest {
      */
     private String interactionOverrideReason;
 
+    // ────────── PREGNANCY / TERATOGEN OVERRIDE (Phase 13c, V112) ──────────
+    // Populated by the same PrescribeSafetyDialog when a pregnancy (teratogen)
+    // contraindication was acknowledged. Both nullable for the common case.
+
+    /** TRUE when the prescriber acknowledged a pregnancy (teratogen) contraindication. */
+    private Boolean prescribedDespitePregnancy;
+
+    /**
+     * Mandatory clinical justification when prescribing despite the pregnancy risk
+     * (V112). Enforced server-side: a blocking Category X/D override with a blank
+     * reason is rejected — the server re-derives the risk, it does not trust the
+     * client's word that the drug is safe.
+     */
+    private String pregnancyOverrideReason;
+
     // ────────── TYPED ORDERS (V67 — Medication Management) ──────────
     // All nullable: an old client that sends none of these gets the
     // exact pre-V67 single-shot behaviour.

@@ -49,6 +49,19 @@ public class PerformTriageRequest {
      */
     private String phoneNumber;
 
+    /**
+     * Phase 13c — structured pregnancy status captured at the front door. The one
+     * place every patient is first assessed previously could not record this at all;
+     * it had to be set via a separate patient PATCH a triage nurse might never open.
+     * Persisted onto {@code Patient.pregnancyStatus} (timestamped) so it immediately
+     * drives the prescribe-time teratogen gate. Nullable; applied additively — a blank
+     * or UNKNOWN never clears an existing recorded status.
+     */
+    private com.smartTriage.smartTriage_server.common.enums.PregnancyStatus pregnancyStatus;
+
+    /** Phase 13c — best-estimate gestational age in completed weeks (optional). */
+    private Integer gestationalAgeWeeks;
+
     // ====================================================================
     // SECTION 1: EMERGENCY SIGNS — "Emergency Signs? CHECK THE COMPLAINT"
     // Any YES → RED (Immediate Resuscitation / ALARM)

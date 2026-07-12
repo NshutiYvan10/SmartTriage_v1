@@ -170,6 +170,16 @@ public class Patient extends BaseEntity {
     @Column(name = "pregnancy_status_recorded_at")
     private Instant pregnancyStatusRecordedAt;
 
+    /**
+     * Phase 13c — best-estimate gestational age in completed weeks, when known.
+     * Clinically relevant to medication decisions (e.g. NSAIDs are a late-pregnancy
+     * risk from ~30 weeks: the teratogen gate escalates D-late drugs to a hard block
+     * once this is in the 3rd trimester) and to triage. Nullable; only meaningful
+     * when {@link #pregnancyStatus} is PREGNANT / POSSIBLY_PREGNANT.
+     */
+    @Column(name = "gestational_age_weeks")
+    private Integer gestationalAgeWeeks;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "hospital_id", nullable = false)
     private Hospital hospital;

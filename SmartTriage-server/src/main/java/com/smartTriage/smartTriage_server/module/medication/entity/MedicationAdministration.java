@@ -208,6 +208,23 @@ public class MedicationAdministration extends BaseEntity {
     @Column(name = "interaction_override_reason", columnDefinition = "TEXT")
     private String interactionOverrideReason;
 
+    // ── Pregnancy / teratogen override (Phase 13c, V112) ──
+    // Set when the drug is a Category X/D contraindication for a patient recorded
+    // pregnant/possibly-pregnant and the prescriber overrode the server gate.
+
+    /** TRUE when prescribed despite a pregnancy contraindication. */
+    @Column(name = "prescribed_despite_pregnancy", nullable = false)
+    @Builder.Default
+    private Boolean prescribedDespitePregnancy = Boolean.FALSE;
+
+    /** Server timestamp when the pregnancy override was confirmed. */
+    @Column(name = "pregnancy_override_acknowledged_at")
+    private Instant pregnancyOverrideAcknowledgedAt;
+
+    /** Mandatory clinical justification for prescribing despite the pregnancy risk (V112). */
+    @Column(name = "pregnancy_override_reason", columnDefinition = "TEXT")
+    private String pregnancyOverrideReason;
+
     // ====================================================================
     // TYPED ORDERS — Medication Management module (V67)
     // ====================================================================

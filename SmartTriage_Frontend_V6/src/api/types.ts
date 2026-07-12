@@ -476,6 +476,8 @@ export interface PatientResponse {
    */
   pregnancyStatus: PregnancyStatus | null;
   pregnancyStatusRecordedAt: string | null;
+  /** Phase 13c — best-estimate gestational age in completed weeks (nullable). */
+  gestationalAgeWeeks?: number | null;
   guardianNationalId: string | null;
   guardianPhone: string | null;
   guardianName: string | null;

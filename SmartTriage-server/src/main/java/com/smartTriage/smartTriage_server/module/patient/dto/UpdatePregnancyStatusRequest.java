@@ -33,4 +33,7 @@ public class UpdatePregnancyStatusRequest {
 
     @NotNull(message = "pregnancyStatus is required (use UNKNOWN to clear)")
     private PregnancyStatus pregnancyStatus;
+
+    /** Phase 13c — optional best-estimate gestational age in completed weeks. */
+    private Integer gestationalAgeWeeks;
 }

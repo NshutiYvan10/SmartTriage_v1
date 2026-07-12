@@ -302,6 +302,15 @@ export function AdultTriageForm() {
   const [nextOfKin, setNextOfKin] = useState(patient?.contactPerson?.name || '');
   const [phoneNumber, setPhoneNumber] = useState(patient?.contactPerson?.phone || '');
   const [arrivalMode, setArrivalMode] = useState(patient?.arrivalMode || 'WALK_IN');
+  // Phase 13c — pregnancy captured at the front door (drives the prescribe-time
+  // teratogen gate). Prefilled from the patient's current structured status.
+  const [pregnancyStatus, setPregnancyStatus] = useState<string>(() => {
+    // The form's `patient` prop is the loose domain model (no pregnancy field); the
+    // authoritative status lives on PatientResponse. Prefill defensively when present.
+    const s = (patient as { pregnancyStatus?: string } | undefined)?.pregnancyStatus;
+    return s && s !== 'UNKNOWN' ? s : '';
+  });
+  const [gestationalAgeWeeks, setGestationalAgeWeeks] = useState<string>('');
 
   // ── Hydrate patient demographics from the backing patient row ──
   //
@@ -699,6 +708,11 @@ export function AdultTriageForm() {
           mobility: tewsInput.mobility as 'WALKING' | 'WITH_HELP' | 'STRETCHER',
           avpu: avpuMap[tewsInput.avpu] || 'ALERT',
           traumaStatus: tewsInput.trauma ? 'TRAUMA' : 'NO_TRAUMA',
+          // Phase 13c — structured pregnancy status captured at the front door.
+          // Only sent when set (blank → omitted → never downgrades an existing status).
+          ...(pregnancyStatus ? { pregnancyStatus } : {}),
+          ...(pregnancyStatus && gestationalAgeWeeks
+            ? { gestationalAgeWeeks: parseInt(gestationalAgeWeeks, 10) } : {}),
           // ── Very Urgent discriminators (national form) — 1:1 from the unified list.
           // Extra (non-national) VU signs go via additionalVeryUrgentSigns below. Focal
           // neurologic deficit is ORANGE on the form, so the emergency-section checkbox is
@@ -1033,6 +1047,30 @@ export function AdultTriageForm() {
                   {dob && <p className="text-emerald-500 text-[10px] mt-1 font-medium">Auto-calculated from DOB</p>}
                 </div>
                 <div><label className={labelCls}>Gender</label><select value={gender} onChange={(e) => setGender(e.target.value)} className={selectCls}><option value="MALE">Male</option><option value="FEMALE">Female</option></select></div>
+                {/* Phase 13c — pregnancy capture at the front door (female patients).
+                    Drives the prescribe-time teratogen safety gate. Optional; never blocks triage. */}
+                {gender === 'FEMALE' && (
+                  <>
+                    <div>
+                      <label className={labelCls}>Pregnancy status</label>
+                      <select value={pregnancyStatus} onChange={(e) => setPregnancyStatus(e.target.value)} className={selectCls}>
+                        <option value="">— not assessed —</option>
+                        <option value="PREGNANT">Pregnant</option>
+                        <option value="POSSIBLY_PREGNANT">Possibly / unsure</option>
+                        <option value="BREASTFEEDING">Breastfeeding</option>
+                        <option value="NOT_PREGNANT">Not pregnant (ruled out)</option>
+                        <option value="NOT_APPLICABLE">Not applicable</option>
+                      </select>
+                    </div>
+                    {(pregnancyStatus === 'PREGNANT' || pregnancyStatus === 'POSSIBLY_PREGNANT') && (
+                      <div>
+                        <label className={labelCls}>Gestational age (weeks)</label>
+                        <input type="number" min="0" max="45" value={gestationalAgeWeeks}
+                          onChange={(e) => setGestationalAgeWeeks(e.target.value)} placeholder="e.g. 32" className={inputCls} />
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
               <div><label className={labelCls}>IP / MR Number</label><input type="text" value={ipMrNumber} onChange={(e) => setIpMrNumber(e.target.value)} className={inputCls} /></div>
               <div>

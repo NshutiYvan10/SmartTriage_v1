@@ -19,6 +19,7 @@ import { SepsisPanel } from './SepsisPanel';
 import { FastTrackPanel } from './FastTrackPanel';
 import { HypoglycemiaPanel, HypoglycemiaEventBanner } from './HypoglycemiaPanel';
 import { IsolationPanel, IsolationPrecautionBanner } from './IsolationPanel';
+import { PregnancyBanner } from './PregnancyBanner';
 import { ReportIncidentForm } from '../safety/ReportIncidentForm';
 import { PathwayPanel } from './PathwayPanel';
 import { HandoverPanel } from './HandoverPanel';
@@ -879,6 +880,10 @@ export function VisitDetailPage() {
             walk into the patient's room, and the precaution + PPE must be
             unmissable before they do. Renders nothing when not isolated. */}
         <IsolationPrecautionBanner visitId={visit.id} onOpen={() => setActiveTab('isolation')} />
+
+        {/* ── Pregnancy signage — changes medication safety, imaging, dosing and
+            triage; must be visible from every tab, not buried in the profile. */}
+        <PregnancyBanner patient={patient} />
 
         {/* ── Open hypoglycemia event signage — fatal in minutes; the treatment
             state + mandatory recheck clock must be visible from every tab. */}

@@ -59,6 +59,7 @@ public final class PatientMapper {
                 .weightKg(patient.getWeightKg())
                 .pregnancyStatus(patient.getPregnancyStatus())
                 .pregnancyStatusRecordedAt(patient.getPregnancyStatusRecordedAt())
+                .gestationalAgeWeeks(patient.getGestationalAgeWeeks())
                 .guardianNationalId(patient.getGuardianNationalId())
                 .guardianPhone(patient.getGuardianPhone())
                 .guardianName(patient.getGuardianName())

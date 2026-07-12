@@ -61,6 +61,8 @@ public class PatientResponse {
      */
     private PregnancyStatus pregnancyStatus;
     private Instant pregnancyStatusRecordedAt;
+    /** Phase 13c — best-estimate gestational age in completed weeks (nullable). */
+    private Integer gestationalAgeWeeks;
 
     // ── Guardian (pediatric attribution) ──
     private String guardianNationalId;

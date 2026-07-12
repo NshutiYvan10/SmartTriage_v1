@@ -189,6 +189,119 @@ public class MedicationSafetyEngine {
     }
 
     // ====================================================================
+    // TERATOGEN / PREGNANCY CHECK — the server-side authoritative gate.
+    // ====================================================================
+
+    /**
+     * Re-derive pregnancy/lactation drug risk server-side, so the teratogen check is
+     * a real gate on the prescribe path (like {@link #assessAllergyForPrescription})
+     * rather than a client-only dialog the server merely records. Reads the patient's
+     * structured {@link com.smartTriage.smartTriage_server.common.enums.PregnancyStatus}
+     * first (falling back to a free-text scan of chronic conditions for legacy records),
+     * classifies the drug via {@link TeratogenRules} (name rules first, formulary
+     * {@code pregnancy_category} as a backstop), and returns a graded assessment.
+     *
+     * <p>Reads only; persists nothing — cheap to call inline on prescribe. Never throws.
+     *
+     * @return a {@link TeratogenAssessment}; {@link TeratogenAssessment#isBlocking()}
+     *         is true for Category X / D against an active pregnancy — the prescription
+     *         must not proceed without an explicit, documented override.
+     */
+    public TeratogenAssessment assessTeratogenForPrescription(Patient patient, Visit visit, String drugName) {
+        try {
+            if (patient == null || drugName == null || drugName.isBlank()) {
+                return TeratogenAssessment.none();
+            }
+            // Explicit "ruled out" suppresses the gate entirely (no free-text second-guessing).
+            if (TeratogenRules.isExplicitlySuppressed(patient.getPregnancyStatus())) {
+                return TeratogenAssessment.none();
+            }
+            TeratogenRules.State state = TeratogenRules.resolveState(
+                    patient.getPregnancyStatus(), patient.getChronicConditions());
+            if (state == null) return TeratogenAssessment.none();
+
+            // Primary signal — the drug-class name rules (carry the clinical "why").
+            TeratogenRules.Finding finding = TeratogenRules.classify(drugName, state);
+
+            // Backstop — a formulary X/D not caught by name rules (only meaningful for
+            // an active pregnancy; the formulary category doesn't encode lactation risk).
+            if (finding == null && state == TeratogenRules.State.PREGNANT && visit != null) {
+                TeratogenRules.Category cat = findFormularyEntry(drugName, visit)
+                        .map(f -> TeratogenRules.fromFormularyCategory(f.getPregnancyCategory()))
+                        .orElse(null);
+                if (cat != null) {
+                    finding = new TeratogenRules.Finding(drugName, cat, state,
+                            "recorded as pregnant",
+                            "Formulary pregnancy category " + cat + " — clear fetal risk; prescribe only if the "
+                            + "benefit clearly outweighs the risk and no safer alternative exists.");
+                }
+            }
+            if (finding == null) return TeratogenAssessment.none();
+
+            // D-late (e.g. NSAIDs) is a late-pregnancy risk — normally a non-blocking
+            // warning, but ESCALATE to a hard block once we know the patient is in the
+            // 3rd trimester (≥30 completed weeks: ductus-arteriosus closure risk).
+            TeratogenRules.Category effectiveCategory = finding.category();
+            Integer gestAge = patient.getGestationalAgeWeeks();
+            if (effectiveCategory == TeratogenRules.Category.D_LATE
+                    && gestAge != null && gestAge >= 30) {
+                effectiveCategory = TeratogenRules.Category.D;
+            }
+
+            String message = String.format(
+                    "%s is pregnancy category %s (%s). %s",
+                    finding.drugClassLabel(),
+                    effectiveCategory == TeratogenRules.Category.D
+                            && finding.category() == TeratogenRules.Category.D_LATE
+                            ? "D — 3rd trimester (" + gestAge + " wk)"
+                            : finding.category(),
+                    finding.state() == TeratogenRules.State.PREGNANT ? "patient recorded pregnant/possibly pregnant"
+                            : "patient recorded breastfeeding",
+                    finding.concern());
+            return new TeratogenAssessment(true, effectiveCategory, finding.state().name(),
+                    finding.drugClassLabel(), finding.concern(), message);
+        } catch (Exception e) {
+            // Fail OPEN is unacceptable for a safety gate, but fail-loud-then-none is
+            // the pragmatic choice: a crash here must not block a legitimate order, and
+            // the allergy gate + FE dialog remain. Log so it's visible.
+            log.error("Teratogen assessment error for drug {}: {}", drugName, e.getMessage(), e);
+            return TeratogenAssessment.none();
+        }
+    }
+
+    /** Public result of {@link #assessTeratogenForPrescription}. */
+    public record TeratogenAssessment(
+            boolean matched,
+            TeratogenRules.Category category,
+            String state,
+            String drugClassLabel,
+            String concern,
+            String message
+    ) {
+        public static TeratogenAssessment none() {
+            return new TeratogenAssessment(false, null, null, null, null, null);
+        }
+
+        /** Category X / D are hard blocks; D-late and caution are non-blocking warnings. */
+        public boolean isBlocking() {
+            return matched && category != null
+                    && (category == TeratogenRules.Category.X || category == TeratogenRules.Category.D);
+        }
+
+        /** Audit tag mirroring teratogenCheck.ts formatTeratogenMatches — feeds the Override Register. */
+        public String auditTag() {
+            if (!matched) return null;
+            String cat = switch (category) {
+                case X -> "X";
+                case D -> "D";
+                case D_LATE -> "D-late";
+                case CAUTION -> "caution";
+            };
+            return "[teratogen][" + cat + "] " + drugClassLabel + " — " + concern;
+        }
+    }
+
+    // ====================================================================
     // ALLERGY CHECK
     // ====================================================================
 

@@ -28,6 +28,7 @@ import com.smartTriage.smartTriage_server.module.medication.mapper.MedicationMap
 import com.smartTriage.smartTriage_server.module.medication.repository.MedicationAdministrationRepository;
 import com.smartTriage.smartTriage_server.module.medication.repository.MedicationDoseRepository;
 import com.smartTriage.smartTriage_server.module.medsafety.engine.MedicationSafetyEngine;
+import com.smartTriage.smartTriage_server.module.medsafety.engine.TeratogenRules;
 import com.smartTriage.smartTriage_server.module.medsafety.entity.DrugFormulary;
 import com.smartTriage.smartTriage_server.module.medsafety.repository.MedicationSafetyCheckRepository;
 import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
@@ -147,6 +148,11 @@ public class MedicationService {
         String interactionMatches = interactionOverride ? request.getInteractionOverrideMatches() : null;
         String interactionReason = interactionOverride ? trimToNull(request.getInteractionOverrideReason()) : null;
 
+        // Pregnancy / teratogen override (Phase 13c) — mirrors allergy/interaction.
+        boolean pregnancyOverride = Boolean.TRUE.equals(request.getPrescribedDespitePregnancy());
+        Instant pregnancyOverrideAt = pregnancyOverride ? Instant.now() : null;
+        String pregnancyReason = pregnancyOverride ? trimToNull(request.getPregnancyOverrideReason()) : null;
+
         // V109 — a safety override without a stated reason is not an auditable
         // override, it is a silent bypass. Every other override path in the system
         // requires a justification; the highest-stakes one (prescribing against a
@@ -159,6 +165,10 @@ public class MedicationService {
         if (interactionOverride && interactionReason == null) {
             throw new ClinicalBusinessException(
                     "A clinical justification is required to prescribe despite a known drug interaction.");
+        }
+        if (pregnancyOverride && pregnancyReason == null) {
+            throw new ClinicalBusinessException(
+                    "A clinical justification is required to prescribe despite a pregnancy contraindication.");
         }
 
         // ── S1: server-side allergy ENFORCEMENT (defense-in-depth) ──
@@ -192,6 +202,28 @@ public class MedicationService {
                             + "this allergy warning before the medication can be prescribed.");
         }
 
+        // ── S1b: server-side TERATOGEN/PREGNANCY ENFORCEMENT (defense-in-depth) ──
+        // Same doctrine as the allergy block above: the FE teratogen dialog is the
+        // first line, but a direct API call or a divergent client could bypass it.
+        // Re-derive the risk server-side from the patient's structured pregnancy
+        // status (× the drug) and HARD-BLOCK a Category X/D contraindication unless
+        // the prescriber has explicitly overridden with a documented reason. Before
+        // this, pregnancy was a client-only check the server merely labelled.
+        MedicationSafetyEngine.TeratogenAssessment teratogenAssessment =
+                medicationSafetyEngine.assessTeratogenForPrescription(
+                        patient, visit, request.getDrugName());
+        if (teratogenAssessment.isBlocking() && !pregnancyOverride) {
+            log.warn("PRESCRIBE BLOCKED (teratogen) — visit:{} drug:{} category:{} detail:{}",
+                    visit.getVisitNumber(), request.getDrugName(),
+                    teratogenAssessment.category(), teratogenAssessment.message());
+            throw new ClinicalBusinessException(
+                    "Prescription blocked by the pregnancy safety check. "
+                            + teratogenAssessment.message()
+                            + " The prescriber must explicitly acknowledge and override "
+                            + "this pregnancy warning (with a documented reason) before the "
+                            + "medication can be prescribed.");
+        }
+
         // Workflow 3 — resolve the authenticated user so we can stamp
         // the prescribed_by_id FK. Without it the separation-of-duties
         // check on administer can't reliably compare prescriber vs
@@ -223,6 +255,9 @@ public class MedicationService {
                 .interactionOverrideMatches(interactionMatches)
                 .interactionOverrideAcknowledgedAt(interactionOverrideAt)
                 .interactionOverrideReason(interactionReason)
+                .prescribedDespitePregnancy(pregnancyOverride)
+                .pregnancyOverrideAcknowledgedAt(pregnancyOverrideAt)
+                .pregnancyOverrideReason(pregnancyReason)
                 .build();
 
         // V67 — typed orders: validate the type-specific parameters,
@@ -272,7 +307,20 @@ public class MedicationService {
             // that flattens "10× overdose" with "duplicate NSAID".
             createInteractionScopedAlerts(visit, med, interactionMatches);
         }
-        if (!allergyOverride && !interactionOverride) {
+        if (pregnancyOverride) {
+            log.warn("PREGNANCY/TERATOGEN OVERRIDE — visit:{} drug:{} prescriber:{} category:{}",
+                    visit.getVisitNumber(), med.getDrugName(), med.getPrescribedByName(),
+                    teratogenAssessment.category());
+            // Category X = irreversible fetal harm → CRITICAL; D and everything else → HIGH.
+            AlertSeverity pregSeverity = teratogenAssessment.category() == TeratogenRules.Category.X
+                    ? AlertSeverity.CRITICAL : AlertSeverity.HIGH;
+            String label = teratogenAssessment.category() != null
+                    ? "Pregnancy override (Category " + teratogenAssessment.category() + ")"
+                    : "Pregnancy override";
+            // auditTag() carries the [teratogen][cat] prefix the Override Register scans for.
+            createOverrideAlert(visit, med, label, teratogenAssessment.auditTag(), pregSeverity);
+        }
+        if (!allergyOverride && !interactionOverride && !pregnancyOverride) {
             log.info("Medication prescribed for visit {} — drug:{} dose:{} route:{} freq:{} priority:{}",
                     visit.getVisitNumber(), med.getDrugName(), med.getDose(),
                     med.getRoute(), med.getFrequency(), med.getPriority());
@@ -578,6 +626,62 @@ public class MedicationService {
             case MODERATE, UNKNOWN -> AlertSeverity.HIGH;
             case MILD -> AlertSeverity.MEDIUM;
         };
+    }
+
+    /**
+     * Phase 13c — retroactive pregnancy re-screen. When a patient's pregnancy status
+     * is confirmed AFTER medications were already prescribed (e.g. a beta-hCG comes
+     * back positive mid-visit), the orders standing on the chart were never checked
+     * against a pregnancy that wasn't known at prescribe time. This re-runs the
+     * authoritative teratogen assessment over every ACTIVE (PRESCRIBED) order on the
+     * visit and raises an owned alert for each one now contraindicated, so the team
+     * can stop/switch it. REQUIRES_NEW + best-effort: it is invoked from the patient
+     * status-update flow and must neither be lost to an afterCommit-join nor poison
+     * that transaction if it fails.
+     *
+     * @return the number of active orders flagged.
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public int rescreenPregnancyRisk(UUID visitId, String contextReason) {
+        try {
+            Visit visit = visitService.findVisitOrThrow(visitId);
+            Patient patient = visit.getPatient();
+            if (patient == null) return 0;
+            int flagged = 0;
+            for (MedicationAdministration med :
+                    medicationRepository.findByVisitIdAndIsActiveTrueOrderByPrescribedAtAsc(visitId)) {
+                if (med.getStatus() != MedicationStatus.PRESCRIBED) continue; // only orders still standing
+                MedicationSafetyEngine.TeratogenAssessment a =
+                        medicationSafetyEngine.assessTeratogenForPrescription(patient, visit, med.getDrugName());
+                if (!a.isBlocking()) continue;
+                AlertSeverity sev = a.category() == TeratogenRules.Category.X
+                        ? AlertSeverity.CRITICAL : AlertSeverity.HIGH;
+                ClinicalAlert alert = ClinicalAlert.builder()
+                        .visit(visit)
+                        .alertType(AlertType.MEDICATION_SAFETY_BLOCK)
+                        .severity(sev)
+                        .title("PREGNANCY RISK on active order: " + med.getDrugName())
+                        .message(String.format(
+                                "Pregnancy status is now %s (%s). An order already active on this visit is "
+                                + "contraindicated: %s Review now — stop or switch, or document an override.",
+                                patient.getPregnancyStatus(),
+                                contextReason != null ? contextReason : "status changed",
+                                a.message()))
+                        .autoGenerated(true)
+                        .build();
+                clinicalAlertRepository.save(alert);
+                publishOverrideAlert(alert, visit);
+                flagged++;
+            }
+            if (flagged > 0) {
+                log.warn("PREGNANCY RE-SCREEN — visit:{} flagged {} active order(s) now contraindicated",
+                        visit.getVisitNumber(), flagged);
+            }
+            return flagged;
+        } catch (Exception e) {
+            log.warn("Pregnancy re-screen failed for visit {}: {}", visitId, e.getMessage());
+            return 0;
+        }
     }
 
     private void createOverrideAlert(
