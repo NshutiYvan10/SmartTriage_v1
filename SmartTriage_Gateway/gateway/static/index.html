@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmartTriage Gateway</title>
+<style>
+  /* 800×480 kiosk — dark clinical theme matching SmartTriage */
+  :root {
+    --bg:#0b1220; --panel:#111a2c; --line:#1e2a44; --text:#e8eefb;
+    --muted:#7d8db0; --cyan:#22d3ee;
+    --g:#34d399; --y:#fbbf24; --o:#fb923c; --r:#f87171;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+  html,body { width:100%; height:100%; background:var(--bg); color:var(--text); overflow:hidden;
+              user-select:none; -webkit-user-select:none; cursor:default; }
+
+  /* header */
+  #hdr { height:44px; display:flex; align-items:center; gap:10px; padding:0 12px;
+         border-bottom:1px solid var(--line); }
+  #hdr .logo { font-weight:800; letter-spacing:.06em; color:var(--cyan); font-size:15px; }
+  #hdr .sub { color:var(--muted); font-size:11px; }
+  .chip { font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px;
+          border:1px solid var(--line); }
+  .chip.up { color:var(--g); border-color:rgba(52,211,153,.4); }
+  .chip.down { color:var(--r); border-color:rgba(248,113,113,.5); animation:pulse 1s infinite; }
+  .chip.q { color:var(--o); }
+  #clock { margin-left:auto; font-variant-numeric:tabular-nums; color:var(--muted); font-size:13px; }
+  @keyframes pulse { 50% { opacity:.45; } }
+
+  /* tile grid */
+  #grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:8px 10px;
+          height:328px; }
+  .tile { background:var(--panel); border:1px solid var(--line); border-radius:12px;
+          padding:8px 10px; display:flex; flex-direction:column; overflow:hidden;
+          border-left-width:5px; }
+  .tile.sev0 { border-left-color:var(--g); } .tile.sev1 { border-left-color:var(--y); }
+  .tile.sev2 { border-left-color:var(--o); } .tile.sev3 { border-left-color:var(--r); }
+  .tile.sev3 .vitals { color:var(--r); }
+  .tile.real { border-left-color:var(--cyan); }
+  .tile.off { opacity:.45; }
+  .trow { display:flex; align-items:center; gap:6px; }
+  .tname { font-size:12px; font-weight:800; letter-spacing:.03em; }
+  .badge { font-size:9px; font-weight:800; padding:1px 6px; border-radius:6px; letter-spacing:.06em; }
+  .badge.real { background:rgba(34,211,238,.15); color:var(--cyan); animation:pulse 1.6s infinite; }
+  .badge.role { background:rgba(125,141,176,.15); color:var(--muted); }
+  .ackdot { width:8px; height:8px; border-radius:50%; margin-left:auto; background:var(--muted); }
+  .ackdot.ok { background:var(--g); } .ackdot.queued { background:var(--o); }
+  .ackdot.failed { background:var(--r); } .ackdot.idle { background:var(--cyan); opacity:.6; }
+  .idlenote { font-size:9px; color:var(--cyan); opacity:.75; font-weight:700; }
+  .vitals { font-size:15px; font-weight:800; margin:4px 0 1px; font-variant-numeric:tabular-nums; }
+  .vitals small { font-size:10px; color:var(--muted); font-weight:600; }
+  .v2 { font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .scen { display:flex; flex-wrap:wrap; gap:3px; margin-top:auto; padding-top:4px; }
+  .sbtn { font-size:9px; font-weight:700; padding:4px 6px; border-radius:7px;
+          border:1px solid var(--line); background:transparent; color:var(--muted); }
+  .sbtn.active.s0 { background:rgba(52,211,153,.18); color:var(--g); border-color:var(--g); }
+  .sbtn.active.s1 { background:rgba(251,191,36,.18); color:var(--y); border-color:var(--y); }
+  .sbtn.active.s2 { background:rgba(251,146,60,.18); color:var(--o); border-color:var(--o); }
+  .sbtn.active.s3 { background:rgba(248,113,113,.18); color:var(--r); border-color:var(--r); }
+  .stat { font-size:11px; color:var(--muted); line-height:1.7; }
+  .stat b { color:var(--text); font-variant-numeric:tabular-nums; }
+
+  /* ticker */
+  #ticker { height:100px; border-top:1px solid var(--line); padding:6px 12px; overflow:hidden;
+            font:11px/1.55 ui-monospace,Menlo,Consolas,monospace; }
+  #ticker .row { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--muted); }
+  #ticker .row b { color:var(--text); }
+  #ticker .ok { color:var(--g); } #ticker .queued { color:var(--o); } #ticker .failed { color:var(--r); }
+</style>
+</head>
+<body>
+  <div id="hdr">
+    <span class="logo">SMARTTRIAGE</span><span class="sub">device gateway · demo console</span>
+    <span id="link" class="chip down">BACKEND …</span>
+    <span id="queue" class="chip q" style="display:none">QUEUE 0</span>
+    <span id="clock"></span>
+  </div>
+  <div id="grid"></div>
+  <div id="ticker"></div>
+
+<script>
+const grid = document.getElementById('grid');
+const ticker = document.getElementById('ticker');
+const fmt = (v, d=0) => v == null ? '--' : Number(v).toFixed(d);
+let state = null;
+
+function vitalsLine(p, role) {
+  if (!p || Object.keys(p).length === 0) return '<span class="vitals"><small>waiting…</small></span>';
+  const bp = (p.systolicBp && p.diastolicBp) ? `${p.systolicBp}/${p.diastolicBp}` : '--/--';
+  let extra = `<div class="v2">T ${fmt(p.temperature,1)}°C · BP ${bp}` +
+              (p.glucose != null ? ` · GLU ${fmt(p.glucose,1)}` : '') +
+              (p.ecgRhythm ? ` · ${p.ecgRhythm}` : '') + `</div>`;
+  return `<div class="vitals">${fmt(p.heartRate)} <small>bpm</small>&nbsp; ${fmt(p.spo2)}<small>%</small>&nbsp; ${fmt(p.respiratoryRate)} <small>rr</small></div>` + extra;
+}
+
+function render() {
+  if (!state) return;
+  document.getElementById('link').className = 'chip ' + (state.backendUp ? 'up' : 'down');
+  document.getElementById('link').textContent = state.backendUp ? 'BACKEND LINK OK' : 'BACKEND OFFLINE';
+  const q = document.getElementById('queue');
+  q.style.display = state.queueDepth > 0 ? '' : 'none';
+  q.textContent = 'QUEUE ' + state.queueDepth;
+
+  let html = '';
+  for (const rm of state.real) {
+    html += `<div class="tile real ${rm.stale ? 'off' : ''}">
+      <div class="trow"><span class="tname">${rm.name}</span>
+        <span class="badge real">LIVE</span>
+        <span class="ackdot ${rm.ack}"></span></div>
+      ${vitalsLine(rm.last_payload, 'real')}
+      <div class="scen"><span class="sbtn">${rm.stale ? 'no data — check monitor' : 'hardware · via gateway'}</span></div>
+    </div>`;
+  }
+  for (const s of state.sims) {
+    html += `<div class="tile sev${s.severity} ${s.running ? '' : 'off'}" data-serial="${s.serial}">
+      <div class="trow"><span class="tname">${s.name}</span>
+        <span class="badge role">${s.role.toUpperCase()}</span>
+        ${s.ack === 'idle' ? '<span class="idlenote">AWAITING PATIENT BIND</span>' : ''}
+        <span class="ackdot ${s.ack}"></span></div>
+      ${vitalsLine(s.payload, s.role)}
+      <div class="scen">${s.scenarios.map(sc =>
+        `<button class="sbtn s${sc.severity} ${sc.key === s.scenario ? 'active' : ''}"
+                 onclick="setScenario('${s.serial}','${sc.key}')">${sc.label}</button>`).join('')}
+      </div>
+    </div>`;
+  }
+  // gateway stats card fills the last cell
+  html += `<div class="tile"><div class="trow"><span class="tname">GATEWAY</span>
+      <span class="badge role">RPi 5</span></div>
+    <div class="stat">upstream <b>${state.backendUrl}</b><br>
+      sent <b>${state.txOk}</b> · failed <b>${state.txFail}</b> · buffered <b>${state.queueDepth}</b><br>
+      one point of egress — per-device keys preserved</div></div>`;
+  grid.innerHTML = html;
+}
+
+async function setScenario(serial, key) {
+  await fetch(`/api/sim/${serial}/scenario/${key}`, { method: 'POST' });
+  refresh();
+}
+
+async function refresh() {
+  try {
+    state = await (await fetch('/api/state')).json();
+    render();
+  } catch (e) { /* gateway restarting */ }
+}
+
+// live outgoing-payload ticker
+const rows = [];
+function tick(ev) {
+  if (ev.type !== 'tx') return;
+  const t = new Date(ev.ts * 1000).toLocaleTimeString([], {hour12:false});
+  const p = ev.payload || {};
+  const gist = ['heartRate','spo2','respiratoryRate','temperature','systolicBp','diastolicBp','glucose']
+    .filter(k => p[k] != null).map(k => `${k.replace('heartRate','hr').replace('respiratoryRate','rr')
+    .replace('temperature','t').replace('systolicBp','sys').replace('diastolicBp','dia')}=${p[k]}`).join(' ');
+  rows.unshift(`<div class="row">${t} <b>${ev.source}</b> [${ev.scenario}] → ${gist} <span class="${ev.ack}">${ev.ack.toUpperCase()}</span></div>`);
+  if (rows.length > 6) rows.pop();
+  ticker.innerHTML = rows.join('');
+}
+
+function connectWs() {
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  ws.onmessage = (m) => { try { tick(JSON.parse(m.data)); } catch (e) {} };
+  ws.onclose = () => setTimeout(connectWs, 2000);
+  setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 15000);
+}
+
+setInterval(() => document.getElementById('clock').textContent =
+  new Date().toLocaleTimeString([], {hour12:false}), 1000);
+setInterval(refresh, 2000);
+refresh();
+connectWs();
+</script>
+</body>
+</html>
