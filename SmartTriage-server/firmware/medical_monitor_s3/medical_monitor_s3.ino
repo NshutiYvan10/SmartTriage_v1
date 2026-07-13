@@ -36,6 +36,7 @@
  * ============================================================
  */
 #include <Wire.h>
+#include "esp_task_wdt.h"
 #include "config.h"
 #include "state.h"
 #include "filters.h"
@@ -128,9 +129,20 @@ void setup() {
 
   // Core 0 runs the display task, whose long SPI bursts (a full-screen
   // fill on ILI9488 is ~0.4 s of continuous, non-yielding writes) can
-  // legitimately hold the core past the 5 s idle-task watchdog. The
-  // standard remedy for display-heavy cores on Arduino-ESP32:
-  disableCore0WDT();
+  // legitimately hold the core past the 5 s idle-task watchdog.
+  // NOTE: disableCore0WDT() is the classic remedy but on Arduino core 3.x
+  // it leaves the idle task calling esp_task_wdt_reset() into a watchdog
+  // it no longer belongs to — flooding serial with "task not found" ~200x
+  // per second (observed live). Reconfiguring the watchdog to stop
+  // watching idle tasks entirely is the clean 3.x approach: no reboots,
+  // no spam, and explicit subscribers could still use it.
+  {
+    esp_task_wdt_config_t wdtCfg = {};
+    wdtCfg.timeout_ms = 30000;
+    wdtCfg.idle_core_mask = 0;      // watch no idle tasks
+    wdtCfg.trigger_panic = false;
+    esp_task_wdt_reconfigure(&wdtCfg);
+  }
 
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
   Wire.setClock(100000);          // MAX30205 is SMBus-class: 100 kHz only
