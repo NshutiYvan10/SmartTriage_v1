@@ -174,8 +174,8 @@ private:
   }
 
   // ---------- value cell: sprite-rendered, redrawn only on change ----------
-  struct Cell { char last[20] = ""; };
-  Cell cells_[14];
+  struct Cell { char last[28] = ""; };
+  Cell cells_[24];   // 0-13 pages · 14-21 BP-history rows
 
   // Only fonts 2 and 4 are used for data (the fonts the previously working
   // build proved are enabled in this project's User_Setup.h); `size` scales
@@ -372,9 +372,14 @@ private:
       {"RESP", &g_trendRr,   TFT_VIOLET},
     };
 
-    uint32_t now = millis();
-    if (!forceRedraw_ && now - lastTrendDrawMs_ < 2000) { drawBpHistory(s, chartW); return; }
-    lastTrendDrawMs_ = now;
+    // Charts repaint only when the underlying rings actually gained a
+    // point (every TREND_INTERVAL_MS) — repainting on a fixed 2 s timer
+    // made all four charts blink for no data change.
+    uint32_t ringSig = (uint32_t)g_trendHr.count * 131 + g_trendHr.idx
+                     + (uint32_t)g_trendSpo2.idx * 7 + (uint32_t)g_trendTemp.idx * 13
+                     + (uint32_t)g_trendRr.idx * 29;
+    if (!forceRedraw_ && ringSig == lastTrendSig_) { drawBpHistory(s, chartW); return; }
+    lastTrendSig_ = ringSig;
 
     for (int i = 0; i < 4; i++) {
       int y = top + i * (chartH + 4);
@@ -434,11 +439,13 @@ private:
       } else {
         line[0] = '\0';
       }
-      cell(10 + (i % 3), x, top + 22 + i * 20, W - x - 6, 18, line, TFT_WHITE, 2);
-      // NOTE: cells 10-12 rotate — acceptable coarse dedup for a short list
+      // Dedicated cache slot per row — the first build rotated 3 slots
+      // across 8 rows, which repainted ~5 rows EVERY frame (visible
+      // churn + constant SPI load on the trends page).
+      cell(14 + i, x, top + 22 + i * 20, W - x - 6, 18, line, TFT_WHITE, 2);
     }
   }
-  uint32_t lastTrendDrawMs_ = 0;
+  uint32_t lastTrendSig_ = 0xFFFFFFFF;
 
   // =====================================================================
   //  PAGE 4 — blood pressure

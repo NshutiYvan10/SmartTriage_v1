@@ -148,6 +148,21 @@ void setup() {
   Wire.setClock(100000);          // MAX30205 is SMBus-class: 100 kHz only
   delay(50);
 
+  // Boot I2C census — both clinical sensors have reported NOT FOUND on
+  // this hardware, so print exactly who answers on the bus. Expected:
+  // 0x57 (MAX30102) and 0x48 (MAX30205). Nothing at all = wiring/pullup
+  // problem on SDA 6 / SCL 7; different addresses = different parts or
+  // address straps.
+  {
+    int found = 0;
+    Serial.print("[i2c] scan:");
+    for (uint8_t a = 1; a < 127; a++) {
+      Wire.beginTransmission(a);
+      if (Wire.endTransmission() == 0) { Serial.printf(" 0x%02X", a); found++; }
+    }
+    Serial.printf("%s (%d device%s)\n", found ? "" : " none", found, found == 1 ? "" : "s");
+  }
+
   // BP first, screen second — deliberately: the cuff-pressure zero
   // calibration borrows GPIO 12 (the display's future SPI clock) for its
   // bit-banged reads. Doing that BEFORE tft.init() means the display's

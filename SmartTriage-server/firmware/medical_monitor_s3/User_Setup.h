@@ -21,7 +21,10 @@
 #define TOUCH_CS  5
 
 // SPI Speeds
-#define SPI_FREQUENCY       27000000
+// 40 MHz: ~1.5x faster page draws than the original 27 MHz. ILI9488
+// modules overwhelmingly run 40 MHz on short wiring. If you ever see
+// pixel noise, streaks or wrong colours, set this back to 27000000.
+#define SPI_FREQUENCY       40000000
 #define SPI_READ_FREQUENCY  20000000
 #define SPI_TOUCH_FREQUENCY  2500000
 

@@ -166,8 +166,14 @@ public:
   bool present() const { return present_; }
 
   void poll() {
-    if (!present_) { publish(Chan::ABSENT, 0); return; }
     uint32_t now = millis();
+    if (!present_) {
+      // Publish the absent state at 1 Hz, NOT every 2 ms tick — the
+      // unthrottled version hammered the state mutex ~500x/s from core 1
+      // and visibly degraded UI responsiveness on core 0.
+      if (now - lastReadMs_ >= 1000) { lastReadMs_ = now; publish(Chan::ABSENT, 0); }
+      return;
+    }
     if (now - lastReadMs_ < TEMP_READ_INTERVAL_MS) return;
     lastReadMs_ = now;
 

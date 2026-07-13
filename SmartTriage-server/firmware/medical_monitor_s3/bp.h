@@ -51,6 +51,7 @@ public:
         stateUnlock();
       }
       if (!requested) { vTaskDelay(pdMS_TO_TICKS(150)); continue; }
+      Serial.println("[bp] START requested");
 
       bool sim = false;
       if (stateLock()) { sim = g_state.simulation; stateUnlock(); }
@@ -104,6 +105,11 @@ private:
     for (int i = 0; i < 20; i++) { sum += readPressureMmHg() + zeroOffset_; delay(10); }
     zeroOffset_ = sum / 20.0f;
     bool fault = fabsf(zeroOffset_) > 150.0f;   // sensor missing/shorted
+    // Raw ~0 or ~300 (all-zeros / all-ones on the data line) also means
+    // nothing coherent is answering on the pressure ADC.
+    Serial.printf("[bp] zero-cal: raw %.1f mmHg -> offset %.1f | %s\n",
+                  zeroOffset_, zeroOffset_,
+                  fault ? "FAULT (implausible - check pressure ADC wiring)" : "ok");
     if (stateLock()) {
       g_state.chBp = fault ? Chan::FAULT : Chan::OK;
       stateUnlock();
@@ -130,6 +136,14 @@ private:
   }
 
   void setPhase(BpPhase p, uint8_t progress, const char *err = nullptr) {
+    // Serial trail of the measurement cycle — "the button does nothing"
+    // and "the cycle failed at step X" look identical on screen from a
+    // distance; the log tells them apart.
+    if (p != lastLoggedPhase_) {
+      lastLoggedPhase_ = p;
+      Serial.printf("[bp] phase=%d%s%s (cuff %.1f mmHg)\n", (int)p,
+                    err ? " err=" : "", err ? err : "", g_state.cuffPressure);
+    }
     if (!stateLock(50)) return;
     g_state.bpPhase = p;
     g_state.bpProgress = progress;
@@ -137,6 +151,7 @@ private:
     else if (p != BpPhase::ERROR) g_state.bpError[0] = '\0';
     stateUnlock();
   }
+  BpPhase lastLoggedPhase_ = BpPhase::IDLE;
   void publishPressure(float mmHg) {
     if (stateLock(5)) { g_state.cuffPressure = mmHg; stateUnlock(); }
   }
