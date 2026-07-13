@@ -112,24 +112,45 @@ private:
   }
 
   // ---------- alarm / sim banner (top strip, every page) ----------
+  // Redrawn ONLY when its rendered content actually changes (signature
+  // compare) — the first field build repainted it every frame, which
+  // both flickered visibly ("twitching") and burned ~25 ms of SPI per
+  // frame, dragging the whole UI's responsiveness down.
+  char bannerSig_[120] = "";
+
   void drawBanner(const MonitorState &s) {
     uint32_t now = millis();
     bool critical = s.alarms.any();
-    char text[96];
+    bool flash = (now / 400) % 2 == 0;
+    bool silenced = s.alarmSilencedUntil != 0 && now < s.alarmSilencedUntil;
+
+    char text[96] = "";
+    const char *link = s.backendUp ? "LINK OK"
+                     : s.wifiUp ? "NO SERVER"
+                     : s.provisioned ? "NO WIFI" : "NOT PROVISIONED";
+    int minute = -1;
+    if (s.clockSynced) {
+      time_t t = time(nullptr); struct tm tmv; localtime_r(&t, &tmv);
+      minute = tmv.tm_hour * 100 + tmv.tm_min;
+    }
+    int kind = critical ? 2 : s.simulation ? 1 : 0;
+    if (critical) AlarmManager::describe(s.alarms, text, sizeof(text));
+
+    char sig[120];
+    snprintf(sig, sizeof(sig), "%d|%d|%d|%d|%s|%s",
+             kind, (critical && flash) ? 1 : 0, silenced ? 1 : 0, minute, link, text);
+    if (!forceRedraw_ && strcmp(sig, bannerSig_) == 0) return;
+    strlcpy(bannerSig_, sig, sizeof(bannerSig_));
 
     if (critical) {
-      AlarmManager::describe(s.alarms, text, sizeof(text));
-      bool flash = (now / 400) % 2 == 0;             // impossible to miss
       uint16_t bg = flash ? TFT_RED : 0x8000;
       tft_.fillRect(0, 0, W, BANNER_H, bg);
       tft_.setTextColor(TFT_WHITE, bg);
       tft_.setTextDatum(ML_DATUM);
       tft_.drawString(text, 6, BANNER_H / 2, 2);
-      bool silenced = s.alarmSilencedUntil != 0 && now < s.alarmSilencedUntil;
       tft_.setTextDatum(MR_DATUM);
       tft_.drawString(silenced ? "SILENCED" : "TAP TO SILENCE", W - 6, BANNER_H / 2, 1);
       tft_.setTextDatum(TL_DATUM);
-      bannerWas_ = 2;
     } else if (s.simulation) {
       uint16_t bg = TFT_ORANGE;
       tft_.fillRect(0, 0, W, BANNER_H, bg);
@@ -137,23 +158,14 @@ private:
       tft_.setTextDatum(MC_DATUM);
       tft_.drawString("SIMULATION MODE — DEMO DATA, NOT TRANSMITTED", W / 2, BANNER_H / 2, 2);
       tft_.setTextDatum(TL_DATUM);
-      bannerWas_ = 1;
     } else {
-      if (bannerWas_ != 0 || forceRedraw_) tft_.fillRect(0, 0, W, BANNER_H, TFT_BLACK);
-      bannerWas_ = 0;
-      // idle header: title left, clock + link state right
+      tft_.fillRect(0, 0, W, BANNER_H, TFT_BLACK);
       tft_.setTextColor(TFT_CYAN, TFT_BLACK);
       tft_.setTextDatum(ML_DATUM);
       tft_.drawString("SMARTTRIAGE MONITOR", 6, BANNER_H / 2, 2);
-      char right[40];
-      if (s.clockSynced) {
-        time_t t = time(nullptr); struct tm tmv; localtime_r(&t, &tmv);
-        snprintf(right, sizeof(right), "%02d:%02d  %s", tmv.tm_hour, tmv.tm_min,
-                 s.backendUp ? "LINK OK" : (s.wifiUp ? "NO SERVER" : "NO WIFI"));
-      } else {
-        snprintf(right, sizeof(right), "--:--  %s",
-                 s.backendUp ? "LINK OK" : (s.wifiUp ? "NO SERVER" : "NO WIFI"));
-      }
+      char right[44];
+      if (minute >= 0) snprintf(right, sizeof(right), "%02d:%02d  %s", minute / 100, minute % 100, link);
+      else             snprintf(right, sizeof(right), "--:--  %s", link);
       tft_.setTextColor(s.backendUp ? TFT_GREEN : TFT_ORANGE, TFT_BLACK);
       tft_.setTextDatum(MR_DATUM);
       tft_.drawString(right, W - 6, BANNER_H / 2, 2);
@@ -432,6 +444,7 @@ private:
   //  PAGE 4 — blood pressure
   // =====================================================================
   int btnX_, btnY_, btnW_, btnH_;
+  uint8_t lastBpProg_ = 255;
 
   void drawBpPage(const MonitorState &s) {
     int top = BANNER_H + 6;
@@ -462,10 +475,13 @@ private:
                         : s.bpPhase == BpPhase::MEASURING ? "Measuring - hold still"
                         : "Computing...";
       cell(13, W / 2 - 130, top + 116, 260, 20, phase, TFT_ORANGE, 2);
-      // progress bar
-      int bw = W - 80;
-      tft_.drawRect(40, top + 146, bw, 14, TFT_DARKGREY);
-      tft_.fillRect(41, top + 147, (bw - 2) * s.bpProgress / 100, 12, TFT_ORANGE);
+      // progress bar — repaint only on progress change
+      if (forceRedraw_ || s.bpProgress != lastBpProg_) {
+        lastBpProg_ = s.bpProgress;
+        int bw = W - 80;
+        tft_.drawRect(40, top + 146, bw, 14, TFT_DARKGREY);
+        tft_.fillRect(41, top + 147, (bw - 2) * s.bpProgress / 100, 12, TFT_ORANGE);
+      }
     } else if (s.bpPhase == BpPhase::ERROR) {
       cell(11, W / 2 - 150, top + 30, 300, 40, "FAILED", TFT_RED, 4);
       cell(12, W / 2 - 170, top + 84, 340, 18, s.bpError, TFT_RED, 2);
@@ -486,14 +502,20 @@ private:
       cell(12, W / 2 - 170, top + 92, 340, 18, "wrap cuff snugly, then press start", TFT_SILVER, 2);
     }
 
-    // start button
-    uint16_t bc = busy ? TFT_DARKGREY : TFT_GREEN;
-    tft_.fillRoundRect(btnX_, btnY_, btnW_, btnH_, 10, bc);
-    tft_.setTextColor(TFT_BLACK, bc);
-    tft_.setTextDatum(MC_DATUM);
-    tft_.drawString(busy ? "MEASURING..." : "START BP", btnX_ + btnW_ / 2, btnY_ + btnH_ / 2, 4);
-    tft_.setTextDatum(TL_DATUM);
+    // start button — repainted only when its state changes (an
+    // every-frame repaint flickers and wastes SPI time)
+    int btnState = busy ? 1 : 0;
+    if (forceRedraw_ || btnState != lastBpBtn_) {
+      lastBpBtn_ = btnState;
+      uint16_t bc = busy ? TFT_DARKGREY : TFT_GREEN;
+      tft_.fillRoundRect(btnX_, btnY_, btnW_, btnH_, 10, bc);
+      tft_.setTextColor(TFT_BLACK, bc);
+      tft_.setTextDatum(MC_DATUM);
+      tft_.drawString(busy ? "MEASURING..." : "START BP", btnX_ + btnW_ / 2, btnY_ + btnH_ / 2, 4);
+      tft_.setTextDatum(TL_DATUM);
+    }
   }
+  int lastBpBtn_ = -1;
 
   // =====================================================================
   //  PAGE 5 — device status
@@ -535,15 +557,20 @@ private:
     row(8, line, TFT_WHITE);
     row(9, s.clockSynced ? "NTP synced (UTC)" : "NOT SYNCED", s.clockSynced ? TFT_GREEN : TFT_ORANGE);
 
-    // simulation toggle
+    // simulation toggle — repainted only when its state changes
     simBtnY_ = y + 8;
-    uint16_t sc = s.simulation ? TFT_ORANGE : 0x39E7;
-    tft_.fillRoundRect(10, simBtnY_, 220, 40, 8, sc);
-    tft_.setTextColor(s.simulation ? TFT_BLACK : TFT_WHITE, sc);
-    tft_.setTextDatum(MC_DATUM);
-    tft_.drawString(s.simulation ? "SIMULATION: ON" : "SIMULATION: OFF", 120, simBtnY_ + 20, 2);
-    tft_.setTextDatum(TL_DATUM);
+    int simState = s.simulation ? 1 : 0;
+    if (forceRedraw_ || simState != lastSimBtn_) {
+      lastSimBtn_ = simState;
+      uint16_t sc = s.simulation ? TFT_ORANGE : 0x39E7;
+      tft_.fillRoundRect(10, simBtnY_, 220, 40, 8, sc);
+      tft_.setTextColor(s.simulation ? TFT_BLACK : TFT_WHITE, sc);
+      tft_.setTextDatum(MC_DATUM);
+      tft_.drawString(s.simulation ? "SIMULATION: ON" : "SIMULATION: OFF", 120, simBtnY_ + 20, 2);
+      tft_.setTextDatum(TL_DATUM);
+    }
   }
+  int lastSimBtn_ = -1;
 
   // =====================================================================
   //  Touch: swipe navigation + page-local buttons + alarm silence
@@ -559,7 +586,7 @@ private:
     // it every frame starved IDLE0 into a task-watchdog reboot loop
     // (diagnosed from a live backtrace on the real hardware).
     uint32_t now = millis();
-    if (now - lastTouchPollMs_ < 100) return;
+    if (now - lastTouchPollMs_ < 50) return;     // 20 Hz: quick taps land
     lastTouchPollMs_ = now;
 
     // BOUNDED pre-check before entering TFT_eSPI's getTouch(): getTouchRawZ
@@ -576,27 +603,65 @@ private:
 
     if (pressed && !touching_) {                 // touch start
       touching_ = true; downX_ = x; downY_ = y; lastX_ = x; lastY_ = y; downMs_ = millis();
+      // Buttons fire ON PRESS — instant feedback, and a quick tap can
+      // never fall between two polls. Swipes still resolve on release.
+      pressConsumed_ = onPress(x, y, s);
     } else if (pressed) {                        // drag — remember position
       lastX_ = x; lastY_ = y;
     } else if (!pressed && touching_) {          // touch release
       touching_ = false;
       // getTouch reports nothing on release — use the last pressed coords.
       int dx = (int)lastX_ - (int)downX_;
-      if (abs(dx) > 70) {
+      if (!pressConsumed_ && abs(dx) > 70) {
         int p = (int)page_ + (dx < 0 ? 1 : -1);
         p = (p + (int)Page::COUNT) % (int)Page::COUNT;
         page_ = (Page)p;
         pageDirty_ = true;
         return;
       }
-      onTap(downX_, downY_, s);
+      if (!pressConsumed_) onTap(downX_, downY_, s);
+      pressConsumed_ = false;
     }
   }
+  bool pressConsumed_ = false;
 
+  // Press-fired controls (buttons). Returns true when the press hit one,
+  // so the release pass doesn't double-handle it as a tap/swipe.
+  bool onPress(uint16_t x, uint16_t y, const MonitorState &s) {
+    if (page_ == Page::BP) {
+      bool busy = s.bpPhase == BpPhase::INFLATING || s.bpPhase == BpPhase::MEASURING
+               || s.bpPhase == BpPhase::COMPUTING || s.bpPhase == BpPhase::ZEROING;
+      if (!busy && x >= btnX_ && x <= btnX_ + btnW_ && y >= btnY_ && y <= btnY_ + btnH_) {
+        if (stateLock()) { g_state.bpRequested = true; stateUnlock(); }
+        tone(PIN_BUZZER, 900, 60);
+        return true;
+      }
+    }
+    if (page_ == Page::DEVICE && simBtnY_ > 0
+        && x >= 10 && x <= 230 && y >= simBtnY_ && y <= simBtnY_ + 40) {
+      if (stateLock()) {
+        g_state.simulation = !g_state.simulation;
+        if (!g_state.simulation) {
+          g_state.hr = g_state.spo2 = g_state.temp = g_state.rr = 0;
+          g_state.chSpo2 = g_state.chTemp = g_state.chEcg = Chan::ABSENT;
+        }
+        stateUnlock();
+      }
+      pageDirty_ = true;
+      tone(PIN_BUZZER, 1200, 80);
+      return true;
+    }
+    return false;
+  }
+
+  // Release-fired targets (the ones where accidental brushes must not
+  // trigger): alarm silence + page-dot navigation. Buttons live in
+  // onPress() for instant response.
   void onTap(uint16_t x, uint16_t y, const MonitorState &s) {
     // banner tap → silence alarms
     if (y < BANNER_H + 6 && s.alarms.any()) {
       if (stateLock()) { g_state.alarmSilencedUntil = millis() + ALARM_SILENCE_MS; stateUnlock(); }
+      bannerSig_[0] = '\0';   // force banner repaint with SILENCED label
       return;
     }
     // page dots strip → tap left/right half jumps a page
@@ -605,29 +670,5 @@ private:
       page_ = (Page)p; pageDirty_ = true;
       return;
     }
-    if (page_ == Page::BP) {
-      bool busy = s.bpPhase == BpPhase::INFLATING || s.bpPhase == BpPhase::MEASURING
-               || s.bpPhase == BpPhase::COMPUTING || s.bpPhase == BpPhase::ZEROING;
-      if (!busy && x >= btnX_ && x <= btnX_ + btnW_ && y >= btnY_ && y <= btnY_ + btnH_) {
-        if (stateLock()) { g_state.bpRequested = true; stateUnlock(); }
-        tone(PIN_BUZZER, 900, 60);
-      }
-    }
-    if (page_ == Page::DEVICE && simBtnY_ > 0
-        && x >= 10 && x <= 230 && y >= simBtnY_ && y <= simBtnY_ + 40) {
-      if (stateLock()) {
-        g_state.simulation = !g_state.simulation;
-        if (!g_state.simulation) {
-          // leaving sim: wipe demo values so real pipelines repopulate
-          g_state.hr = g_state.spo2 = g_state.temp = g_state.rr = 0;
-          g_state.chSpo2 = g_state.chTemp = g_state.chEcg = Chan::ABSENT;
-        }
-        stateUnlock();
-      }
-      pageDirty_ = true;
-      tone(PIN_BUZZER, 1200, 80);
-    }
   }
-
-  int bannerWas_ = -1;
 };

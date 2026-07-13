@@ -66,6 +66,9 @@ struct MonitorState {
   uint32_t alarmSilencedUntil = 0;  // millis(); 0 = not silenced
 
   // ---- network ----
+  /** False while config.h still holds placeholder WiFi credentials —
+   *  suppresses the server-link alarm and WiFi retry storms on the bench. */
+  bool     provisioned = true;
   bool     wifiUp = false;
   int      wifiRssi = 0;
   bool     backendUp = false;       // ACKed within BACKEND_LOST_ALARM_MS

@@ -50,8 +50,9 @@ public:
     a.ecgLeadsOff = !s.simulation && patientPresent && s.chEcg == Chan::NO_CONTACT;
 
     // Backend lost: only after we've been reachable once (or 90 s grace
-    // from boot), never in simulation (transmission is deliberately off).
-    if (!s.simulation) {
+    // from boot), never in simulation (transmission is deliberately off)
+    // and never while unprovisioned (bench: placeholder WiFi credentials).
+    if (!s.simulation && s.provisioned) {
       bool everAcked = s.lastAckMillis > 0;
       uint32_t since = everAcked ? now - s.lastAckMillis : now;
       a.backendLost = (everAcked || now > 90000) && since > BACKEND_LOST_ALARM_MS;

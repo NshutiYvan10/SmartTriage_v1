@@ -43,7 +43,15 @@ class NetLink {
 public:
   void attachEcg(EcgPipeline *ecg) { ecg_ = ecg; }
 
+  static bool provisioned() {
+    return strcmp(WIFI_SSID, "YOUR_WIFI_SSID") != 0;
+  }
+
   void taskLoop() {
+    if (!provisioned()) {
+      // Bench state: no WiFi attempts, no alarms — just report the fact.
+      for (;;) { publishNetState(); vTaskDelay(pdMS_TO_TICKS(1000)); }
+    }
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -213,6 +221,7 @@ private:
 
   void publishNetState() {
     if (!stateLock()) return;
+    g_state.provisioned = provisioned();
     g_state.wifiUp = WiFi.status() == WL_CONNECTED;
     g_state.wifiRssi = g_state.wifiUp ? WiFi.RSSI() : 0;
     g_state.lastAckMillis = lastAckMillis_;
