@@ -58,9 +58,14 @@
 #define PIN_ECG_LO_N   15    // leads-off detect -
 
 // Cuff pressure ADC (bit-banged 16-bit, HX710-style)
+// PIN_PRES_SCK moved 12 → 40: GPIO 12 is the DISPLAY's SPI clock
+// (TFT_SCLK in User_Setup.h). The old firmware "shared" them but never
+// actually read the pressure sensor; v3.0 does, and bit-banging the
+// display's clock line kills the screen. MOVE THE SENSOR'S SCK WIRE TO
+// GPIO 40 (CS 2 and MISO 4 stay as wired).
 #define PIN_PRES_CS    2
 #define PIN_PRES_MISO  4
-#define PIN_PRES_SCK   12
+#define PIN_PRES_SCK   40
 
 // Pump H-bridge
 #define PIN_MOTOR_IN1  16

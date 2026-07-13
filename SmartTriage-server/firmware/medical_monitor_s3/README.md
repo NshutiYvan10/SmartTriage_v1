@@ -8,11 +8,11 @@ five-page touch UI, on-device alarms, and real transmission into SmartTriage.
 | Part | Bus / pins |
 |---|---|
 | ESP32-S3 | Arduino-ESP32 core **3.x** |
-| SPI TFT + touch (TFT_eSPI) | pins live in TFT_eSPI `User_Setup.h` — the sketch adapts to any resolution |
+| 4.0″ ILI9488 480×320 SPI + XPT2046 touch | **copy this folder's `User_Setup.h` over `Documents\Arduino\libraries\TFT_eSPI\User_Setup.h`** — it is the recovered working config (HSPI: MISO 13, MOSI 11, SCLK 12, CS 10, DC 8, RST 9, T_CS 5) |
 | MAX30102 pulse-ox | I²C — SDA **6**, SCL **7** (100 kHz) |
 | MAX30205 contact temp | same I²C bus, addr **0x48** |
 | AD8232 ECG | OUT → **1** (ADC), LO+ → **14**, LO− → **15** |
-| Cuff pressure ADC | CS **2**, MISO **4**, SCK **12** (bit-banged 16-bit) |
+| Cuff pressure ADC | CS **2**, MISO **4**, SCK **40** (bit-banged) — **rewire SCK to GPIO 40**: the old sketch's pin 12 is the display's SPI clock; it "worked" before only because the sensor was never read |
 | Pump H-bridge | IN1 **16**, IN2 **17**, ENA **18** (PWM) |
 | LEDs | normal **21**, warning **47**, critical **45**, BP **35**, heartbeat **37** |
 | Buzzer | **19** |
