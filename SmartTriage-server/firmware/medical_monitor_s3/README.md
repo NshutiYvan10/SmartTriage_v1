@@ -12,7 +12,7 @@ five-page touch UI, on-device alarms, and real transmission into SmartTriage.
 | MAX30102 pulse-ox | I²C — SDA **6**, SCL **7** (100 kHz) |
 | MAX30205 contact temp | same I²C bus, addr **0x48** |
 | AD8232 ECG | OUT → **1** (ADC), LO+ → **14**, LO− → **15** |
-| Cuff pressure ADC | CS **2**, MISO **4**, SCK **40** (bit-banged) — **rewire SCK to GPIO 40**: the old sketch's pin 12 is the display's SPI clock; it "worked" before only because the sensor was never read |
+| Cuff pressure ADC | CS **2**, MISO **4**, SCK **12** (bit-banged) — SCK is **shared with the display's SPI clock** (fixed, soldered wiring). Safe by design: the firmware arbitrates the wire with a bus mutex and restores the pin's SPI routing after each ~70 µs read; the display ignores clock edges while its CS is high. No rewiring needed. |
 | Pump H-bridge | IN1 **16**, IN2 **17**, ENA **18** (PWM) |
 | LEDs | normal **21**, warning **47**, critical **45**, BP **35**, heartbeat **37** |
 | Buzzer | **19** |

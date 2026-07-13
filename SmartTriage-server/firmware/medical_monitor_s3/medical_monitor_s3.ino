@@ -48,6 +48,7 @@
 // ---- shared-state definitions (declared extern in state.h) ----
 MonitorState g_state;
 SemaphoreHandle_t g_stateMutex;
+SemaphoreHandle_t g_spiBusMutex;   // arbitrates the shared GPIO-12 clock (display ↔ cuff ADC)
 TrendRing g_trendHr, g_trendSpo2, g_trendTemp, g_trendRr;
 volatile int16_t  g_ecgWave[ECG_WAVE_RING] = {0};
 volatile uint16_t g_ecgWaveHead = 0;
@@ -123,6 +124,7 @@ void setup() {
   Serial.println("\n=== SmartTriage Medical Monitor v3.0 (ESP32-S3) ===");
 
   g_stateMutex = xSemaphoreCreateMutex();
+  g_spiBusMutex = xSemaphoreCreateMutex();
 
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
   Wire.setClock(100000);          // MAX30205 is SMBus-class: 100 kHz only

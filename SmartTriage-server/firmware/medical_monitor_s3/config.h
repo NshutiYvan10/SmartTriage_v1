@@ -58,14 +58,17 @@
 #define PIN_ECG_LO_N   15    // leads-off detect -
 
 // Cuff pressure ADC (bit-banged 16-bit, HX710-style)
-// PIN_PRES_SCK moved 12 → 40: GPIO 12 is the DISPLAY's SPI clock
-// (TFT_SCLK in User_Setup.h). The old firmware "shared" them but never
-// actually read the pressure sensor; v3.0 does, and bit-banging the
-// display's clock line kills the screen. MOVE THE SENSOR'S SCK WIRE TO
-// GPIO 40 (CS 2 and MISO 4 stay as wired).
+// PIN_PRES_SCK is GPIO 12 — the SAME wire as the display's SPI clock
+// (TFT_SCLK). That is legal SPI-style bus sharing (the display ignores
+// clock edges while TFT_CS is high), but it needs software arbitration,
+// which bp.h provides: every pressure read (a) takes the shared
+// g_spiBusMutex so the UI is never mid-draw, and (b) saves GPIO 12's
+// output-matrix routing, bit-bangs the ~70 µs read, and restores the
+// routing so the SPI peripheral gets its clock pin back. Do NOT read
+// the sensor outside bp.h's guarded readPressureMmHg().
 #define PIN_PRES_CS    2
 #define PIN_PRES_MISO  4
-#define PIN_PRES_SCK   40
+#define PIN_PRES_SCK   12
 
 // Pump H-bridge
 #define PIN_MOTOR_IN1  16

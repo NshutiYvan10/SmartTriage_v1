@@ -20,6 +20,7 @@
  */
 #pragma once
 #include <Arduino.h>
+#include "soc/gpio_struct.h"   // GPIO output-matrix routing save/restore (shared clock pin)
 #include "config.h"
 #include "state.h"
 
@@ -27,10 +28,10 @@ class BpModule {
 public:
   void begin() {
     pinMode(PIN_PRES_CS, OUTPUT);
-    pinMode(PIN_PRES_SCK, OUTPUT);
     pinMode(PIN_PRES_MISO, INPUT);
     digitalWrite(PIN_PRES_CS, HIGH);
-    digitalWrite(PIN_PRES_SCK, LOW);
+    // PIN_PRES_SCK deliberately NOT configured here: it belongs to the
+    // display's SPI peripheral; readPressureMmHg() borrows and returns it.
 
     pinMode(PIN_MOTOR_IN1, OUTPUT);
     pinMode(PIN_MOTOR_IN2, OUTPUT);
@@ -60,7 +61,25 @@ public:
 
 private:
   // ================= pressure sensor =================
+  // GPIO 12 is SHARED with the display's SPI clock (fixed wiring — the
+  // sensor is soldered in). Sharing a clock is legitimate SPI bus design:
+  // the display ignores edges while TFT_CS is high. Two things make it
+  // safe in software:
+  //   1. g_spiBusMutex — the UI is never mid-draw while we clock the
+  //      sensor (and we never clock while the UI owns the bus);
+  //   2. the ESP32 routes pin 12 to the SPI peripheral through its GPIO
+  //      output matrix, where digitalWrite has no effect — so we save
+  //      the pin's matrix routing, take the pin as plain GPIO for the
+  //      ~70 µs read, then restore the routing byte-for-byte. The SPI
+  //      peripheral gets its clock pin back exactly as it left it.
   float readPressureMmHg() {
+    if (xSemaphoreTake(g_spiBusMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+      return lastPressure_;               // UI hogged the bus — keep last sample
+    }
+    uint32_t savedRouting = GPIO.func_out_sel_cfg[PIN_PRES_SCK].val;
+    pinMode(PIN_PRES_SCK, OUTPUT);        // detach from SPI matrix → plain GPIO
+    digitalWrite(PIN_PRES_SCK, LOW);
+
     uint16_t raw = 0;
     digitalWrite(PIN_PRES_CS, LOW);
     delayMicroseconds(10);
@@ -70,7 +89,13 @@ private:
       if (digitalRead(PIN_PRES_MISO)) raw |= (1 << i);
     }
     digitalWrite(PIN_PRES_CS, HIGH);
-    return (raw / 16383.0f) * 300.0f * BP_PRES_SCALE - zeroOffset_;
+    digitalWrite(PIN_PRES_SCK, LOW);      // leave the line idle-low (SPI mode 0)
+
+    GPIO.func_out_sel_cfg[PIN_PRES_SCK].val = savedRouting;   // hand pin 12 back to SPI
+    xSemaphoreGive(g_spiBusMutex);
+
+    lastPressure_ = (raw / 16383.0f) * 300.0f * BP_PRES_SCALE - zeroOffset_;
+    return lastPressure_;
   }
 
   void zeroCalibrate() {
@@ -321,4 +346,5 @@ private:
   }
 
   float zeroOffset_ = 0;
+  float lastPressure_ = 0;
 };

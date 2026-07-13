@@ -41,6 +41,11 @@ public:
   }
 
   void frame() {
+    // Own the shared SPI wire for the whole frame (drawing + touch read):
+    // GPIO 12 doubles as the cuff-pressure clock, and the BP task borrows
+    // it between frames. Skipping a frame under contention is invisible;
+    // clocking the sensor mid-draw is not.
+    if (xSemaphoreTake(g_spiBusMutex, pdMS_TO_TICKS(100)) != pdTRUE) return;
     MonitorState s = snapshotState();
     handleTouch(s);
 
@@ -63,6 +68,7 @@ public:
       default: break;
     }
     forceRedraw_ = false;
+    xSemaphoreGive(g_spiBusMutex);
   }
 
 private:
