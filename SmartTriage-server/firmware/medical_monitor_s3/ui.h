@@ -69,7 +69,12 @@ public:
     }
     forceRedraw_ = false;
     xSemaphoreGive(g_spiBusMutex);
+    frameCount = frameCount + 1;
   }
+
+  // Liveness counter for the serial heartbeat: rising = UI healthy;
+  // frozen = a display/touch call is stuck (tells us exactly where to dig).
+  volatile uint32_t frameCount = 0;
 
 private:
   TFT_eSPI tft_;
@@ -532,9 +537,18 @@ private:
   // =====================================================================
   bool touching_ = false;
   uint16_t downX_ = 0, downY_ = 0, lastX_ = 0, lastY_ = 0;
-  uint32_t downMs_ = 0;
+  uint32_t downMs_ = 0, lastTouchPollMs_ = 0;
 
   void handleTouch(const MonitorState &s) {
+    // Poll touch at 10 Hz — the cadence the previous firmware proved on
+    // this exact panel. TFT_eSPI's getTouch runs an UNBOUNDED pressure-
+    // debounce loop inside (validTouch: `while (z1 > z2)`), and hammering
+    // it every frame starved IDLE0 into a task-watchdog reboot loop
+    // (diagnosed from a live backtrace on the real hardware).
+    uint32_t now = millis();
+    if (now - lastTouchPollMs_ < 100) return;
+    lastTouchPollMs_ = now;
+
     uint16_t x, y;
     bool pressed = tft_.getTouch(&x, &y);
 

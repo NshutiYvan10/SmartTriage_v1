@@ -126,6 +126,12 @@ void setup() {
   g_stateMutex = xSemaphoreCreateMutex();
   g_spiBusMutex = xSemaphoreCreateMutex();
 
+  // Core 0 runs the display task, whose long SPI bursts (a full-screen
+  // fill on ILI9488 is ~0.4 s of continuous, non-yielding writes) can
+  // legitimately hold the core past the 5 s idle-task watchdog. The
+  // standard remedy for display-heavy cores on Arduino-ESP32:
+  disableCore0WDT();
+
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
   Wire.setClock(100000);          // MAX30205 is SMBus-class: 100 kHz only
   delay(50);
@@ -159,5 +165,18 @@ void setup() {
 
 void loop() {
   trendTick();
+
+  // Serial heartbeat (runs on core 1, independent of the UI): if the UI
+  // ever wedges, uptime keeps printing while frames stops rising — that
+  // one line pinpoints a display/touch hang without a debugger.
+  static uint32_t lastBeat = 0;
+  if (millis() - lastBeat >= 5000) {
+    lastBeat = millis();
+    Serial.printf("[hb] up=%lus frames=%lu heap=%u wifi=%s\n",
+                  (unsigned long)(millis() / 1000),
+                  (unsigned long)ui.frameCount,
+                  (unsigned)ESP.getFreeHeap(),
+                  WiFi.status() == WL_CONNECTED ? "up" : "down");
+  }
   vTaskDelay(pdMS_TO_TICKS(250));
 }
