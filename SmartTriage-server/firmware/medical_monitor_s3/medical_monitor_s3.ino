@@ -148,13 +148,18 @@ void setup() {
   Wire.setClock(100000);          // MAX30205 is SMBus-class: 100 kHz only
   delay(50);
 
-  ui.begin();                     // screen up first — boot feedback
+  // BP first, screen second — deliberately: the cuff-pressure zero
+  // calibration borrows GPIO 12 (the display's future SPI clock) for its
+  // bit-banged reads. Doing that BEFORE tft.init() means the display's
+  // SPI bus is configured from scratch afterwards and can never inherit
+  // a disturbed pin state from the calibration.
+  bp.begin();                     // includes cuff-pressure zero calibration
+  ui.begin();
   alarms.begin();
 
   bool spo2Ok = spo2.begin();
   temp.begin();
   ecg.begin();
-  bp.begin();                     // includes cuff-pressure zero calibration
   net.attachEcg(&ecg);
 
   Serial.printf("MAX30102: %s | MAX30205: %s\n",
@@ -184,9 +189,11 @@ void loop() {
   static uint32_t lastBeat = 0;
   if (millis() - lastBeat >= 5000) {
     lastBeat = millis();
-    Serial.printf("[hb] up=%lus frames=%lu heap=%u wifi=%s\n",
+    Serial.printf("[hb] up=%lus starts=%lu frames=%lu stage=%u heap=%u wifi=%s\n",
                   (unsigned long)(millis() / 1000),
+                  (unsigned long)ui.frameStarts,
                   (unsigned long)ui.frameCount,
+                  (unsigned)ui.stage,
                   (unsigned)ESP.getFreeHeap(),
                   WiFi.status() == WL_CONNECTED ? "up" : "down");
   }

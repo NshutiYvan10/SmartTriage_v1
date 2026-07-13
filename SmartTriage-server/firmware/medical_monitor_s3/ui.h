@@ -41,13 +41,18 @@ public:
   }
 
   void frame() {
+    frameStarts = frameStarts + 1;
+    stage = 1;
     // Own the shared SPI wire for the whole frame (drawing + touch read):
     // GPIO 12 doubles as the cuff-pressure clock, and the BP task borrows
     // it between frames. Skipping a frame under contention is invisible;
     // clocking the sensor mid-draw is not.
     if (xSemaphoreTake(g_spiBusMutex, pdMS_TO_TICKS(100)) != pdTRUE) return;
+    stage = 2;
     MonitorState s = snapshotState();
+    stage = 3;
     handleTouch(s);
+    stage = 4;
 
     if (pageDirty_) {
       tft_.fillScreen(TFT_BLACK);
@@ -56,8 +61,10 @@ public:
       forceRedraw_ = true;
       waveInit_ = false;
     }
+    stage = 5;
 
     drawBanner(s);
+    stage = 6;
 
     switch (page_) {
       case Page::DASH:   drawDashboard(s); break;
@@ -69,12 +76,18 @@ public:
     }
     forceRedraw_ = false;
     xSemaphoreGive(g_spiBusMutex);
+    stage = 7;
     frameCount = frameCount + 1;
   }
 
-  // Liveness counter for the serial heartbeat: rising = UI healthy;
-  // frozen = a display/touch call is stuck (tells us exactly where to dig).
+  // Liveness telemetry for the serial heartbeat:
+  //   frameStarts rising, frameCount rising           → healthy
+  //   frameStarts rising, frameCount 0                → every frame aborts at the mutex
+  //   both frozen, stage names the last step reached  → hard-stuck in that call
+  //   (1 mutex · 2 snapshot · 3 touch · 4 chrome · 5 banner · 6 page-draw · 7 done)
   volatile uint32_t frameCount = 0;
+  volatile uint32_t frameStarts = 0;
+  volatile uint8_t  stage = 0;
 
 private:
   TFT_eSPI tft_;
@@ -549,8 +562,17 @@ private:
     if (now - lastTouchPollMs_ < 100) return;
     lastTouchPollMs_ = now;
 
-    uint16_t x, y;
-    bool pressed = tft_.getTouch(&x, &y);
+    // BOUNDED pre-check before entering TFT_eSPI's getTouch(): getTouchRawZ
+    // is a fixed three-transfer read, while getTouch's internal validTouch
+    // contains an unbounded pressure-settling loop that wedged this exact
+    // panel (frames=0, stuck pre-first-draw — seen live). Only enter the
+    // unbounded path when real finger pressure is present; with a genuine
+    // press the settling loop converges quickly.
+    uint16_t x = 0, y = 0;
+    bool pressed = false;
+    if (tft_.getTouchRawZ() > 240) {
+      pressed = tft_.getTouch(&x, &y);
+    }
 
     if (pressed && !touching_) {                 // touch start
       touching_ = true; downX_ = x; downY_ = y; lastX_ = x; lastY_ = y; downMs_ = millis();
