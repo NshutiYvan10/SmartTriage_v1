@@ -114,3 +114,4 @@ env/
 # Per-session transcripts, plans, agent worktrees. Local-only —
 # never committed.
 .claude/
+gateway-queue.db
