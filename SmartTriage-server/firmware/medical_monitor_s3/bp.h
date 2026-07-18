@@ -207,19 +207,38 @@ private:
       v = (uint16_t)((v << 1) | (digitalRead(SHARED_PIN_MISO) ? 1 : 0));
       digitalWrite(PIN_PRES_SCK, LOW);  delayMicroseconds(2);
     }
-    return (uint16_t)((v >> 4) & 0x0FFF);      // 12-bit result
+    return (uint16_t)((v >> 3) & 0x0FFF);      // 12-bit result (busy bit + 12 data)
   }
 
+  // A press must LOOK like a press, twice. The first field run of this
+  // detector cancelled two measurements at the very first poll: a
+  // garbage read (all zeros) computed as z = 0 + 4095 - 0 = "maximum
+  // pressure". Real fingers give mid-range z1 AND pull z2 down from its
+  // rail; rail/zero values are electrical noise, not skin. Two reads
+  // must agree — noise isn't stable across 2 ms, a held finger is.
   bool touchCancelPoll() {
-    // MOSI is already plain GPIO (the cycle ended the display SPI driver
-    // and CuffAdcPinGuard configured the shared pins).
-    digitalWrite(SHARED_PIN_TOUCH_CS, LOW);
-    uint16_t z1 = xptTransfer(0xB1);           // pressure electrode 1
-    uint16_t z2 = xptTransfer(0xC1);           // pressure electrode 2
-    xptTransfer(0xD0);                         // power down between polls
-    digitalWrite(SHARED_PIN_TOUCH_CS, HIGH);
-    int z = (int)z1 + 4095 - (int)z2;
-    return z > 900;                            // firm press anywhere
+    auto readZ = [&](uint16_t &z1, uint16_t &z2) {
+      digitalWrite(SHARED_PIN_TOUCH_CS, LOW);
+      z1 = xptTransfer(0xB1);                  // pressure electrode 1
+      z2 = xptTransfer(0xC1);                  // pressure electrode 2
+      xptTransfer(0xD0);                       // power down between polls
+      digitalWrite(SHARED_PIN_TOUCH_CS, HIGH);
+    };
+    auto firm = [](uint16_t z1, uint16_t z2) {
+      if (z1 < 120 || z1 > 4000) return false; // rail / open-circuit garbage
+      if (z2 == 0 || z2 > 4060) return false;  // rail / open-circuit garbage
+      return (int)z1 + 4095 - (int)z2 > 1100;
+    };
+    uint16_t z1a, z2a, z1b, z2b;
+    readZ(z1a, z2a);
+    delayMicroseconds(2000);
+    readZ(z1b, z2b);
+    bool cancel = firm(z1a, z2a) && firm(z1b, z2b)
+               && abs((int)z1a - (int)z1b) < 400;
+    if (cancel) {
+      Serial.printf("[bp] cancel touch confirmed (z1 %u/%u, z2 %u/%u)\n", z1a, z1b, z2a, z2b);
+    }
+    return cancel;
   }
 
   // ================= the real measurement (bus OWNED throughout) ========
