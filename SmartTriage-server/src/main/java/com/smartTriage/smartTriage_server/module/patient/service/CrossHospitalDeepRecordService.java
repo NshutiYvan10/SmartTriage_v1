@@ -17,6 +17,7 @@ import com.smartTriage.smartTriage_server.module.medication.repository.Medicatio
 import com.smartTriage.smartTriage_server.module.patient.dto.CrossHospitalDeepRecordResponse;
 import com.smartTriage.smartTriage_server.module.patient.dto.CrossHospitalDeepRecordResponse.HospitalSection;
 import com.smartTriage.smartTriage_server.module.patient.dto.CrossHospitalDeepRecordResponse.VisitSummary;
+import com.smartTriage.smartTriage_server.module.patient.dto.CrossHospitalDeepRecordResponse.DischargeSummaryDoc;
 import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
 import com.smartTriage.smartTriage_server.module.patient.entity.PersonIdentity;
 import com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository;
@@ -210,8 +211,8 @@ public class CrossHospitalDeepRecordService {
                         .arrivalTime(v.getArrivalTime())
                         .status(v.getStatus() != null ? v.getStatus().name() : null)
                         .diagnoses(diagnoses(v.getId()))
-                        .dischargeSummaries(dischargeSummaries(v.getId()))
-                        .criticalLabs(criticalLabs(v.getId()))
+                        .dischargeSummaries(dischargeSummaries(v.getId(), p.getNationalId()))
+                        .labs(labs(v.getId()))
                         .keyNotes(keyNotes(v.getId()))
                         .build());
             }
@@ -250,27 +251,43 @@ public class CrossHospitalDeepRecordService {
         return out;
     }
 
-    private List<String> dischargeSummaries(UUID visitId) {
-        List<String> out = new ArrayList<>();
+    private List<DischargeSummaryDoc> dischargeSummaries(UUID visitId, String nationalId) {
+        List<DischargeSummaryDoc> out = new ArrayList<>();
         clinicalDocumentRepository.findByVisitIdAndDocumentTypeAndIsActiveTrueOrderByCreatedAtDesc(
                         visitId, ClinicalDocumentType.DISCHARGE_SUMMARY)
-                .forEach(doc -> out.add((doc.getTitle() != null ? doc.getTitle() : "Discharge summary")
-                        + (doc.isSigned() ? " (signed)" : " (unsigned)")));
+                .forEach(doc -> out.add(DischargeSummaryDoc.builder()
+                        .title(doc.getTitle() != null ? doc.getTitle() : "Discharge summary")
+                        // Mask the national ID inside the free-text body so it matches the
+                        // masked identifier shown everywhere else in the deep record.
+                        .content(redactNationalId(doc.getContent(), nationalId))
+                        .signed(doc.isSigned())
+                        .build()));
         return out;
     }
 
-    private List<String> criticalLabs(UUID visitId) {
+    /** Replace the raw national ID wherever it appears in free text with its masked form. */
+    private static String redactNationalId(String content, String nationalId) {
+        if (content == null || nationalId == null || nationalId.length() < 4) return content;
+        return content.replace(nationalId, mask(nationalId));
+    }
+
+    /** All labs/investigations for the visit (not only critical) — tagged with severity. */
+    private List<String> labs(UUID visitId) {
         List<String> out = new ArrayList<>();
-        investigationRepository.findByVisitIdAndIsActiveTrueOrderByOrderedAtAsc(visitId).stream()
-                .filter(i -> Boolean.TRUE.equals(i.getIsCritical()) || Boolean.TRUE.equals(i.getIsAbnormal()))
+        investigationRepository.findByVisitIdAndIsActiveTrueOrderByOrderedAtAsc(visitId)
                 .forEach(i -> out.add(i.getTestName()
-                        + (Boolean.TRUE.equals(i.getIsCritical()) ? " [CRITICAL]" : " [ABNORMAL]")));
-        labOrderRepository.findByVisitIdAndInvestigationIsNullAndIsActiveTrueOrderByOrderedAtDesc(visitId).stream()
-                .filter(l -> l.isCritical() || l.isAbnormal())
+                        + severityTag(Boolean.TRUE.equals(i.getIsCritical()), Boolean.TRUE.equals(i.getIsAbnormal()))));
+        labOrderRepository.findByVisitIdAndInvestigationIsNullAndIsActiveTrueOrderByOrderedAtDesc(visitId)
                 .forEach(l -> out.add(l.getTestName()
                         + (l.getResultValue() != null ? " = " + l.getResultValue() : "")
-                        + (l.isCritical() ? " [CRITICAL]" : " [ABNORMAL]")));
+                        + severityTag(l.isCritical(), l.isAbnormal())));
         return out;
+    }
+
+    private static String severityTag(boolean critical, boolean abnormal) {
+        if (critical) return " [CRITICAL]";
+        if (abnormal) return " [ABNORMAL]";
+        return "";
     }
 
     private List<String> keyNotes(UUID visitId) {

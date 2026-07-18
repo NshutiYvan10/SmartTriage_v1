@@ -3,6 +3,7 @@ package com.smartTriage.smartTriage_server.module.clinical.service;
 import com.smartTriage.smartTriage_server.common.enums.DiagnosisType;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
+import com.smartTriage.smartTriage_server.module.clinical.dto.AmendDiagnosisRequest;
 import com.smartTriage.smartTriage_server.module.clinical.dto.CreateDiagnosisRequest;
 import com.smartTriage.smartTriage_server.module.clinical.dto.DiagnosisResponse;
 import com.smartTriage.smartTriage_server.module.clinical.entity.Diagnosis;
@@ -100,6 +101,62 @@ public class DiagnosisService {
                 diagnosis.getId(), diagnosis.getDiagnosisType(), diagnosis.getDescription());
 
         return ClinicalMapper.toResponse(diagnosis);
+    }
+
+    /**
+     * Amend (edit) a diagnosis WITHOUT losing the original. Creates a new version
+     * linked back to the root original, records the reason + who/when, and
+     * soft-supersedes the prior version so current-state reads show only the
+     * latest while the full chain stays retrievable via {@link #getHistory}.
+     */
+    @Transactional
+    public DiagnosisResponse amendDiagnosis(UUID diagnosisId, AmendDiagnosisRequest request) {
+        Diagnosis current = findDiagnosisOrThrow(diagnosisId);
+        // Always link amendments to the FIRST version so the whole chain shares one root.
+        Diagnosis root = current.getOriginalDiagnosis() != null
+                ? current.getOriginalDiagnosis() : current;
+
+        // If the amended version is primary, demote any other active primary on the visit.
+        if (Boolean.TRUE.equals(request.getIsPrimary())) {
+            diagnosisRepository.findByVisitIdAndIsPrimaryTrueAndIsActiveTrue(current.getVisit().getId())
+                    .filter(d -> !d.getId().equals(current.getId()))
+                    .ifPresent(d -> { d.setIsPrimary(false); diagnosisRepository.save(d); });
+        }
+
+        Diagnosis amended = Diagnosis.builder()
+                .visit(current.getVisit())
+                .diagnosisType(request.getDiagnosisType())
+                .icdCode(request.getIcdCode())
+                .description(request.getDescription())
+                .diagnosedByName(request.getDiagnosedByName())
+                // Preserve the original clinical diagnosis time; amendedAt marks the edit.
+                .diagnosedAt(current.getDiagnosedAt())
+                .isPrimary(Boolean.TRUE.equals(request.getIsPrimary()))
+                .notes(request.getNotes())
+                .originalDiagnosis(root)
+                .isAmendment(true)
+                .amendmentReason(request.getAmendmentReason())
+                .amendedAt(Instant.now())
+                .build();
+        amended = diagnosisRepository.save(amended);
+
+        // Supersede the prior version — soft-delete keeps it (and its history) on file.
+        current.softDelete();
+        diagnosisRepository.save(current);
+
+        log.info("Diagnosis amended — new id:{} supersedes:{} root:{} reason:'{}'",
+                amended.getId(), current.getId(), root.getId(), request.getAmendmentReason());
+
+        return ClinicalMapper.toResponse(amended);
+    }
+
+    /** Full version history for a diagnosis (root + every amendment), oldest first. */
+    public List<DiagnosisResponse> getHistory(UUID diagnosisId) {
+        Diagnosis current = findDiagnosisOrThrow(diagnosisId);
+        Diagnosis root = current.getOriginalDiagnosis() != null
+                ? current.getOriginalDiagnosis() : current;
+        return diagnosisRepository.findVersionChain(root.getId())
+                .stream().map(ClinicalMapper::toResponse).collect(Collectors.toList());
     }
 
     @Transactional

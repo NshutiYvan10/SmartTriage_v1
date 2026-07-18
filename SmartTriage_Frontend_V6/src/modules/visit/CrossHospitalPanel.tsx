@@ -10,7 +10,7 @@ import {
   Globe, Loader2, Lock, ShieldAlert, ShieldCheck, Building2, Stethoscope,
   FlaskConical, FileText, Pill, ChevronRight,
 } from 'lucide-react';
-import { crossHospitalApi, type CrossHospitalDeepRecord } from '@/api/crossHospital';
+import { crossHospitalApi, type CrossHospitalDeepRecord, type CrossHospitalVisitSummary, type CrossHospitalDischargeSummary } from '@/api/crossHospital';
 import { ApiError } from '@/api/client';
 import { useTheme } from '@/hooks/useTheme';
 import { BreakTheGlassModal } from './BreakTheGlassModal';
@@ -20,7 +20,7 @@ interface Props {
 }
 
 export function CrossHospitalPanel({ nationalId }: Props) {
-  const { glassCard, glassInner, isDark, text } = useTheme();
+  const { glassCard, isDark, text } = useTheme();
   const [record, setRecord] = useState<CrossHospitalDeepRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -160,18 +160,7 @@ export function CrossHospitalPanel({ nationalId }: Props) {
           ) : (
             <div className="space-y-3">
               {(h.visits ?? []).map((v, vi) => (
-                <div key={vi} className="rounded-lg p-3" style={glassInner}>
-                  <div className="flex items-center gap-2 mb-1.5 text-xs">
-                    <ChevronRight className={`w-3.5 h-3.5 ${text.muted}`} />
-                    <span className={`font-bold ${text.heading}`}>Visit {v.visitNumber ?? '—'}</span>
-                    {v.status && <span className={text.muted}>· {v.status}</span>}
-                    {v.arrivalTime && <span className={text.muted}>· {new Date(v.arrivalTime).toLocaleDateString()}</span>}
-                  </div>
-                  <Section icon={Stethoscope} label="Diagnoses" items={v.diagnoses} tone={isDark ? 'text-indigo-300' : 'text-indigo-600'} />
-                  <Section icon={FlaskConical} label="Critical labs" items={v.criticalLabs} tone={isDark ? 'text-red-300' : 'text-red-600'} />
-                  <Section icon={FileText} label="Discharge summaries" items={v.dischargeSummaries} tone={isDark ? 'text-emerald-300' : 'text-emerald-600'} />
-                  <Section icon={FileText} label="Key notes" items={v.keyNotes} tone={text.body} />
-                </div>
+                <VisitRow key={vi} visit={v} />
               ))}
             </div>
           )}
@@ -182,6 +171,104 @@ export function CrossHospitalPanel({ nationalId }: Props) {
         <div className={`rounded-xl p-6 text-center text-sm flex items-center justify-center gap-2 ${text.muted}`} style={glassCard}>
           <Globe className="w-4 h-4" /> No detailed history available across hospitals.
         </div>
+      )}
+    </div>
+  );
+}
+
+/** One cross-hospital visit, collapsed by default — click the row to reveal its
+ *  bounded clinical detail. Visits with nothing further show an explicit empty
+ *  state rather than a dead chevron. */
+function VisitRow({ visit }: { visit: CrossHospitalVisitSummary }) {
+  const { glassInner, text, isDark } = useTheme();
+  const [open, setOpen] = useState(false);
+
+  const stringSections = [
+    { icon: Stethoscope, label: 'Diagnoses', items: visit.diagnoses, tone: isDark ? 'text-indigo-300' : 'text-indigo-600' },
+    { icon: FlaskConical, label: 'Labs & tests', items: visit.labs, tone: isDark ? 'text-red-300' : 'text-red-600' },
+    { icon: FileText, label: 'Key notes', items: visit.keyNotes, tone: text.body },
+  ];
+  const summaries = visit.dischargeSummaries ?? [];
+  const presentSections = stringSections.filter((s) => s.items && s.items.length > 0);
+  const totalItems = presentSections.reduce((n, s) => n + (s.items?.length ?? 0), 0) + summaries.length;
+  const hasDetail = presentSections.length > 0 || summaries.length > 0;
+
+  return (
+    <div className="rounded-lg overflow-hidden" style={glassInner}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className={`w-full text-left p-3 flex items-center gap-2 text-xs transition-colors ${isDark ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}
+      >
+        <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 transition-transform duration-200 ${text.muted} ${open ? 'rotate-90' : ''}`} />
+        <span className={`font-bold ${text.heading}`}>Visit {visit.visitNumber ?? '—'}</span>
+        {visit.status && <span className={text.muted}>· {visit.status}</span>}
+        {visit.arrivalTime && <span className={text.muted}>· {new Date(visit.arrivalTime).toLocaleDateString()}</span>}
+        {!open && (
+          <span className={`ml-auto text-[11px] font-medium ${text.muted}`}>
+            {!hasDetail ? 'no detail' : `${totalItems} item${totalItems === 1 ? '' : 's'}`}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="px-3 pb-3">
+          {!hasDetail ? (
+            <p className={`text-xs ${text.muted}`}>No further clinical detail was recorded for this visit.</p>
+          ) : (
+            <>
+              {presentSections.map((s, i) => (
+                <Section key={i} icon={s.icon} label={s.label} items={s.items} tone={s.tone} />
+              ))}
+              {summaries.length > 0 && (
+                <div className="mt-1.5">
+                  <div className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>
+                    <FileText className="w-3 h-3" /> Discharge summaries
+                  </div>
+                  <div className="mt-0.5 ml-4 space-y-1">
+                    {summaries.map((d, i) => <DischargeSummaryItem key={i} doc={d} />)}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A discharge summary line — click to expand its full text inline. */
+function DischargeSummaryItem({ doc }: { doc: CrossHospitalDischargeSummary }) {
+  const { text, isDark } = useTheme();
+  const [open, setOpen] = useState(false);
+  const hasContent = !!doc.content && doc.content.trim().length > 0;
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => hasContent && setOpen((o) => !o)}
+        aria-expanded={hasContent ? open : undefined}
+        className={`flex items-start gap-1.5 text-xs text-left w-full ${hasContent ? 'cursor-pointer' : 'cursor-default'} ${text.body}`}
+      >
+        <FileText className={`w-3 h-3 mt-0.5 flex-shrink-0 ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`} />
+        <span>
+          <span className={hasContent ? 'hover:underline' : ''}>{doc.title}</span>{' '}
+          <span className={text.muted}>{doc.signed ? '(signed)' : '(unsigned)'}</span>
+          {hasContent && (
+            <span className={`ml-1.5 text-[10px] font-semibold ${isDark ? 'text-cyan-300' : 'text-cyan-600'}`}>
+              {open ? '▲ Hide' : '▼ View full'}
+            </span>
+          )}
+        </span>
+      </button>
+      {open && hasContent && (
+        <pre
+          className={`mt-1 ml-4 p-2.5 rounded-lg text-[11px] leading-relaxed whitespace-pre-wrap ${isDark ? 'bg-black/25 text-slate-300' : 'bg-slate-50 text-slate-700 border border-slate-200'}`}
+          style={{ fontFamily: 'inherit' }}
+        >
+          {doc.content}
+        </pre>
       )}
     </div>
   );

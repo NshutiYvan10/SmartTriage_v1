@@ -58,8 +58,21 @@ public class CrossHospitalDeepRecordResponse {
         private Instant arrivalTime;
         private String status;
         private List<String> diagnoses;
-        private List<String> dischargeSummaries;
-        private List<String> criticalLabs;
+        /** Discharge summaries with their full content, so a receiving clinician can
+         *  open and read them (a discharge summary is a continuity-of-care document). */
+        private List<DischargeSummaryDoc> dischargeSummaries;
+        /** All labs/investigations for the visit, each tagged [CRITICAL]/[ABNORMAL] where applicable. */
+        private List<String> labs;
         private List<String> keyNotes;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class DischargeSummaryDoc {
+        private String title;
+        private String content;
+        private boolean signed;
     }
 }

@@ -22,7 +22,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
 import type { Patient } from '@/types';
 import { HandoffPriorityBadges } from '@/components/HandoffPriorityBadges';
-import { chartPath } from '@/lib/chartNav';
+import { chartPath, patientPath } from '@/lib/chartNav';
 
 /* ─── Arrival mode config ─── */
 const arrivalModeConfig: Record<string, { label: string; icon: string; bg: string; text: string; border: string }> = {
@@ -586,7 +586,11 @@ export function PatientsList() {
                 {archive.map((p) => (
                   <div
                     key={p.id}
-                    className="px-5 py-3 flex flex-wrap items-center gap-x-5 gap-y-1"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate(patientPath(p.id))}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(patientPath(p.id)); } }}
+                    className="px-5 py-3 flex flex-wrap items-center gap-x-5 gap-y-1 cursor-pointer transition-colors hover:bg-white/[0.03]"
                     style={{ borderBottom: borderStyle }}
                   >
                     <div className="min-w-[200px]">

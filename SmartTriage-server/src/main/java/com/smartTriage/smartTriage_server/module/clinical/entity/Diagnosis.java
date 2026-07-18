@@ -23,7 +23,8 @@ import java.time.Instant;
 @Table(name = "diagnoses", indexes = {
         @Index(name = "idx_diagnosis_visit", columnList = "visit_id"),
         @Index(name = "idx_diagnosis_type", columnList = "diagnosis_type"),
-        @Index(name = "idx_diagnosis_active", columnList = "is_active")
+        @Index(name = "idx_diagnosis_active", columnList = "is_active"),
+        @Index(name = "idx_diagnosis_original", columnList = "original_diagnosis_id")
 })
 @Getter
 @Setter
@@ -65,4 +66,27 @@ public class Diagnosis extends BaseEntity {
     /** Clinical notes about this diagnosis */
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
+
+    // ── Edit-with-history (non-destructive amendment) ──
+    // Editing a diagnosis creates a NEW row linked back to the first version via
+    // originalDiagnosis; the superseded row is soft-deleted so current-state reads
+    // show only the latest, while the full chain stays retrievable for history.
+
+    /** The first version this row amends (points at the root original). Null on originals. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "original_diagnosis_id")
+    private Diagnosis originalDiagnosis;
+
+    /** True when this row was produced by editing an earlier diagnosis. */
+    @Column(name = "is_amendment", nullable = false)
+    @Builder.Default
+    private boolean isAmendment = false;
+
+    /** Why the diagnosis was changed (required when amending). */
+    @Column(name = "amendment_reason", columnDefinition = "TEXT")
+    private String amendmentReason;
+
+    /** When this amendment was made. */
+    @Column(name = "amended_at")
+    private Instant amendedAt;
 }

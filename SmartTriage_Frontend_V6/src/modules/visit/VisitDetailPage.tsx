@@ -12,7 +12,7 @@ import {
   Wind, Droplets, Brain, Clock, User, AlertTriangle, ChevronRight,
   Plus, Send, CheckCircle2, XCircle, Eye, Loader2, RefreshCw, LogOut,
   TrendingUp, Sparkles, Siren, UserCheck, ShieldAlert, Zap, Route, Globe,
-  MapPin,
+  MapPin, Pencil, History,
 } from 'lucide-react';
 import { ClinicalSignsTab } from './ClinicalSignsTab';
 import { SepsisPanel } from './SepsisPanel';
@@ -94,7 +94,7 @@ import type {
   VisitResponse, VitalSignsResponse, TriageRecordResponse,
   ClinicalNoteResponse, DiagnosisResponse, InvestigationResponse,
   MedicationResponse, ClinicalAlertResponse, PatientResponse,
-  RecordVitalsRequest, CreateClinicalNoteRequest, CreateDiagnosisRequest,
+  RecordVitalsRequest, CreateClinicalNoteRequest, CreateDiagnosisRequest, AmendDiagnosisRequest,
   OrderInvestigationRequest, PrescribeMedicationRequest,
   NoteType, DiagnosisType, InvestigationType, MedicationRoute,
   AvpuScore, TriageCategory, DispositionType,
@@ -457,6 +457,18 @@ export function VisitDetailPage() {
       loadData();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Could not save the diagnosis');
+      console.error(err);
+    } finally { setFormLoading(false); }
+  };
+
+  // Non-destructive edit — amends a diagnosis while preserving the original version.
+  const handleAmendDiagnosis = async (id: string, data: { amendmentReason?: string } & Partial<CreateDiagnosisRequest>) => {
+    setFormLoading(true);
+    try {
+      await diagnosisApi.amend(id, { diagnosedByName: userName, ...data } as AmendDiagnosisRequest);
+      loadData();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not amend the diagnosis');
       console.error(err);
     } finally { setFormLoading(false); }
   };
@@ -954,7 +966,7 @@ export function VisitDetailPage() {
           {activeTab === 'triage' && <TriageTab visit={visit} triageHistory={triageHistory} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'clinical-signs' && <ClinicalSignsTab visitId={visit.id} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} onVisitMayHaveChanged={loadData} />}
           {activeTab === 'notes' && <NotesTab notes={notes} showForm={showNoteForm} setShowForm={setShowNoteForm} onSubmit={handleCreateNote} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
-          {activeTab === 'diagnoses' && <DiagnosesTab diagnoses={diagnoses} isDoctor={isDoctor} showForm={showDiagnosisForm} setShowForm={setShowDiagnosisForm} onSubmit={handleCreateDiagnosis} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
+          {activeTab === 'diagnoses' && <DiagnosesTab diagnoses={diagnoses} isDoctor={isDoctor} showForm={showDiagnosisForm} setShowForm={setShowDiagnosisForm} onSubmit={handleCreateDiagnosis} onAmend={handleAmendDiagnosis} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'investigations' && <InvestigationsTab investigations={investigations} isDoctor={isDoctor} showForm={showInvestigationForm} setShowForm={setShowInvestigationForm} onSubmit={handleOrderInvestigation} onAction={handleInvestigationAction} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} userName={userName} />}
           {activeTab === 'sepsis' && <SepsisPanel visitId={visit.id} latestVitals={latestVitals} onScreened={loadData} />}
           {activeTab === 'fast-track' && <FastTrackPanel visitId={visit.id} onChanged={loadData} />}
@@ -2015,12 +2027,32 @@ function NotesTab({ notes, showForm, setShowForm, onSubmit, formLoading, glassCa
 // Form is delegated to <DiagnosisPanel>, which owns the ICD-10 catalog
 // search and common-in-Rwanda quick-pick. This tab is the list + read view.
 //
-function DiagnosesTab({ diagnoses, isDoctor, showForm, setShowForm, onSubmit, formLoading, glassCard, glassInner, isDark, text }: any) {
+function DiagnosesTab({ diagnoses, isDoctor, showForm, setShowForm, onSubmit, onAmend, formLoading, glassCard, glassInner, isDark, text }: any) {
   const typeColors: Record<string, string> = {
     PROVISIONAL: 'text-amber-500 bg-amber-500/10',
     CONFIRMED: 'text-emerald-500 bg-emerald-500/10',
     DIFFERENTIAL: 'text-blue-500 bg-blue-500/10',
     WORKING: 'text-violet-500 bg-violet-500/10',
+  };
+
+  // Which diagnosis is being edited, and whose history is expanded.
+  const [editing, setEditing] = useState<DiagnosisResponse | null>(null);
+  const [historyFor, setHistoryFor] = useState<string | null>(null);
+  const [history, setHistory] = useState<DiagnosisResponse[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const toggleHistory = async (id: string) => {
+    if (historyFor === id) { setHistoryFor(null); return; }
+    setHistoryFor(id);
+    setHistory([]);
+    setHistoryLoading(true);
+    try {
+      setHistory(await diagnosisApi.getHistory(id));
+    } catch {
+      setHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   return (
@@ -2029,16 +2061,30 @@ function DiagnosesTab({ diagnoses, isDoctor, showForm, setShowForm, onSubmit, fo
         <h3 className={`text-base font-extrabold tracking-tight ${text.heading}`}>Diagnoses ({diagnoses.length})</h3>
         {isDoctor && (
           /* Nurse-scope RBAC — diagnosing is a doctor act; nurses read. */
-          <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
+          <button onClick={() => { setEditing(null); setShowForm(!showForm); }} className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
             <Plus className="w-3.5 h-3.5" /> Add Diagnosis
           </button>
         )}
       </div>
 
-      {showForm && isDoctor && (
+      {showForm && isDoctor && !editing && (
         <DiagnosisPanel
           onSubmit={async (req) => { await onSubmit(req); setShowForm(false); }}
           onClose={() => setShowForm(false)}
+          formLoading={formLoading}
+          glassCard={glassCard}
+          glassInner={glassInner}
+          isDark={isDark}
+          text={text}
+        />
+      )}
+
+      {/* Edit (amend) form — pre-filled with the current version. */}
+      {editing && isDoctor && (
+        <DiagnosisPanel
+          existing={editing}
+          onSubmit={async (req) => { await onAmend(editing.id, req); setEditing(null); }}
+          onClose={() => setEditing(null)}
           formLoading={formLoading}
           glassCard={glassCard}
           glassInner={glassInner}
@@ -2056,11 +2102,12 @@ function DiagnosesTab({ diagnoses, isDoctor, showForm, setShowForm, onSubmit, fo
         ) : diagnoses.map((d: DiagnosisResponse) => (
           <div key={d.id} className="rounded-2xl p-4" style={glassCard}>
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg ${typeColors[d.diagnosisType] || 'text-slate-500 bg-slate-500/10'}`}>
                   {d.diagnosisType}
                 </span>
                 {d.isPrimary && <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg text-violet-500 bg-violet-500/10">PRIMARY</span>}
+                {d.isAmendment && <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg text-amber-500 bg-amber-500/10">EDITED</span>}
                 {d.icdCode && <span className={`text-[10px] font-mono ${text.muted}`}>ICD: {d.icdCode}</span>}
               </div>
               <span className={`text-[10px] ${text.muted}`}>{d.createdAt ? format(new Date(d.createdAt), 'dd MMM yyyy HH:mm') : ''}</span>
@@ -2068,6 +2115,48 @@ function DiagnosesTab({ diagnoses, isDoctor, showForm, setShowForm, onSubmit, fo
             <p className={`text-sm font-medium ${text.heading}`}>{d.description}</p>
             {d.notes && <p className={`text-xs mt-1 ${text.body}`}>{d.notes}</p>}
             {d.diagnosedByName && <p className={`text-[10px] mt-2 ${text.muted}`}>By: {d.diagnosedByName}</p>}
+
+            {/* Doctor actions: Edit (amend) + History */}
+            <div className="flex items-center gap-3 mt-3">
+              {isDoctor && (
+                <button
+                  onClick={() => { setShowForm(false); setEditing(d); }}
+                  className={`inline-flex items-center gap-1.5 text-[11px] font-bold ${isDark ? 'text-cyan-300 hover:text-cyan-200' : 'text-cyan-600 hover:text-cyan-700'}`}
+                >
+                  <Pencil className="w-3 h-3" /> Edit
+                </button>
+              )}
+              <button
+                onClick={() => toggleHistory(d.id)}
+                className={`inline-flex items-center gap-1.5 text-[11px] font-bold ${text.muted} hover:opacity-80`}
+              >
+                <History className="w-3 h-3" /> {historyFor === d.id ? 'Hide history' : 'History'}
+              </button>
+            </div>
+
+            {/* Version history — original + every amendment, oldest first. */}
+            {historyFor === d.id && (
+              <div className="mt-3 pl-3 border-l-2 border-slate-400/30 space-y-2">
+                {historyLoading ? (
+                  <p className={`text-xs flex items-center gap-1.5 ${text.muted}`}><Loader2 className="w-3 h-3 animate-spin" /> Loading history…</p>
+                ) : history.length <= 1 ? (
+                  <p className={`text-xs ${text.muted}`}>No prior versions — this diagnosis hasn't been edited.</p>
+                ) : (
+                  history.map((v, i) => (
+                    <div key={v.id} className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className={`font-bold ${text.body}`}>v{i + 1}</span>
+                        <span className={`px-1.5 py-0.5 rounded ${typeColors[v.diagnosisType] || 'text-slate-500 bg-slate-500/10'} text-[9px] font-bold uppercase`}>{v.diagnosisType}</span>
+                        {i === history.length - 1 && <span className="text-[9px] font-bold uppercase text-emerald-500">current</span>}
+                        <span className={`text-[10px] ${text.muted}`}>{v.amendedAt ? format(new Date(v.amendedAt), 'dd MMM HH:mm') : (v.createdAt ? format(new Date(v.createdAt), 'dd MMM HH:mm') : '')}</span>
+                      </div>
+                      <p className={`${text.body} mt-0.5`}>{v.description}{v.icdCode ? ` (${v.icdCode})` : ''}</p>
+                      {v.amendmentReason && <p className={`text-[10px] italic mt-0.5 ${text.muted}`}>Reason: {v.amendmentReason}</p>}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>

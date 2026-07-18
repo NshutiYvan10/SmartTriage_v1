@@ -177,10 +177,6 @@ export function DynamicRetriage() {
                   <RefreshCw className="w-3.5 h-3.5" />
                   Run Analysis
                 </button>
-                <div className="bg-white/15 backdrop-blur rounded-xl px-3 py-1.5 flex items-center gap-2">
-                  <div className="w-2 h-2 bg-violet-400 rounded-full animate-pulse" />
-                  <span className="text-xs font-semibold text-white/90">Module 5</span>
-                </div>
               </div>
             </div>
           </div>

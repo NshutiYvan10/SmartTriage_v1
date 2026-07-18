@@ -31,7 +31,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, X, Stethoscope, ChevronDown, Sparkles, Send, Loader2, CheckCircle2 } from 'lucide-react';
 import { icdApi, type IcdCodeResponse } from '@/api/icdCodes';
-import type { CreateDiagnosisRequest, DiagnosisType } from '@/api/types';
+import type { CreateDiagnosisRequest, DiagnosisResponse, DiagnosisType } from '@/api/types';
 
 const DIAGNOSIS_TYPES: DiagnosisType[] = ['PROVISIONAL', 'CONFIRMED', 'DIFFERENTIAL', 'WORKING'];
 const TYPE_DESCRIPTIONS: Record<DiagnosisType, string> = {
@@ -42,7 +42,9 @@ const TYPE_DESCRIPTIONS: Record<DiagnosisType, string> = {
 };
 
 interface Props {
-  onSubmit: (req: Partial<CreateDiagnosisRequest>) => Promise<void>;
+  /** When present, the panel edits this diagnosis (amend) instead of creating a new one. */
+  existing?: DiagnosisResponse | null;
+  onSubmit: (req: Partial<CreateDiagnosisRequest> & { amendmentReason?: string }) => Promise<void>;
   onClose: () => void;
   formLoading: boolean;
   glassCard: React.CSSProperties;
@@ -51,7 +53,8 @@ interface Props {
   text: any;
 }
 
-export function DiagnosisPanel({ onSubmit, onClose, formLoading, glassCard, glassInner, isDark, text }: Props) {
+export function DiagnosisPanel({ existing, onSubmit, onClose, formLoading, glassCard, glassInner, isDark, text }: Props) {
+  const isEditing = !!existing;
   const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   // ── Search state ──
   const [query, setQuery] = useState('');
@@ -62,11 +65,15 @@ export function DiagnosisPanel({ onSubmit, onClose, formLoading, glassCard, glas
   const [selected, setSelected] = useState<IcdCodeResponse | null>(null);
   const searchSeq = useRef(0);
 
-  // ── Form fields ──
-  const [diagnosisType, setDiagnosisType] = useState<DiagnosisType>('PROVISIONAL');
-  const [description, setDescription] = useState('');
-  const [isPrimary, setIsPrimary] = useState(false);
-  const [notes, setNotes] = useState('');
+  // ── Form fields (pre-filled from the existing diagnosis when editing) ──
+  const [diagnosisType, setDiagnosisType] = useState<DiagnosisType>(existing?.diagnosisType ?? 'PROVISIONAL');
+  const [description, setDescription] = useState(existing?.description ?? '');
+  const [isPrimary, setIsPrimary] = useState(existing?.isPrimary ?? false);
+  const [notes, setNotes] = useState(existing?.notes ?? '');
+  // ICD code is retained across an edit even without re-searching the catalog.
+  const [icdCode, setIcdCode] = useState(existing?.icdCode ?? '');
+  // Mandatory reason when editing — this is a change to a clinical record.
+  const [amendmentReason, setAmendmentReason] = useState('');
 
   // Load common Rwandan diagnoses once for the quick-pick chips.
   useEffect(() => {
@@ -109,6 +116,7 @@ export function DiagnosisPanel({ onSubmit, onClose, formLoading, glassCard, glas
 
   const handleSelect = useCallback((entry: IcdCodeResponse) => {
     setSelected(entry);
+    setIcdCode(entry.code);
     setQuery(`${entry.code} — ${entry.description}`);
     // Pre-fill description from the catalog. Doctor can edit before saving
     // (e.g. add "suspected", "post-treatment", or qualifying detail).
@@ -123,30 +131,33 @@ export function DiagnosisPanel({ onSubmit, onClose, formLoading, glassCard, glas
 
   const handleClear = useCallback(() => {
     setSelected(null);
+    setIcdCode('');
     setQuery('');
     setResults([]);
     setDescription('');
   }, []);
 
-  const canSubmit = !!description.trim() && !formLoading;
+  const canSubmit = !!description.trim() && !formLoading
+    && (!isEditing || !!amendmentReason.trim());
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit) return;
     await onSubmit({
       diagnosisType,
       description: description.trim(),
-      icdCode: selected?.code || undefined,
+      icdCode: icdCode || undefined,
       isPrimary,
       notes: notes.trim() || undefined,
+      ...(isEditing ? { amendmentReason: amendmentReason.trim() } : {}),
     });
-  }, [canSubmit, diagnosisType, description, selected, isPrimary, notes, onSubmit]);
+  }, [canSubmit, diagnosisType, description, icdCode, isPrimary, notes, isEditing, amendmentReason, onSubmit]);
 
   return (
     <div className="rounded-2xl p-5 animate-fade-up space-y-4" style={glassCard}>
       <div className="flex items-center justify-between">
         <h4 className={`text-sm font-bold flex items-center gap-2 ${text.heading}`}>
           <Stethoscope className="w-4 h-4 text-cyan-500" />
-          New Diagnosis
+          {isEditing ? 'Edit Diagnosis' : 'New Diagnosis'}
         </h4>
         <div className="flex items-center gap-2">
           {common.length > 0 && (
@@ -308,6 +319,26 @@ export function DiagnosisPanel({ onSubmit, onClose, formLoading, glassCard, glas
         />
       </div>
 
+      {/* Reason for change — mandatory when editing (keeps the original on record). */}
+      {isEditing && (
+        <div>
+          <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>
+            Reason for change (required)
+          </label>
+          <textarea
+            value={amendmentReason}
+            onChange={(e) => setAmendmentReason(e.target.value)}
+            placeholder="e.g. Ultrasound confirmed the provisional diagnosis; updating type and description"
+            rows={2}
+            className={`w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none ${isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'}`}
+            style={glassInner}
+          />
+          <p className={`text-[10px] mt-1 ${text.muted}`}>
+            The current version is preserved — this creates a new, attributed version and keeps the full history.
+          </p>
+        </div>
+      )}
+
       {/* Action row */}
       <div className="flex items-center gap-3">
         <button
@@ -317,7 +348,7 @@ export function DiagnosisPanel({ onSubmit, onClose, formLoading, glassCard, glas
           className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {formLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-          Save Diagnosis
+          {isEditing ? 'Save changes' : 'Save Diagnosis'}
         </button>
         <button type="button" onClick={onClose} className={`px-4 py-2.5 text-xs font-bold rounded-xl ${text.muted}`}>Cancel</button>
         {selected && (

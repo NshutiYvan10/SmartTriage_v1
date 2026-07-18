@@ -35,14 +35,22 @@ export interface CrossHospitalSafetySummary {
 // ── Deep record (Phase 2) — consent- or break-glass-gated ──
 export type AccessBasis = 'CONSENT' | 'BREAK_THE_GLASS' | 'DENIED';
 
+export interface CrossHospitalDischargeSummary {
+  title: string;
+  /** Full discharge-summary text; may be null for legacy/empty documents. */
+  content: string | null;
+  signed: boolean;
+}
+
 export interface CrossHospitalVisitSummary {
   visitNumber: string | null;
   /** ISO-8601 instant `YYYY-MM-DDTHH:mm:ssZ` (backend `Instant`); safe for `new Date(...)`. */
   arrivalTime: string | null;
   status: string | null;
   diagnoses: string[] | null;
-  dischargeSummaries: string[] | null;
-  criticalLabs: string[] | null;
+  dischargeSummaries: CrossHospitalDischargeSummary[] | null;
+  /** All labs/investigations, each tagged [CRITICAL]/[ABNORMAL] where applicable. */
+  labs: string[] | null;
   keyNotes: string[] | null;
 }
 

@@ -6,6 +6,7 @@
  * is an exceptional, audited action.
  */
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, Loader2, ShieldAlert, X } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 
@@ -34,7 +35,10 @@ export function BreakTheGlassModal({ patientLabel, onConfirm, onClose }: Props) 
     }
   };
 
-  return (
+  // Portal to <body> so the fixed overlay escapes any transformed / overflow
+  // ancestor (the visit page's animate-fade-in wrapper), which would otherwise
+  // become the containing block and clip the modal instead of the viewport.
+  return createPortal(
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -90,6 +94,7 @@ export function BreakTheGlassModal({ patientLabel, onConfirm, onClose }: Props) 
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

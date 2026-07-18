@@ -1111,6 +1111,21 @@ export interface DiagnosisResponse {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+  // Edit-with-history lineage. Present once a diagnosis has been amended.
+  isAmendment?: boolean;
+  amendmentReason?: string | null;
+  originalDiagnosisId?: string | null;
+  amendedAt?: string | null;
+}
+
+export interface AmendDiagnosisRequest {
+  diagnosisType: DiagnosisType;
+  icdCode?: string;
+  description: string;
+  diagnosedByName?: string;
+  isPrimary?: boolean;
+  notes?: string;
+  amendmentReason: string;
 }
 
 // ── Investigations ──

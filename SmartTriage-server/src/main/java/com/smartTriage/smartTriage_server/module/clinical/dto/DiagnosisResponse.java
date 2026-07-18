@@ -29,4 +29,11 @@ public class DiagnosisResponse {
     private String notes;
     private Instant createdAt;
     private Instant updatedAt;
+
+    // Edit-with-history lineage. Boolean (not primitive) so Jackson keeps the
+    // JSON key "isAmendment" — consistent with isPrimary — instead of "amendment".
+    private Boolean isAmendment;
+    private String amendmentReason;
+    private UUID originalDiagnosisId;
+    private Instant amendedAt;
 }

@@ -16,6 +16,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -172,7 +173,9 @@ public class PatientController {
             + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<PatientResponse>>> getPatientsByHospital(
             @PathVariable UUID hospitalId,
-            @PageableDefault(size = 20) Pageable pageable) {
+            // Newest-first by default so freshly-registered patients appear at the TOP
+            // of the "All patients" registry instead of being buried at the bottom.
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         Page<PatientResponse> response = patientService.getPatientsByHospital(hospitalId, pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
@@ -183,7 +186,7 @@ public class PatientController {
     public ResponseEntity<ApiResponse<Page<PatientResponse>>> searchPatients(
             @PathVariable UUID hospitalId,
             @RequestParam String query,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         Page<PatientResponse> response = patientService.searchPatients(hospitalId, query, pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
     }

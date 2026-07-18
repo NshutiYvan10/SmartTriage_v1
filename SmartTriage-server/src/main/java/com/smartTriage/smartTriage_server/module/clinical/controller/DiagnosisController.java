@@ -2,6 +2,7 @@ package com.smartTriage.smartTriage_server.module.clinical.controller;
 
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.common.enums.DiagnosisType;
+import com.smartTriage.smartTriage_server.module.clinical.dto.AmendDiagnosisRequest;
 import com.smartTriage.smartTriage_server.module.clinical.dto.CreateDiagnosisRequest;
 import com.smartTriage.smartTriage_server.module.clinical.dto.DiagnosisResponse;
 import com.smartTriage.smartTriage_server.module.clinical.service.DiagnosisService;
@@ -59,6 +60,29 @@ public class DiagnosisController {
             @Valid @RequestBody CreateDiagnosisRequest request) {
         DiagnosisResponse response = diagnosisService.updateDiagnosis(id, request);
         return ResponseEntity.ok(ApiResponse.success("Diagnosis updated", response));
+    }
+
+    /**
+     * Amend a diagnosis — a non-destructive edit. Creates a new linked version and
+     * preserves the original; the change reason is mandatory. Doctor act.
+     */
+    @PostMapping("/{id}/amend")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessDiagnosis(authentication, #id)")
+    public ResponseEntity<ApiResponse<DiagnosisResponse>> amendDiagnosis(
+            @PathVariable UUID id,
+            @Valid @RequestBody AmendDiagnosisRequest request) {
+        DiagnosisResponse response = diagnosisService.amendDiagnosis(id, request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Diagnosis amended — the original version is preserved", response));
+    }
+
+    /** Full version history for a diagnosis (root original + every amendment). */
+    @GetMapping("/{id}/history")
+    @PreAuthorize("@clinicalAuthz.canAccessDiagnosis(authentication, #id)")
+    public ResponseEntity<ApiResponse<List<DiagnosisResponse>>> getDiagnosisHistory(@PathVariable UUID id) {
+        List<DiagnosisResponse> response = diagnosisService.getHistory(id);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @DeleteMapping("/{id}")

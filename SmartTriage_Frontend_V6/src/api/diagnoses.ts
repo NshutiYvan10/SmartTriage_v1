@@ -1,6 +1,6 @@
 /* ── Diagnoses API ── */
 import { get, post, put, del } from './client';
-import type { CreateDiagnosisRequest, DiagnosisResponse, DiagnosisType, Page } from './types';
+import type { AmendDiagnosisRequest, CreateDiagnosisRequest, DiagnosisResponse, DiagnosisType, Page } from './types';
 
 export const diagnosisApi = {
   create: (data: CreateDiagnosisRequest) =>
@@ -8,6 +8,14 @@ export const diagnosisApi = {
 
   update: (id: string, data: CreateDiagnosisRequest) =>
     put<DiagnosisResponse>(`/diagnoses/${id}`, data),
+
+  /** Non-destructive edit — creates a new linked version, preserves the original. */
+  amend: (id: string, data: AmendDiagnosisRequest) =>
+    post<DiagnosisResponse>(`/diagnoses/${id}/amend`, data),
+
+  /** Full version history (root original + every amendment), oldest first. */
+  getHistory: (id: string) =>
+    get<DiagnosisResponse[]>(`/diagnoses/${id}/history`),
 
   delete: (id: string) =>
     del<void>(`/diagnoses/${id}`),

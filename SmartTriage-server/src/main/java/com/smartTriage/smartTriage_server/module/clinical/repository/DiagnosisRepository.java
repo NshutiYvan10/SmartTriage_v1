@@ -31,4 +31,13 @@ public interface DiagnosisRepository extends JpaRepository<Diagnosis, UUID> {
     /** RBAC fix — projection used by ClinicalAuthz.canAccessDiagnosis. */
     @Query("SELECT d.visit.id FROM Diagnosis d WHERE d.id = :id")
     Optional<UUID> findVisitIdByDiagnosisId(@Param("id") UUID id);
+
+    /**
+     * Full version chain for a diagnosis — the root plus every amendment linked to
+     * it, oldest first. Deliberately ignores is_active so superseded versions
+     * remain visible in the history view.
+     */
+    @Query("SELECT d FROM Diagnosis d WHERE d.id = :rootId OR d.originalDiagnosis.id = :rootId "
+            + "ORDER BY d.createdAt ASC")
+    List<Diagnosis> findVersionChain(@Param("rootId") UUID rootId);
 }

@@ -28,6 +28,11 @@ public final class ClinicalMapper {
                 .notes(diagnosis.getNotes())
                 .createdAt(diagnosis.getCreatedAt())
                 .updatedAt(diagnosis.getUpdatedAt())
+                .isAmendment(diagnosis.isAmendment())
+                .amendmentReason(diagnosis.getAmendmentReason())
+                .originalDiagnosisId(diagnosis.getOriginalDiagnosis() != null
+                        ? diagnosis.getOriginalDiagnosis().getId() : null)
+                .amendedAt(diagnosis.getAmendedAt())
                 .build();
     }
 
