@@ -31,7 +31,7 @@ export function HospitalManagement() {
 
   const emptyForm = {
     name: '', hospitalCode: '', address: '',
-    city: '', country: '',
+    city: '', country: 'RWA',
     phoneNumber: '', email: '', tier: 'DISTRICT',
     bedCapacity: '' as string,
     edCapacity: '' as string,
@@ -143,7 +143,7 @@ export function HospitalManagement() {
       hospitalCode: h.hospitalCode || '',
       address: h.address || '',
       city: h.city || '',
-      country: h.country || '',
+      country: toCountryCode(h.country),
       phoneNumber: h.phoneNumber || '',
       email: h.email || '',
       tier: h.tier || 'DISTRICT',
@@ -164,6 +164,27 @@ export function HospitalManagement() {
   };
 
   const TIERS = ['NATIONAL_REFERRAL', 'PROVINCIAL', 'DISTRICT', 'HEALTH_CENTER', 'CLINIC'];
+  // ISO 3166-1 alpha-3 codes — the backend caps country at 3 characters, so the
+  // dropdown stores codes (e.g. "RWA"), never the full name. Short, Rwanda-first list.
+  const COUNTRIES: { code: string; name: string }[] = [
+    { code: 'RWA', name: 'Rwanda' },
+    { code: 'UGA', name: 'Uganda' },
+    { code: 'KEN', name: 'Kenya' },
+    { code: 'TZA', name: 'Tanzania' },
+    { code: 'BDI', name: 'Burundi' },
+    { code: 'COD', name: 'DR Congo' },
+    { code: 'SSD', name: 'South Sudan' },
+    { code: '', name: 'Other / unspecified' },
+  ];
+  // Map legacy free-text values (e.g. "Rwanda") to their code so existing
+  // records — created before this dropdown — still load into it correctly.
+  const toCountryCode = (v?: string | null): string => {
+    if (!v) return '';
+    const s = v.trim();
+    if (COUNTRIES.some(c => c.code && c.code === s.toUpperCase())) return s.toUpperCase();
+    const byName = COUNTRIES.find(c => c.name.toLowerCase() === s.toLowerCase());
+    return byName ? byName.code : '';
+  };
 
   return (
     <div className="min-h-full">
@@ -218,8 +239,6 @@ export function HospitalManagement() {
               {([
                 { label: 'Hospital Name', key: 'name', placeholder: 'e.g., King Faisal Hospital' },
                 { label: 'Address', key: 'address', placeholder: 'Kigali, Rwanda' },
-                { label: 'City', key: 'city', placeholder: 'e.g., Kigali' },
-                { label: 'Country', key: 'country', placeholder: 'e.g., Rwanda' },
                 { label: 'Phone', key: 'phoneNumber', placeholder: '+250 788 000 000' },
                 { label: 'Email', key: 'email', placeholder: 'info@hospital.rw' },
               ] as const).map(({ label, key, placeholder }) => (
@@ -228,6 +247,12 @@ export function HospitalManagement() {
                   <input value={(form as any)[key] || ''} onChange={(e) => setForm({ ...form, [key]: e.target.value })} placeholder={placeholder} className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body} ${isDark ? 'placeholder-slate-500' : 'placeholder-slate-400'}`} style={glassInner} />
                 </div>
               ))}
+              <div>
+                <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Country</label>
+                <select value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} className={`w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 ${text.body}`} style={glassInner}>
+                  {COUNTRIES.map(c => <option key={c.code || 'none'} value={c.code}>{c.name}</option>)}
+                </select>
+              </div>
               {editId && (
                 <div>
                   <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`}>Code (auto-generated)</label>
@@ -322,6 +347,8 @@ export function HospitalManagement() {
                   sectorId: next.sectorId,
                   cellId: next.cellId,
                   villageId: next.villageId,
+                  // City is Rwanda's town-level unit — the district — so mirror it here.
+                  city: next.districtName ?? f.city,
                 }))}
               />
             </div>
