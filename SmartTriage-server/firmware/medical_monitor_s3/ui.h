@@ -69,18 +69,22 @@ public:
     // Touch calibration: prefer the values captured on THIS panel by the
     // on-device routine (NVS survives reboots and reflashes); fall back
     // to the compiled-in default only when none are stored yet.
-    uint16_t cal[5] = TOUCH_CAL;
+    uint16_t defCal[5] = TOUCH_CAL;
+    memcpy(cal_, defCal, sizeof(cal_));
     prefs_.begin("touch", false);
-    if (prefs_.getBytesLength("cal") == sizeof(cal)) {
-      prefs_.getBytes("cal", cal, sizeof(cal));
+    if (prefs_.getBytesLength("cal") == sizeof(cal_)) {
+      prefs_.getBytes("cal", cal_, sizeof(cal_));
       calFromNvs_ = true;
       Serial.printf("[touch] using stored calibration { %u, %u, %u, %u, %u }\n",
-                    cal[0], cal[1], cal[2], cal[3], cal[4]);
+                    cal_[0], cal_[1], cal_[2], cal_[3], cal_[4]);
     } else {
       Serial.println("[touch] no stored calibration — using config.h default. "
                      "Run CALIBRATE TOUCH on the Device page.");
     }
-    tft_.setTouch(cal);
+    if (prefs_.getBytesLength("trim") == sizeof(trim_)) {
+      prefs_.getBytes("trim", trim_, sizeof(trim_));
+      Serial.printf("[touch] using stored trim %+d,%+d\n", trim_[0], trim_[1]);
+    }
 
     W = tft_.width(); H = tft_.height();
     BANNER_H = 26;
@@ -154,6 +158,47 @@ private:
   TFT_eSprite val_{&tft_};
   Preferences prefs_;
   bool calFromNvs_ = false;
+  uint16_t cal_[5] = TOUCH_CAL;   // active calibration (NVS overrides in begin)
+  int16_t  trim_[2] = {0, 0};     // centre-tap fine correction (x, y), NVS-stored
+
+  // ---------- raw→screen mapping (v3.1.2 — we own it now) ----------
+  // TFT_eSPI's getTouch() REJECTS any touch whose mapped coordinate falls
+  // outside the screen (returns "not pressed") instead of clamping. On
+  // this panel the resistive overlay maps the bottom edge slightly past
+  // the LCD, so the PREV/NEXT bar sat in a DEAD STRIP no calibration
+  // could cure ("touching prev/next does nothing" — observed live). We
+  // therefore read RAW coordinates and do the library's own linear
+  // mapping ourselves (same calData semantics), in int32, with the
+  // centre-tap trim applied, CLAMPED to the screen — no dead zones.
+  void mapRawToScreen(uint16_t rawX, uint16_t rawY, uint16_t &sx, uint16_t &sy) {
+    bool rotate = cal_[4] & 0x01;
+    bool invX   = cal_[4] & 0x02;
+    bool invY   = cal_[4] & 0x04;
+    int32_t inX = rotate ? rawY : rawX;
+    int32_t inY = rotate ? rawX : rawY;
+    int32_t spanX = (int32_t)cal_[1] - (int32_t)cal_[0]; if (spanX == 0) spanX = 1;
+    int32_t spanY = (int32_t)cal_[3] - (int32_t)cal_[2]; if (spanY == 0) spanY = 1;
+    int32_t xx = (inX - (int32_t)cal_[0]) * W / spanX;
+    int32_t yy = (inY - (int32_t)cal_[2]) * H / spanY;
+    if (invX) xx = W - xx;
+    if (invY) yy = H - yy;
+    xx += trim_[0]; yy += trim_[1];
+    sx = (uint16_t)constrain(xx, (int32_t)0, (int32_t)(W - 1));
+    sy = (uint16_t)constrain(yy, (int32_t)0, (int32_t)(H - 1));
+  }
+
+  // Bounded touch read: raw-Z pre-gate (caller), then two raw samples
+  // that must agree — a fixed-cost stand-in for TFT_eSPI's unbounded
+  // validTouch settling loop (which wedged this panel; seen live).
+  bool readTouch(uint16_t zGate, uint16_t &sx, uint16_t &sy) {
+    if (tft_.getTouchRawZ() <= zGate) return false;
+    uint16_t rx1, ry1, rx2, ry2;
+    tft_.getTouchRaw(&rx1, &ry1);
+    tft_.getTouchRaw(&rx2, &ry2);
+    if (abs((int)rx1 - (int)rx2) > 40 || abs((int)ry1 - (int)ry2) > 40) return false;
+    mapRawToScreen((uint16_t)((rx1 + rx2) / 2), (uint16_t)((ry1 + ry2) / 2), sx, sy);
+    return true;
+  }
   int W = 480, H = 320, BANNER_H = 26;
   Page page_ = Page::DASH;
   bool pageDirty_ = true, forceRedraw_ = true, waveInit_ = false;
@@ -687,13 +732,49 @@ private:
     tft_.drawString("(use a fingernail or stylus for precision)", W / 2, H / 2 + 26, 2);
     tft_.setTextDatum(TL_DATUM);
 
-    uint16_t cal[5];
-    tft_.calibrateTouch(cal, UI_ACCENT, UI_BG, 18);
-    tft_.setTouch(cal);
-    prefs_.putBytes("cal", cal, sizeof(cal));
+    tft_.calibrateTouch(cal_, UI_ACCENT, UI_BG, 18);
+    tft_.setTouch(cal_);
+    prefs_.putBytes("cal", cal_, sizeof(cal_));
     calFromNvs_ = true;
     Serial.printf("[touch] calibrated + stored: TOUCH_CAL { %u, %u, %u, %u, %u }\n",
-                  cal[0], cal[1], cal[2], cal[3], cal[4]);
+                  cal_[0], cal_[1], cal_[2], cal_[3], cal_[4]);
+
+    // ---- centre fine-trim (v3.1.2) ----
+    // The four corner arrows nail the scale, but a constant finger-pad /
+    // parallax bias survives them (observed live: presses registered
+    // ~35 px below the finger, so the SIMULATION button fired PREV).
+    // One tap on a centre target measures that residual offset and
+    // stores it as a correction applied to every future touch.
+    trim_[0] = trim_[1] = 0;
+    // wait for the last calibration touch to clear
+    uint32_t t0 = millis();
+    while (tft_.getTouchRawZ() > 100 && millis() - t0 < 3000) delay(20);
+    delay(300);
+
+    tft_.fillScreen(UI_BG);
+    tft_.setTextColor(UI_INK, UI_BG);
+    tft_.setTextDatum(MC_DATUM);
+    tft_.drawString("One more: tap the centre of the ring", W / 2, H / 2 - 60, 2);
+    tft_.setTextDatum(TL_DATUM);
+    tft_.drawCircle(W / 2, H / 2, 14, UI_ACCENT);
+    tft_.drawCircle(W / 2, H / 2, 13, UI_ACCENT);
+    tft_.drawFastHLine(W / 2 - 20, H / 2, 40, UI_ACCENT);
+    tft_.drawFastVLine(W / 2, H / 2 - 20, 40, UI_ACCENT);
+
+    t0 = millis();
+    bool got = false; uint16_t tx = 0, ty = 0;
+    while (millis() - t0 < 15000) {
+      if (readTouch(TOUCH_Z_PRESS, tx, ty)) { got = true; break; }
+      delay(20);
+    }
+    if (got) {
+      int dx = W / 2 - (int)tx, dy = H / 2 - (int)ty;
+      if (abs(dx) <= 60 && abs(dy) <= 60) { trim_[0] = (int16_t)dx; trim_[1] = (int16_t)dy; }
+      // a wild tap (>60 px off) is treated as a miss — no trim
+    }
+    prefs_.putBytes("trim", trim_, sizeof(trim_));
+    Serial.printf("[touch] centre check %s: trim %+d,%+d stored\n",
+                  got ? "done" : "timed out", trim_[0], trim_[1]);
 
     tft_.fillScreen(UI_BG);
     tft_.setTextColor(UI_GOOD, UI_BG);
@@ -731,13 +812,13 @@ private:
     lastTouchPollMs_ = now;
 
     uint16_t x = 0, y = 0;
-    bool pressed = false;
-    if (tft_.getTouchRawZ() > (touching_ ? TOUCH_Z_TRACK : TOUCH_Z_PRESS)) {
-      pressed = tft_.getTouch(&x, &y);
-    }
+    bool pressed = readTouch(touching_ ? TOUCH_Z_TRACK : TOUCH_Z_PRESS, x, y);
 
     if (pressed && !touching_) {                 // touch start
       touching_ = true; downX_ = x; downY_ = y; lastX_ = x; lastY_ = y; downMs_ = now;
+      // One line per press — lets a captured serial log show exactly
+      // where the firmware thinks fingers are landing.
+      Serial.printf("[touch] press x=%u y=%u\n", x, y);
       // Buttons fire ON PRESS — instant feedback, and a quick tap can
       // never fall between two polls.
       pressConsumed_ = onPress(x, y, s);
