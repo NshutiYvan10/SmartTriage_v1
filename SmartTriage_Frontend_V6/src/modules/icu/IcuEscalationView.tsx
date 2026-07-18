@@ -67,6 +67,10 @@ export function IcuEscalationView() {
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const scope = useScopedView();
+  // Nurse-scope RBAC — a nurse may RAISE an escalation and notify the team
+  // (rapid-response safety valve); the decisions that follow (response, bed
+  // assignment, transfer, cancellation) are doctor acts (server enforces).
+  const isDoctor = user?.role === 'DOCTOR' || user?.role === 'SUPER_ADMIN';
 
   const [escalations, setEscalations] = useState<IcuEscalation[]>([]);
   const [totalElements, setTotalElements] = useState(0);
@@ -482,7 +486,7 @@ export function IcuEscalationView() {
                         </button>
                       )}
 
-                      {esc.status === 'ICU_NOTIFIED' && (
+                      {esc.status === 'ICU_NOTIFIED' && isDoctor && (
                         <button
                           onClick={() => {
                             setResponseDialogId(esc.id);
@@ -497,7 +501,7 @@ export function IcuEscalationView() {
                         </button>
                       )}
 
-                      {esc.status === 'ICU_RESPONDED' && (
+                      {esc.status === 'ICU_RESPONDED' && isDoctor && (
                         <button
                           onClick={() => {
                             setBedDialogId(esc.id);
@@ -510,7 +514,7 @@ export function IcuEscalationView() {
                         </button>
                       )}
 
-                      {esc.status === 'BED_ASSIGNED' && (
+                      {esc.status === 'BED_ASSIGNED' && isDoctor && (
                         <button
                           onClick={() => handleTransfer(esc.id)}
                           disabled={actionLoading === esc.id}
@@ -521,7 +525,7 @@ export function IcuEscalationView() {
                         </button>
                       )}
 
-                      {esc.status !== 'TRANSFERRED' && esc.status !== 'CANCELLED' && (
+                      {esc.status !== 'TRANSFERRED' && esc.status !== 'CANCELLED' && isDoctor && (
                         <button
                           onClick={() => {
                             setCancelDialogId(esc.id);

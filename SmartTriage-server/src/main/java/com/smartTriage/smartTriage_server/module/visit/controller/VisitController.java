@@ -145,8 +145,12 @@ public class VisitController {
      * Record patient disposition — the final step of an ED visit.
      * Automatically stops IoT monitoring and transitions visit status.
      */
+    // Nurse-scope RBAC sweep — HOSPITAL_ADMIN removed: disposition is the
+    // final clinical decision of the visit, and settled product policy is
+    // that administrators never perform clinical work. Also visit-scoped.
     @PostMapping("/{id}/disposition")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #id)")
     public ResponseEntity<ApiResponse<VisitResponse>> recordDisposition(
             @PathVariable UUID id,
             @Valid @RequestBody DispositionRequest request) {

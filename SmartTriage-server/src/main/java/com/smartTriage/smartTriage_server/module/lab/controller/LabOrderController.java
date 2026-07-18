@@ -28,8 +28,10 @@ import java.util.UUID;
 /**
  * Lab Order Controller — manages the full lab order lifecycle.
  *
- * RBAC summary (Phase 1):
- *  - DOCTOR / NURSE          : create order
+ * RBAC summary (Phase 1, tightened by the nurse-scope RBAC fix):
+ *  - DOCTOR                  : create order — ordering diagnostics is a
+ *                              physician act; nurses collect specimens on
+ *                              orders, they do not author them
  *  - DOCTOR                  : cancel order, acknowledge critical values
  *  - LAB_TECHNICIAN          : receive specimen, reject specimen,
  *                              start processing, record result
@@ -66,7 +68,7 @@ public class LabOrderController {
     // ====================================================================
 
     @PostMapping("/order")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
             + "and @clinicalAuthz.canAccessVisit(authentication, #request.visitId)")
     public ResponseEntity<ApiResponse<LabOrderResponse>> orderLab(
             @Valid @RequestBody OrderLabRequest request) {

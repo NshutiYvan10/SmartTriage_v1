@@ -41,8 +41,13 @@ public class MedicationSafetyController {
     // PRESCRIPTION VALIDATION
     // ====================================================================
 
+    // Nurse-scope RBAC fix — prescription validation is the prescriber's
+    // dry-run and persists a safety-check row; nurses no longer prescribe,
+    // so this follows the prescribe gate. (Administration-time gates run
+    // server-side inside the dose workflow, not through this endpoint.)
     @PostMapping("/validate")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #request.visitId)")
     public ResponseEntity<ApiResponse<MedicationSafetyCheckResponse>> validatePrescription(
             @Valid @RequestBody ValidatePrescriptionRequest request) {
         MedicationSafetyCheckResponse response = medicationSafetyService.validatePrescription(request);

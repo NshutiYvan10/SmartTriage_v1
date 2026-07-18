@@ -81,6 +81,17 @@ export function ClinicalDocumentation() {
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
   const access = useCanSeeAllZones();
+  // Nurse-scope RBAC — the medico-legal document classes are doctor-authored
+  // (the server rejects them for other roles); nurses keep the nursing
+  // documentation set. Mirrors ClinicalDocumentService.DOCTOR_ONLY_DOCUMENT_TYPES.
+  const isDoctor = user?.role === 'DOCTOR' || user?.role === 'SUPER_ADMIN';
+  const DOCTOR_ONLY_DOC_TYPES = [
+    'INITIAL_ASSESSMENT', 'PROCEDURE_NOTE', 'OPERATIVE_NOTE', 'CONSULTATION_NOTE',
+    'DISCHARGE_SUMMARY', 'TRANSFER_SUMMARY', 'DEATH_CERTIFICATE', 'AGAINST_MEDICAL_ADVICE',
+  ];
+  const authorableDocTypes = DOC_TYPES.filter(
+    (t) => t !== 'ALL' && (isDoctor || !DOCTOR_ONLY_DOC_TYPES.includes(t)),
+  );
 
   // Action-error surfacing (was previously swallowed to console).
   const [error, setError] = useState<string | null>(null);
@@ -481,7 +492,7 @@ export function ClinicalDocumentation() {
                   }`}
                   style={glassInner}
                 >
-                  {DOC_TYPES.filter(t => t !== 'ALL').map((t) => (
+                  {authorableDocTypes.map((t) => (
                     <option key={t} value={t}>{DOC_TYPE_LABELS[t]}</option>
                   ))}
                 </select>
@@ -820,14 +831,18 @@ export function ClinicalDocumentation() {
                             <Shield className="w-3.5 h-3.5" /> Co-Sign
                           </button>
                         )}
-                        <button
-                          onClick={() => openSignDialog('amend', doc.id)}
-                          className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl transition-all ${
-                            isDark ? 'bg-blue-500/15 text-blue-400 hover:bg-blue-500/25' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                          }`}
-                        >
-                          <PenTool className="w-3.5 h-3.5" /> Amend
-                        </button>
+                        {/* An amendment re-authors under the original's type, so a
+                            doctor-only document is amendable only by a doctor. */}
+                        {(isDoctor || !DOCTOR_ONLY_DOC_TYPES.includes(doc.documentType)) && (
+                          <button
+                            onClick={() => openSignDialog('amend', doc.id)}
+                            className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl transition-all ${
+                              isDark ? 'bg-blue-500/15 text-blue-400 hover:bg-blue-500/25' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                            }`}
+                          >
+                            <PenTool className="w-3.5 h-3.5" /> Amend
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}

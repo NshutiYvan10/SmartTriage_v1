@@ -66,7 +66,8 @@ public class IcuEscalationController {
      * Notify the ICU team about an escalation.
      */
     @PutMapping("/{id}/notify-team")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessIcuEscalation(authentication, #id)")
     public ResponseEntity<ApiResponse<IcuEscalationResponse>> notifyIcuTeam(@PathVariable UUID id) {
         IcuEscalation escalation = icuEscalationService.notifyIcuTeam(id);
         return ResponseEntity.ok(ApiResponse.success("ICU team notified", IcuEscalationMapper.toResponse(escalation)));
@@ -75,8 +76,12 @@ public class IcuEscalationController {
     /**
      * Record the ICU team's response (accept or decline).
      */
+    // Nurse-scope RBAC fix — a nurse may RAISE an escalation (rapid-response
+    // safety valve, /request above); the decisions that follow (accept/decline,
+    // bed assignment, transfer, cancellation) are physician acts.
     @PutMapping("/{id}/response")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessIcuEscalation(authentication, #id)")
     public ResponseEntity<ApiResponse<IcuEscalationResponse>> recordResponse(
             @PathVariable UUID id,
             @RequestBody IcuResponseRequest request) {
@@ -91,7 +96,8 @@ public class IcuEscalationController {
      * Assign an ICU bed to the escalation.
      */
     @PutMapping("/{id}/assign-bed")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessIcuEscalation(authentication, #id)")
     public ResponseEntity<ApiResponse<IcuEscalationResponse>> assignBed(
             @PathVariable UUID id,
             @RequestParam String bedNumber) {
@@ -103,7 +109,8 @@ public class IcuEscalationController {
      * Mark the patient as transferred to ICU.
      */
     @PutMapping("/{id}/transfer")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessIcuEscalation(authentication, #id)")
     public ResponseEntity<ApiResponse<IcuEscalationResponse>> transferToIcu(@PathVariable UUID id) {
         IcuEscalation escalation = icuEscalationService.transferToIcu(id);
         return ResponseEntity.ok(ApiResponse.success("Patient transferred to ICU", IcuEscalationMapper.toResponse(escalation)));
@@ -113,7 +120,8 @@ public class IcuEscalationController {
      * Cancel an ICU escalation with a reason.
      */
     @PutMapping("/{id}/cancel")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessIcuEscalation(authentication, #id)")
     public ResponseEntity<ApiResponse<IcuEscalationResponse>> cancelEscalation(
             @PathVariable UUID id,
             @RequestParam String reason) {

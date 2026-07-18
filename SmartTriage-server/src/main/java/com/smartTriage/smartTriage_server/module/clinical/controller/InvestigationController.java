@@ -47,8 +47,14 @@ public class InvestigationController {
     private final InvestigationService investigationService;
     private final LabReportDocumentService labReportDocumentService;
 
+    /**
+     * Nurse-scope RBAC fix — ordering investigations (labs / imaging / ECG
+     * studies) is a DOCTOR act. Nurses keep the downstream work on an
+     * existing order: specimen collection, performing the study, and the
+     * status/result endpoints below.
+     */
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
             + "and @clinicalAuthz.canAccessVisit(authentication, #request.visitId)")
     public ResponseEntity<ApiResponse<InvestigationResponse>> orderInvestigation(
             @Valid @RequestBody OrderInvestigationRequest request) {

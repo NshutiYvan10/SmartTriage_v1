@@ -114,4 +114,9 @@ public interface MedicationDoseRepository extends JpaRepository<MedicationDose, 
             @org.springframework.data.repository.query.Param("from") java.time.Instant from,
             @org.springframework.data.repository.query.Param("to") java.time.Instant to);
 
+    /** RBAC — projection used by ClinicalAuthz.canAccessMedicationDose to scope
+     *  the dose-keyed endpoints (administer / delay / refuse) to the dose's own
+     *  hospital. */
+    @Query("SELECT d.visit.id FROM MedicationDose d WHERE d.id = :id")
+    Optional<UUID> findVisitIdById(@Param("id") UUID id);
 }

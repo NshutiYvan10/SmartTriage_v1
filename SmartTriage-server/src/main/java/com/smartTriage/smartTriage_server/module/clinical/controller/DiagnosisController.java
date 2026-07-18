@@ -36,8 +36,14 @@ public class DiagnosisController {
 
     private final DiagnosisService diagnosisService;
 
+    /**
+     * Nurse-scope RBAC fix — diagnosing is a DOCTOR act; nurses assess and
+     * escalate but do not author diagnoses. Also hospital-scoped via the
+     * request's visit (was previously role-gated only).
+     */
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #request.visitId)")
     public ResponseEntity<ApiResponse<DiagnosisResponse>> createDiagnosis(
             @Valid @RequestBody CreateDiagnosisRequest request) {
         DiagnosisResponse response = diagnosisService.createDiagnosis(request);
@@ -46,7 +52,8 @@ public class DiagnosisController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessDiagnosis(authentication, #id)")
     public ResponseEntity<ApiResponse<DiagnosisResponse>> updateDiagnosis(
             @PathVariable UUID id,
             @Valid @RequestBody CreateDiagnosisRequest request) {
@@ -55,7 +62,8 @@ public class DiagnosisController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessDiagnosis(authentication, #id)")
     public ResponseEntity<ApiResponse<Void>> deleteDiagnosis(@PathVariable UUID id) {
         diagnosisService.deleteDiagnosis(id);
         return ResponseEntity.ok(ApiResponse.success("Diagnosis deleted", null));

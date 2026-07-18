@@ -91,6 +91,7 @@ public class ClinicalDocumentService {
     public ClinicalDocumentResponse createDocument(UUID visitId, CreateDocumentRequest request) {
         Visit visit = visitService.findVisitOrThrow(visitId);
         User author = resolveCurrentUserOrThrow();
+        assertMayAuthorDocumentType(author, request.getDocumentType());
 
         // Auto-attach latest vitals
         VitalSigns latestVitals = vitalSignsRepository
@@ -236,6 +237,9 @@ public class ClinicalDocumentService {
         // The amendment's author is the authenticated user making the correction —
         // never a client-supplied name.
         User amender = resolveCurrentUserOrThrow();
+        // An amendment carries the original's type, so it needs the same
+        // authoring authority (a nurse must not amend a discharge summary).
+        assertMayAuthorDocumentType(amender, original.getDocumentType());
 
         // Auto-attach latest vitals
         VitalSigns latestVitals = vitalSignsRepository
@@ -680,6 +684,37 @@ public class ClinicalDocumentService {
 
     private static String roleOf(User user) {
         return user.getRole() != null ? user.getRole().name() : null;
+    }
+
+    /**
+     * Nurse-scope RBAC fix — the medico-legal document classes may only be
+     * authored (or amended, which re-authors under the same type) by a
+     * DOCTOR / SUPER_ADMIN. The controller's role gate admits NURSE because
+     * nursing documentation legitimately lives here (nursing assessment,
+     * triage narrative, progress and handover notes, informed consent) —
+     * this type-level check is where the line is drawn.
+     */
+    private static final java.util.Set<ClinicalDocumentType> DOCTOR_ONLY_DOCUMENT_TYPES =
+            java.util.EnumSet.of(
+                    ClinicalDocumentType.INITIAL_ASSESSMENT,
+                    ClinicalDocumentType.PROCEDURE_NOTE,
+                    ClinicalDocumentType.CONSULTATION_NOTE,
+                    ClinicalDocumentType.DISCHARGE_SUMMARY,
+                    ClinicalDocumentType.TRANSFER_SUMMARY,
+                    ClinicalDocumentType.DEATH_CERTIFICATE,
+                    ClinicalDocumentType.OPERATIVE_NOTE,
+                    ClinicalDocumentType.AGAINST_MEDICAL_ADVICE);
+
+    private static void assertMayAuthorDocumentType(User author, ClinicalDocumentType type) {
+        if (type == null || !DOCTOR_ONLY_DOCUMENT_TYPES.contains(type)) {
+            return;
+        }
+        if (author.getRole() == Role.DOCTOR || author.getRole() == Role.SUPER_ADMIN) {
+            return;
+        }
+        throw new ClinicalBusinessException(
+                "A " + type.name().replace('_', ' ').toLowerCase()
+                        + " must be authored by a doctor.");
     }
 
     /** A qualified, non-trainee doctor who may provide a supervisory co-signature. */

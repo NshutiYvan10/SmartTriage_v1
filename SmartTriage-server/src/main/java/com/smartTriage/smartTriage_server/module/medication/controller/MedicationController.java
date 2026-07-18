@@ -58,8 +58,18 @@ public class MedicationController {
     // PRESCRIBE
     // ====================================================================
 
+    /**
+     * Nurse-scope RBAC fix — prescribing is a DOCTOR act. Nurses administer,
+     * countersign, hold and refuse (below); they do not author medication
+     * orders. Previously NURSE was accepted here, so any zone nurse could
+     * prescribe from the chart — the safety gates (allergy / interaction /
+     * teratogen / dose) all ran, but for the wrong author entirely.
+     * Also hospital-scoped now: the visit in the request body must belong to
+     * the prescriber's own hospital (was previously role-gated only).
+     */
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #request.visitId)")
     public ResponseEntity<ApiResponse<MedicationResponse>> prescribe(
             @Valid @RequestBody PrescribeMedicationRequest request) {
         MedicationResponse response = medicationService.prescribe(request);
@@ -72,7 +82,8 @@ public class MedicationController {
     // ====================================================================
 
     @PatchMapping("/{id}/administer")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessMedication(authentication, #id)")
     public ResponseEntity<ApiResponse<MedicationResponse>> administer(
             @PathVariable UUID id,
             @RequestBody AdministerMedicationRequest request) {
@@ -85,7 +96,8 @@ public class MedicationController {
     // ====================================================================
 
     @PatchMapping("/{id}/countersign")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessMedication(authentication, #id)")
     public ResponseEntity<ApiResponse<MedicationResponse>> countersign(
             @PathVariable UUID id,
             @RequestBody CountersignMedicationRequest request) {
@@ -98,7 +110,8 @@ public class MedicationController {
     // ====================================================================
 
     @PatchMapping("/{id}/hold")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessMedication(authentication, #id)")
     public ResponseEntity<ApiResponse<MedicationResponse>> hold(
             @PathVariable UUID id,
             @RequestParam(required = false) String reason) {
@@ -107,7 +120,8 @@ public class MedicationController {
     }
 
     @PatchMapping("/{id}/cancel")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessMedication(authentication, #id)")
     public ResponseEntity<ApiResponse<MedicationResponse>> cancel(
             @PathVariable UUID id,
             @RequestParam(required = false) String reason) {
@@ -116,7 +130,8 @@ public class MedicationController {
     }
 
     @PatchMapping("/{id}/refuse")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessMedication(authentication, #id)")
     public ResponseEntity<ApiResponse<MedicationResponse>> refuse(
             @PathVariable UUID id,
             @RequestParam(required = false) String reason) {
@@ -129,7 +144,7 @@ public class MedicationController {
     // ====================================================================
 
     @GetMapping("/{id}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("@clinicalAuthz.canAccessMedication(authentication, #id)")
     public ResponseEntity<ApiResponse<MedicationResponse>> getMedication(@PathVariable UUID id) {
         MedicationResponse response = medicationService.getMedication(id);
         return ResponseEntity.ok(ApiResponse.success(response));
@@ -200,7 +215,8 @@ public class MedicationController {
     // ====================================================================
 
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessMedication(authentication, #id)")
     public ResponseEntity<ApiResponse<MedicationResponse>> approveOrder(
             @PathVariable UUID id,
             @Valid @RequestBody(required = false) ApproveOrderRequest request) {
@@ -210,14 +226,16 @@ public class MedicationController {
     }
 
     @PostMapping("/{id}/resume")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessMedication(authentication, #id)")
     public ResponseEntity<ApiResponse<MedicationResponse>> resumeOrder(@PathVariable UUID id) {
         MedicationResponse response = medicationScheduleService.resumeOrder(id);
         return ResponseEntity.ok(ApiResponse.success("Order resumed", response));
     }
 
     @PostMapping("/{id}/discontinue")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessMedication(authentication, #id)")
     public ResponseEntity<ApiResponse<MedicationResponse>> discontinueOrder(
             @PathVariable UUID id,
             @Valid @RequestBody DiscontinueOrderRequest request) {
@@ -226,7 +244,8 @@ public class MedicationController {
     }
 
     @PostMapping("/{id}/modify")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessMedication(authentication, #id)")
     public ResponseEntity<ApiResponse<MedicationResponse>> modifyOrder(
             @PathVariable UUID id,
             @Valid @RequestBody ModifyOrderRequest request) {
@@ -235,7 +254,8 @@ public class MedicationController {
     }
 
     @PostMapping("/doses/{doseId}/administer")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessMedicationDose(authentication, #doseId)")
     public ResponseEntity<ApiResponse<MedicationDoseResponse>> administerDose(
             @PathVariable UUID doseId,
             @Valid @RequestBody(required = false) AdministerDoseRequest request) {
@@ -245,7 +265,8 @@ public class MedicationController {
     }
 
     @PostMapping("/doses/{doseId}/delay")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessMedicationDose(authentication, #doseId)")
     public ResponseEntity<ApiResponse<MedicationDoseResponse>> delayDose(
             @PathVariable UUID doseId,
             @Valid @RequestBody DelayDoseRequest request) {
@@ -254,7 +275,8 @@ public class MedicationController {
     }
 
     @PostMapping("/doses/{doseId}/refuse")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessMedicationDose(authentication, #doseId)")
     public ResponseEntity<ApiResponse<MedicationDoseResponse>> refuseDose(
             @PathVariable UUID doseId,
             @Valid @RequestBody RefuseDoseRequest request) {
@@ -263,7 +285,8 @@ public class MedicationController {
     }
 
     @PostMapping("/{id}/prn-dose")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessMedication(authentication, #id)")
     public ResponseEntity<ApiResponse<MedicationDoseResponse>> recordPrnDose(
             @PathVariable UUID id,
             @Valid @RequestBody RecordPrnDoseRequest request) {
@@ -272,7 +295,8 @@ public class MedicationController {
     }
 
     @PostMapping("/{id}/infusion/start")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessMedication(authentication, #id)")
     public ResponseEntity<ApiResponse<MedicationDoseResponse>> startInfusion(
             @PathVariable UUID id,
             @Valid @RequestBody(required = false) InfusionEventRequest request) {
@@ -282,7 +306,8 @@ public class MedicationController {
     }
 
     @PostMapping("/{id}/infusion/rate")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessMedication(authentication, #id)")
     public ResponseEntity<ApiResponse<MedicationDoseResponse>> changeInfusionRate(
             @PathVariable UUID id,
             @Valid @RequestBody InfusionEventRequest request) {
@@ -291,7 +316,8 @@ public class MedicationController {
     }
 
     @PostMapping("/{id}/infusion/stop")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessMedication(authentication, #id)")
     public ResponseEntity<ApiResponse<MedicationDoseResponse>> stopInfusion(
             @PathVariable UUID id,
             @Valid @RequestBody InfusionEventRequest request) {

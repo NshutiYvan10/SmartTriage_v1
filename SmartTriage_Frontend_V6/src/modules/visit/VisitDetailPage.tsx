@@ -265,6 +265,12 @@ export function VisitDetailPage() {
   // (the cross-hospital identity anchor). UX gate — disclosure is gated server-side.
   const canViewCrossHospital = !!patient?.nationalId && !!user
     && (user.role === 'DOCTOR' || user.role === 'NURSE' || user.role === 'SUPER_ADMIN');
+  // Nurse-scope RBAC — UI mirror of the server's capability matrix. Prescribing,
+  // ordering investigations/labs, diagnosing, referring and disposition are
+  // DOCTOR acts (the backend now 403s them for NURSE); the chart must not show
+  // a nurse forms that can only fail. Nurses keep the care work: vitals,
+  // administration, specimen collection, protocols, notes.
+  const isDoctor = user?.role === 'DOCTOR' || user?.role === 'SUPER_ADMIN';
   // Workflow 2 — structured allergy records. The prescribe-time
   // safety check prefers these over the legacy free-text column on
   // patient.knownAllergies because they carry per-row severity +
@@ -849,7 +855,10 @@ export function VisitDetailPage() {
 
           {/* ── Tabs ── */}
           <div className="flex overflow-x-auto gap-1 px-4 py-2" style={{ borderTop: isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)' }}>
-            {TABS.filter((tab) => tab.id !== 'cross-hospital' || canViewCrossHospital).map((tab) => {
+            {TABS.filter((tab) => (tab.id !== 'cross-hospital' || canViewCrossHospital)
+              // Disposition is the doctor's final decision — hiding it for
+              // nurses removes a tab that could only ever 403.
+              && (tab.id !== 'disposition' || isDoctor)).map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
@@ -912,18 +921,18 @@ export function VisitDetailPage() {
           {activeTab === 'triage' && <TriageTab visit={visit} triageHistory={triageHistory} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'clinical-signs' && <ClinicalSignsTab visitId={visit.id} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} onVisitMayHaveChanged={loadData} />}
           {activeTab === 'notes' && <NotesTab notes={notes} showForm={showNoteForm} setShowForm={setShowNoteForm} onSubmit={handleCreateNote} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
-          {activeTab === 'diagnoses' && <DiagnosesTab diagnoses={diagnoses} showForm={showDiagnosisForm} setShowForm={setShowDiagnosisForm} onSubmit={handleCreateDiagnosis} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
-          {activeTab === 'investigations' && <InvestigationsTab investigations={investigations} showForm={showInvestigationForm} setShowForm={setShowInvestigationForm} onSubmit={handleOrderInvestigation} onAction={handleInvestigationAction} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} userName={userName} />}
+          {activeTab === 'diagnoses' && <DiagnosesTab diagnoses={diagnoses} isDoctor={isDoctor} showForm={showDiagnosisForm} setShowForm={setShowDiagnosisForm} onSubmit={handleCreateDiagnosis} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
+          {activeTab === 'investigations' && <InvestigationsTab investigations={investigations} isDoctor={isDoctor} showForm={showInvestigationForm} setShowForm={setShowInvestigationForm} onSubmit={handleOrderInvestigation} onAction={handleInvestigationAction} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} userName={userName} />}
           {activeTab === 'sepsis' && <SepsisPanel visitId={visit.id} latestVitals={latestVitals} onScreened={loadData} />}
           {activeTab === 'fast-track' && <FastTrackPanel visitId={visit.id} onChanged={loadData} />}
           {activeTab === 'hypoglycemia' && <HypoglycemiaPanel visitId={visit.id} onChanged={loadData} />}
           {activeTab === 'isolation' && <IsolationPanel visitId={visit.id} onChanged={loadData} />}
           {activeTab === 'pathways' && <PathwayPanel visitId={visit.id} onChanged={loadData} />}
-          {activeTab === 'medications' && <MedicationsTab medications={medications} showForm={showMedicationForm} setShowForm={setShowMedicationForm} onSubmit={handlePrescribeMedication} onAction={handleMedicationAction} formLoading={formLoading} patient={patient} visit={visit} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
+          {activeTab === 'medications' && <MedicationsTab medications={medications} isDoctor={isDoctor} showForm={showMedicationForm} setShowForm={setShowMedicationForm} onSubmit={handlePrescribeMedication} onAction={handleMedicationAction} formLoading={formLoading} patient={patient} visit={visit} latestTriage={latestTriage} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
           {activeTab === 'handover' && <HandoverPanel visitId={visit.id} />}
           {activeTab === 'cross-hospital' && <CrossHospitalPanel nationalId={patient?.nationalId ?? null} />}
           {activeTab === 'alerts' && <AlertsTab alerts={visitAlerts} onAcknowledge={requestAlertAck} visit={visit} navigate={navigate} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
-          {activeTab === 'disposition' && <DispositionTab visit={visit} onDisposition={handleRecordDisposition} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
+          {activeTab === 'disposition' && isDoctor && <DispositionTab visit={visit} onDisposition={handleRecordDisposition} formLoading={formLoading} glassCard={glassCard} glassInner={glassInner} isDark={isDark} text={text} />}
         </div>
       </div>
 
@@ -1950,7 +1959,7 @@ function NotesTab({ notes, showForm, setShowForm, onSubmit, formLoading, glassCa
 // Form is delegated to <DiagnosisPanel>, which owns the ICD-10 catalog
 // search and common-in-Rwanda quick-pick. This tab is the list + read view.
 //
-function DiagnosesTab({ diagnoses, showForm, setShowForm, onSubmit, formLoading, glassCard, glassInner, isDark, text }: any) {
+function DiagnosesTab({ diagnoses, isDoctor, showForm, setShowForm, onSubmit, formLoading, glassCard, glassInner, isDark, text }: any) {
   const typeColors: Record<string, string> = {
     PROVISIONAL: 'text-amber-500 bg-amber-500/10',
     CONFIRMED: 'text-emerald-500 bg-emerald-500/10',
@@ -1962,12 +1971,15 @@ function DiagnosesTab({ diagnoses, showForm, setShowForm, onSubmit, formLoading,
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className={`text-base font-extrabold tracking-tight ${text.heading}`}>Diagnoses ({diagnoses.length})</h3>
-        <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
-          <Plus className="w-3.5 h-3.5" /> Add Diagnosis
-        </button>
+        {isDoctor && (
+          /* Nurse-scope RBAC — diagnosing is a doctor act; nurses read. */
+          <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
+            <Plus className="w-3.5 h-3.5" /> Add Diagnosis
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {showForm && isDoctor && (
         <DiagnosisPanel
           onSubmit={async (req) => { await onSubmit(req); setShowForm(false); }}
           onClose={() => setShowForm(false)}
@@ -2008,7 +2020,7 @@ function DiagnosesTab({ diagnoses, showForm, setShowForm, onSubmit, formLoading,
 }
 
 // ═══════ INVESTIGATIONS TAB ═══════
-function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, onAction, formLoading, glassCard, glassInner, isDark, text, userName: _userName }: any) {
+function InvestigationsTab({ investigations, isDoctor, showForm, setShowForm, onSubmit, onAction, formLoading, glassCard, glassInner, isDark, text, userName: _userName }: any) {
   // resultNumeric + resultUnit are the structured pair the eGFR check
   // (Phase 12b) reads. Free-text `result` is preserved alongside — it's
   // still the right field for "trace haemolysis, repeat sent" nuance.
@@ -2033,12 +2045,21 @@ function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, on
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className={`text-base font-extrabold tracking-tight ${text.heading}`}>Investigations ({investigations.length})</h3>
-        <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
-          <Plus className="w-3.5 h-3.5" /> Order Investigation
-        </button>
+        {isDoctor ? (
+          <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
+            <Plus className="w-3.5 h-3.5" /> Order Investigation
+          </button>
+        ) : (
+          /* Nurse-scope RBAC — ordering is a doctor act. The nurse's work on
+             this tab is the existing orders: collect specimens, perform the
+             study, record status (actions on each order card below). */
+          <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg text-slate-500 bg-slate-500/10`}>
+            Ordering is done by the doctor
+          </span>
+        )}
       </div>
 
-      {showForm && (
+      {showForm && isDoctor && (
         <InvestigationPanel
           onSubmit={async (req) => { await onSubmit(req); setShowForm(false); }}
           onClose={() => setShowForm(false)}
@@ -2195,7 +2216,7 @@ function InvestigationsTab({ investigations, showForm, setShowForm, onSubmit, on
 }
 
 // ═══════ MEDICATIONS TAB ═══════
-function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction, formLoading, patient, visit, latestTriage, glassCard, glassInner, isDark, text }: any) {
+function MedicationsTab({ medications, isDoctor, showForm, setShowForm, onSubmit, onAction, formLoading, patient, visit, latestTriage, glassCard, glassInner, isDark, text }: any) {
   // ── V67: dose-level audit per order (typed orders only) ──
   // Loaded tab-locally so the parent's data flow stays untouched; the
   // audit endpoint returns every order with its complete dose timeline.
@@ -2229,12 +2250,21 @@ function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className={`text-base font-extrabold tracking-tight ${text.heading}`}>Medications ({medications.length})</h3>
-        <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
-          <Plus className="w-3.5 h-3.5" /> Prescribe Medication
-        </button>
+        {isDoctor ? (
+          <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
+            <Plus className="w-3.5 h-3.5" /> Prescribe Medication
+          </button>
+        ) : (
+          /* Nurse view — this tab is the patient's MAR: the nurse
+             administers, holds, refuses and countersigns below.
+             Prescribing is the doctor's act (server enforces too). */
+          <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg text-slate-500 bg-slate-500/10`}>
+            Administration view — prescribing is done by the doctor
+          </span>
+        )}
       </div>
 
-      {showForm && (
+      {showForm && isDoctor && (
         <MedicationPanel
           onSubmit={async (req) => { await onSubmit(req); setShowForm(false); }}
           onClose={() => setShowForm(false)}
@@ -2471,7 +2501,7 @@ function MedicationsTab({ medications, showForm, setShowForm, onSubmit, onAction
                 </button>
               )}
               {(med.status === 'PRESCRIBED' || med.status === 'PENDING_APPROVAL' || med.status === 'HELD')
-                && med.prescriptionType && (
+                && med.prescriptionType && isDoctor && (
                 <button
                   onClick={() => {
                     // eslint-disable-next-line no-alert

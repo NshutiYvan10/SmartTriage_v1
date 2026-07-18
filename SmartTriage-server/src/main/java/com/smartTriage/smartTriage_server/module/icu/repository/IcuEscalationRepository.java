@@ -62,4 +62,10 @@ public interface IcuEscalationRepository extends JpaRepository<IcuEscalation, UU
             "AND e.status NOT IN (com.smartTriage.smartTriage_server.common.enums.IcuEscalationStatus.TRANSFERRED_TO_ICU, " +
             "com.smartTriage.smartTriage_server.common.enums.IcuEscalationStatus.CANCELLED)")
     List<UUID> findVisitIdsWithOpenEscalation(@Param("visitIds") java.util.Collection<UUID> visitIds);
+
+    /** RBAC — projection used by ClinicalAuthz.canAccessIcuEscalation to scope the
+     *  id-keyed lifecycle endpoints (response / assign-bed / transfer / cancel /
+     *  notify-team) to the escalation's own hospital. */
+    @Query("SELECT e.visit.id FROM IcuEscalation e WHERE e.id = :id")
+    Optional<UUID> findVisitIdById(@Param("id") UUID id);
 }

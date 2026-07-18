@@ -48,7 +48,8 @@ public class ClinicalNoteController {
     private final ClinicalNoteService clinicalNoteService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #request.visitId)")
     public ResponseEntity<ApiResponse<ClinicalNoteResponse>> createNote(
             @Valid @RequestBody CreateClinicalNoteRequest request) {
         ClinicalNoteResponse response = clinicalNoteService.createNote(request);
@@ -62,7 +63,8 @@ public class ClinicalNoteController {
      * rows remain visible to readers so the correction trail is auditable.
      */
     @PostMapping("/{id}/supersede")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessClinicalNote(authentication, #id)")
     public ResponseEntity<ApiResponse<ClinicalNoteResponse>> supersedeNote(
             @PathVariable UUID id,
             @Valid @RequestBody CreateClinicalNoteRequest request) {

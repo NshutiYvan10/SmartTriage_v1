@@ -175,4 +175,9 @@ public interface MedicationAdministrationRepository extends JpaRepository<Medica
             @org.springframework.data.repository.query.Param("from") java.time.Instant from,
             @org.springframework.data.repository.query.Param("to") java.time.Instant to);
 
+    /** RBAC — projection used by ClinicalAuthz.canAccessMedication to scope the
+     *  id-keyed order endpoints (administer / hold / countersign / approve /
+     *  resume / discontinue / prn-dose / infusion) to the order's own hospital. */
+    @Query("SELECT m.visit.id FROM MedicationAdministration m WHERE m.id = :id")
+    Optional<UUID> findVisitIdById(@Param("id") UUID id);
 }

@@ -354,11 +354,16 @@ export function ConsentReferralView() {
 
             {tab === 'referral' && (
               <div className="space-y-3">
-                <button onClick={() => setShowReferralForm(!showReferralForm)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl">
-                  <Plus className="w-3.5 h-3.5" /> New Consultation Request</button>
+                {/* Nurse-scope RBAC — requesting a consultation/referral is a
+                    doctor act (the referring clinician signs it); the server
+                    now 403s NURSE, so don't show a form that can only fail. */}
+                {canRespond && (
+                  <button onClick={() => setShowReferralForm(!showReferralForm)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl">
+                    <Plus className="w-3.5 h-3.5" /> New Consultation Request</button>
+                )}
 
-                {showReferralForm && (
+                {showReferralForm && canRespond && (
                   <div className="rounded-2xl p-5 space-y-3" style={glassCard}>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
@@ -420,7 +425,10 @@ export function ConsentReferralView() {
                               <Clock className="w-3 h-3" /> Awaiting doctor response
                             </span>
                           )}
-                          <button onClick={() => setCancelTarget(r.id)} disabled={busy} className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg ${text.muted} hover:bg-white/10`}><X className="w-3 h-3" /> Cancel</button>
+                          {/* Cancelling a referral is the referring doctor's act (server 403s NURSE). */}
+                          {canRespond && (
+                            <button onClick={() => setCancelTarget(r.id)} disabled={busy} className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg ${text.muted} hover:bg-white/10`}><X className="w-3 h-3" /> Cancel</button>
+                          )}
                         </div>
                       )}
                     </div>

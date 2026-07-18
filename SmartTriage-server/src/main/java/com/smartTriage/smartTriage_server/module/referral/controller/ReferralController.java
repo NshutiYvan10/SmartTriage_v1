@@ -35,8 +35,10 @@ public class ReferralController {
 
     private final ReferralService referralService;
 
+    /** Nurse-scope RBAC fix — requesting a specialist consultation / referral
+     *  is a DOCTOR act (the referring clinician signs the referral). */
     @PostMapping("/visit/{visitId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
             + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<ReferralResponse>> requestReferral(
             @PathVariable UUID visitId,
@@ -57,7 +59,7 @@ public class ReferralController {
     }
 
     @PutMapping("/{id}/cancel")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
             + "and @clinicalAuthz.canAccessReferral(authentication, #id)")
     public ResponseEntity<ApiResponse<ReferralResponse>> cancelReferral(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success("Referral cancelled", referralService.cancelReferral(id)));

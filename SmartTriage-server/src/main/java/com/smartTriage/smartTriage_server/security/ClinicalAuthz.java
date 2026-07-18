@@ -123,6 +123,9 @@ public class ClinicalAuthz {
     private final ReferralRepository referralRepository;
     private final MohReportRepository mohReportRepository;
     private final MedicationSafetyCheckRepository medicationSafetyCheckRepository;
+    private final com.smartTriage.smartTriage_server.module.medication.repository.MedicationAdministrationRepository medicationAdministrationRepository;
+    private final com.smartTriage.smartTriage_server.module.medication.repository.MedicationDoseRepository medicationDoseRepository;
+    private final com.smartTriage.smartTriage_server.module.icu.repository.IcuEscalationRepository icuEscalationRepository;
     private final IoTDeviceRepository ioTDeviceRepository;
     private final com.smartTriage.smartTriage_server.module.safety.repository.SafetyIncidentRepository safetyIncidentRepository;
     private final ClinicalPolicyRepository clinicalPolicyRepository;
@@ -956,6 +959,54 @@ public class ClinicalAuthz {
                     .orElse(false);
         } catch (Exception e) {
             log.error("canAccessSepsisScreening error for screening {}: {}", screeningId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** Nurse-scope RBAC fix — hospital-scope authz for a MEDICATION ORDER by id: order → visit →
+     *  {@link #canAccessVisit}. The id-keyed MAR endpoints (administer / countersign / hold /
+     *  refuse / approve / resume / discontinue / modify / prn-dose / infusion events) were
+     *  previously role-gated only, letting a clinician at hospital B drive hospital A's
+     *  medication order by enumerating a UUID. Denies unknown ids (no existence leak). */
+    @Transactional(readOnly = true)
+    public boolean canAccessMedication(Authentication authentication, UUID medicationId) {
+        try {
+            if (medicationId == null) return false;
+            return medicationAdministrationRepository.findVisitIdById(medicationId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessMedication error for medication {}: {}", medicationId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** Same pattern as {@link #canAccessMedication}, for a single DOSE row (the
+     *  /doses/{doseId}/administer|delay|refuse endpoints). */
+    @Transactional(readOnly = true)
+    public boolean canAccessMedicationDose(Authentication authentication, UUID doseId) {
+        try {
+            if (doseId == null) return false;
+            return medicationDoseRepository.findVisitIdById(doseId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessMedicationDose error for dose {}: {}", doseId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** Scopes the ICU-escalation lifecycle endpoints (notify-team / response /
+     *  assign-bed / transfer / cancel) to the escalation's own hospital. */
+    @Transactional(readOnly = true)
+    public boolean canAccessIcuEscalation(Authentication authentication, UUID escalationId) {
+        try {
+            if (escalationId == null) return false;
+            return icuEscalationRepository.findVisitIdById(escalationId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessIcuEscalation error for escalation {}: {}", escalationId, e.getMessage(), e);
             return false;
         }
     }
