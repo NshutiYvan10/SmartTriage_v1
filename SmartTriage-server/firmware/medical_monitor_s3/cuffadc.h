@@ -92,11 +92,12 @@ inline int32_t cuffAdcClockOut24() {
 
 // Reset + discard the first two conversions (framing-slip protection —
 // an exactly-doubled sample was observed live from the first-after-reset
-// read). ~150-700 ms depending on the chip's post-reset conversion rate.
+// read). Timing is generous: some HX710/HX711 variants convert at only
+// 10 samples/s, so a tight cap here misdiagnoses a healthy chip as dead.
 inline bool cuffAdcSyncSettle() {
   cuffAdcResetSync();
   for (int i = 0; i < 2; i++) {
-    if (!cuffAdcWaitReady(i == 0 ? 700 : 150)) return false;
+    if (!cuffAdcWaitReady(i == 0 ? 900 : 400)) return false;
     (void)cuffAdcClockOut24();
   }
   return true;

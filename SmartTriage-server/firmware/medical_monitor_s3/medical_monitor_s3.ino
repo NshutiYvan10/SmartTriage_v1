@@ -125,7 +125,11 @@ static void trendTick() {
 // =====================================================================
 void setup() {
   Serial.begin(115200);
-  Serial.println("\n=== SmartTriage Medical Monitor v3.0 (ESP32-S3) ===");
+  // Give a just-(re)attached serial monitor a moment to connect — every
+  // live debugging round so far lost the boot banner + health lines to a
+  // late attach. (The 30 s [recap] line below is the belt to this brace.)
+  delay(1200);
+  Serial.println("\n=== SmartTriage Medical Monitor " FIRMWARE_VERSION " (ESP32-S3) ===");
 
   g_stateMutex = xSemaphoreCreateMutex();
   g_spiBusMutex = xSemaphoreCreateMutex();
@@ -206,6 +210,25 @@ void setup() {
 
 void loop() {
   trendTick();
+
+  // Sensor-health recap every 30 s: the boot banner keeps getting lost
+  // to late-attaching serial monitors, so the verdict lines repeat.
+  static uint32_t lastRecap = 0;
+  if (millis() - lastRecap >= 30000) {
+    lastRecap = millis();
+    MonitorState s = snapshotState();
+    auto chan = [](Chan c) {
+      switch (c) {
+        case Chan::OK: return "OK";
+        case Chan::NO_CONTACT: return "off-patient";
+        case Chan::FAULT: return "FAULT";
+        default: return "absent";
+      }
+    };
+    Serial.printf("[recap] fw=%s spo2:%s temp:%s ecg:%s cuff-adc:%s%s\n",
+                  FIRMWARE_VERSION, chan(s.chSpo2), chan(s.chTemp), chan(s.chEcg), chan(s.chBp),
+                  s.simulation ? " (SIMULATION)" : "");
+  }
 
   // Serial heartbeat (runs on core 1, independent of the UI): if the UI
   // ever wedges, uptime keeps printing while frames stops rising — that

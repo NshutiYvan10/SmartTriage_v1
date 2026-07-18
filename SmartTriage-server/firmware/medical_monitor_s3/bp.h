@@ -93,34 +93,47 @@ private:
     return true;
   }
 
+  // Probe the ADC and capture the zero point. PRECONDITION: caller owns
+  // the bus and a CuffAdcPinGuard is active. Generous timing (some
+  // HX710/HX711 variants convert at only 10 samples/s) + one internal
+  // retry — a single missed conversation must never condemn the sensor.
+  bool probeAndZeroOwned() {
+    for (int attempt = 0; attempt < 2; attempt++) {
+      cuffAdcResetSync();
+      if (!cuffAdcWaitReady(900)) continue;        // first conv after reset is slow
+      (void)cuffAdcClockOut24();                   // discard (framing slip)
+      if (cuffAdcWaitReady(400)) (void)cuffAdcClockOut24();  // discard #2
+      int got = 0;
+      int64_t sum = 0;
+      for (int i = 0; i < 12; i++) {
+        if (!cuffAdcWaitReady(400)) continue;
+        sum += cuffAdcClockOut24();
+        got++;
+      }
+      if (got >= 6) {
+        zeroRaw_ = (int32_t)(sum / got);
+        sensorPresent_ = true;
+        Serial.printf("[bp] zero-cal: ok - pressure ADC answering (samples %d, zero raw %ld)\n",
+                      got, (long)zeroRaw_);
+        if (stateLock()) { g_state.chBp = Chan::OK; stateUnlock(); }
+        return true;
+      }
+    }
+    sensorPresent_ = false;
+    Serial.println("[bp] zero-cal: FAULT - pressure ADC not responding (DOUT never ready)");
+    if (stateLock()) { g_state.chBp = Chan::FAULT; stateUnlock(); }
+    return false;
+  }
+
   void zeroCalibrate() {
     // Runs at boot BEFORE the UI task exists (deliberate .ino ordering),
     // so the bus is quiet; the mutex take is form, not necessity.
     xSemaphoreTake(g_spiBusMutex, portMAX_DELAY);
-    int got = 0;
-    int64_t sum = 0;
     {
       CuffAdcPinGuard guard;
-      if (cuffAdcSyncSettle()) {                   // reset + discard 2 (framing slip)
-        for (int i = 0; i < 12; i++) {
-          if (!cuffAdcWaitReady(150)) continue;
-          sum += cuffAdcClockOut24();
-          got++;
-        }
-      }
+      probeAndZeroOwned();
     }
     xSemaphoreGive(g_spiBusMutex);
-
-    sensorPresent_ = got >= 6;
-    if (sensorPresent_) zeroRaw_ = (int32_t)(sum / got);
-    Serial.printf("[bp] zero-cal: %s (samples %d, zero raw %ld)\n",
-                  sensorPresent_ ? "ok - pressure ADC answering"
-                                 : "FAULT - pressure ADC not responding (DOUT never ready)",
-                  got, (long)zeroRaw_);
-    if (stateLock()) {
-      g_state.chBp = sensorPresent_ ? Chan::OK : Chan::FAULT;
-      stateUnlock();
-    }
   }
 
   // ================= motor =================
@@ -130,8 +143,17 @@ private:
   // cuff fill. There is NO powered deflate on this box: it vents
   // PASSIVELY through its bleed valve whenever the motor is off (the
   // cuff emptied as soon as the motor stopped). So: deflation == stop.
-  void motorInflate() { digitalWrite(PIN_MOTOR_IN1, HIGH); digitalWrite(PIN_MOTOR_IN2, LOW);  ledcWrite(PIN_MOTOR_ENA, BP_INFLATE_PWM); }
-  void motorStop()    { digitalWrite(PIN_MOTOR_IN1, LOW);  digitalWrite(PIN_MOTOR_IN2, LOW);  ledcWrite(PIN_MOTOR_ENA, 0); }
+  bool motorOn_ = false;
+  void motorInflate() {
+    digitalWrite(PIN_MOTOR_IN1, HIGH); digitalWrite(PIN_MOTOR_IN2, LOW);
+    ledcWrite(PIN_MOTOR_ENA, BP_INFLATE_PWM);
+    if (!motorOn_) { motorOn_ = true; Serial.println("[bp] motor ON (pumping)"); }
+  }
+  void motorStop() {
+    digitalWrite(PIN_MOTOR_IN1, LOW); digitalWrite(PIN_MOTOR_IN2, LOW);
+    ledcWrite(PIN_MOTOR_ENA, 0);
+    if (motorOn_) { motorOn_ = false; Serial.println("[bp] motor OFF (venting)"); }
+  }
 
   void setPhase(BpPhase p, uint8_t progress, const char *err = nullptr) {
     // Serial trail of the measurement cycle — "the button does nothing"
@@ -206,12 +228,6 @@ private:
     cancelRequested();                                      // clear stale
     lastPressure_ = 0;
 
-    if (!sensorPresent_) {
-      setPhase(BpPhase::ERROR, 0, "Pressure sensor not detected");
-      digitalWrite(PIN_LED_BP, LOW);
-      return;
-    }
-
     // Let the UI paint the "display paused" measuring screen, then take
     // the whole shared bus for the duration (see file header).
     setPhase(BpPhase::ZEROING, 2);
@@ -239,7 +255,17 @@ private:
   void runCycleOwned() {
     uint32_t cycleStart = millis();
 
-    // ---- Phase 0: sync + settle + sanity ----
+    // ---- Phase 0: probe (if needed) + sync + settle + sanity ----
+    // A failed BOOT probe no longer condemns the sensor forever: every
+    // START re-probes fresh. One bad boot handshake used to mean
+    // "Pressure sensor not detected" until the next power cycle.
+    if (!sensorPresent_) {
+      Serial.println("[bp] sensor was absent at boot - re-probing now");
+      if (!probeAndZeroOwned()) {
+        setPhase(BpPhase::ERROR, 0, "Pressure sensor not responding");
+        return;                                    // motor never started; nothing to vent
+      }
+    }
     // Settle discards the first two conversions: the first-after-reset
     // sample framing-slipped live (an exactly-doubled reading, 311.6
     // with an empty cuff) and failed the sanity gate for nothing.
@@ -273,7 +299,7 @@ private:
 
     float prevP = p0;
     for (;;) {
-      if (!readSample(p, 120)) {
+      if (!readSample(p, 150)) {
         if (++misses >= 10) { setPhase(BpPhase::ERROR, 0, "Pressure sensor stopped"); finishSafe(); return; }
         continue;
       }
@@ -349,7 +375,7 @@ private:
     prevP = baseline;
 
     for (;;) {
-      if (!readSample(p, 120)) {
+      if (!readSample(p, 150)) {
         if (++misses >= 10) { setPhase(BpPhase::ERROR, 0, "Pressure sensor stopped"); finishSafe(); return; }
         continue;
       }
