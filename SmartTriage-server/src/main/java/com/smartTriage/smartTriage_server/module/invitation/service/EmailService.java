@@ -96,11 +96,14 @@ public class EmailService {
             helper.setText(htmlBody, true);
             mailSender.send(message);
             log.info("Email sent to {}: {}", to, subject);
-        } catch (MessagingException | java.io.UnsupportedEncodingException e) {
+        } catch (MessagingException | java.io.UnsupportedEncodingException
+                 | org.springframework.mail.MailException e) {
+            // MessagingException/UnsupportedEncodingException come from building
+            // the message; MailException (MailSend/MailAuthentication) comes from
+            // mailSender.send() when SMTP is unreachable or rejects auth. Without
+            // catching MailException here, an SMTP send failure surfaced as the
+            // generic "An unexpected error occurred" 500 instead of this hint.
             log.error("Failed to send email to {}: {}", to, e.getMessage());
-            // Wrap in a ClinicalBusinessException so GlobalExceptionHandler
-            // returns a clear 400 message instead of the generic
-            // "An unexpected error occurred. Contact system administrator."
             throw new com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException(
                     "Failed to send invitation email: " + e.getMessage()
                             + ". Please check SMTP configuration.");

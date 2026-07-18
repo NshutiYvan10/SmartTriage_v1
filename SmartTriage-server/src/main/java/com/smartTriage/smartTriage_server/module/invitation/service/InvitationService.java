@@ -183,11 +183,22 @@ public class InvitationService {
                 .build();
         tokenRepository.save(invitation);
 
-        // Resend email
+        // Resend email — best-effort, exactly like inviteUser. An SMTP
+        // failure must NOT fail the whole operation: the token has already
+        // been reissued, so the admin can share the activation link
+        // manually or resend once SMTP is fixed. Previously this threw,
+        // so resending failed (with a generic 500) whenever SMTP was down,
+        // even though creating the very same invitation succeeds silently.
         String roleName = user.getRole().name().replace("_", " ");
-        emailService.sendInvitationEmail(user.getEmail(), token, roleName, user.getHospital().getName());
-
-        log.info("Invitation resent to {}", user.getEmail());
+        try {
+            emailService.sendInvitationEmail(user.getEmail(), token, roleName, user.getHospital().getName());
+            log.info("Invitation resent to {}", user.getEmail());
+        } catch (Exception emailErr) {
+            log.warn("Resent invitation email FAILED for {} (role {}): {}. Token reissued; "
+                    + "admin can share the activation link manually or fix SMTP "
+                    + "(SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM).",
+                    user.getEmail(), user.getRole(), emailErr.getMessage());
+        }
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.security;
 
+import com.smartTriage.smartTriage_server.common.enums.AccountStatus;
 import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
@@ -195,8 +196,16 @@ public class UserAdminAuthz {
             User target = userRepository.findById(targetUserId).orElse(null);
             if (target == null) return false;
 
-            // No one can manage a SUPER_ADMIN through the API.
-            if (target.getRole() == Role.SUPER_ADMIN) return false;
+            // An ACTIVE SUPER_ADMIN cannot be managed through the API —
+            // protective, so no one deactivates another super-admin. But a
+            // SUPER_ADMIN whose invitation is still PENDING may be resent or
+            // cancelled by another SUPER_ADMIN; those invitation-lifecycle
+            // actions must not be permanently blocked (the reason resending
+            // or cancelling a pending super-admin invite used to fail).
+            if (target.getRole() == Role.SUPER_ADMIN) {
+                return caller.getRole() == Role.SUPER_ADMIN
+                        && target.getAccountStatus() == AccountStatus.PENDING_ACTIVATION;
+            }
 
             if (caller.getRole() == Role.SUPER_ADMIN) {
                 // SA can manage any non-SA user.
