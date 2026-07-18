@@ -160,6 +160,8 @@ export interface BreakTheGlassEvent {
   actorName: string | null;
   actorRole: string | null;
   actorHospitalId: string | null;
+  /** Resolved on the patient-scoped access log (which spans hospitals). */
+  actorHospitalName?: string | null;
   reason: string | null;
   priorConsentState: string | null; // NONE | DENIED | WITHDRAWN
   accessedAt: string | null;
@@ -173,6 +175,10 @@ export const governanceApi = {
   getBreakTheGlassEvents: (hospitalId: string, range: GovernanceRange = 'all', page = 0, size = 200) =>
     get<Page<BreakTheGlassEvent>>(
       `/break-the-glass-events/hospital/${enc(hospitalId)}?range=${range}&page=${page}&size=${size}`),
+
+  /** Patient-scoped access log: every break-the-glass access on THIS person, across all hospitals. */
+  getBreakTheGlassEventsForPatient: (patientId: string) =>
+    get<BreakTheGlassEvent[]>(`/break-the-glass-events/patient/${enc(patientId)}`),
 
   acknowledgeBreakTheGlassEvent: (hospitalId: string, eventId: string, note?: string) => {
     const q = note && note.trim() ? `?note=${enc(note.trim())}` : '';

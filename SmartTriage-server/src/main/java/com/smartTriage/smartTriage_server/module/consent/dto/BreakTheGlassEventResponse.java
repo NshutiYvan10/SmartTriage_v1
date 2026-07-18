@@ -29,6 +29,8 @@ public class BreakTheGlassEventResponse {
     private String actorName;
     private String actorRole;
     private UUID actorHospitalId;
+    /** Resolved on the patient-scoped access log (the log spans hospitals). */
+    private String actorHospitalName;
 
     // Forensic facts (immutable).
     private String reason;

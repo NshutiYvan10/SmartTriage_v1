@@ -5,6 +5,9 @@ import com.smartTriage.smartTriage_server.module.consent.dto.BreakTheGlassEventR
 import com.smartTriage.smartTriage_server.module.consent.entity.BreakTheGlassEvent;
 import com.smartTriage.smartTriage_server.module.consent.mapper.BreakTheGlassEventMapper;
 import com.smartTriage.smartTriage_server.module.consent.repository.BreakTheGlassEventRepository;
+import com.smartTriage.smartTriage_server.module.hospital.repository.HospitalRepository;
+import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
+import com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +20,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Governance read + sign-off over break-the-glass emergency overrides (Phase 3). The feed is scoped
@@ -32,6 +39,36 @@ import java.util.UUID;
 public class BreakTheGlassEventService {
 
     private final BreakTheGlassEventRepository repository;
+    private final PatientRepository patientRepository;
+    private final HospitalRepository hospitalRepository;
+
+    /**
+     * Patient-scoped access log: every break-the-glass override on THIS person, across all hospitals,
+     * newest first — the data-subject "accounting of disclosures" view (complements the actor-scoped
+     * governance feed). Resolves the patient's shared identity, then every override recorded against
+     * it. A patient with no cross-hospital identity has no such events → empty list. Read-only;
+     * forensic facts and the review overlay are surfaced as-is.
+     */
+    public List<BreakTheGlassEventResponse> getEventsForPatient(UUID patientId) {
+        Patient patient = patientRepository.findByIdAndIsActiveTrue(patientId)
+                .orElseThrow(() -> new ResourceNotFoundException("Patient", "id", patientId));
+        if (patient.getPersonIdentity() == null) {
+            return List.of();
+        }
+        UUID identityId = patient.getPersonIdentity().getId();
+        Map<UUID, String> hospitalNames = new HashMap<>();
+        return repository.findByPersonIdentityIdAndIsActiveTrueOrderByAccessedAtDesc(identityId).stream()
+                .map(e -> {
+                    BreakTheGlassEventResponse r = BreakTheGlassEventMapper.toResponse(e);
+                    if (e.getActorHospitalId() != null) {
+                        r.setActorHospitalName(hospitalNames.computeIfAbsent(e.getActorHospitalId(),
+                                id -> hospitalRepository.findByIdAndIsActiveTrue(id)
+                                        .map(h -> h.getName()).orElse(null)));
+                    }
+                    return r;
+                })
+                .collect(Collectors.toList());
+    }
 
     /**
      * Paginated governance feed for a hospital. {@code range} is "24h" | "7d" | "30d" | "all"

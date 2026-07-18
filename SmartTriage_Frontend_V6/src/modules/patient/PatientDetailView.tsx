@@ -13,6 +13,7 @@ import { patientApi } from '@/api/patients';
 import { ReplaceCardModal } from './ReplaceCardModal';
 import { EditPatientModal } from './EditPatientModal';
 import { PatientHistoryPanel } from '@/modules/entry/PatientHistoryPanel';
+import { CrossHospitalAccessLog } from './CrossHospitalAccessLog';
 import type { Patient } from '@/types';
 import type { UserRole } from '@/types/roles';
 
@@ -461,6 +462,8 @@ export function PatientDetailView() {
             emptyMessage="No prior visits on record for this patient."
           />
         )}
+
+        {realPatientId && <CrossHospitalAccessLog patientId={realPatientId} />}
       </div>
 
       {showEdit && realPatientId && (

@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -26,6 +27,19 @@ import java.util.UUID;
 public class BreakTheGlassGovernanceController {
 
     private final BreakTheGlassEventService breakTheGlassEventService;
+
+    /**
+     * Patient-scoped access log — every break-the-glass override on THIS patient's cross-hospital
+     * record, across all hospitals (the data-subject "who accessed my record" view). Read-only.
+     * Gated to the patient's treating team (canAccessPatient), not the actor-hospital governance gate.
+     */
+    @GetMapping("/patient/{patientId}")
+    @PreAuthorize("@clinicalAuthz.canAccessPatient(authentication, #patientId)")
+    public ResponseEntity<ApiResponse<List<BreakTheGlassEventResponse>>> getEventsForPatient(
+            @PathVariable UUID patientId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                breakTheGlassEventService.getEventsForPatient(patientId)));
+    }
 
     @GetMapping("/hospital/{hospitalId}")
     @PreAuthorize("@clinicalAuthz.canAuditSafetyOverrides(authentication, #hospitalId)")
