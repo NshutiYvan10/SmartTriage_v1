@@ -158,24 +158,30 @@ private:
   Page page_ = Page::DASH;
   bool pageDirty_ = true, forceRedraw_ = true, waveInit_ = false;
 
-  // ---------- shared chrome ----------
+  // ---------- shared chrome: bottom navigation bar ----------
+  // v3.1.1 — real touch targets. The v3.1.0 "< prev / next >" labels sat
+  // at the extreme bottom edge while the tap zone floated above them, so
+  // users had to press "a bit on top of" the text (and resistive panels
+  // are least accurate at the very edge). Now: a 26 px bar with PREV /
+  // NEXT chips whose HIT zones are the full left/right thirds of the
+  // bottom 34 px — much bigger than the visuals, per touch-target
+  // practice. The current page's name lives in the top banner.
   void drawChrome() {
-    // page dots, bottom-centre
-    int dots = (int)Page::COUNT;
-    int cx = W / 2 - dots * 10 / 2 + 2;
-    for (int i = 0; i < dots; i++) {
-      tft_.fillCircle(cx + i * 12, H - 8, 3, i == (int)page_ ? UI_ACCENT : UI_FAINT);
-    }
-    static const char *names[] = {"VITALS", "WAVES", "TRENDS", "BLOOD PRESSURE", "DEVICE"};
-    tft_.setTextColor(UI_MUTED, UI_BG);
-    tft_.setTextDatum(BC_DATUM);
-    tft_.drawString(names[(int)page_], W / 2, H - 14, 1);
-    // gentle affordance for the bottom-strip tap navigation
-    tft_.setTextDatum(BL_DATUM);
-    tft_.drawString("< prev", 8, H - 6, 1);
-    tft_.setTextDatum(BR_DATUM);
-    tft_.drawString("next >", W - 8, H - 6, 1);
+    int barY = H - 26;
+    tft_.fillRect(0, barY, W, 26, UI_BANNER);
+    tft_.drawFastHLine(0, barY, W, UI_FAINT);
+    tft_.setTextColor(UI_ACCENT, UI_BANNER);
+    tft_.setTextDatum(ML_DATUM);
+    tft_.drawString("<  PREV", 10, barY + 13, 2);
+    tft_.setTextDatum(MR_DATUM);
+    tft_.drawString("NEXT  >", W - 10, barY + 13, 2);
     tft_.setTextDatum(TL_DATUM);
+    // page dots, centred in the bar
+    int dots = (int)Page::COUNT;
+    int cx = W / 2 - dots * 12 / 2 + 6;
+    for (int i = 0; i < dots; i++) {
+      tft_.fillCircle(cx + i * 12, barY + 13, 3, i == (int)page_ ? UI_ACCENT : UI_FAINT);
+    }
   }
 
   // ---------- alarm / sim banner (top strip, every page) ----------
@@ -203,8 +209,8 @@ private:
     if (critical) AlarmManager::describe(s.alarms, text, sizeof(text));
 
     char sig[120];
-    snprintf(sig, sizeof(sig), "%d|%d|%d|%d|%s|%s",
-             kind, (critical && flash) ? 1 : 0, silenced ? 1 : 0, minute, link, text);
+    snprintf(sig, sizeof(sig), "%d|%d|%d|%d|%d|%s|%s",
+             kind, (critical && flash) ? 1 : 0, silenced ? 1 : 0, minute, (int)page_, link, text);
     if (!forceRedraw_ && strcmp(sig, bannerSig_) == 0) return;
     strlcpy(bannerSig_, sig, sizeof(bannerSig_));
 
@@ -229,6 +235,11 @@ private:
       tft_.setTextColor(UI_ACCENT, UI_BANNER);
       tft_.setTextDatum(ML_DATUM);
       tft_.drawString("SMARTTRIAGE MONITOR", 6, BANNER_H / 2, 2);
+      // current page name, centred (moved here from the bottom strip)
+      static const char *names[] = {"VITALS", "WAVES", "TRENDS", "BLOOD PRESSURE", "DEVICE"};
+      tft_.setTextColor(UI_INK, UI_BANNER);
+      tft_.setTextDatum(MC_DATUM);
+      tft_.drawString(names[(int)page_], W / 2, BANNER_H / 2, 2);
       char right[44];
       if (minute >= 0) snprintf(right, sizeof(right), "%02d:%02d  %s", minute / 100, minute % 100, link);
       else             snprintf(right, sizeof(right), "--:--  %s", link);
@@ -274,7 +285,7 @@ private:
   // =====================================================================
   void drawDashboard(const MonitorState &s) {
     int top = BANNER_H + 4;
-    int tileW = (W - 18) / 2, tileH = (H - top - 96) / 2;
+    int tileW = (W - 18) / 2, tileH = (H - top - 104) / 2;
     struct Tile { const char *label; const char *unit; };
 
     if (forceRedraw_) {
@@ -289,7 +300,7 @@ private:
         tft_.setTextDatum(TL_DATUM);
       }
       int by = top + 2 * (tileH + 6);
-      tft_.drawRoundRect(6, by, W - 12, H - by - 26, 8, UI_FAINT);
+      tft_.drawRoundRect(6, by, W - 12, H - by - 42, 8, UI_FAINT);
       tft_.setTextColor(UI_MUTED, UI_BG);
       tft_.drawString("BP (last reading)", 16, by + 6, 2);
     }
@@ -337,7 +348,7 @@ private:
     char chips[64];
     snprintf(chips, sizeof(chips), "SPO2:%s  TEMP:%s  ECG:%s  CUFF:%s",
              chanTxt(s.chSpo2), chanTxt(s.chTemp), chanTxt(s.chEcg), chanTxt(s.chBp));
-    cell(6, 6, H - 24, W - 12, 12, chips, UI_MUTED, 1);
+    cell(6, 6, H - 40, W - 12, 12, chips, UI_MUTED, 1);
   }
 
   static const char *chanTxt(Chan c) {
@@ -359,12 +370,12 @@ private:
     int top = BANNER_H + 2;
     int numW = 96;                        // numeric column on the right
     int plotW = W - numW - 4;
-    int ecgH = (H - top - 20) * 3 / 5;
-    int plethH = (H - top - 20) - ecgH - 4;
+    int ecgH = (H - top - 32) * 3 / 5;
+    int plethH = (H - top - 32) - ecgH - 4;
     int ecgY = top, plethY = top + ecgH + 4;
 
     if (!waveInit_) {
-      tft_.fillRect(0, top, plotW, H - top - 16, UI_BG);
+      tft_.fillRect(0, top, plotW, H - top - 28, UI_BG);
       tft_.drawRect(0, ecgY, plotW, ecgH, UI_FAINT);
       tft_.drawRect(0, plethY, plotW, plethH, UI_FAINT);
       tft_.setTextColor(UI_GOOD, UI_BG);   tft_.drawString("ECG  (Lead II)", 6, ecgY + 3, 1);
@@ -428,7 +439,7 @@ private:
   void drawTrends(const MonitorState &s) {
     int top = BANNER_H + 4;
     int chartW = W * 3 / 5 - 10;
-    int chartH = (H - top - 24) / 4 - 4;
+    int chartH = (H - top - 34) / 4 - 4;
 
     struct Row { const char *label; const TrendRing *r; uint16_t color; };
     Row rows[4] = {
@@ -522,7 +533,7 @@ private:
   void drawBpPage(const MonitorState &s) {
     int top = BANNER_H + 6;
     btnW_ = 200; btnH_ = 54;
-    btnX_ = W / 2 - btnW_ / 2; btnY_ = H - btnH_ - 30;
+    btnX_ = W / 2 - btnW_ / 2; btnY_ = H - btnH_ - 36;
 
     if (forceRedraw_) {
       tft_.setTextColor(UI_MUTED, UI_BG);
@@ -631,28 +642,25 @@ private:
     row(9, s.clockSynced ? "NTP synced (UTC)" : "NOT SYNCED", s.clockSynced ? UI_GOOD : UI_WARN);
 
     // simulation toggle — repainted only when its state changes
-    simBtnY_ = y + 8;
+    simBtnY_ = y + 4;
     int simState = s.simulation ? 1 : 0;
     if (forceRedraw_ || simState != lastSimBtn_) {
       lastSimBtn_ = simState;
       uint16_t sc = s.simulation ? TFT_ORANGE : UI_FAINT;
-      tft_.fillRoundRect(10, simBtnY_, 220, 40, 8, sc);
+      tft_.fillRoundRect(10, simBtnY_, 220, 32, 8, sc);
       tft_.setTextColor(s.simulation ? TFT_BLACK : UI_INK, sc);
       tft_.setTextDatum(MC_DATUM);
-      tft_.drawString(s.simulation ? "SIMULATION: ON" : "SIMULATION: OFF", 120, simBtnY_ + 20, 2);
+      tft_.drawString(s.simulation ? "SIMULATION: ON" : "SIMULATION: OFF", 120, simBtnY_ + 16, 2);
       tft_.setTextDatum(TL_DATUM);
     }
 
     // touch-calibration button — static, drawn on page entry
     if (forceRedraw_) {
-      tft_.fillRoundRect(240, simBtnY_, 220, 40, 8, UI_ACCENT);
+      tft_.fillRoundRect(240, simBtnY_, 220, 32, 8, UI_ACCENT);
       tft_.setTextColor(TFT_WHITE, UI_ACCENT);
       tft_.setTextDatum(MC_DATUM);
-      tft_.drawString("CALIBRATE TOUCH", 350, simBtnY_ + 20, 2);
+      tft_.drawString(calFromNvs_ ? "CALIBRATE TOUCH" : "CALIBRATE TOUCH !", 350, simBtnY_ + 16, 2);
       tft_.setTextDatum(TL_DATUM);
-      tft_.setTextColor(UI_MUTED, UI_BG);
-      tft_.drawString(calFromNvs_ ? "touch cal: stored on device" : "touch cal: factory default — please calibrate",
-                      10, simBtnY_ + 48, 1);
     }
   }
   int lastSimBtn_ = -1;
@@ -775,7 +783,7 @@ private:
         return true;
       }
     }
-    if (page_ == Page::DEVICE && simBtnY_ > 0 && y >= simBtnY_ && y <= simBtnY_ + 40) {
+    if (page_ == Page::DEVICE && simBtnY_ > 0 && y >= simBtnY_ && y <= simBtnY_ + 32) {
       if (x >= 10 && x <= 230) {                 // simulation toggle
         if (stateLock()) {
           g_state.simulation = !g_state.simulation;
@@ -808,9 +816,13 @@ private:
       bannerSig_[0] = '\0';   // force banner repaint with SILENCED label
       return;
     }
-    // bottom strip → tap left/right half jumps a page
-    if (y > H - 22) {
-      flipPage(x > W / 2 ? +1 : -1);
+    // bottom navigation bar → generous hit zones: the full left/right
+    // thirds of the bottom 34 px (visuals are 26 px; the extra headroom
+    // absorbs the "I pressed slightly above the button" reality of
+    // resistive edges). Middle third (the dots) is deliberately inert.
+    if (y >= (uint16_t)(H - 34)) {
+      if (x < (uint16_t)(W / 3))     { flipPage(-1); return; }
+      if (x > (uint16_t)(2 * W / 3)) { flipPage(+1); return; }
       return;
     }
   }

@@ -353,10 +353,13 @@ private:
       for (int i = BP_HISTORY_SIZE - 1; i > 0; i--) g_state.bpHistory[i] = g_state.bpHistory[i - 1];
       g_state.bpHistory[0] = g_state.bpLast;
       if (g_state.bpHistoryCount < BP_HISTORY_SIZE) g_state.bpHistoryCount++;
-      g_state.bpPhase = BpPhase::DONE;
-      g_state.bpProgress = 100;
       stateUnlock();
     }
+    // Route DONE through setPhase so the serial trail shows the cycle
+    // completing — the sim path previously set DONE silently, which read
+    // as "stuck in MEASURING" in a captured log.
+    setPhase(BpPhase::DONE, 100);
+    Serial.printf("[bp] SIM result %d/%d (demo numbers - never transmitted)\n", sys, dia);
     digitalWrite(PIN_LED_BP, LOW);
   }
 
