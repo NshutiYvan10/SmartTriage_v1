@@ -97,8 +97,10 @@ static void bpTask(void *) { bp.taskLoop(); }
 // Core 0 — network. Blocking HTTP lives here, away from the samplers.
 static void netTask(void *) { net.taskLoop(); }
 
-// Core 0 — display + touch.
+// Core 0 — display + touch. Watchdog-covered: ui.frame() feeds it per
+// attempt; a hard freeze inside a frame reboots the monitor in 20 s.
 static void uiTask(void *) {
+  esp_task_wdt_add(NULL);
   for (;;) {
     ui.frame();
     vTaskDelay(pdMS_TO_TICKS(UI_FRAME_MS));
@@ -134,13 +136,19 @@ void setup() {
   // it leaves the idle task calling esp_task_wdt_reset() into a watchdog
   // it no longer belongs to — flooding serial with "task not found" ~200x
   // per second (observed live). Reconfiguring the watchdog to stop
-  // watching idle tasks entirely is the clean 3.x approach: no reboots,
-  // no spam, and explicit subscribers could still use it.
+  // watching idle tasks entirely is the clean 3.x approach.
+  //
+  // v3.2.0: the UI task SUBSCRIBES itself (uiTask → esp_task_wdt_add) and
+  // feeds the watchdog once per frame attempt; trigger_panic reboots the
+  // monitor if the UI ever freezes hard (observed twice on real hardware
+  // before the shared-bus ownership fix). A 20 s self-recovery beats a
+  // bricked bedside monitor. The touch-calibration screen unsubscribes
+  // for its (user-paced) duration.
   {
     esp_task_wdt_config_t wdtCfg = {};
-    wdtCfg.timeout_ms = 30000;
+    wdtCfg.timeout_ms = 20000;
     wdtCfg.idle_core_mask = 0;      // watch no idle tasks
-    wdtCfg.trigger_panic = false;
+    wdtCfg.trigger_panic = true;    // frozen UI → reboot, not a brick
     esp_task_wdt_reconfigure(&wdtCfg);
   }
 

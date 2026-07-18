@@ -18,7 +18,7 @@
 #pragma once
 
 // ======================== IDENTITY / NETWORK =========================
-#define FIRMWARE_VERSION   "s3-3.1.5"
+#define FIRMWARE_VERSION   "s3-3.2.0"
 
 #define WIFI_SSID          "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD      "YOUR_WIFI_PASSWORD"
@@ -205,12 +205,22 @@
 // Fixed-ratio oscillometric identification (industry-standard ratios)
 #define BP_SYS_RATIO 0.55f
 #define BP_DIA_RATIO 0.75f
-// Pressure sensor transfer: mmHg = (raw/16383)*300*BP_PRES_SCALE + offset.
-// Offset is auto-zeroed at boot (cuff open to air). BP_PRES_SCALE must be
-// validated against a reference gauge — until then every result carries
-// the UNCALIBRATED flag on screen.
-#define BP_PRES_SCALE 1.00f
+// Pressure ADC transfer (v3.2.0 — HX710-family, 24-bit, two-wire, NO CS):
+//   mmHg = (raw24 - zeroRaw at boot) / BP_COUNTS_PER_MMHG
+// The default below is the NOMINAL sensitivity of the common
+// MPS20N0040D-bridge + HX710 cuff module. It MUST be validated against a
+// reference sphygmomanometer: if our reading is consistently too HIGH,
+// increase this number proportionally; too LOW, decrease it. Until
+// validated every result carries the UNCALIBRATED flag on screen.
+#define BP_COUNTS_PER_MMHG 4600.0f
 #define BP_HISTORY_SIZE 8
+
+// These must match TFT_eSPI's User_Setup.h — used by the measurement
+// cycle's bit-banged touch poll (the screen's SPI is silenced during a
+// measurement, so CANCEL is read straight from the touch chip).
+#define SHARED_PIN_MOSI     11
+#define SHARED_PIN_MISO     13
+#define SHARED_PIN_TOUCH_CS  5
 
 // ======================== TRENDS =====================================
 #define TREND_POINTS       120     // 120 points × 5 s = 10 minutes per screen

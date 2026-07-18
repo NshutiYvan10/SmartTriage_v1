@@ -7,22 +7,36 @@
  *   - BP_HARD_ABORT_MMHG or any timeout/stall/sensor-fault → immediate
  *     abort; EVERY exit path runs finishSafe() = motor stop + full deflate.
  *   - The whole cycle is bounded by BP_MEASURE_TIMEOUT_MS.
+ *   - A running cycle is always cancellable: on-screen button (sim) and a
+ *     press-and-hold read straight from the touch chip (real cycle).
  *
  * MEASUREMENT (fixed-ratio oscillometric, the industry-standard method):
- *   controlled deflation ~3 mmHg/s while sampling cuff pressure at 50 Hz;
- *   oscillation = pressure − slow baseline; its smoothed envelope peaks at
- *   MAP; systolic/diastolic are where the envelope crosses 55%/75% of the
- *   peak on the high-/low-pressure side.
+ *   controlled deflation ~3 mmHg/s while sampling cuff pressure at the
+ *   ADC's 40 SPS; oscillation = pressure − slow baseline; its smoothed
+ *   envelope peaks at MAP; systolic/diastolic are where the envelope
+ *   crosses 55%/75% of the peak on the high-/low-pressure side.
  *
- * CALIBRATION: the pressure zero-point is auto-zeroed at boot (cuff open).
- * The SCALE (BP_PRES_SCALE) must be validated against a reference gauge —
- * until then results carry bpCalibrated=false and the UI shows UNCALIBRATED.
+ * BUS OWNERSHIP (v3.2.0 — the hard-won part):
+ *   The pressure ADC shares its clock with the display/touch SPI and has
+ *   NO chip-select (see cuffadc.h). Interleaving pressure reads with UI
+ *   drawing desynced the ADC (garbage readings) and froze the UI twice on
+ *   real hardware. So a real measurement takes g_spiBusMutex ONCE and
+ *   owns the whole shared bus for the duration: the UI freezes on a
+ *   pre-drawn "display paused" screen and resumes when the cuff releases.
+ *   CANCEL during that window is a press-and-hold, polled by THIS task
+ *   via a bit-banged touch read (each poll desyncs the ADC; we resync).
+ *
+ * CALIBRATION: the zero point auto-zeroes at boot (cuff open to air).
+ * The SCALE (BP_COUNTS_PER_MMHG) must be validated against a reference
+ * sphygmomanometer — until then results carry bpCalibrated=false and the
+ * UI shows UNCALIBRATED.
  */
 #pragma once
 #include <Arduino.h>
-#include "soc/gpio_struct.h"   // GPIO output-matrix routing save/restore (shared clock pin)
+#include "soc/gpio_struct.h"   // GPIO output-matrix routing save/restore (shared pins)
 #include "config.h"
 #include "state.h"
+#include "cuffadc.h"
 
 class BpModule {
 public:
@@ -31,7 +45,7 @@ public:
     pinMode(PIN_PRES_MISO, INPUT);
     digitalWrite(PIN_PRES_CS, HIGH);
     // PIN_PRES_SCK deliberately NOT configured here: it belongs to the
-    // display's SPI peripheral; readPressureMmHg() borrows and returns it.
+    // display's SPI peripheral; CuffAdcPinGuard borrows and returns it.
 
     pinMode(PIN_MOTOR_IN1, OUTPUT);
     pinMode(PIN_MOTOR_IN2, OUTPUT);
@@ -61,57 +75,51 @@ public:
   }
 
 private:
-  // ================= pressure sensor =================
-  // GPIO 12 is SHARED with the display's SPI clock (fixed wiring — the
-  // sensor is soldered in). Sharing a clock is legitimate SPI bus design:
-  // the display ignores edges while TFT_CS is high. Two things make it
-  // safe in software:
-  //   1. g_spiBusMutex — the UI is never mid-draw while we clock the
-  //      sensor (and we never clock while the UI owns the bus);
-  //   2. the ESP32 routes pin 12 to the SPI peripheral through its GPIO
-  //      output matrix, where digitalWrite has no effect — so we save
-  //      the pin's matrix routing, take the pin as plain GPIO for the
-  //      ~70 µs read, then restore the routing byte-for-byte. The SPI
-  //      peripheral gets its clock pin back exactly as it left it.
-  float readPressureMmHg() {
-    if (xSemaphoreTake(g_spiBusMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
-      return lastPressure_;               // UI hogged the bus — keep last sample
-    }
-    uint32_t savedRouting = GPIO.func_out_sel_cfg[PIN_PRES_SCK].val;
-    pinMode(PIN_PRES_SCK, OUTPUT);        // detach from SPI matrix → plain GPIO
-    digitalWrite(PIN_PRES_SCK, LOW);
+  // ================= pressure conversion =================
+  int32_t zeroRaw_ = 0;
+  bool sensorPresent_ = false;
+  float lastPressure_ = 0;
 
-    uint16_t raw = 0;
-    digitalWrite(PIN_PRES_CS, LOW);
-    delayMicroseconds(10);
-    for (int i = 15; i >= 0; i--) {
-      digitalWrite(PIN_PRES_SCK, LOW);  delayMicroseconds(2);
-      digitalWrite(PIN_PRES_SCK, HIGH); delayMicroseconds(2);
-      if (digitalRead(PIN_PRES_MISO)) raw |= (1 << i);
-    }
-    digitalWrite(PIN_PRES_CS, HIGH);
-    digitalWrite(PIN_PRES_SCK, LOW);      // leave the line idle-low (SPI mode 0)
+  float countsToMmHg(int32_t raw) {
+    return (float)((double)(raw - zeroRaw_) / BP_COUNTS_PER_MMHG);
+  }
 
-    GPIO.func_out_sel_cfg[PIN_PRES_SCK].val = savedRouting;   // hand pin 12 back to SPI
-    xSemaphoreGive(g_spiBusMutex);
-
-    lastPressure_ = (raw / 16383.0f) * 300.0f * BP_PRES_SCALE - zeroOffset_;
-    return lastPressure_;
+  // One fresh sample. Caller owns the bus + pin guard. false = not ready
+  // within capMs (sensor silent or conversion still running).
+  bool readSample(float &mmHg, uint32_t capMs) {
+    if (!cuffAdcWaitReady(capMs)) return false;
+    mmHg = countsToMmHg(cuffAdcClockOut24());
+    lastPressure_ = mmHg;
+    return true;
   }
 
   void zeroCalibrate() {
-    // Cuff open to air at boot → whatever we read IS zero.
-    float sum = 0;
-    for (int i = 0; i < 20; i++) { sum += readPressureMmHg() + zeroOffset_; delay(10); }
-    zeroOffset_ = sum / 20.0f;
-    bool fault = fabsf(zeroOffset_) > 150.0f;   // sensor missing/shorted
-    // Raw ~0 or ~300 (all-zeros / all-ones on the data line) also means
-    // nothing coherent is answering on the pressure ADC.
-    Serial.printf("[bp] zero-cal: raw %.1f mmHg -> offset %.1f | %s\n",
-                  zeroOffset_, zeroOffset_,
-                  fault ? "FAULT (implausible - check pressure ADC wiring)" : "ok");
+    // Runs at boot BEFORE the UI task exists (deliberate .ino ordering),
+    // so the bus is quiet; the mutex take is form, not necessity.
+    xSemaphoreTake(g_spiBusMutex, portMAX_DELAY);
+    int got = 0;
+    int64_t sum = 0;
+    {
+      CuffAdcPinGuard guard;
+      cuffAdcResetSync();
+      if (cuffAdcWaitReady(700)) {                 // first conv after reset is slow
+        for (int i = 0; i < 12; i++) {
+          if (!cuffAdcWaitReady(150)) continue;
+          sum += cuffAdcClockOut24();
+          got++;
+        }
+      }
+    }
+    xSemaphoreGive(g_spiBusMutex);
+
+    sensorPresent_ = got >= 6;
+    if (sensorPresent_) zeroRaw_ = (int32_t)(sum / got);
+    Serial.printf("[bp] zero-cal: %s (samples %d, zero raw %ld)\n",
+                  sensorPresent_ ? "ok - pressure ADC answering"
+                                 : "FAULT - pressure ADC not responding (DOUT never ready)",
+                  got, (long)zeroRaw_);
     if (stateLock()) {
-      g_state.chBp = fault ? Chan::FAULT : Chan::OK;
+      g_state.chBp = sensorPresent_ ? Chan::OK : Chan::FAULT;
       stateUnlock();
     }
   }
@@ -121,37 +129,6 @@ private:
   void motorDeflate(uint8_t pwm) { digitalWrite(PIN_MOTOR_IN1, LOW); digitalWrite(PIN_MOTOR_IN2, HIGH); ledcWrite(PIN_MOTOR_ENA, pwm); }
   void motorStop()    { digitalWrite(PIN_MOTOR_IN1, LOW);  digitalWrite(PIN_MOTOR_IN2, LOW);  ledcWrite(PIN_MOTOR_ENA, 0); }
 
-  // EVERY cycle exit funnels through here: stop, then actively deflate
-  // until the cuff is empty (or a hard time cap — then stop regardless).
-  //
-  // v3.1.5 hardening (from a live incident): with a FAULTED pressure
-  // sensor the old 15 s full-power deflate could never see "empty", so
-  // it thrashed the motor against garbage readings for the full 15 s —
-  // and the electrical noise from that froze the UI. With nothing
-  // trustworthy to servo on, deflate briefly and stop; likewise bail
-  // out if the reading simply stops changing (sensor dead/stuck).
-  void finishSafe() {
-    motorStop();
-    float p = readPressureMmHg();
-    bool sensorSane = p > -50.0f && p < 260.0f && g_state.chBp != Chan::FAULT;
-    uint32_t cap = sensorSane ? 15000 : 2500;
-    uint32_t start = millis();
-    float lastP = p;
-    uint32_t lastChange = millis();
-    motorDeflate(255);
-    while (millis() - start < cap) {
-      p = readPressureMmHg();
-      if (p < 8.0f) break;
-      if (fabsf(p - lastP) > 1.0f) { lastP = p; lastChange = millis(); }
-      else if (millis() - lastChange > 3000) break;   // reading frozen — stop thrashing
-      vTaskDelay(pdMS_TO_TICKS(100));
-    }
-    motorStop();
-    Serial.printf("[bp] finishSafe done (cuff %.1f mmHg, sensor %s)\n",
-                  p, sensorSane ? "ok" : "SUSPECT");
-    digitalWrite(PIN_LED_BP, LOW);
-  }
-
   void setPhase(BpPhase p, uint8_t progress, const char *err = nullptr) {
     // Serial trail of the measurement cycle — "the button does nothing"
     // and "the cycle failed at step X" look identical on screen from a
@@ -159,7 +136,7 @@ private:
     if (p != lastLoggedPhase_) {
       lastLoggedPhase_ = p;
       Serial.printf("[bp] phase=%d%s%s (cuff %.1f mmHg)\n", (int)p,
-                    err ? " err=" : "", err ? err : "", g_state.cuffPressure);
+                    err ? " err=" : "", err ? err : "", lastPressure_);
     }
     if (!stateLock(50)) return;
     g_state.bpPhase = p;
@@ -169,13 +146,12 @@ private:
     stateUnlock();
   }
   BpPhase lastLoggedPhase_ = BpPhase::IDLE;
+
   void publishPressure(float mmHg) {
     if (stateLock(5)) { g_state.cuffPressure = mmHg; stateUnlock(); }
   }
 
-  // Reads-and-clears the UI's cancel request. Checked in every loop of
-  // the running cycle: a cuff squeezing a patient's arm must always be
-  // stoppable from the screen (the busy button becomes CANCEL).
+  // Reads-and-clears the UI's cancel request (sim cycle / pre-ownership).
   bool cancelRequested() {
     bool c = false;
     if (stateLock(10)) {
@@ -186,21 +162,85 @@ private:
     return c;
   }
 
-  // ================= the real measurement =================
+  // ================= in-cycle touch CANCEL (bit-banged) =================
+  // While the cycle owns the bus the UI cannot poll touch, so we ask the
+  // touch chip directly: clock it by hand on the shared pins and read the
+  // pressure electrodes. Any firm press counts as CANCEL — a patient in
+  // distress should not have to find a button. Each poll feeds foreign
+  // clocks to the cuff ADC; the caller must cuffAdcResetSync() after.
+  uint16_t xptTransfer(uint8_t cmd) {
+    uint16_t v = 0;
+    for (int i = 7; i >= 0; i--) {
+      digitalWrite(SHARED_PIN_MOSI, (cmd >> i) & 1);
+      digitalWrite(PIN_PRES_SCK, HIGH); delayMicroseconds(2);
+      digitalWrite(PIN_PRES_SCK, LOW);  delayMicroseconds(2);
+    }
+    digitalWrite(SHARED_PIN_MOSI, LOW);
+    for (int i = 0; i < 16; i++) {
+      digitalWrite(PIN_PRES_SCK, HIGH); delayMicroseconds(2);
+      v = (uint16_t)((v << 1) | (digitalRead(SHARED_PIN_MISO) ? 1 : 0));
+      digitalWrite(PIN_PRES_SCK, LOW);  delayMicroseconds(2);
+    }
+    return (uint16_t)((v >> 4) & 0x0FFF);      // 12-bit result
+  }
+
+  bool touchCancelPoll() {
+    uint32_t savedMosi = GPIO.func_out_sel_cfg[SHARED_PIN_MOSI].val;
+    pinMode(SHARED_PIN_MOSI, OUTPUT);
+    digitalWrite(SHARED_PIN_TOUCH_CS, LOW);
+    uint16_t z1 = xptTransfer(0xB1);           // pressure electrode 1
+    uint16_t z2 = xptTransfer(0xC1);           // pressure electrode 2
+    xptTransfer(0xD0);                         // power down between polls
+    digitalWrite(SHARED_PIN_TOUCH_CS, HIGH);
+    GPIO.func_out_sel_cfg[SHARED_PIN_MOSI].val = savedMosi;
+    int z = (int)z1 + 4095 - (int)z2;
+    return z > 900;                            // firm press anywhere
+  }
+
+  // ================= the real measurement (bus OWNED throughout) ========
   void runRealCycle() {
     digitalWrite(PIN_LED_BP, HIGH);
-    uint32_t cycleStart = millis();
-    cancelRequested();                                      // clear any stale request
+    cancelRequested();                                      // clear stale
+    lastPressure_ = 0;
 
-    // ---- Phase 0: sanity ----
+    if (!sensorPresent_) {
+      setPhase(BpPhase::ERROR, 0, "Pressure sensor not detected");
+      digitalWrite(PIN_LED_BP, LOW);
+      return;
+    }
+
+    // Let the UI paint the "display paused" measuring screen, then take
+    // the whole shared bus for the duration (see file header).
     setPhase(BpPhase::ZEROING, 2);
-    float p0 = readPressureMmHg();
-    // Always report WHAT the sensor said — "sensor fault" without the
-    // number made a live failure undiagnosable from the log.
-    Serial.printf("[bp] sanity: cuff reads %.1f mmHg (zero offset %.1f)\n", p0, zeroOffset_);
+    vTaskDelay(pdMS_TO_TICKS(450));
+    if (xSemaphoreTake(g_spiBusMutex, pdMS_TO_TICKS(3000)) != pdTRUE) {
+      setPhase(BpPhase::ERROR, 0, "Screen busy - try again");
+      digitalWrite(PIN_LED_BP, LOW);
+      return;
+    }
+    {
+      CuffAdcPinGuard guard;
+      runCycleOwned();
+    }
+    xSemaphoreGive(g_spiBusMutex);
+    digitalWrite(PIN_LED_BP, LOW);
+  }
+
+  void runCycleOwned() {
+    uint32_t cycleStart = millis();
+
+    // ---- Phase 0: sync + sanity ----
+    cuffAdcResetSync();
+    float p0;
+    if (!readSample(p0, 700)) {
+      setPhase(BpPhase::ERROR, 0, "Pressure sensor not responding");
+      finishSafe();
+      return;
+    }
+    Serial.printf("[bp] sanity: cuff reads %.1f mmHg (zero raw %ld)\n", p0, (long)zeroRaw_);
     if (p0 > 30.0f || p0 < -30.0f) {
       char msg[40];
-      snprintf(msg, sizeof(msg), "Sensor reads %.0f mmHg - check ADC", p0);
+      snprintf(msg, sizeof(msg), "Cuff not empty? reads %.0f mmHg", p0);
       setPhase(BpPhase::ERROR, 0, msg);
       finishSafe();
       return;
@@ -210,21 +250,20 @@ private:
     setPhase(BpPhase::INFLATING, 5);
     motorInflate();
     uint32_t inflateStart = millis();
-    float lastP = p0;
-    uint32_t lastRiseCheck = millis();
+    float p = p0, lastP = p0;
+    uint32_t lastRiseCheck = millis(), lastCancelPoll = millis();
+    int misses = 0;
 
     for (;;) {
-      vTaskDelay(pdMS_TO_TICKS(BP_SAMPLE_INTERVAL_MS));
-      float p = readPressureMmHg();
+      if (!readSample(p, 120)) {
+        if (++misses >= 10) { setPhase(BpPhase::ERROR, 0, "Pressure sensor stopped"); finishSafe(); return; }
+        continue;
+      }
+      misses = 0;
       publishPressure(p);
-      setPhase(BpPhase::INFLATING, (uint8_t)(5 + 35.0f * min(p / BP_TARGET_INFLATE_MMHG, 1.0f)));
 
       if (p >= BP_HARD_ABORT_MMHG) {                       // hard safety
         setPhase(BpPhase::ERROR, 0, "Overpressure — aborted");
-        finishSafe(); return;
-      }
-      if (cancelRequested()) {
-        setPhase(BpPhase::ERROR, 0, "Cancelled — cuff deflated");
         finishSafe(); return;
       }
       if (p >= BP_TARGET_INFLATE_MMHG) break;               // target reached
@@ -239,6 +278,15 @@ private:
         }
         lastP = p; lastRiseCheck = millis();
       }
+      if (millis() - lastCancelPoll > 1200) {               // press-and-hold cancel
+        lastCancelPoll = millis();
+        bool cancel = touchCancelPoll() || cancelRequested();
+        cuffAdcResetSync();
+        if (cancel) {
+          setPhase(BpPhase::ERROR, 0, "Cancelled — cuff deflated");
+          finishSafe(); return;
+        }
+      }
     }
     motorStop();
     vTaskDelay(pdMS_TO_TICKS(300));                         // let pressure settle
@@ -250,7 +298,12 @@ private:
     static float envA[MAX_POINTS];                          // envelope amplitude
     int points = 0;
 
-    float baseline = readPressureMmHg();
+    cuffAdcResetSync();
+    float baseline;
+    if (!readSample(baseline, 700)) {
+      setPhase(BpPhase::ERROR, 0, "Pressure sensor stopped");
+      finishSafe(); return;
+    }
     float envelope = 0;
     uint8_t pwm = BP_DEFLATE_PWM;
     motorDeflate(pwm);
@@ -259,10 +312,15 @@ private:
     uint32_t lastRateCheck = millis();
     float rateRefP = baseline;
     uint32_t lastRecord = 0;
+    lastCancelPoll = millis();
+    misses = 0;
 
     for (;;) {
-      vTaskDelay(pdMS_TO_TICKS(BP_SAMPLE_INTERVAL_MS));
-      float p = readPressureMmHg();
+      if (!readSample(p, 120)) {
+        if (++misses >= 10) { setPhase(BpPhase::ERROR, 0, "Pressure sensor stopped"); finishSafe(); return; }
+        continue;
+      }
+      misses = 0;
       publishPressure(p);
 
       if (millis() - cycleStart > BP_MEASURE_TIMEOUT_MS) {
@@ -273,9 +331,15 @@ private:
         setPhase(BpPhase::ERROR, 0, "Overpressure — aborted");
         finishSafe(); return;
       }
-      if (cancelRequested()) {
-        setPhase(BpPhase::ERROR, 0, "Cancelled — cuff deflated");
-        finishSafe(); return;
+      if (millis() - lastCancelPoll > 1200) {
+        lastCancelPoll = millis();
+        bool cancel = touchCancelPoll() || cancelRequested();
+        cuffAdcResetSync();
+        if (cancel) {
+          setPhase(BpPhase::ERROR, 0, "Cancelled — cuff deflated");
+          finishSafe(); return;
+        }
+        continue;                                           // resync consumed the slot
       }
 
       // slow baseline tracks the deflation ramp; the residual is the
@@ -338,6 +402,36 @@ private:
       g_state.bpProgress = 100;
       stateUnlock();
     }
+    Serial.printf("[bp] RESULT %d/%d (MAP %d) from %d envelope points\n", sys, dia, map, points);
+  }
+
+  // EVERY cycle exit funnels through here: stop, then actively deflate
+  // until the cuff is empty (or a hard time cap — then stop regardless).
+  // With an unresponsive sensor there is nothing to servo on: deflate
+  // briefly and stop rather than thrash the motor (a 15 s full-power
+  // thrash against garbage readings froze the UI on real hardware).
+  // Caller still owns the bus + pin guard.
+  void finishSafe() {
+    motorStop();
+    cuffAdcResetSync();
+    float p;
+    bool sane = readSample(p, 500);
+    uint32_t cap = sane ? 15000 : 2500;
+    uint32_t start = millis();
+    float lastP = sane ? p : 0;
+    uint32_t lastChange = millis();
+    motorDeflate(255);
+    while (millis() - start < cap) {
+      if (!readSample(p, 120)) { vTaskDelay(pdMS_TO_TICKS(20)); continue; }
+      publishPressure(p);
+      if (p < 8.0f) break;
+      if (fabsf(p - lastP) > 1.0f) { lastP = p; lastChange = millis(); }
+      else if (millis() - lastChange > 3000) break;   // reading frozen — stop thrashing
+    }
+    motorStop();
+    Serial.printf("[bp] finishSafe done (cuff %.1f mmHg, sensor %s)\n",
+                  lastPressure_, sane ? "ok" : "SUSPECT");
+    digitalWrite(PIN_LED_BP, LOW);
   }
 
   bool computeOscillometric(const float *envP, const float *envA, int n,
@@ -419,7 +513,4 @@ private:
     Serial.printf("[bp] SIM result %d/%d (demo numbers - never transmitted)\n", sys, dia);
     digitalWrite(PIN_LED_BP, LOW);
   }
-
-  float zeroOffset_ = 0;
-  float lastPressure_ = 0;
 };

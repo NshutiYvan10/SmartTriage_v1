@@ -39,6 +39,7 @@
 #include <Preferences.h>
 #include <WiFi.h>
 #include <time.h>
+#include "esp_task_wdt.h"
 #include "config.h"
 #include "state.h"
 #include "alarms.h"
@@ -94,6 +95,12 @@ public:
   }
 
   void frame() {
+    // Watchdog heartbeat: a frame ATTEMPT is liveness (during a BP cycle
+    // the measurement task owns the bus and every frame legitimately
+    // skips at the mutex). A task frozen INSIDE a frame stops feeding
+    // and the WDT reboots the monitor — a self-recovering monitor beats
+    // a bricked one at a patient's bedside. (Seen frozen twice live.)
+    esp_task_wdt_reset();
     frameStarts = frameStarts + 1;
     stage = 1;
     // Own the shared SPI wire for the whole frame (drawing + touch read):
@@ -599,7 +606,6 @@ private:
   //  PAGE 4 — blood pressure
   // =====================================================================
   int btnX_, btnY_, btnW_, btnH_;
-  uint8_t lastBpProg_ = 255;
 
   void drawBpPage(const MonitorState &s) {
     int top = BANNER_H + 6;
@@ -623,20 +629,20 @@ private:
     // result / live area
     char t[32];
     if (busy) {
-      snprintf(t, sizeof(t), "%.0f", s.cuffPressure);
-      cell(11, W / 2 - 110, top + 30, 220, 56, t, UI_WARN, 4, 2);
-      cell(12, W / 2 - 110, top + 92, 220, 18, "cuff mmHg", UI_MUTED, 2);
-      const char *phase = s.bpPhase == BpPhase::INFLATING ? "Inflating..."
-                        : s.bpPhase == BpPhase::MEASURING ? "Measuring - hold still"
-                        : "Computing...";
-      cell(13, W / 2 - 130, top + 116, 260, 20, phase, UI_WARN, 2);
-      // progress bar — repaint only on progress change
-      if (forceRedraw_ || s.bpProgress != lastBpProg_) {
-        lastBpProg_ = s.bpProgress;
-        int bw = W - 80;
-        tft_.drawRect(40, top + 146, bw, 14, UI_FAINT);
-        tft_.fillRect(41, top + 147, (bw - 2) * s.bpProgress / 100, 12, UI_WARN);
-      }
+      // During a REAL measurement the BP task owns the whole shared bus
+      // (the pressure ADC shares the display clock and has no CS — see
+      // bp.h), so this screen is drawn ONCE and then freezes until the
+      // cuff releases. Draw honest static guidance, not live numbers
+      // that would sit frozen mid-value. (The sim cycle does update the
+      // number — it never touches the bus.)
+      snprintf(t, sizeof(t), s.simulation ? "%.0f" : "MEASURING", s.cuffPressure);
+      cell(11, W / 2 - 140, top + 30, 280, 56, t, UI_WARN, 4, s.simulation ? 2 : 1);
+      cell(12, W / 2 - 150, top + 92, 300, 18,
+           s.simulation ? "cuff mmHg (simulated)" : "display pauses while measuring",
+           UI_MUTED, 2);
+      cell(13, W / 2 - 150, top + 116, 300, 20,
+           s.simulation ? "Measuring - hold still" : "hold still - press & HOLD screen to stop",
+           UI_WARN, 2);
     } else if (s.bpPhase == BpPhase::ERROR) {
       cell(11, W / 2 - 150, top + 30, 300, 40, "FAILED", UI_CRIT, 4);
       cell(12, W / 2 - 170, top + 84, 340, 18, s.bpError, UI_CRIT, 2);
@@ -751,6 +757,9 @@ private:
   bool calRequested_ = false;
 
   void runTouchCalibration() {
+    // The calibration legitimately blocks for as long as the user takes
+    // to tap the corners — unsubscribe from the watchdog for its duration.
+    esp_task_wdt_delete(NULL);
     tft_.fillScreen(UI_BG);
     tft_.setTextColor(UI_INK, UI_BG);
     tft_.setTextDatum(MC_DATUM);
@@ -814,6 +823,7 @@ private:
     tone(PIN_BUZZER, 1400, 80);
     delay(900);
     pageDirty_ = true;      // repaint the Device page fresh
+    esp_task_wdt_add(NULL); // resume watchdog cover
   }
 
   // =====================================================================
