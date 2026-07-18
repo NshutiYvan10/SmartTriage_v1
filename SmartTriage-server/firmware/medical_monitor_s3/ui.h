@@ -170,7 +170,7 @@ private:
   // therefore read RAW coordinates and do the library's own linear
   // mapping ourselves (same calData semantics), in int32, with the
   // centre-tap trim applied, CLAMPED to the screen — no dead zones.
-  void mapRawToScreen(uint16_t rawX, uint16_t rawY, uint16_t &sx, uint16_t &sy) {
+  void mapRawToScreen(uint16_t rawX, uint16_t rawY, int32_t &xx, int32_t &yy) {
     bool rotate = cal_[4] & 0x01;
     bool invX   = cal_[4] & 0x02;
     bool invY   = cal_[4] & 0x04;
@@ -178,25 +178,51 @@ private:
     int32_t inY = rotate ? rawX : rawY;
     int32_t spanX = (int32_t)cal_[1] - (int32_t)cal_[0]; if (spanX == 0) spanX = 1;
     int32_t spanY = (int32_t)cal_[3] - (int32_t)cal_[2]; if (spanY == 0) spanY = 1;
-    int32_t xx = (inX - (int32_t)cal_[0]) * W / spanX;
-    int32_t yy = (inY - (int32_t)cal_[2]) * H / spanY;
+    xx = (inX - (int32_t)cal_[0]) * W / spanX;
+    yy = (inY - (int32_t)cal_[2]) * H / spanY;
     if (invX) xx = W - xx;
     if (invY) yy = H - yy;
     xx += trim_[0]; yy += trim_[1];
-    sx = (uint16_t)constrain(xx, (int32_t)0, (int32_t)(W - 1));
-    sy = (uint16_t)constrain(yy, (int32_t)0, (int32_t)(H - 1));
   }
 
-  // Bounded touch read: raw-Z pre-gate (caller), then two raw samples
-  // that must agree — a fixed-cost stand-in for TFT_eSPI's unbounded
-  // validTouch settling loop (which wedged this panel; seen live).
+  // Throttled diagnostics: proves (or clears) the electrical-noise theory
+  // in a captured serial log without flooding it.
+  uint32_t lastPhantomLogMs_ = 0;
+  void logPhantom(uint16_t rx, uint16_t ry) {
+    uint32_t now = millis();
+    if (now - lastPhantomLogMs_ < 1000) return;
+    lastPhantomLogMs_ = now;
+    Serial.printf("[touch] phantom rejected (raw %u,%u)\n", rx, ry);
+  }
+
+  // Bounded touch read: raw-Z pre-gate, two raw samples that must agree
+  // (a fixed-cost stand-in for TFT_eSPI's unbounded validTouch loop,
+  // which wedged this panel), then PHANTOM REJECTION (v3.1.4):
+  //
+  // With the cuff module attached, its ADC shares the display/touch
+  // clock wire (GPIO 12) and the bus picks up bursts of electrical
+  // noise. Those bursts read as rail-ish raw values which map far
+  // off-screen — and v3.1.2's unconditional clamp parked them ON A
+  // CORNER, where the bottom-left one is the PREV zone: the monitor
+  // "walked backwards on its own" (observed live). Real fingers
+  // slightly past the panel edge overshoot by a few pixels; garbage
+  // overshoots by hundreds. So: clamp small overshoot (keeps the
+  // bottom bar alive), reject big overshoot and rail raw values, and
+  // require pressure to still be present after the coordinate reads.
   bool readTouch(uint16_t zGate, uint16_t &sx, uint16_t &sy) {
     if (tft_.getTouchRawZ() <= zGate) return false;
     uint16_t rx1, ry1, rx2, ry2;
     tft_.getTouchRaw(&rx1, &ry1);
     tft_.getTouchRaw(&rx2, &ry2);
     if (abs((int)rx1 - (int)rx2) > 40 || abs((int)ry1 - (int)ry2) > 40) return false;
-    mapRawToScreen((uint16_t)((rx1 + rx2) / 2), (uint16_t)((ry1 + ry2) / 2), sx, sy);
+    uint16_t rx = (uint16_t)((rx1 + rx2) / 2), ry = (uint16_t)((ry1 + ry2) / 2);
+    if (rx < 60 || rx > 4030 || ry < 60 || ry > 4030) { logPhantom(rx, ry); return false; }
+    if (tft_.getTouchRawZ() <= zGate) return false;   // pressure gone = burst, not finger
+    int32_t xx, yy;
+    mapRawToScreen(rx, ry, xx, yy);
+    if (xx < -30 || xx > W + 30 || yy < -30 || yy > H + 30) { logPhantom(rx, ry); return false; }
+    sx = (uint16_t)constrain(xx, (int32_t)0, (int32_t)(W - 1));
+    sy = (uint16_t)constrain(yy, (int32_t)0, (int32_t)(H - 1));
     return true;
   }
   int W = 480, H = 320, BANNER_H = 26;
@@ -847,7 +873,14 @@ private:
   }
   bool pressConsumed_ = false;
 
+  uint32_t lastFlipMs_ = 0;
   void flipPage(int step) {
+    // One page per gesture-beat: even if a phantom press slips through
+    // every filter, it can nudge one page at most — never machine-gun
+    // the user from page 4 back to page 1.
+    uint32_t now = millis();
+    if (now - lastFlipMs_ < 400) return;
+    lastFlipMs_ = now;
     int p = ((int)page_ + step + (int)Page::COUNT) % (int)Page::COUNT;
     page_ = (Page)p;
     pageDirty_ = true;
