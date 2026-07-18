@@ -293,17 +293,39 @@ private:
       finishSafe();
       return;
     }
+
+    // PER-CYCLE AUTO-ZERO. The bridge's zero drifted by ~60 mmHg worth
+    // of counts between boots on the battery-fed module (observed live:
+    // boot zeros 1.437M → 1.722M, an empty cuff then "reading" -14),
+    // so a boot-time zero is worthless minutes later. Like commercial
+    // monitors: the cuff is empty at START — capture zero right now.
+    {
+      int64_t sum = 0; int got = 0;
+      for (int i = 0; i < 8; i++) {
+        if (!cuffAdcWaitReady(400)) continue;
+        sum += cuffAdcClockOut24();
+        got++;
+      }
+      if (got < 4) {
+        setPhase(BpPhase::ERROR, 0, "Pressure sensor not responding");
+        finishSafe();
+        return;
+      }
+      int32_t newZero = (int32_t)(sum / got);
+      Serial.printf("[bp] auto-zero: raw %ld (drift %+.1f mmHg since previous zero)\n",
+                    (long)newZero, (float)((double)(newZero - zeroRaw_) / BP_COUNTS_PER_MMHG));
+      zeroRaw_ = newZero;
+    }
     float p0;
     if (!readSample(p0, 700)) {
       setPhase(BpPhase::ERROR, 0, "Pressure sensor not responding");
       finishSafe();
       return;
     }
-    Serial.printf("[bp] sanity: cuff reads %.1f mmHg (zero raw %ld)\n", p0, (long)zeroRaw_);
-    if (p0 > 30.0f || p0 < -30.0f) {
-      char msg[40];
-      snprintf(msg, sizeof(msg), "Cuff not empty? reads %.0f mmHg", p0);
-      setPhase(BpPhase::ERROR, 0, msg);
+    // Post-auto-zero the empty cuff must read ~0 by construction; a big
+    // residual now means the signal itself is unstable, not "not empty".
+    if (fabsf(p0) > 15.0f) {
+      setPhase(BpPhase::ERROR, 0, "Pressure signal unstable - retry");
       finishSafe();
       return;
     }
@@ -365,6 +387,8 @@ private:
       }
     }
     motorStop();                                            // vent opens: passive deflation begins
+    float inflateSecs = (millis() - inflateStart) / 1000.0f;
+    Serial.printf("[bp] inflated to %.0f mmHg in %.1f s\n", p, inflateSecs);
     vTaskDelay(pdMS_TO_TICKS(300));                         // let pressure settle
 
     // ---- Phase 2: PASSIVE deflation + oscillation capture ----
@@ -483,9 +507,15 @@ private:
     Serial.printf("[bp] capture done: %d envelope points in %.0f s, avg bleed %.1f mmHg/s\n",
                   points, captureSecs, avgBleed);
     if (avgBleed > 12.0f) {
-      // vented so fast the envelope can't contain enough pulses — say so
-      // rather than emit a junk number (tighten the bleed screw if present)
-      setPhase(BpPhase::ERROR, 0, "Deflated too fast — tighten valve, retry");
+      // Vented so fast the envelope can't contain enough pulses. The
+      // combination fast-fill + fast-collapse means the air only ever
+      // pressurised the hose stub, not the cuff (kinked / slipped hose —
+      // diagnosed live: 183 mmHg in 3 s, then 30 mmHg/s collapse, while
+      // the user watched the cuff stay flat).
+      bool pneumatic = inflateSecs < 4.0f;
+      setPhase(BpPhase::ERROR, 0,
+               pneumatic ? "Air not reaching cuff — check hose"
+                         : "Deflated too fast — tighten valve, retry");
       finishSafe(); return;
     }
 
