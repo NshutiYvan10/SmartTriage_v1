@@ -122,16 +122,33 @@ private:
   void motorStop()    { digitalWrite(PIN_MOTOR_IN1, LOW);  digitalWrite(PIN_MOTOR_IN2, LOW);  ledcWrite(PIN_MOTOR_ENA, 0); }
 
   // EVERY cycle exit funnels through here: stop, then actively deflate
-  // until the cuff is empty (or 15 s — then stop regardless).
+  // until the cuff is empty (or a hard time cap — then stop regardless).
+  //
+  // v3.1.5 hardening (from a live incident): with a FAULTED pressure
+  // sensor the old 15 s full-power deflate could never see "empty", so
+  // it thrashed the motor against garbage readings for the full 15 s —
+  // and the electrical noise from that froze the UI. With nothing
+  // trustworthy to servo on, deflate briefly and stop; likewise bail
+  // out if the reading simply stops changing (sensor dead/stuck).
   void finishSafe() {
     motorStop();
+    float p = readPressureMmHg();
+    bool sensorSane = p > -50.0f && p < 260.0f && g_state.chBp != Chan::FAULT;
+    uint32_t cap = sensorSane ? 15000 : 2500;
     uint32_t start = millis();
+    float lastP = p;
+    uint32_t lastChange = millis();
     motorDeflate(255);
-    while (millis() - start < 15000) {
-      if (readPressureMmHg() < 8.0f) break;
+    while (millis() - start < cap) {
+      p = readPressureMmHg();
+      if (p < 8.0f) break;
+      if (fabsf(p - lastP) > 1.0f) { lastP = p; lastChange = millis(); }
+      else if (millis() - lastChange > 3000) break;   // reading frozen — stop thrashing
       vTaskDelay(pdMS_TO_TICKS(100));
     }
     motorStop();
+    Serial.printf("[bp] finishSafe done (cuff %.1f mmHg, sensor %s)\n",
+                  p, sensorSane ? "ok" : "SUSPECT");
     digitalWrite(PIN_LED_BP, LOW);
   }
 
@@ -178,8 +195,13 @@ private:
     // ---- Phase 0: sanity ----
     setPhase(BpPhase::ZEROING, 2);
     float p0 = readPressureMmHg();
+    // Always report WHAT the sensor said — "sensor fault" without the
+    // number made a live failure undiagnosable from the log.
+    Serial.printf("[bp] sanity: cuff reads %.1f mmHg (zero offset %.1f)\n", p0, zeroOffset_);
     if (p0 > 30.0f || p0 < -30.0f) {
-      setPhase(BpPhase::ERROR, 0, "Cuff not empty / sensor fault");
+      char msg[40];
+      snprintf(msg, sizeof(msg), "Sensor reads %.0f mmHg - check ADC", p0);
+      setPhase(BpPhase::ERROR, 0, msg);
       finishSafe();
       return;
     }
