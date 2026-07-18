@@ -1440,3 +1440,14 @@ html.dark .hover\:bg-gray-400:hover {
   /* Let the content flow across pages instead of being clipped to one screen. */
   .min-h-full, .min-h-screen { min-height: 0 !important; }
 }
+
+/* ── Modal overlays: center + scroll-safe ────────────────────────────────
+   Every full-screen modal overlay uses `fixed inset-0 flex items-center
+   justify-center`. `align-items: safe center` keeps the dialog centred when
+   it fits, but switches to top-aligned (no clipping) when it is taller than
+   the viewport; paired with overflow-y:auto the user can simply scroll to a
+   long dialog instead of losing its top or its action buttons. */
+.fixed.inset-0.items-center.justify-center {
+  align-items: safe center;
+  overflow-y: auto;
+}

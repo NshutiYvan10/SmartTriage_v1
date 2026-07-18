@@ -162,7 +162,12 @@ function AppContent() {
             background (no second surface) and fills the full height, so the curved
             active sidebar item reads as carving into this surface. Palette +
             typography unchanged. */}
-        <div className="relative z-10 animate-fade-in min-h-full">
+        {/* NOTE: no transform-based animation on this wrapper. `animate-fade-in`
+            leaves a lingering `transform`, which makes it a containing block for
+            `position: fixed` — that trapped every modal inside the scrolled
+            content area (popups appeared far down the page). Page content still
+            animates via its own cards/headers. */}
+        <div className="relative z-10 min-h-full">
           {/* ── Clinical-safety failsafe ──
               Wrap every route in an ErrorBoundary so a thrown error
               during render (e.g. a transient race between auth and
