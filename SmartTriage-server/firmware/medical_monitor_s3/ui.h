@@ -66,6 +66,9 @@ public:
   void begin() {
     tft_.init();
     tft_.setRotation(1);
+    // Hand the BP cycle a way to detach/reattach the display SPI driver
+    // cleanly around its exclusive-bus measurement (see bp.h / state.h).
+    g_tftSpi = &tft_.getSPIinstance();
 
     // Touch calibration: prefer the values captured on THIS panel by the
     // on-device routine (NVS survives reboots and reflashes); fall back

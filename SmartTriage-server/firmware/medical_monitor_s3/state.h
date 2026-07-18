@@ -88,9 +88,17 @@ extern SemaphoreHandle_t g_stateMutex;
 
 // Shared-wire arbitration: GPIO 12 is both the display's SPI clock and
 // the cuff-pressure ADC's bit-bang clock (fixed wiring). The UI holds
-// this mutex for each frame's drawing/touch; the BP module holds it for
-// each ~70 µs pressure read. Nothing else may touch the TFT bus.
+// this mutex for each frame's drawing/touch; a REAL BP measurement holds
+// it for the entire cycle (the ADC has no chip-select — see cuffadc.h).
+// Nothing else may touch the TFT bus.
 extern SemaphoreHandle_t g_spiBusMutex;
+
+// The display's SPI driver instance (set by ui.begin). The BP cycle ends
+// it before bit-banging the shared pins and re-begins it afterwards —
+// driver-level detach/reattach; register-level pin juggling left the SPI
+// peripheral wedged (three UI freezes on real hardware).
+class SPIClass;
+extern SPIClass *g_tftSpi;
 
 inline bool stateLock(uint32_t ms = 20) {
   return xSemaphoreTake(g_stateMutex, pdMS_TO_TICKS(ms)) == pdTRUE;

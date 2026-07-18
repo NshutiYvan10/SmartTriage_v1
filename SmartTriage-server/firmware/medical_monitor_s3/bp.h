@@ -33,7 +33,7 @@
  */
 #pragma once
 #include <Arduino.h>
-#include "soc/gpio_struct.h"   // GPIO output-matrix routing save/restore (shared pins)
+#include <SPI.h>
 #include "config.h"
 #include "state.h"
 #include "cuffadc.h"
@@ -101,8 +101,7 @@ private:
     int64_t sum = 0;
     {
       CuffAdcPinGuard guard;
-      cuffAdcResetSync();
-      if (cuffAdcWaitReady(700)) {                 // first conv after reset is slow
+      if (cuffAdcSyncSettle()) {                   // reset + discard 2 (framing slip)
         for (int i = 0; i < 12; i++) {
           if (!cuffAdcWaitReady(150)) continue;
           sum += cuffAdcClockOut24();
@@ -125,8 +124,13 @@ private:
   }
 
   // ================= motor =================
+  // HARDWARE TRUTH (measured live, v3.2.0 log): driving the H-bridge in
+  // "reverse" ALSO pumps air IN — pressure rose 312→366 mmHg during what
+  // the code believed was active deflation, while the user watched the
+  // cuff fill. There is NO powered deflate on this box: it vents
+  // PASSIVELY through its bleed valve whenever the motor is off (the
+  // cuff emptied as soon as the motor stopped). So: deflation == stop.
   void motorInflate() { digitalWrite(PIN_MOTOR_IN1, HIGH); digitalWrite(PIN_MOTOR_IN2, LOW);  ledcWrite(PIN_MOTOR_ENA, BP_INFLATE_PWM); }
-  void motorDeflate(uint8_t pwm) { digitalWrite(PIN_MOTOR_IN1, LOW); digitalWrite(PIN_MOTOR_IN2, HIGH); ledcWrite(PIN_MOTOR_ENA, pwm); }
   void motorStop()    { digitalWrite(PIN_MOTOR_IN1, LOW);  digitalWrite(PIN_MOTOR_IN2, LOW);  ledcWrite(PIN_MOTOR_ENA, 0); }
 
   void setPhase(BpPhase p, uint8_t progress, const char *err = nullptr) {
@@ -185,14 +189,13 @@ private:
   }
 
   bool touchCancelPoll() {
-    uint32_t savedMosi = GPIO.func_out_sel_cfg[SHARED_PIN_MOSI].val;
-    pinMode(SHARED_PIN_MOSI, OUTPUT);
+    // MOSI is already plain GPIO (the cycle ended the display SPI driver
+    // and CuffAdcPinGuard configured the shared pins).
     digitalWrite(SHARED_PIN_TOUCH_CS, LOW);
     uint16_t z1 = xptTransfer(0xB1);           // pressure electrode 1
     uint16_t z2 = xptTransfer(0xC1);           // pressure electrode 2
     xptTransfer(0xD0);                         // power down between polls
     digitalWrite(SHARED_PIN_TOUCH_CS, HIGH);
-    GPIO.func_out_sel_cfg[SHARED_PIN_MOSI].val = savedMosi;
     int z = (int)z1 + 4095 - (int)z2;
     return z > 900;                            // firm press anywhere
   }
@@ -218,10 +221,17 @@ private:
       digitalWrite(PIN_LED_BP, LOW);
       return;
     }
+    // Shut the display SPI driver down cleanly before bit-banging its
+    // pins, and re-begin it afterwards. The v3.2.0 register-level pin
+    // juggling left the SPI peripheral wedged: the FIRST display/touch
+    // operation after the cycle spun forever (UI freeze, watchdog reboot
+    // — observed live). end()/begin() is the driver-sanctioned hand-off.
+    if (g_tftSpi) g_tftSpi->end();
     {
       CuffAdcPinGuard guard;
       runCycleOwned();
     }
+    if (g_tftSpi) g_tftSpi->begin(PIN_PRES_SCK, SHARED_PIN_MISO, SHARED_PIN_MOSI, -1);
     xSemaphoreGive(g_spiBusMutex);
     digitalWrite(PIN_LED_BP, LOW);
   }
@@ -229,8 +239,15 @@ private:
   void runCycleOwned() {
     uint32_t cycleStart = millis();
 
-    // ---- Phase 0: sync + sanity ----
-    cuffAdcResetSync();
+    // ---- Phase 0: sync + settle + sanity ----
+    // Settle discards the first two conversions: the first-after-reset
+    // sample framing-slipped live (an exactly-doubled reading, 311.6
+    // with an empty cuff) and failed the sanity gate for nothing.
+    if (!cuffAdcSyncSettle()) {
+      setPhase(BpPhase::ERROR, 0, "Pressure sensor not responding");
+      finishSafe();
+      return;
+    }
     float p0;
     if (!readSample(p0, 700)) {
       setPhase(BpPhase::ERROR, 0, "Pressure sensor not responding");
@@ -254,11 +271,20 @@ private:
     uint32_t lastRiseCheck = millis(), lastCancelPoll = millis();
     int misses = 0;
 
+    float prevP = p0;
     for (;;) {
       if (!readSample(p, 120)) {
         if (++misses >= 10) { setPhase(BpPhase::ERROR, 0, "Pressure sensor stopped"); finishSafe(); return; }
         continue;
       }
+      // bit-slip guard: a physically impossible jump between consecutive
+      // samples (25 ms apart) is a framing error, not pressure — resync.
+      if (fabsf(p - prevP) > 250.0f) {
+        cuffAdcSyncSettle();
+        if (++misses >= 10) { setPhase(BpPhase::ERROR, 0, "Pressure sensor unstable"); finishSafe(); return; }
+        continue;
+      }
+      prevP = p;
       misses = 0;
       publishPressure(p);
 
@@ -281,45 +307,58 @@ private:
       if (millis() - lastCancelPoll > 1200) {               // press-and-hold cancel
         lastCancelPoll = millis();
         bool cancel = touchCancelPoll() || cancelRequested();
-        cuffAdcResetSync();
+        cuffAdcSyncSettle();
         if (cancel) {
           setPhase(BpPhase::ERROR, 0, "Cancelled — cuff deflated");
           finishSafe(); return;
         }
       }
     }
-    motorStop();
+    motorStop();                                            // vent opens: passive deflation begins
     vTaskDelay(pdMS_TO_TICKS(300));                         // let pressure settle
 
-    // ---- Phase 2: controlled deflation + oscillation capture ----
+    // ---- Phase 2: PASSIVE deflation + oscillation capture ----
+    // The box vents through its bleed valve with the motor off (measured
+    // live — there is no powered deflate; "reverse" pumps air IN). We
+    // ride the natural bleed rate and merely police it: too slow means a
+    // blocked vent, too fast means too few pulses to analyse.
     setPhase(BpPhase::MEASURING, 40);
     const int MAX_POINTS = 512;
     static float envP[MAX_POINTS];                          // pressure at sample
     static float envA[MAX_POINTS];                          // envelope amplitude
     int points = 0;
 
-    cuffAdcResetSync();
+    if (!cuffAdcSyncSettle()) {
+      setPhase(BpPhase::ERROR, 0, "Pressure sensor stopped");
+      finishSafe(); return;
+    }
     float baseline;
     if (!readSample(baseline, 700)) {
       setPhase(BpPhase::ERROR, 0, "Pressure sensor stopped");
       finishSafe(); return;
     }
     float envelope = 0;
-    uint8_t pwm = BP_DEFLATE_PWM;
-    motorDeflate(pwm);
 
     float startP = baseline;
     uint32_t lastRateCheck = millis();
     float rateRefP = baseline;
+    float bleedRate = 0;                                    // mmHg/s, measured
     uint32_t lastRecord = 0;
     lastCancelPoll = millis();
     misses = 0;
+    prevP = baseline;
 
     for (;;) {
       if (!readSample(p, 120)) {
         if (++misses >= 10) { setPhase(BpPhase::ERROR, 0, "Pressure sensor stopped"); finishSafe(); return; }
         continue;
       }
+      if (fabsf(p - prevP) > 250.0f) {                      // bit-slip guard
+        cuffAdcSyncSettle();
+        if (++misses >= 10) { setPhase(BpPhase::ERROR, 0, "Pressure sensor unstable"); finishSafe(); return; }
+        continue;
+      }
+      prevP = p;
       misses = 0;
       publishPressure(p);
 
@@ -334,12 +373,13 @@ private:
       if (millis() - lastCancelPoll > 1200) {
         lastCancelPoll = millis();
         bool cancel = touchCancelPoll() || cancelRequested();
-        cuffAdcResetSync();
+        cuffAdcSyncSettle();
         if (cancel) {
           setPhase(BpPhase::ERROR, 0, "Cancelled — cuff deflated");
           finishSafe(); return;
         }
-        continue;                                           // resync consumed the slot
+        prevP = p;                                          // resync consumed the slot
+        continue;
       }
 
       // slow baseline tracks the deflation ramp; the residual is the
@@ -360,23 +400,27 @@ private:
           (startP - p) / max(startP - BP_DEFLATE_FLOOR_MMHG, 1.0f), 0.0f, 1.0f));
       setPhase(BpPhase::MEASURING, prog);
 
-      // deflation-rate control toward ~3 mmHg/s
+      // police the natural bleed rate (no actuator to adjust — motor off)
       if (millis() - lastRateCheck >= 1000) {
-        float rate = rateRefP - p;                          // mmHg over the last second
-        if (rate < 0.5f) {
-          // not deflating (valve stuck / pinched hose) — escalate then abort
-          if (pwm >= 250) { setPhase(BpPhase::ERROR, 0, "Deflation failure"); finishSafe(); return; }
-          pwm = min((int)pwm + 40, 255);
+        bleedRate = rateRefP - p;                           // mmHg over the last second
+        if (bleedRate < 0.3f) {
+          setPhase(BpPhase::ERROR, 0, "Cuff not venting — check valve");
+          finishSafe(); return;
         }
-        else if (rate < 2.0f) pwm = min((int)pwm + 10, 255);
-        else if (rate > 4.5f) pwm = max((int)pwm - 10, 20);
-        motorDeflate(pwm);
         rateRefP = p; lastRateCheck = millis();
       }
 
       if (p <= BP_DEFLATE_FLOOR_MMHG) break;                // capture complete
     }
     motorStop();
+    Serial.printf("[bp] capture done: %d envelope points, last bleed rate %.1f mmHg/s\n",
+                  points, bleedRate);
+    if (bleedRate > 12.0f) {
+      // vented so fast the envelope can't contain enough pulses — say so
+      // rather than emit a junk number (tighten the bleed screw if present)
+      setPhase(BpPhase::ERROR, 0, "Deflated too fast — tighten valve, retry");
+      finishSafe(); return;
+    }
 
     // ---- Phase 3: oscillometric identification ----
     setPhase(BpPhase::COMPUTING, 96);
@@ -405,32 +449,25 @@ private:
     Serial.printf("[bp] RESULT %d/%d (MAP %d) from %d envelope points\n", sys, dia, map, points);
   }
 
-  // EVERY cycle exit funnels through here: stop, then actively deflate
-  // until the cuff is empty (or a hard time cap — then stop regardless).
-  // With an unresponsive sensor there is nothing to servo on: deflate
-  // briefly and stop rather than thrash the motor (a 15 s full-power
-  // thrash against garbage readings froze the UI on real hardware).
-  // Caller still owns the bus + pin guard.
+  // EVERY cycle exit funnels through here. The box vents PASSIVELY when
+  // the motor is off (measured live — the "reverse" H-bridge direction
+  // pumps air IN; v3.2.0's active deflate was re-inflating the cuff!),
+  // so safety here means: motor OFF, then simply watch the pressure
+  // fall until the cuff is empty (or a hard time cap). Never drive the
+  // motor from this function. Caller still owns the bus + pin guard.
   void finishSafe() {
     motorStop();
-    cuffAdcResetSync();
-    float p;
-    bool sane = readSample(p, 500);
-    uint32_t cap = sane ? 15000 : 2500;
+    cuffAdcSyncSettle();
+    float p = 0;
     uint32_t start = millis();
-    float lastP = sane ? p : 0;
-    uint32_t lastChange = millis();
-    motorDeflate(255);
-    while (millis() - start < cap) {
-      if (!readSample(p, 120)) { vTaskDelay(pdMS_TO_TICKS(20)); continue; }
+    while (millis() - start < 20000) {
+      if (!readSample(p, 200)) { vTaskDelay(pdMS_TO_TICKS(50)); continue; }
       publishPressure(p);
       if (p < 8.0f) break;
-      if (fabsf(p - lastP) > 1.0f) { lastP = p; lastChange = millis(); }
-      else if (millis() - lastChange > 3000) break;   // reading frozen — stop thrashing
+      vTaskDelay(pdMS_TO_TICKS(100));
     }
-    motorStop();
-    Serial.printf("[bp] finishSafe done (cuff %.1f mmHg, sensor %s)\n",
-                  lastPressure_, sane ? "ok" : "SUSPECT");
+    Serial.printf("[bp] finishSafe done (cuff %.1f mmHg, motor off, passive vent)\n",
+                  lastPressure_);
     digitalWrite(PIN_LED_BP, LOW);
   }
 

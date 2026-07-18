@@ -50,6 +50,7 @@
 MonitorState g_state;
 SemaphoreHandle_t g_stateMutex;
 SemaphoreHandle_t g_spiBusMutex;   // arbitrates the shared GPIO-12 clock (display ↔ cuff ADC)
+SPIClass *g_tftSpi = nullptr;      // display SPI driver; BP cycle end()s/begin()s it (state.h)
 TrendRing g_trendHr, g_trendSpo2, g_trendTemp, g_trendRr;
 volatile int16_t  g_ecgWave[ECG_WAVE_RING] = {0};
 volatile uint16_t g_ecgWaveHead = 0;

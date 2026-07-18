@@ -13,34 +13,38 @@
  *   - DOUT high = conversion in progress; DOUT low = data ready.
  *   - Holding SCK high > 60 µs power-downs the chip; releasing it resets
  *     the conversation — our reliable resync after any bus disturbance.
+ *   - The FIRST sample after a reset is unreliable (observed live: an
+ *     exactly-doubled value = one-bit framing slip). Callers must settle:
+ *     discard two samples after every resync (cuffAdcSyncSettle).
  *   - 25/26/27 clock pulses select the next conversion mode; we always
  *     clock 27 (24 data + 3) → 40 samples/s differential input.
  *
- * PROTOCOL FOR CALLERS (enforced in bp.h):
- *   own g_spiBusMutex for the WHOLE measurement, hold a CuffAdcPinGuard,
- *   cuffAdcResetSync() once (and after any touch poll), then
- *   wait-ready → clock-out per sample. Never interleave display SPI.
+ * BUS PROTOCOL (v3.2.1): the BP cycle SHUTS DOWN the display SPI driver
+ * (SPIClass::end) before touching these pins and re-begins it afterwards
+ * — clean driver-level detach/reattach. The earlier register-level pin
+ * juggling left the SPI peripheral wedged: the first display/touch
+ * operation after the cycle spun forever (three UI freezes on real
+ * hardware; the task watchdog's reboot was the only way out).
  */
 #pragma once
 #include <Arduino.h>
-#include "soc/gpio_struct.h"
 #include "config.h"
 
-// Borrows GPIO 12 (the display SPI clock) as a plain GPIO output for the
-// guard's lifetime, then restores its output-matrix routing byte-for-byte
-// (digitalWrite is a no-op on a matrix-routed pin — see bp.h history).
-// Also asserts the module's CS line if one is wired (harmless if not).
+// Claims the shared-bus pins as plain GPIO for the guard's lifetime.
+// PRECONDITION: the display SPI driver is NOT attached (either not yet
+// begun — boot zero-cal — or explicitly ended by the BP cycle).
 struct CuffAdcPinGuard {
-  uint32_t savedRouting;
   CuffAdcPinGuard() {
-    savedRouting = GPIO.func_out_sel_cfg[PIN_PRES_SCK].val;
-    pinMode(PIN_PRES_SCK, OUTPUT);
+    pinMode(PIN_PRES_SCK, OUTPUT);      // shared clock (display SCLK)
     digitalWrite(PIN_PRES_SCK, LOW);
+    pinMode(SHARED_PIN_MOSI, OUTPUT);   // for the in-cycle touch poll
+    digitalWrite(SHARED_PIN_MOSI, LOW);
+    pinMode(SHARED_PIN_MISO, INPUT);    // touch data out
     digitalWrite(PIN_PRES_CS, LOW);
   }
   ~CuffAdcPinGuard() {
     digitalWrite(PIN_PRES_CS, HIGH);
-    GPIO.func_out_sel_cfg[PIN_PRES_SCK].val = savedRouting;
+    // Pin routing is reclaimed by SPIClass::begin() after the cycle.
   }
 };
 
@@ -84,4 +88,16 @@ inline int32_t cuffAdcClockOut24() {
   interrupts();
   if (v & 0x800000) v -= 0x1000000;   // sign-extend 24-bit
   return v;
+}
+
+// Reset + discard the first two conversions (framing-slip protection —
+// an exactly-doubled sample was observed live from the first-after-reset
+// read). ~150-700 ms depending on the chip's post-reset conversion rate.
+inline bool cuffAdcSyncSettle() {
+  cuffAdcResetSync();
+  for (int i = 0; i < 2; i++) {
+    if (!cuffAdcWaitReady(i == 0 ? 700 : 150)) return false;
+    (void)cuffAdcClockOut24();
+  }
+  return true;
 }
