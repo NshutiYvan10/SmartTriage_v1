@@ -337,7 +337,12 @@ private:
         setPhase(BpPhase::ERROR, 0, "Overpressure — aborted");
         finishSafe(); return;
       }
-      if (p >= BP_TARGET_INFLATE_MMHG) break;               // target reached
+      if (p >= BP_TARGET_INFLATE_MMHG) {                    // target reached —
+        float confirm;                                      // confirm it isn't a
+        if (readSample(confirm, 200)                        // doubled sample
+            && confirm >= BP_TARGET_INFLATE_MMHG - 20.0f) break;
+        continue;
+      }
       if (millis() - inflateStart > BP_INFLATE_TIMEOUT_MS) {
         setPhase(BpPhase::ERROR, 0, "Inflation timeout — check cuff");
         finishSafe(); return;
@@ -385,9 +390,11 @@ private:
     float envelope = 0;
 
     float startP = baseline;
+    uint32_t measureStart = millis();
     uint32_t lastRateCheck = millis();
     float rateRefP = baseline;
     float bleedRate = 0;                                    // mmHg/s, measured
+    int stallWindows = 0;
     uint32_t lastRecord = 0;
     lastCancelPoll = millis();
     misses = 0;
@@ -398,7 +405,13 @@ private:
         if (++misses >= 10) { setPhase(BpPhase::ERROR, 0, "Pressure sensor stopped"); finishSafe(); return; }
         continue;
       }
-      if (fabsf(p - prevP) > 250.0f) {                      // bit-slip guard
+      // Bit-slip guard, measure-phase edition: during passive deflation
+      // pressure only FALLS, a few mmHg/s, oscillating ±5. A jump of
+      // >25 mmHg between consecutive samples is a framing glitch — at
+      // low pressures a DOUBLED sample (66 → "133") slipped under the
+      // old 250 gate, made one rate window read negative, and aborted a
+      // perfectly-venting run with "Cuff not venting" (observed live).
+      if (fabsf(p - prevP) > 25.0f) {
         cuffAdcSyncSettle();
         if (++misses >= 10) { setPhase(BpPhase::ERROR, 0, "Pressure sensor unstable"); finishSafe(); return; }
         continue;
@@ -445,12 +458,18 @@ private:
           (startP - p) / max(startP - BP_DEFLATE_FLOOR_MMHG, 1.0f), 0.0f, 1.0f));
       setPhase(BpPhase::MEASURING, prog);
 
-      // police the natural bleed rate (no actuator to adjust — motor off)
+      // police the natural bleed rate (no actuator to adjust — motor off).
+      // A stall verdict needs THREE consecutive stalled seconds: one
+      // corrupt sample must never abort a healthy run again.
       if (millis() - lastRateCheck >= 1000) {
         bleedRate = rateRefP - p;                           // mmHg over the last second
         if (bleedRate < 0.3f) {
-          setPhase(BpPhase::ERROR, 0, "Cuff not venting — check valve");
-          finishSafe(); return;
+          if (++stallWindows >= 3) {
+            setPhase(BpPhase::ERROR, 0, "Cuff not venting — check valve");
+            finishSafe(); return;
+          }
+        } else {
+          stallWindows = 0;
         }
         rateRefP = p; lastRateCheck = millis();
       }
@@ -458,9 +477,12 @@ private:
       if (p <= BP_DEFLATE_FLOOR_MMHG) break;                // capture complete
     }
     motorStop();
-    Serial.printf("[bp] capture done: %d envelope points, last bleed rate %.1f mmHg/s\n",
-                  points, bleedRate);
-    if (bleedRate > 12.0f) {
+    // Judge "too fast" on the WHOLE capture, not one window.
+    float captureSecs = (millis() - measureStart) / 1000.0f;
+    float avgBleed = captureSecs > 1.0f ? (startP - p) / captureSecs : 0;
+    Serial.printf("[bp] capture done: %d envelope points in %.0f s, avg bleed %.1f mmHg/s\n",
+                  points, captureSecs, avgBleed);
+    if (avgBleed > 12.0f) {
       // vented so fast the envelope can't contain enough pulses — say so
       // rather than emit a junk number (tighten the bleed screw if present)
       setPhase(BpPhase::ERROR, 0, "Deflated too fast — tighten valve, retry");
