@@ -20,10 +20,16 @@ five-page touch UI, on-device alarms, and real transmission into SmartTriage.
 ## Libraries (Arduino Library Manager)
 
 - `TFT_eSPI` — **keep your existing `User_Setup.h` unchanged**: the display is
-  driven exactly like the previously working build (same `init()`, rotation 1,
-  same touch calibration). All value text uses fonts 2 and 4 (the fonts that
-  build already proved); tiny labels use the GLCD font — keep `LOAD_GLCD`,
-  `LOAD_FONT2`, `LOAD_FONT4` enabled (they are by default).
+  driven exactly like the previously working build (same `init()`, rotation 1).
+  All value text uses fonts 2 and 4 (the fonts that build already proved);
+  tiny labels use the GLCD font — keep `LOAD_GLCD`, `LOAD_FONT2`,
+  `LOAD_FONT4` enabled (they are by default).
+
+  v3.1.0 UI: **light clinical theme** (white background, dark-green/amber/red
+  value bands — far more readable on this panel than the 3.0.x black theme),
+  swipe navigation that works **anywhere on the page, both directions,
+  mid-drag** (plus tap the bottom strip: left half = previous, right half =
+  next), and a persistent on-device touch calibration (see Calibration).
 - `SparkFun MAX3010x Pulse and Proximity Sensor Library` — **not** the MAX30100 library; that chip is register-incompatible and was why HR/SpO2 never worked
 - `ArduinoJson` (v7)
 
@@ -49,9 +55,14 @@ On an 8/16 MB S3 board pick a larger partition scheme in the IDE
 - **Temperature**: MAX30205 is a ±0.1 °C contact sensor; `TEMP_SITE_OFFSET_C`
   (default +0.2 °C) compensates skin-site vs core. Validate against a
   reference thermometer and adjust.
-- **Touch**: `TOUCH_CAL` in `config.h` carries the previous build's values.
-  If taps land off-target run TFT_eSPI's `Touch_calibrate` example and paste
-  the five numbers.
+- **Touch** (v3.1.0 — do this FIRST on a new panel): open the **Device**
+  page and press **CALIBRATE TOUCH**, then tap the four corner arrows with
+  a fingernail or stylus. The values apply immediately, persist in flash
+  (they survive reboots and reflashes), and are printed to serial as a
+  ready-to-paste `TOUCH_CAL` line. The compiled-in `TOUCH_CAL` in
+  `config.h` is only the factory fallback — the shipped default is known
+  to be skewed on this panel (touch responded only near one edge, swipes
+  and the START BP button missed), so run the on-device calibration once.
 - **Blood pressure**: zero-point auto-calibrates at every boot (cuff must be
   open to air). The **scale** (`BP_PRES_SCALE`) must be validated once against
   a reference gauge: tee the cuff line into a manual sphygmomanometer, inflate

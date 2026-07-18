@@ -18,7 +18,7 @@
 #pragma once
 
 // ======================== IDENTITY / NETWORK =========================
-#define FIRMWARE_VERSION   "s3-3.0.0"
+#define FIRMWARE_VERSION   "s3-3.1.0"
 
 #define WIFI_SSID          "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD      "YOUR_WIFI_PASSWORD"
@@ -86,9 +86,24 @@
 #define PIN_BUZZER       19
 
 // Touch (TFT pins live in TFT_eSPI's User_Setup.h — the library owns them)
-// Calibration from the previously working build; redo with TFT_eSPI's
-// Touch_calibrate example if touch lands off-target.
+//
+// TOUCH_CAL is only the FACTORY-DEFAULT calibration. The monitor stores
+// its real calibration in flash (NVS): run "CALIBRATE TOUCH" on the
+// Device page once, tap the four corner arrows, and the values persist
+// across reboots + reflashes (NVS survives a sketch upload). The stored
+// values are also printed to serial as a TOUCH_CAL line — paste it here
+// if you ever want the default to match.
+//
+// v3.1.0 note: this default is suspect — its X span (337..1099) covers
+// only ~20% of the XPT2046 ADC range, which matches the observed "only
+// one spot on the right responds" behaviour. Run the on-device
+// calibration; it takes ten seconds and fixes swipe + buttons together.
 #define TOUCH_CAL { 337, 1099, 317, 3355, 7 }
+
+// Gesture tuning
+#define SWIPE_MIN_PX        50    // horizontal travel that flips a page
+#define TOUCH_Z_PRESS      240    // raw pressure to ENTER a touch (idle gate)
+#define TOUCH_Z_TRACK      140    // lighter gate while a finger is tracking
 
 // ======================== SAMPLING CADENCE ===========================
 #define ECG_SAMPLE_INTERVAL_MS   4      // 250 Hz — standard monitor rate

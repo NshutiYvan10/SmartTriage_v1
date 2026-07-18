@@ -1,28 +1,62 @@
 /*
  * ui.h — five-page touch UI on TFT_eSPI.
  *
- * Flicker-free by construction (the previous build did a full
- * fillScreen on nearly every frame):
+ * v3.1.0 — LIGHT CLINICAL THEME + gesture overhaul + stored calibration.
+ *
+ *   Theme: white background, near-black ink, dark-green/amber/red value
+ *   bands. The 3.0.x black theme washed out on this panel; the light
+ *   palette below is picked for RGB565 readability on white (every
+ *   colour here was chosen so text passes contrast on TFT_WHITE).
+ *
+ *   Touch: three fixes that travel together —
+ *     1. Calibration is now STORED IN FLASH (NVS) and set from a
+ *        ten-second on-device routine ("CALIBRATE TOUCH", Device page).
+ *        The compiled-in TOUCH_CAL is only a fallback default; its X
+ *        span covers ~20% of the ADC range, which is exactly why only
+ *        one strip of the panel responded and buttons missed.
+ *     2. Swipes fire MID-DRAG the moment the finger travels SWIPE_MIN_PX,
+ *        in either direction, from anywhere on the page — no waiting for
+ *        release. While a finger is down the touch is tracked every
+ *        frame (idle polling stays at 20 Hz behind the bounded raw-Z
+ *        pre-gate that keeps TFT_eSPI's unbounded validTouch loop from
+ *        starving the watchdog — proven on this hardware).
+ *     3. A quiet click on every page change confirms the gesture.
+ *
+ * Flicker-free by construction (unchanged from 3.0.x):
  *   - numbers render into a small reused sprite and are pushed only
  *     when their text actually changed;
- *   - waveforms scroll with the classic monitor "erase-ahead cursor" —
- *     one column cleared and redrawn per new sample, no full-frame work;
- *   - static chrome (labels, frames) is drawn once per page entry.
- *
- * Layout adapts to tft.width()/height() at runtime, so whatever panel
- * your working User_Setup.h defines (480×320 assumed) renders correctly.
+ *   - waveforms scroll with the classic monitor "erase-ahead cursor";
+ *   - static chrome is drawn once per page entry;
+ *   - banner/buttons/progress repaint only on a real content change.
  *
  * Pages: 1 Dashboard · 2 Waveforms · 3 Trends · 4 Blood Pressure · 5 Device.
- * Navigation: horizontal swipe anywhere, or tap the page dots. The alarm
+ * Navigation: horizontal swipe anywhere (both directions), or tap the
+ * bottom strip (left half = previous, right half = next). The alarm
  * banner overlays every page; tapping it silences the buzzer for 2 min.
  */
 #pragma once
 #include <TFT_eSPI.h>
+#include <Preferences.h>
 #include <WiFi.h>
 #include <time.h>
 #include "config.h"
 #include "state.h"
 #include "alarms.h"
+
+// ---------- light clinical palette (RGB565, tuned for white bg) ----------
+#define UI_BG      TFT_WHITE
+#define UI_INK     0x18E3   // near-black slate — primary text
+#define UI_MUTED   0x632C   // mid grey — labels, secondary text
+#define UI_FAINT   0xC618   // light grey — frames, disabled, inactive dots
+#define UI_GOOD    0x0400   // dark green — in-range values (also ECG trace; LSB=0)
+#define UI_WARN    0xCBC0   // dark amber — warning band (readable on white)
+#define UI_CRIT    0xF800   // red — critical band / alarms
+#define UI_PLETH   0x0333   // deep teal — pleth trace + accent (LSB=1)
+#define UI_ACCENT  0x0333
+#define UI_VIOLET  0x780F   // trends: RESP
+#define UI_BANNER  0xEF5D   // idle banner strip — very light grey
+// NOTE: UI_GOOD and UI_PLETH deliberately differ in bit 0 — drawTrace
+// keys its per-trace "previous y" slot on (color & 1).
 
 enum class Page : uint8_t { DASH = 0, WAVE, TREND, BP, DEVICE, COUNT };
 
@@ -31,12 +65,27 @@ public:
   void begin() {
     tft_.init();
     tft_.setRotation(1);
+
+    // Touch calibration: prefer the values captured on THIS panel by the
+    // on-device routine (NVS survives reboots and reflashes); fall back
+    // to the compiled-in default only when none are stored yet.
     uint16_t cal[5] = TOUCH_CAL;
+    prefs_.begin("touch", false);
+    if (prefs_.getBytesLength("cal") == sizeof(cal)) {
+      prefs_.getBytes("cal", cal, sizeof(cal));
+      calFromNvs_ = true;
+      Serial.printf("[touch] using stored calibration { %u, %u, %u, %u, %u }\n",
+                    cal[0], cal[1], cal[2], cal[3], cal[4]);
+    } else {
+      Serial.println("[touch] no stored calibration — using config.h default. "
+                     "Run CALIBRATE TOUCH on the Device page.");
+    }
     tft_.setTouch(cal);
+
     W = tft_.width(); H = tft_.height();
     BANNER_H = 26;
     val_.setColorDepth(8);
-    tft_.fillScreen(TFT_BLACK);
+    tft_.fillScreen(UI_BG);
     drawChrome();
   }
 
@@ -52,10 +101,21 @@ public:
     MonitorState s = snapshotState();
     stage = 3;
     handleTouch(s);
+
+    // On-device touch calibration (requested from the Device page). Runs
+    // here, inside the frame's mutex hold: the calibration owns the whole
+    // display + touch for as long as the user takes to tap four corners.
+    // Safe because it is only reachable while the BP cycle is idle (the
+    // idle BP task never touches the shared bus), and no watchdog watches
+    // this task.
+    if (calRequested_) {
+      calRequested_ = false;
+      runTouchCalibration();
+    }
     stage = 4;
 
     if (pageDirty_) {
-      tft_.fillScreen(TFT_BLACK);
+      tft_.fillScreen(UI_BG);
       drawChrome();
       pageDirty_ = false;
       forceRedraw_ = true;
@@ -92,6 +152,8 @@ public:
 private:
   TFT_eSPI tft_;
   TFT_eSprite val_{&tft_};
+  Preferences prefs_;
+  bool calFromNvs_ = false;
   int W = 480, H = 320, BANNER_H = 26;
   Page page_ = Page::DASH;
   bool pageDirty_ = true, forceRedraw_ = true, waveInit_ = false;
@@ -102,20 +164,24 @@ private:
     int dots = (int)Page::COUNT;
     int cx = W / 2 - dots * 10 / 2 + 2;
     for (int i = 0; i < dots; i++) {
-      tft_.fillCircle(cx + i * 12, H - 8, 3, i == (int)page_ ? TFT_CYAN : TFT_DARKGREY);
+      tft_.fillCircle(cx + i * 12, H - 8, 3, i == (int)page_ ? UI_ACCENT : UI_FAINT);
     }
     static const char *names[] = {"VITALS", "WAVES", "TRENDS", "BLOOD PRESSURE", "DEVICE"};
-    tft_.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tft_.setTextColor(UI_MUTED, UI_BG);
     tft_.setTextDatum(BC_DATUM);
     tft_.drawString(names[(int)page_], W / 2, H - 14, 1);
+    // gentle affordance for the bottom-strip tap navigation
+    tft_.setTextDatum(BL_DATUM);
+    tft_.drawString("< prev", 8, H - 6, 1);
+    tft_.setTextDatum(BR_DATUM);
+    tft_.drawString("next >", W - 8, H - 6, 1);
     tft_.setTextDatum(TL_DATUM);
   }
 
   // ---------- alarm / sim banner (top strip, every page) ----------
   // Redrawn ONLY when its rendered content actually changes (signature
-  // compare) — the first field build repainted it every frame, which
-  // both flickered visibly ("twitching") and burned ~25 ms of SPI per
-  // frame, dragging the whole UI's responsiveness down.
+  // compare) — an every-frame repaint both flickered visibly and burned
+  // ~25 ms of SPI per frame.
   char bannerSig_[120] = "";
 
   void drawBanner(const MonitorState &s) {
@@ -143,7 +209,7 @@ private:
     strlcpy(bannerSig_, sig, sizeof(bannerSig_));
 
     if (critical) {
-      uint16_t bg = flash ? TFT_RED : 0x8000;
+      uint16_t bg = flash ? UI_CRIT : 0x8000;
       tft_.fillRect(0, 0, W, BANNER_H, bg);
       tft_.setTextColor(TFT_WHITE, bg);
       tft_.setTextDatum(ML_DATUM);
@@ -159,14 +225,14 @@ private:
       tft_.drawString("SIMULATION MODE — DEMO DATA, NOT TRANSMITTED", W / 2, BANNER_H / 2, 2);
       tft_.setTextDatum(TL_DATUM);
     } else {
-      tft_.fillRect(0, 0, W, BANNER_H, TFT_BLACK);
-      tft_.setTextColor(TFT_CYAN, TFT_BLACK);
+      tft_.fillRect(0, 0, W, BANNER_H, UI_BANNER);
+      tft_.setTextColor(UI_ACCENT, UI_BANNER);
       tft_.setTextDatum(ML_DATUM);
       tft_.drawString("SMARTTRIAGE MONITOR", 6, BANNER_H / 2, 2);
       char right[44];
       if (minute >= 0) snprintf(right, sizeof(right), "%02d:%02d  %s", minute / 100, minute % 100, link);
       else             snprintf(right, sizeof(right), "--:--  %s", link);
-      tft_.setTextColor(s.backendUp ? TFT_GREEN : TFT_ORANGE, TFT_BLACK);
+      tft_.setTextColor(s.backendUp ? UI_GOOD : UI_WARN, UI_BANNER);
       tft_.setTextDatum(MR_DATUM);
       tft_.drawString(right, W - 6, BANNER_H / 2, 2);
       tft_.setTextDatum(TL_DATUM);
@@ -186,8 +252,8 @@ private:
     if (!forceRedraw_ && strcmp(cells_[id].last, txt) == 0) return;
     strlcpy(cells_[id].last, txt, sizeof(cells_[id].last));
     val_.createSprite(w, h);
-    val_.fillSprite(TFT_BLACK);
-    val_.setTextColor(color, TFT_BLACK);
+    val_.fillSprite(UI_BG);
+    val_.setTextColor(color, UI_BG);
     val_.setTextDatum(MC_DATUM);
     val_.setTextSize(size);
     val_.drawString(txt, w / 2, h / 2, font);
@@ -197,10 +263,10 @@ private:
   }
 
   static uint16_t bandColor(float v, float warnLo, float warnHi, float critLo, float critHi) {
-    if (v <= 0) return TFT_DARKGREY;
-    if (v < critLo || v > critHi) return TFT_RED;
-    if (v < warnLo || v > warnHi) return TFT_YELLOW;
-    return TFT_GREEN;
+    if (v <= 0) return UI_MUTED;
+    if (v < critLo || v > critHi) return UI_CRIT;
+    if (v < warnLo || v > warnHi) return UI_WARN;
+    return UI_GOOD;
   }
 
   // =====================================================================
@@ -215,16 +281,16 @@ private:
       static const Tile tiles[4] = {{"HR", "bpm"}, {"SpO2", "%"}, {"TEMP", "C"}, {"RESP", "/min"}};
       for (int i = 0; i < 4; i++) {
         int x = 6 + (i % 2) * (tileW + 6), y = top + (i / 2) * (tileH + 6);
-        tft_.drawRoundRect(x, y, tileW, tileH, 8, TFT_DARKGREY);
-        tft_.setTextColor(TFT_SILVER, TFT_BLACK);
+        tft_.drawRoundRect(x, y, tileW, tileH, 8, UI_FAINT);
+        tft_.setTextColor(UI_MUTED, UI_BG);
         tft_.drawString(tiles[i].label, x + 10, y + 6, 2);
         tft_.setTextDatum(TR_DATUM);
         tft_.drawString(tiles[i].unit, x + tileW - 10, y + 6, 2);
         tft_.setTextDatum(TL_DATUM);
       }
       int by = top + 2 * (tileH + 6);
-      tft_.drawRoundRect(6, by, W - 12, H - by - 26, 8, TFT_DARKGREY);
-      tft_.setTextColor(TFT_SILVER, TFT_BLACK);
+      tft_.drawRoundRect(6, by, W - 12, H - by - 26, 8, UI_FAINT);
+      tft_.setTextColor(UI_MUTED, UI_BG);
       tft_.drawString("BP (last reading)", 16, by + 6, 2);
     }
 
@@ -234,7 +300,7 @@ private:
     cell(0, 6 + 8, top + 22, tileW - 16, tileH - 42,
          t, bandColor(s.hr, ALM_HR_WARN_LOW, ALM_HR_WARN_HIGH, ALM_HR_CRIT_LOW, ALM_HR_CRIT_HIGH), 4, 2);
     cell(10, 6 + 8, top + tileH - 20, tileW - 16, 16,
-         s.hr <= 0 ? "" : (s.hrFromEcg ? "ECG" : "PULSE-OX"), TFT_DARKGREY, 1);
+         s.hr <= 0 ? "" : (s.hrFromEcg ? "ECG" : "PULSE-OX"), UI_MUTED, 1);
 
     snprintf(t, sizeof(t), s.spo2 > 0 ? "%.0f" : "--", s.spo2);
     cell(1, 12 + tileW + 8, top + 22, tileW - 16, tileH - 42,
@@ -257,21 +323,21 @@ private:
         snprintf(when, sizeof(when), "%02d:%02d", tmv.tm_hour, tmv.tm_min);
       }
       snprintf(t, sizeof(t), "%d/%d", s.bpLast.sys, s.bpLast.dia);
-      uint16_t c = (s.bpLast.sys > ALM_SYS_CRIT_HIGH || s.bpLast.sys < ALM_SYS_CRIT_LOW) ? TFT_RED : TFT_GREEN;
+      uint16_t c = (s.bpLast.sys > ALM_SYS_CRIT_HIGH || s.bpLast.sys < ALM_SYS_CRIT_LOW) ? UI_CRIT : UI_GOOD;
       cell(4, 16, by + 22, 150, 34, t, c, 4);
       char meta[56];
       snprintf(meta, sizeof(meta), "MAP %d   at %s%s", s.bpLast.map, when, s.bpCalibrated ? "" : "  UNCAL");
-      cell(5, 176, by + 30, W - 196, 18, meta, TFT_SILVER, 2);
+      cell(5, 176, by + 30, W - 196, 18, meta, UI_MUTED, 2);
     } else {
-      cell(4, 16, by + 22, 150, 34, "--/--", TFT_DARKGREY, 4);
-      cell(5, 176, by + 30, W - 196, 18, "no reading - use BP page", TFT_DARKGREY, 2);
+      cell(4, 16, by + 22, 150, 34, "--/--", UI_MUTED, 4);
+      cell(5, 176, by + 30, W - 196, 18, "no reading - use BP page", UI_MUTED, 2);
     }
 
     // per-channel status chips
     char chips[64];
     snprintf(chips, sizeof(chips), "SPO2:%s  TEMP:%s  ECG:%s  CUFF:%s",
              chanTxt(s.chSpo2), chanTxt(s.chTemp), chanTxt(s.chEcg), chanTxt(s.chBp));
-    cell(6, 6, H - 24, W - 12, 12, chips, TFT_DARKGREY, 1);
+    cell(6, 6, H - 24, W - 12, 12, chips, UI_MUTED, 1);
   }
 
   static const char *chanTxt(Chan c) {
@@ -298,11 +364,11 @@ private:
     int ecgY = top, plethY = top + ecgH + 4;
 
     if (!waveInit_) {
-      tft_.fillRect(0, top, plotW, H - top - 16, TFT_BLACK);
-      tft_.drawRect(0, ecgY, plotW, ecgH, 0x0200);        // faint green frame
-      tft_.drawRect(0, plethY, plotW, plethH, 0x0010);    // faint blue frame
-      tft_.setTextColor(TFT_GREEN, TFT_BLACK);  tft_.drawString("ECG  (Lead II)", 6, ecgY + 3, 1);
-      tft_.setTextColor(TFT_CYAN, TFT_BLACK);   tft_.drawString("PLETH (SpO2)", 6, plethY + 3, 1);
+      tft_.fillRect(0, top, plotW, H - top - 16, UI_BG);
+      tft_.drawRect(0, ecgY, plotW, ecgH, UI_FAINT);
+      tft_.drawRect(0, plethY, plotW, plethH, UI_FAINT);
+      tft_.setTextColor(UI_GOOD, UI_BG);   tft_.drawString("ECG  (Lead II)", 6, ecgY + 3, 1);
+      tft_.setTextColor(UI_PLETH, UI_BG);  tft_.drawString("PLETH (SpO2)", 6, plethY + 3, 1);
       waveX_ = 1;
       ecgReadHead_ = g_ecgWaveHead;
       plethReadHead_ = g_plethWaveHead;
@@ -310,24 +376,24 @@ private:
     }
 
     if (!s.simulation && s.chEcg == Chan::NO_CONTACT) {
-      cell(7, plotW / 2 - 90, ecgY + ecgH / 2 - 10, 180, 20, "ECG LEADS OFF", TFT_RED, 2);
+      cell(7, plotW / 2 - 90, ecgY + ecgH / 2 - 10, 180, 20, "ECG LEADS OFF", UI_CRIT, 2);
     } else {
-      cell(7, plotW / 2 - 90, ecgY + ecgH / 2 - 10, 1, 1, "", TFT_BLACK, 1); // clear marker
-      drawTrace(g_ecgWave, g_ecgWaveHead, ecgReadHead_, ecgY + 2, ecgH - 4, plotW, TFT_GREEN);
+      cell(7, plotW / 2 - 90, ecgY + ecgH / 2 - 10, 1, 1, "", UI_BG, 1); // clear marker
+      drawTrace(g_ecgWave, g_ecgWaveHead, ecgReadHead_, ecgY + 2, ecgH - 4, plotW, UI_GOOD);
     }
-    drawTrace(g_plethWave, g_plethWaveHead, plethReadHead_, plethY + 2, plethH - 4, plotW, TFT_CYAN);
+    drawTrace(g_plethWave, g_plethWaveHead, plethReadHead_, plethY + 2, plethH - 4, plotW, UI_PLETH);
 
     // numerics column
     char t[16];
     snprintf(t, sizeof(t), s.hr > 0 ? "%.0f" : "--", s.hr);
     cell(8, W - numW, ecgY + 14, numW - 4, 40, t,
          bandColor(s.hr, ALM_HR_WARN_LOW, ALM_HR_WARN_HIGH, ALM_HR_CRIT_LOW, ALM_HR_CRIT_HIGH), 4);
-    if (forceRedraw_) { tft_.setTextColor(TFT_SILVER, TFT_BLACK); tft_.drawString("HR bpm", W - numW + 8, ecgY + 2, 1); }
+    if (forceRedraw_) { tft_.setTextColor(UI_MUTED, UI_BG); tft_.drawString("HR bpm", W - numW + 8, ecgY + 2, 1); }
 
     snprintf(t, sizeof(t), s.spo2 > 0 ? "%.0f%%" : "--", s.spo2);
     cell(9, W - numW, plethY + 14, numW - 4, 34, t,
          bandColor(s.spo2, ALM_SPO2_WARN, 101, ALM_SPO2_CRIT, 101), 4);
-    if (forceRedraw_) { tft_.setTextColor(TFT_SILVER, TFT_BLACK); tft_.drawString("SpO2", W - numW + 8, plethY + 2, 1); }
+    if (forceRedraw_) { tft_.setTextColor(UI_MUTED, UI_BG); tft_.drawString("SpO2", W - numW + 8, plethY + 2, 1); }
   }
 
   // consume new ring samples; draw one column per sample with an erase-ahead cursor
@@ -343,7 +409,7 @@ private:
 
       // erase-ahead cursor (classic monitor sweep)
       int eraseX = (waveX_ + 6) % plotW;
-      if (eraseX > 1) tft_.drawFastVLine(eraseX, y, h, TFT_BLACK);
+      if (eraseX > 1) tft_.drawFastVLine(eraseX, y, h, UI_BG);
 
       if (waveX_ > 1 && lastPy_[color & 1] >= 0 && waveX_ - 1 != 0) {
         tft_.drawLine(waveX_ - 1, lastPy_[color & 1], waveX_, py, color);
@@ -366,10 +432,10 @@ private:
 
     struct Row { const char *label; const TrendRing *r; uint16_t color; };
     Row rows[4] = {
-      {"HR",   &g_trendHr,   TFT_GREEN},
-      {"SpO2", &g_trendSpo2, TFT_CYAN},
-      {"TEMP", &g_trendTemp, TFT_ORANGE},
-      {"RESP", &g_trendRr,   TFT_VIOLET},
+      {"HR",   &g_trendHr,   UI_GOOD},
+      {"SpO2", &g_trendSpo2, UI_PLETH},
+      {"TEMP", &g_trendTemp, UI_WARN},
+      {"RESP", &g_trendRr,   UI_VIOLET},
     };
 
     // Charts repaint only when the underlying rings actually gained a
@@ -383,9 +449,9 @@ private:
 
     for (int i = 0; i < 4; i++) {
       int y = top + i * (chartH + 4);
-      tft_.fillRect(0, y, chartW + 8, chartH, TFT_BLACK);
-      tft_.drawRect(4, y, chartW, chartH, TFT_DARKGREY);
-      tft_.setTextColor(rows[i].color, TFT_BLACK);
+      tft_.fillRect(0, y, chartW + 8, chartH, UI_BG);
+      tft_.drawRect(4, y, chartW, chartH, UI_FAINT);
+      tft_.setTextColor(rows[i].color, UI_BG);
       tft_.drawString(rows[i].label, 8, y + 2, 1);
 
       const TrendRing *r = rows[i].r;
@@ -413,7 +479,7 @@ private:
       }
       char lbl[16];
       snprintf(lbl, sizeof(lbl), "%.0f-%.0f", lo + pad, hi - pad);
-      tft_.setTextColor(TFT_DARKGREY, TFT_BLACK);
+      tft_.setTextColor(UI_MUTED, UI_BG);
       tft_.setTextDatum(TR_DATUM);
       tft_.drawString(lbl, chartW, y + 2, 1);
       tft_.setTextDatum(TL_DATUM);
@@ -424,7 +490,7 @@ private:
   void drawBpHistory(const MonitorState &s, int chartW) {
     int x = chartW + 14, top = BANNER_H + 4;
     if (forceRedraw_) {
-      tft_.setTextColor(TFT_SILVER, TFT_BLACK);
+      tft_.setTextColor(UI_MUTED, UI_BG);
       tft_.drawString("BP HISTORY", x, top, 2);
     }
     char line[28];
@@ -442,7 +508,7 @@ private:
       // Dedicated cache slot per row — the first build rotated 3 slots
       // across 8 rows, which repainted ~5 rows EVERY frame (visible
       // churn + constant SPI load on the trends page).
-      cell(14 + i, x, top + 22 + i * 20, W - x - 6, 18, line, TFT_WHITE, 2);
+      cell(14 + i, x, top + 22 + i * 20, W - x - 6, 18, line, UI_INK, 2);
     }
   }
   uint32_t lastTrendSig_ = 0xFFFFFFFF;
@@ -459,10 +525,10 @@ private:
     btnX_ = W / 2 - btnW_ / 2; btnY_ = H - btnH_ - 30;
 
     if (forceRedraw_) {
-      tft_.setTextColor(TFT_SILVER, TFT_BLACK);
+      tft_.setTextColor(UI_MUTED, UI_BG);
       tft_.drawString("OSCILLOMETRIC BLOOD PRESSURE", 10, top, 2);
       if (!s.bpCalibrated) {
-        tft_.setTextColor(TFT_ORANGE, TFT_BLACK);
+        tft_.setTextColor(UI_WARN, UI_BG);
         tft_.setTextDatum(TR_DATUM);
         tft_.drawString("UNCALIBRATED", W - 8, top, 2);
         tft_.setTextDatum(TL_DATUM);
@@ -476,37 +542,37 @@ private:
     char t[32];
     if (busy) {
       snprintf(t, sizeof(t), "%.0f", s.cuffPressure);
-      cell(11, W / 2 - 110, top + 30, 220, 56, t, TFT_ORANGE, 4, 2);
-      cell(12, W / 2 - 110, top + 92, 220, 18, "cuff mmHg", TFT_SILVER, 2);
+      cell(11, W / 2 - 110, top + 30, 220, 56, t, UI_WARN, 4, 2);
+      cell(12, W / 2 - 110, top + 92, 220, 18, "cuff mmHg", UI_MUTED, 2);
       const char *phase = s.bpPhase == BpPhase::INFLATING ? "Inflating..."
                         : s.bpPhase == BpPhase::MEASURING ? "Measuring - hold still"
                         : "Computing...";
-      cell(13, W / 2 - 130, top + 116, 260, 20, phase, TFT_ORANGE, 2);
+      cell(13, W / 2 - 130, top + 116, 260, 20, phase, UI_WARN, 2);
       // progress bar — repaint only on progress change
       if (forceRedraw_ || s.bpProgress != lastBpProg_) {
         lastBpProg_ = s.bpProgress;
         int bw = W - 80;
-        tft_.drawRect(40, top + 146, bw, 14, TFT_DARKGREY);
-        tft_.fillRect(41, top + 147, (bw - 2) * s.bpProgress / 100, 12, TFT_ORANGE);
+        tft_.drawRect(40, top + 146, bw, 14, UI_FAINT);
+        tft_.fillRect(41, top + 147, (bw - 2) * s.bpProgress / 100, 12, UI_WARN);
       }
     } else if (s.bpPhase == BpPhase::ERROR) {
-      cell(11, W / 2 - 150, top + 30, 300, 40, "FAILED", TFT_RED, 4);
-      cell(12, W / 2 - 170, top + 84, 340, 18, s.bpError, TFT_RED, 2);
-      cell(13, 40, top + 146, W - 80, 20, "", TFT_BLACK, 1);
-      tft_.fillRect(40, top + 146, W - 80, 16, TFT_BLACK);
+      cell(11, W / 2 - 150, top + 30, 300, 40, "FAILED", UI_CRIT, 4);
+      cell(12, W / 2 - 170, top + 84, 340, 18, s.bpError, UI_CRIT, 2);
+      cell(13, 40, top + 146, W - 80, 20, "", UI_BG, 1);
+      tft_.fillRect(40, top + 146, W - 80, 16, UI_BG);
     } else if (s.bpLast.valid) {
       snprintf(t, sizeof(t), "%d/%d", s.bpLast.sys, s.bpLast.dia);
-      cell(11, W / 2 - 140, top + 30, 280, 56, t, TFT_GREEN, 4, 2);
+      cell(11, W / 2 - 140, top + 30, 280, 56, t, UI_GOOD, 4, 2);
       char meta[48];
       char when[10] = "--:--";
       if (s.bpLast.at > 0) { struct tm tmv; localtime_r(&s.bpLast.at, &tmv); snprintf(when, sizeof(when), "%02d:%02d", tmv.tm_hour, tmv.tm_min); }
       snprintf(meta, sizeof(meta), "MAP %d mmHg   measured %s", s.bpLast.map, when);
-      cell(12, W / 2 - 150, top + 96, 300, 18, meta, TFT_SILVER, 2);
-      cell(13, 40, top + 146, W - 80, 20, "", TFT_BLACK, 1);
-      tft_.fillRect(40, top + 146, W - 80, 16, TFT_BLACK);
+      cell(12, W / 2 - 150, top + 96, 300, 18, meta, UI_MUTED, 2);
+      cell(13, 40, top + 146, W - 80, 20, "", UI_BG, 1);
+      tft_.fillRect(40, top + 146, W - 80, 16, UI_BG);
     } else {
-      cell(11, W / 2 - 150, top + 40, 300, 40, "no reading yet", TFT_DARKGREY, 4);
-      cell(12, W / 2 - 170, top + 92, 340, 18, "wrap cuff snugly, then press start", TFT_SILVER, 2);
+      cell(11, W / 2 - 150, top + 40, 300, 40, "no reading yet", UI_MUTED, 4);
+      cell(12, W / 2 - 170, top + 92, 340, 18, "wrap cuff snugly, then press start", UI_MUTED, 2);
     }
 
     // start button — repainted only when its state changes (an
@@ -514,9 +580,9 @@ private:
     int btnState = busy ? 1 : 0;
     if (forceRedraw_ || btnState != lastBpBtn_) {
       lastBpBtn_ = btnState;
-      uint16_t bc = busy ? TFT_DARKGREY : TFT_GREEN;
+      uint16_t bc = busy ? UI_FAINT : UI_GOOD;
       tft_.fillRoundRect(btnX_, btnY_, btnW_, btnH_, 10, bc);
-      tft_.setTextColor(TFT_BLACK, bc);
+      tft_.setTextColor(busy ? UI_MUTED : TFT_WHITE, bc);
       tft_.setTextDatum(MC_DATUM);
       tft_.drawString(busy ? "MEASURING..." : "START BP", btnX_ + btnW_ / 2, btnY_ + btnH_ / 2, 4);
       tft_.setTextDatum(TL_DATUM);
@@ -540,44 +606,98 @@ private:
       const char *labels[] = {"WiFi", "Signal", "Server", "Last sync", "Device", "Firmware",
                               "Transmit", "Buffered", "Sensors", "Clock"};
       int ly = top;
-      for (int i = 0; i < 10; i++) { tft_.setTextColor(TFT_SILVER, TFT_BLACK); tft_.drawString(labels[i], 10, ly, 2); ly += lh; }
+      for (int i = 0; i < 10; i++) { tft_.setTextColor(UI_MUTED, UI_BG); tft_.drawString(labels[i], 10, ly, 2); ly += lh; }
     }
 
     snprintf(line, sizeof(line), "%s%s", s.wifiUp ? "connected  " : "DISCONNECTED", s.wifiUp ? WiFi.SSID().c_str() : "");
-    row(0, line, s.wifiUp ? TFT_GREEN : TFT_RED);
+    row(0, line, s.wifiUp ? UI_GOOD : UI_CRIT);
     snprintf(line, sizeof(line), s.wifiUp ? "%d dBm" : "-", s.wifiRssi);
-    row(1, line, s.wifiRssi > -70 ? TFT_GREEN : TFT_YELLOW);
-    row(2, s.backendUp ? "SmartTriage receiving" : "NOT REACHABLE", s.backendUp ? TFT_GREEN : TFT_RED);
+    row(1, line, s.wifiRssi > -70 ? UI_GOOD : UI_WARN);
+    row(2, s.backendUp ? "SmartTriage receiving" : "NOT REACHABLE", s.backendUp ? UI_GOOD : UI_CRIT);
     if (s.lastAckAt > 0) {
       struct tm tmv; localtime_r(&s.lastAckAt, &tmv);
       snprintf(line, sizeof(line), "%02d:%02d:%02d", tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
     } else strlcpy(line, "never", sizeof(line));
-    row(3, line, s.lastAckAt > 0 ? TFT_WHITE : TFT_ORANGE);
-    row(4, DEVICE_SERIAL " (session bound at ED)", TFT_WHITE);
-    row(5, FIRMWARE_VERSION, TFT_WHITE);
+    row(3, line, s.lastAckAt > 0 ? UI_INK : UI_WARN);
+    row(4, DEVICE_SERIAL " (session bound at ED)", UI_INK);
+    row(5, FIRMWARE_VERSION, UI_INK);
     snprintf(line, sizeof(line), "%lu ok / %lu failed", (unsigned long)s.txOk, (unsigned long)s.txFail);
-    row(6, line, TFT_WHITE);
+    row(6, line, UI_INK);
     snprintf(line, sizeof(line), "%u offline readings", s.offlineBuffered);
-    row(7, line, s.offlineBuffered ? TFT_ORANGE : TFT_WHITE);
+    row(7, line, s.offlineBuffered ? UI_WARN : UI_INK);
     snprintf(line, sizeof(line), "SPO2:%s TEMP:%s ECG:%s CUFF:%s",
              chanTxt(s.chSpo2), chanTxt(s.chTemp), chanTxt(s.chEcg), chanTxt(s.chBp));
-    row(8, line, TFT_WHITE);
-    row(9, s.clockSynced ? "NTP synced (UTC)" : "NOT SYNCED", s.clockSynced ? TFT_GREEN : TFT_ORANGE);
+    row(8, line, UI_INK);
+    row(9, s.clockSynced ? "NTP synced (UTC)" : "NOT SYNCED", s.clockSynced ? UI_GOOD : UI_WARN);
 
     // simulation toggle — repainted only when its state changes
     simBtnY_ = y + 8;
     int simState = s.simulation ? 1 : 0;
     if (forceRedraw_ || simState != lastSimBtn_) {
       lastSimBtn_ = simState;
-      uint16_t sc = s.simulation ? TFT_ORANGE : 0x39E7;
+      uint16_t sc = s.simulation ? TFT_ORANGE : UI_FAINT;
       tft_.fillRoundRect(10, simBtnY_, 220, 40, 8, sc);
-      tft_.setTextColor(s.simulation ? TFT_BLACK : TFT_WHITE, sc);
+      tft_.setTextColor(s.simulation ? TFT_BLACK : UI_INK, sc);
       tft_.setTextDatum(MC_DATUM);
       tft_.drawString(s.simulation ? "SIMULATION: ON" : "SIMULATION: OFF", 120, simBtnY_ + 20, 2);
       tft_.setTextDatum(TL_DATUM);
     }
+
+    // touch-calibration button — static, drawn on page entry
+    if (forceRedraw_) {
+      tft_.fillRoundRect(240, simBtnY_, 220, 40, 8, UI_ACCENT);
+      tft_.setTextColor(TFT_WHITE, UI_ACCENT);
+      tft_.setTextDatum(MC_DATUM);
+      tft_.drawString("CALIBRATE TOUCH", 350, simBtnY_ + 20, 2);
+      tft_.setTextDatum(TL_DATUM);
+      tft_.setTextColor(UI_MUTED, UI_BG);
+      tft_.drawString(calFromNvs_ ? "touch cal: stored on device" : "touch cal: factory default — please calibrate",
+                      10, simBtnY_ + 48, 1);
+    }
   }
   int lastSimBtn_ = -1;
+
+  // =====================================================================
+  //  On-device touch calibration (Device page → CALIBRATE TOUCH)
+  //
+  //  TFT_eSPI draws an arrow in each corner; the user taps them in turn.
+  //  The resulting 5 values are applied immediately, persisted to NVS
+  //  (they survive reboots AND reflashes), and printed to serial as a
+  //  ready-to-paste TOUCH_CAL line. This is the durable fix for the
+  //  "touch only responds in one spot" symptom: swipe zones, buttons and
+  //  taps all depend on this mapping being true for THIS panel.
+  // =====================================================================
+  bool calRequested_ = false;
+
+  void runTouchCalibration() {
+    tft_.fillScreen(UI_BG);
+    tft_.setTextColor(UI_INK, UI_BG);
+    tft_.setTextDatum(MC_DATUM);
+    tft_.drawString("TOUCH CALIBRATION", W / 2, H / 2 - 30, 4);
+    tft_.setTextColor(UI_MUTED, UI_BG);
+    tft_.drawString("Tap the corner arrows as they appear", W / 2, H / 2 + 6, 2);
+    tft_.drawString("(use a fingernail or stylus for precision)", W / 2, H / 2 + 26, 2);
+    tft_.setTextDatum(TL_DATUM);
+
+    uint16_t cal[5];
+    tft_.calibrateTouch(cal, UI_ACCENT, UI_BG, 18);
+    tft_.setTouch(cal);
+    prefs_.putBytes("cal", cal, sizeof(cal));
+    calFromNvs_ = true;
+    Serial.printf("[touch] calibrated + stored: TOUCH_CAL { %u, %u, %u, %u, %u }\n",
+                  cal[0], cal[1], cal[2], cal[3], cal[4]);
+
+    tft_.fillScreen(UI_BG);
+    tft_.setTextColor(UI_GOOD, UI_BG);
+    tft_.setTextDatum(MC_DATUM);
+    tft_.drawString("CALIBRATED", W / 2, H / 2 - 8, 4);
+    tft_.setTextColor(UI_MUTED, UI_BG);
+    tft_.drawString("saved to device memory", W / 2, H / 2 + 22, 2);
+    tft_.setTextDatum(TL_DATUM);
+    tone(PIN_BUZZER, 1400, 80);
+    delay(900);
+    pageDirty_ = true;      // repaint the Device page fresh
+  }
 
   // =====================================================================
   //  Touch: swipe navigation + page-local buttons + alarm silence
@@ -587,83 +707,100 @@ private:
   uint32_t downMs_ = 0, lastTouchPollMs_ = 0;
 
   void handleTouch(const MonitorState &s) {
-    // Poll touch at 10 Hz — the cadence the previous firmware proved on
-    // this exact panel. TFT_eSPI's getTouch runs an UNBOUNDED pressure-
-    // debounce loop inside (validTouch: `while (z1 > z2)`), and hammering
-    // it every frame starved IDLE0 into a task-watchdog reboot loop
-    // (diagnosed from a live backtrace on the real hardware).
+    // Idle: poll at 20 Hz behind the bounded raw-Z pre-gate (TFT_eSPI's
+    // getTouch runs an UNBOUNDED pressure-debounce loop inside; hammering
+    // it with no finger present starved IDLE0 into a watchdog reboot loop
+    // — diagnosed live on this hardware).
+    //
+    // While a finger IS down: track EVERY frame (~30 Hz) with a lighter
+    // pressure gate. The 3.0.x builds kept the 20 Hz cadence during the
+    // gesture too, so a fast swipe landed only one or two samples — the
+    // measured travel was ~0 px and the page never changed. That is the
+    // "sliding only works in one spot / never backwards" complaint: the
+    // only reliable navigation left was the bottom-right tap zone.
     uint32_t now = millis();
-    if (now - lastTouchPollMs_ < 50) return;     // 20 Hz: quick taps land
+    if (!touching_ && now - lastTouchPollMs_ < 50) return;
     lastTouchPollMs_ = now;
 
-    // BOUNDED pre-check before entering TFT_eSPI's getTouch(): getTouchRawZ
-    // is a fixed three-transfer read, while getTouch's internal validTouch
-    // contains an unbounded pressure-settling loop that wedged this exact
-    // panel (frames=0, stuck pre-first-draw — seen live). Only enter the
-    // unbounded path when real finger pressure is present; with a genuine
-    // press the settling loop converges quickly.
     uint16_t x = 0, y = 0;
     bool pressed = false;
-    if (tft_.getTouchRawZ() > 240) {
+    if (tft_.getTouchRawZ() > (touching_ ? TOUCH_Z_TRACK : TOUCH_Z_PRESS)) {
       pressed = tft_.getTouch(&x, &y);
     }
 
     if (pressed && !touching_) {                 // touch start
-      touching_ = true; downX_ = x; downY_ = y; lastX_ = x; lastY_ = y; downMs_ = millis();
+      touching_ = true; downX_ = x; downY_ = y; lastX_ = x; lastY_ = y; downMs_ = now;
       // Buttons fire ON PRESS — instant feedback, and a quick tap can
-      // never fall between two polls. Swipes still resolve on release.
+      // never fall between two polls.
       pressConsumed_ = onPress(x, y, s);
-    } else if (pressed) {                        // drag — remember position
+    } else if (pressed) {                        // drag
       lastX_ = x; lastY_ = y;
+      // Swipe fires MID-DRAG, the moment the finger has travelled far
+      // enough — no waiting for release, either direction, from anywhere.
+      int dx = (int)x - (int)downX_;
+      if (!pressConsumed_ && abs(dx) >= SWIPE_MIN_PX) {
+        flipPage(dx < 0 ? +1 : -1);
+        pressConsumed_ = true;                   // one flip per gesture
+      }
     } else if (!pressed && touching_) {          // touch release
       touching_ = false;
-      // getTouch reports nothing on release — use the last pressed coords.
+      // Fallback for a swipe so fast it completed between two polls.
       int dx = (int)lastX_ - (int)downX_;
-      if (!pressConsumed_ && abs(dx) > 70) {
-        int p = (int)page_ + (dx < 0 ? 1 : -1);
-        p = (p + (int)Page::COUNT) % (int)Page::COUNT;
-        page_ = (Page)p;
-        pageDirty_ = true;
-        return;
+      if (!pressConsumed_ && abs(dx) >= SWIPE_MIN_PX) {
+        flipPage(dx < 0 ? +1 : -1);
+      } else if (!pressConsumed_) {
+        onTap(downX_, downY_, s);
       }
-      if (!pressConsumed_) onTap(downX_, downY_, s);
       pressConsumed_ = false;
     }
   }
   bool pressConsumed_ = false;
 
+  void flipPage(int step) {
+    int p = ((int)page_ + step + (int)Page::COUNT) % (int)Page::COUNT;
+    page_ = (Page)p;
+    pageDirty_ = true;
+    tone(PIN_BUZZER, 1400, 25);    // quiet click: gesture registered
+  }
+
   // Press-fired controls (buttons). Returns true when the press hit one,
-  // so the release pass doesn't double-handle it as a tap/swipe.
+  // so the drag/release passes don't double-handle it as a swipe/tap.
   bool onPress(uint16_t x, uint16_t y, const MonitorState &s) {
-    if (page_ == Page::BP) {
-      bool busy = s.bpPhase == BpPhase::INFLATING || s.bpPhase == BpPhase::MEASURING
+    bool bpBusy = s.bpPhase == BpPhase::INFLATING || s.bpPhase == BpPhase::MEASURING
                || s.bpPhase == BpPhase::COMPUTING || s.bpPhase == BpPhase::ZEROING;
-      if (!busy && x >= btnX_ && x <= btnX_ + btnW_ && y >= btnY_ && y <= btnY_ + btnH_) {
+    if (page_ == Page::BP) {
+      if (!bpBusy && x >= btnX_ && x <= btnX_ + btnW_ && y >= btnY_ && y <= btnY_ + btnH_) {
         if (stateLock()) { g_state.bpRequested = true; stateUnlock(); }
         tone(PIN_BUZZER, 900, 60);
         return true;
       }
     }
-    if (page_ == Page::DEVICE && simBtnY_ > 0
-        && x >= 10 && x <= 230 && y >= simBtnY_ && y <= simBtnY_ + 40) {
-      if (stateLock()) {
-        g_state.simulation = !g_state.simulation;
-        if (!g_state.simulation) {
-          g_state.hr = g_state.spo2 = g_state.temp = g_state.rr = 0;
-          g_state.chSpo2 = g_state.chTemp = g_state.chEcg = Chan::ABSENT;
+    if (page_ == Page::DEVICE && simBtnY_ > 0 && y >= simBtnY_ && y <= simBtnY_ + 40) {
+      if (x >= 10 && x <= 230) {                 // simulation toggle
+        if (stateLock()) {
+          g_state.simulation = !g_state.simulation;
+          if (!g_state.simulation) {
+            g_state.hr = g_state.spo2 = g_state.temp = g_state.rr = 0;
+            g_state.chSpo2 = g_state.chTemp = g_state.chEcg = Chan::ABSENT;
+          }
+          stateUnlock();
         }
-        stateUnlock();
+        pageDirty_ = true;
+        tone(PIN_BUZZER, 1200, 80);
+        return true;
       }
-      pageDirty_ = true;
-      tone(PIN_BUZZER, 1200, 80);
-      return true;
+      if (x >= 240 && x <= 460 && !bpBusy) {     // touch calibration
+        calRequested_ = true;                    // runs after this touch pass
+        tone(PIN_BUZZER, 1000, 60);
+        return true;
+      }
     }
     return false;
   }
 
   // Release-fired targets (the ones where accidental brushes must not
-  // trigger): alarm silence + page-dot navigation. Buttons live in
-  // onPress() for instant response.
+  // trigger): alarm silence + bottom-strip page navigation. Buttons live
+  // in onPress() for instant response.
   void onTap(uint16_t x, uint16_t y, const MonitorState &s) {
     // banner tap → silence alarms
     if (y < BANNER_H + 6 && s.alarms.any()) {
@@ -671,10 +808,9 @@ private:
       bannerSig_[0] = '\0';   // force banner repaint with SILENCED label
       return;
     }
-    // page dots strip → tap left/right half jumps a page
+    // bottom strip → tap left/right half jumps a page
     if (y > H - 22) {
-      int p = ((int)page_ + (x > W / 2 ? 1 : -1) + (int)Page::COUNT) % (int)Page::COUNT;
-      page_ = (Page)p; pageDirty_ = true;
+      flipPage(x > W / 2 ? +1 : -1);
       return;
     }
   }
