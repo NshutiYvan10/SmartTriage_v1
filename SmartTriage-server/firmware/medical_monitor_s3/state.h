@@ -59,6 +59,7 @@ struct MonitorState {
   uint8_t  bpHistoryCount = 0;
   char     bpError[40] = "";
   bool     bpRequested = false;     // UI → bpTask trigger
+  bool     bpCancelRequested = false; // UI → bpTask: abort the running cycle NOW
   bool     bpCalibrated = false;    // scale validated against a reference?
 
   // ---- alarms ----

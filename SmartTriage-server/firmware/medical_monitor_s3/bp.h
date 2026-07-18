@@ -156,10 +156,24 @@ private:
     if (stateLock(5)) { g_state.cuffPressure = mmHg; stateUnlock(); }
   }
 
+  // Reads-and-clears the UI's cancel request. Checked in every loop of
+  // the running cycle: a cuff squeezing a patient's arm must always be
+  // stoppable from the screen (the busy button becomes CANCEL).
+  bool cancelRequested() {
+    bool c = false;
+    if (stateLock(10)) {
+      c = g_state.bpCancelRequested;
+      g_state.bpCancelRequested = false;
+      stateUnlock();
+    }
+    return c;
+  }
+
   // ================= the real measurement =================
   void runRealCycle() {
     digitalWrite(PIN_LED_BP, HIGH);
     uint32_t cycleStart = millis();
+    cancelRequested();                                      // clear any stale request
 
     // ---- Phase 0: sanity ----
     setPhase(BpPhase::ZEROING, 2);
@@ -185,6 +199,10 @@ private:
 
       if (p >= BP_HARD_ABORT_MMHG) {                       // hard safety
         setPhase(BpPhase::ERROR, 0, "Overpressure — aborted");
+        finishSafe(); return;
+      }
+      if (cancelRequested()) {
+        setPhase(BpPhase::ERROR, 0, "Cancelled — cuff deflated");
         finishSafe(); return;
       }
       if (p >= BP_TARGET_INFLATE_MMHG) break;               // target reached
@@ -231,6 +249,10 @@ private:
       }
       if (p >= BP_HARD_ABORT_MMHG) {
         setPhase(BpPhase::ERROR, 0, "Overpressure — aborted");
+        finishSafe(); return;
+      }
+      if (cancelRequested()) {
+        setPhase(BpPhase::ERROR, 0, "Cancelled — cuff deflated");
         finishSafe(); return;
       }
 
@@ -333,14 +355,27 @@ private:
   // ================= simulation cycle (demo only, never transmitted) ====
   void runSimulatedCycle() {
     digitalWrite(PIN_LED_BP, HIGH);
+    cancelRequested();                                      // clear any stale request
     setPhase(BpPhase::INFLATING, 5);
     for (int p = 0; p <= 180; p += 6) {
+      if (cancelRequested()) {
+        publishPressure(0);
+        setPhase(BpPhase::ERROR, 0, "Cancelled");
+        digitalWrite(PIN_LED_BP, LOW);
+        return;
+      }
       publishPressure(p);
       setPhase(BpPhase::INFLATING, 5 + (uint8_t)(35.0f * p / 180));
       vTaskDelay(pdMS_TO_TICKS(100));
     }
     setPhase(BpPhase::MEASURING, 40);
     for (int p = 180; p >= 35; p -= 3) {
+      if (cancelRequested()) {
+        publishPressure(0);
+        setPhase(BpPhase::ERROR, 0, "Cancelled");
+        digitalWrite(PIN_LED_BP, LOW);
+        return;
+      }
       publishPressure(p);
       setPhase(BpPhase::MEASURING, 40 + (uint8_t)(55.0f * (180 - p) / 145));
       vTaskDelay(pdMS_TO_TICKS(120));

@@ -631,16 +631,18 @@ private:
       cell(12, W / 2 - 170, top + 92, 340, 18, "wrap cuff snugly, then press start", UI_MUTED, 2);
     }
 
-    // start button — repainted only when its state changes (an
-    // every-frame repaint flickers and wastes SPI time)
+    // start/cancel button — repainted only when its state changes (an
+    // every-frame repaint flickers and wastes SPI time). While a cycle
+    // runs the button becomes CANCEL: a cuff squeezing a patient's arm
+    // must always be stoppable from the screen.
     int btnState = busy ? 1 : 0;
     if (forceRedraw_ || btnState != lastBpBtn_) {
       lastBpBtn_ = btnState;
-      uint16_t bc = busy ? UI_FAINT : UI_GOOD;
+      uint16_t bc = busy ? UI_CRIT : UI_GOOD;
       tft_.fillRoundRect(btnX_, btnY_, btnW_, btnH_, 10, bc);
-      tft_.setTextColor(busy ? UI_MUTED : TFT_WHITE, bc);
+      tft_.setTextColor(TFT_WHITE, bc);
       tft_.setTextDatum(MC_DATUM);
-      tft_.drawString(busy ? "MEASURING..." : "START BP", btnX_ + btnW_ / 2, btnY_ + btnH_ / 2, 4);
+      tft_.drawString(busy ? "CANCEL" : "START BP", btnX_ + btnW_ / 2, btnY_ + btnH_ / 2, 4);
       tft_.setTextDatum(TL_DATUM);
     }
   }
@@ -858,9 +860,13 @@ private:
     bool bpBusy = s.bpPhase == BpPhase::INFLATING || s.bpPhase == BpPhase::MEASURING
                || s.bpPhase == BpPhase::COMPUTING || s.bpPhase == BpPhase::ZEROING;
     if (page_ == Page::BP) {
-      if (!bpBusy && x >= btnX_ && x <= btnX_ + btnW_ && y >= btnY_ && y <= btnY_ + btnH_) {
-        if (stateLock()) { g_state.bpRequested = true; stateUnlock(); }
-        tone(PIN_BUZZER, 900, 60);
+      if (x >= btnX_ && x <= btnX_ + btnW_ && y >= btnY_ && y <= btnY_ + btnH_) {
+        if (stateLock()) {
+          if (bpBusy) g_state.bpCancelRequested = true;   // button reads CANCEL
+          else        g_state.bpRequested = true;         // button reads START BP
+          stateUnlock();
+        }
+        tone(PIN_BUZZER, bpBusy ? 600 : 900, 60);
         return true;
       }
     }
