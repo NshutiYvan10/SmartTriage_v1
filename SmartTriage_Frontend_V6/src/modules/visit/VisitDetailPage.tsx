@@ -40,6 +40,8 @@ import { LabTestDetailModal } from '@/modules/lab/LabTestDetailModal';
 import { LabDocuments } from '@/modules/lab/LabDocuments';
 import { visitApi } from '@/api/visits';
 import type { DispositionRequest } from '@/api/visits';
+import { documentationApi } from '@/api/documentation';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { vitalApi } from '@/api/vitals';
 import { triageApi } from '@/api/triage';
 import { usePatientStore, visitResponseToPatient } from '@/store/patientStore';
@@ -301,6 +303,13 @@ export function VisitDetailPage() {
   const [showInvestigationForm, setShowInvestigationForm] = useState(false);
   const [showMedicationForm, setShowMedicationForm] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
+  // Disposition errors surfaced in-app (replaces the native window.alert that
+  // rendered as "localhost says…"). When a Discharge Home is blocked because no
+  // discharge summary exists yet, the dialog offers to generate it and complete
+  // the discharge in one step — there's no summary generator on this tab.
+  const [dispositionNotice, setDispositionNotice] = useState<{ message: string; needsSummary: boolean } | null>(null);
+  const [pendingDisposition, setPendingDisposition] = useState<DispositionRequest | null>(null);
+  const [generatingSummary, setGeneratingSummary] = useState(false);
 
   // Safety hard-stop: when a prescribe attempt conflicts with the
   // patient's known allergies, with a drug–drug interaction against
@@ -790,9 +799,33 @@ export function VisitDetailPage() {
       await visitApi.recordDisposition(visit.id, data);
       loadData();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Could not record the disposition');
-      console.error(err);
+      // In-app dialog instead of window.alert (which rendered as "localhost says…").
+      const message = err instanceof Error ? err.message : 'Could not record the disposition';
+      const needsSummary = data.dispositionType === 'DISCHARGED_HOME' && /discharge summary/i.test(message);
+      setPendingDisposition(needsSummary ? data : null);
+      setDispositionNotice({ message, needsSummary });
+      // needsSummary is an expected, handled guided flow — don't log it as an error.
+      if (!needsSummary) console.error(err);
     } finally { setFormLoading(false); }
+  };
+
+  // A Discharge Home rejected for a missing discharge summary → generate the
+  // summary and complete the same discharge in one step.
+  const handleGenerateSummaryAndDischarge = async () => {
+    if (!visit || !pendingDisposition) return;
+    setGeneratingSummary(true);
+    try {
+      await documentationApi.generateDischargeSummary(visit.id);
+      await visitApi.recordDisposition(visit.id, pendingDisposition);
+      setDispositionNotice(null);
+      setPendingDisposition(null);
+      loadData();
+    } catch (err) {
+      setDispositionNotice({
+        message: err instanceof Error ? err.message : 'Failed to generate the discharge summary.',
+        needsSummary: false,
+      });
+    } finally { setGeneratingSummary(false); }
   };
 
   // ────────── RENDER ──────────
@@ -1003,6 +1036,29 @@ export function VisitDetailPage() {
             if (ok) { setAckModalAlert(null); setAckModalReason(''); }
           }}
           onCancel={() => { setAckModalAlert(null); setAckModalReason(''); }}
+        />
+      )}
+
+      {/* ── Disposition notice / discharge-summary guard (replaces window.alert) ── */}
+      {dispositionNotice && (
+        <ConfirmDialog
+          open
+          tone="primary"
+          title={dispositionNotice.needsSummary ? 'Discharge summary required' : 'Could not record disposition'}
+          message={
+            dispositionNotice.needsSummary
+              ? `${dispositionNotice.message} Generate it now and complete the discharge?`
+              : dispositionNotice.message
+          }
+          confirmLabel={dispositionNotice.needsSummary ? 'Generate summary & discharge' : 'OK'}
+          cancelLabel={dispositionNotice.needsSummary ? 'Cancel' : 'Close'}
+          busy={generatingSummary}
+          onConfirm={
+            dispositionNotice.needsSummary
+              ? handleGenerateSummaryAndDischarge
+              : () => setDispositionNotice(null)
+          }
+          onClose={() => { if (!generatingSummary) { setDispositionNotice(null); setPendingDisposition(null); } }}
         />
       )}
 
