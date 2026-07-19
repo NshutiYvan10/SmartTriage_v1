@@ -34,6 +34,7 @@
 #pragma once
 #include <Arduino.h>
 #include <SPI.h>
+#include <Preferences.h>
 #include "config.h"
 #include "state.h"
 #include "cuffadc.h"
@@ -52,6 +53,15 @@ public:
     ledcAttach(PIN_MOTOR_ENA, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
     motorStop();
 
+    // Pressure scale: prefer the value measured on THIS box by the
+    // guided pump calibration (survives reboots/reflashes); the config
+    // default is only a first-boot placeholder.
+    prefs_.begin("bp", false);
+    countsPerMmHg_ = prefs_.getFloat("scale", BP_COUNTS_PER_MMHG);
+    Serial.printf("[bp] pressure scale: %.0f counts/mmHg (%s)\n", countsPerMmHg_,
+                  prefs_.isKey("scale") ? "measured, stored on device"
+                                        : "factory default - run CAL PUMP on the BP page");
+
     zeroCalibrate();
   }
 
@@ -64,6 +74,13 @@ public:
         g_state.bpRequested = false;
         stateUnlock();
       }
+      bool calRequested = false;
+      if (stateLock()) {
+        calRequested = g_state.bpCalRequested;
+        g_state.bpCalRequested = false;
+        stateUnlock();
+      }
+      if (calRequested) { runCalibrationPump(); continue; }
       if (!requested) { vTaskDelay(pdMS_TO_TICKS(150)); continue; }
       Serial.println("[bp] START requested");
 
@@ -76,12 +93,14 @@ public:
 
 private:
   // ================= pressure conversion =================
+  Preferences prefs_;
   int32_t zeroRaw_ = 0;
+  float countsPerMmHg_ = BP_COUNTS_PER_MMHG;
   bool sensorPresent_ = false;
   float lastPressure_ = 0;
 
   float countsToMmHg(int32_t raw) {
-    return (float)((double)(raw - zeroRaw_) / BP_COUNTS_PER_MMHG);
+    return (float)((double)(raw - zeroRaw_) / countsPerMmHg_);
   }
 
   // One fresh sample. Caller owns the bus + pin guard. false = not ready
@@ -269,6 +288,103 @@ private:
     if (g_tftSpi) g_tftSpi->begin(PIN_PRES_SCK, SHARED_PIN_MISO, SHARED_PIN_MOSI, -1);
     xSemaphoreGive(g_spiBusMutex);
     digitalWrite(PIN_LED_BP, LOW);
+  }
+
+  // ============ guided pump-scale calibration (BP page → CAL PUMP) ======
+  // The factory counts-per-mmHg guess was ~10x off on the real box: the
+  // display claimed 183 mmHg after 3 s while the cuff sat flat and
+  // gripless. This mode measures the true scale on THIS hardware: wrap
+  // the cuff on an arm, press CAL PUMP — the motor runs on a pure TIME
+  // budget (raw counts only, no trusted pressure), and the user presses
+  // and HOLDS the screen the moment the cuff grips clinic-tight (the
+  // ~170 mmHg anchor every clinician knows by feel). raw-delta / 170 =
+  // counts per mmHg, stored in flash. Crude (±20%), but it turns a 10x
+  // error into a working monitor; reference-gauge validation refines it.
+  void runCalibrationPump() {
+    Serial.println("[bp] CAL PUMP started - press & HOLD the screen when the cuff is firmly tight");
+    digitalWrite(PIN_LED_BP, HIGH);
+    cancelRequested();                                      // clear stale
+    setPhase(BpPhase::ZEROING, 2);
+    vTaskDelay(pdMS_TO_TICKS(450));                         // UI paints the paused screen
+    if (xSemaphoreTake(g_spiBusMutex, pdMS_TO_TICKS(3000)) != pdTRUE) {
+      setPhase(BpPhase::ERROR, 0, "Screen busy - try again");
+      digitalWrite(PIN_LED_BP, LOW);
+      return;
+    }
+    if (g_tftSpi) g_tftSpi->end();
+    {
+      CuffAdcPinGuard guard;
+      calibrationOwned();
+    }
+    if (g_tftSpi) g_tftSpi->begin(PIN_PRES_SCK, SHARED_PIN_MISO, SHARED_PIN_MOSI, -1);
+    xSemaphoreGive(g_spiBusMutex);
+    digitalWrite(PIN_LED_BP, LOW);
+  }
+
+  void calibrationOwned() {
+    if (!sensorPresent_ && !probeAndZeroOwned()) {
+      setPhase(BpPhase::ERROR, 0, "Pressure sensor not responding");
+      return;
+    }
+    if (!cuffAdcSyncSettle()) {
+      setPhase(BpPhase::ERROR, 0, "Pressure sensor not responding");
+      return;
+    }
+    // fresh zero (drift!)
+    {
+      int64_t sum = 0; int got = 0;
+      for (int i = 0; i < 8; i++) {
+        if (!cuffAdcWaitReady(400)) continue;
+        sum += cuffAdcClockOut24(); got++;
+      }
+      if (got < 4) { setPhase(BpPhase::ERROR, 0, "Pressure sensor not responding"); return; }
+      zeroRaw_ = (int32_t)(sum / got);
+    }
+
+    setPhase(BpPhase::INFLATING, 20);
+    motorInflate();
+    uint32_t start = millis(), lastCancelPoll = millis();
+    int32_t raw = zeroRaw_;
+    int lastLoggedSec = -1;
+    bool stopped = false;
+
+    for (;;) {
+      if (millis() - start > 30000) break;                  // hard time budget
+      if (cuffAdcWaitReady(150)) {
+        int32_t r = cuffAdcClockOut24();
+        // ignore framing slips (doubled values) for the captured maximum
+        if (labs((long)(r - raw)) < labs((long)(raw - zeroRaw_)) + 400000) raw = r;
+        if (labs((long)(r - zeroRaw_)) > 7000000) break;    // near ADC clip
+      }
+      int sec = (int)((millis() - start) / 1000);
+      if (sec != lastLoggedSec) {
+        lastLoggedSec = sec;
+        Serial.printf("[bp] cal t=%ds raw delta %ld\n", sec, (long)(raw - zeroRaw_));
+      }
+      if (millis() - lastCancelPoll > 800) {                // user says "tight now"
+        lastCancelPoll = millis();
+        bool stop = touchCancelPoll() || cancelRequested();
+        cuffAdcSyncSettle();
+        if (stop) { stopped = true; break; }
+      }
+    }
+    motorStop();
+
+    int32_t delta = raw - zeroRaw_;
+    Serial.printf("[bp] cal finished (%s): raw delta %ld\n",
+                  stopped ? "user stop" : "time/clip budget", (long)delta);
+    if (delta > 20000) {
+      float newScale = constrain((float)delta / 170.0f, 1000.0f, 200000.0f);
+      countsPerMmHg_ = newScale;
+      prefs_.putFloat("scale", newScale);
+      Serial.printf("[bp] SCALE CALIBRATED: %.0f counts/mmHg stored (anchor: cuff felt tight ~170 mmHg)\n",
+                    newScale);
+      finishSafe();
+      setPhase(BpPhase::IDLE, 0);
+    } else {
+      setPhase(BpPhase::ERROR, 0, "Calibration: no pressure rise");
+      finishSafe();
+    }
   }
 
   void runCycleOwned() {

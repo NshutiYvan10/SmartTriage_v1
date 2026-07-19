@@ -60,6 +60,7 @@ struct MonitorState {
   char     bpError[40] = "";
   bool     bpRequested = false;     // UI → bpTask trigger
   bool     bpCancelRequested = false; // UI → bpTask: abort the running cycle NOW
+  bool     bpCalRequested = false;  // UI → bpTask: run the guided pump-scale calibration
   bool     bpCalibrated = false;    // scale validated against a reference?
 
   // ---- alarms ----

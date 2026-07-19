@@ -18,7 +18,7 @@
 #pragma once
 
 // ======================== IDENTITY / NETWORK =========================
-#define FIRMWARE_VERSION   "s3-3.2.5"
+#define FIRMWARE_VERSION   "s3-3.3.0"
 
 #define WIFI_SSID          "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD      "YOUR_WIFI_PASSWORD"
@@ -196,8 +196,11 @@
 // SAFETY ENVELOPE — enforced in bp.h on every path, including errors:
 #define BP_TARGET_INFLATE_MMHG   180.0f  // stop inflating here
 #define BP_HARD_ABORT_MMHG       200.0f  // instant abort + full deflate
-#define BP_INFLATE_TIMEOUT_MS  20000UL   // pump can't reach target → abort
-#define BP_MEASURE_TIMEOUT_MS  60000UL   // whole measurement bounded
+// A small 6 V pump filling a REAL adult cuff (ACMNP-1 class) to 180 mmHg
+// legitimately takes 20-40 s — the old 20 s timeout was tuned while the
+// scale error made inflation LOOK 10x faster than it was.
+#define BP_INFLATE_TIMEOUT_MS  60000UL   // pump can't reach target → abort
+#define BP_MEASURE_TIMEOUT_MS 150000UL   // whole cycle bounded (inflate + bleed)
 #define BP_DEFLATE_FLOOR_MMHG     35.0f  // measurement ends below this
 #define BP_SAMPLE_INTERVAL_MS      20    // 50 Hz cuff-pressure sampling
 #define BP_DEFLATE_PWM            60     // starting deflate PWM (tune for ~3 mmHg/s)
@@ -206,12 +209,15 @@
 #define BP_SYS_RATIO 0.55f
 #define BP_DIA_RATIO 0.75f
 // Pressure ADC transfer (v3.2.0 — HX710-family, 24-bit, two-wire, NO CS):
-//   mmHg = (raw24 - zeroRaw at boot) / BP_COUNTS_PER_MMHG
-// The default below is the NOMINAL sensitivity of the common
-// MPS20N0040D-bridge + HX710 cuff module. It MUST be validated against a
-// reference sphygmomanometer: if our reading is consistently too HIGH,
-// increase this number proportionally; too LOW, decrease it. Until
-// validated every result carries the UNCALIBRATED flag on screen.
+//   mmHg = (raw24 - auto-zero at cycle start) / counts-per-mmHg
+// The define below is only the FACTORY-DEFAULT scale. The REAL scale is
+// measured on-device with the guided pump calibration (BP page → CAL
+// PUMP: motor runs, user stops it when the cuff is clinic-tight ≈ the
+// ~170 mmHg anchor) and stored in flash. Field evidence: with the naive
+// 4600 default the display claimed 183 mmHg after 3 s of pumping while
+// the real cuff sat flat and gripless — the true sensitivity of this
+// module class is roughly 10x higher. Reference-gauge validation still
+// applies afterwards (UNCALIBRATED flag until then).
 #define BP_COUNTS_PER_MMHG 4600.0f
 #define BP_HISTORY_SIZE 8
 

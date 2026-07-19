@@ -679,6 +679,17 @@ private:
       tft_.setTextDatum(MC_DATUM);
       tft_.drawString(busy ? "CANCEL" : "START BP", btnX_ + btnW_ / 2, btnY_ + btnH_ / 2, 4);
       tft_.setTextDatum(TL_DATUM);
+      // guided pump-scale calibration (see bp.h) — hidden while busy
+      if (!busy) {
+        tft_.fillRoundRect(8, btnY_, 116, btnH_, 10, UI_ACCENT);
+        tft_.setTextColor(TFT_WHITE, UI_ACCENT);
+        tft_.setTextDatum(MC_DATUM);
+        tft_.drawString("CAL", 66, btnY_ + btnH_ / 2 - 10, 4);
+        tft_.drawString("PUMP", 66, btnY_ + btnH_ / 2 + 14, 2);
+        tft_.setTextDatum(TL_DATUM);
+      } else {
+        tft_.fillRect(8, btnY_, 116, btnH_, UI_BG);
+      }
     }
   }
   int lastBpBtn_ = -1;
@@ -913,6 +924,12 @@ private:
           stateUnlock();
         }
         tone(PIN_BUZZER, bpBusy ? 600 : 900, 60);
+        return true;
+      }
+      // CAL PUMP — guided pump-scale calibration (idle only)
+      if (!bpBusy && x >= 8 && x <= 124 && y >= btnY_ && y <= btnY_ + btnH_) {
+        if (stateLock()) { g_state.bpCalRequested = true; stateUnlock(); }
+        tone(PIN_BUZZER, 1000, 60);
         return true;
       }
     }
