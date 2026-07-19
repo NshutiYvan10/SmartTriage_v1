@@ -341,12 +341,18 @@ private:
       zeroRaw_ = (int32_t)(sum / got);
     }
 
+    // Remember what a TRULY EMPTY cuff reads (used to detect residual
+    // pressure at future measurement starts).
+    prefs_.putInt("zempty", (int32_t)zeroRaw_);
+
     setPhase(BpPhase::INFLATING, 20);
     motorInflate();
     uint32_t start = millis(), lastCancelPoll = millis();
     int32_t raw = zeroRaw_;
+    int32_t maxDelta = 0;
+    uint32_t lastGrowth = millis();
     int lastLoggedSec = -1;
-    bool stopped = false;
+    bool stopped = false, clipped = false;
 
     for (;;) {
       if (millis() - start > 30000) break;                  // hard time budget
@@ -354,7 +360,13 @@ private:
         int32_t r = cuffAdcClockOut24();
         // ignore framing slips (doubled values) for the captured maximum
         if (labs((long)(r - raw)) < labs((long)(raw - zeroRaw_)) + 400000) raw = r;
-        if (labs((long)(r - zeroRaw_)) > 7000000) break;    // near ADC clip
+        int32_t d = raw - zeroRaw_;
+        if (d > maxDelta + 30000) { maxDelta = d; lastGrowth = millis(); }
+        // Plateau while pumping = the ADC hit its saturation ceiling
+        // (measured live: frozen at exactly +8388607 counts while the
+        // pump kept running). That plateau IS the calibration anchor —
+        // stop, don't keep pumping into a blind sensor.
+        if (maxDelta > 500000 && millis() - lastGrowth > 1500) { clipped = true; break; }
       }
       int sec = (int)((millis() - start) / 1000);
       if (sec != lastLoggedSec) {
@@ -372,13 +384,17 @@ private:
 
     int32_t delta = raw - zeroRaw_;
     Serial.printf("[bp] cal finished (%s): raw delta %ld\n",
-                  stopped ? "user stop" : "time/clip budget", (long)delta);
+                  clipped ? "ADC ceiling" : stopped ? "user stop" : "time budget", (long)delta);
     if (delta > 20000) {
-      float newScale = constrain((float)delta / 170.0f, 1000.0f, 200000.0f);
+      // Anchor: the ADC clip plateau is a repeatable physical constant
+      // (~BP_CLIP_ANCHOR_MMHG); subjective "felt tight" (~170) is the
+      // fallback when the ceiling was never reached.
+      float anchor = clipped ? BP_CLIP_ANCHOR_MMHG : 170.0f;
+      float newScale = constrain((float)delta / anchor, 1000.0f, 200000.0f);
       countsPerMmHg_ = newScale;
       prefs_.putFloat("scale", newScale);
-      Serial.printf("[bp] SCALE CALIBRATED: %.0f counts/mmHg stored (anchor: cuff felt tight ~170 mmHg)\n",
-                    newScale);
+      Serial.printf("[bp] SCALE CALIBRATED: %.0f counts/mmHg stored (anchor: %s ~%.0f mmHg)\n",
+                    newScale, clipped ? "ADC ceiling" : "cuff felt tight", anchor);
       finishSafe();
       setPhase(BpPhase::IDLE, 0);
     } else {
@@ -429,8 +445,18 @@ private:
       }
       int32_t newZero = (int32_t)(sum / got);
       Serial.printf("[bp] auto-zero: raw %ld (drift %+.1f mmHg since previous zero)\n",
-                    (long)newZero, (float)((double)(newZero - zeroRaw_) / BP_COUNTS_PER_MMHG));
+                    (long)newZero, (float)((double)(newZero - zeroRaw_) / countsPerMmHg_));
       zeroRaw_ = newZero;
+      // Residual-pressure check vs the truly-empty zero captured at
+      // calibration: auto-zeroing on a half-full cuff silently eats the
+      // ADC's headroom above the zero (observed live: +190 mmHg of
+      // "drift" that was really trapped air, ceiling down to 148).
+      int32_t zEmpty = prefs_.getInt("zempty", newZero);
+      float residual = (float)((double)(newZero - zEmpty) / countsPerMmHg_);
+      if (residual > 15.0f) {
+        Serial.printf("[bp] warning: cuff holds ~%.0f mmHg residual air at start "
+                      "(loosen/empty the cuff for full range)\n", residual);
+      }
     }
     float p0;
     if (!readSample(p0, 700)) {
@@ -446,7 +472,18 @@ private:
       return;
     }
 
-    // ---- Phase 1: pressure-feedback inflation ----
+    // ---- Phase 1: pressure-feedback inflation (clip-aware) ----
+    // The ADC saturates at BP_ADC_MAX_COUNTS — pressure above that is
+    // invisible. Inflate to the configured target OR just below the
+    // ceiling this cycle's zero leaves us, whichever is lower.
+    float ceiling = (float)((double)(BP_ADC_MAX_COUNTS - zeroRaw_) / countsPerMmHg_);
+    float target = min((float)BP_TARGET_INFLATE_MMHG, ceiling - 6.0f);
+    Serial.printf("[bp] inflation target %.0f mmHg (ADC ceiling %.0f)\n", target, ceiling);
+    if (target < BP_MIN_USABLE_TARGET) {
+      setPhase(BpPhase::ERROR, 0, "Empty the cuff fully, then retry");
+      finishSafe();
+      return;
+    }
     setPhase(BpPhase::INFLATING, 5);
     motorInflate();
     uint32_t inflateStart = millis();
@@ -475,10 +512,10 @@ private:
         setPhase(BpPhase::ERROR, 0, "Overpressure — aborted");
         finishSafe(); return;
       }
-      if (p >= BP_TARGET_INFLATE_MMHG) {                    // target reached —
+      if (p >= target) {                                    // target reached —
         float confirm;                                      // confirm it isn't a
         if (readSample(confirm, 200)                        // doubled sample
-            && confirm >= BP_TARGET_INFLATE_MMHG - 20.0f) break;
+            && confirm >= target - 20.0f) break;
         continue;
       }
       if (millis() - inflateStart > BP_INFLATE_TIMEOUT_MS) {
@@ -487,6 +524,12 @@ private:
       }
       if (millis() - lastRiseCheck > 3000) {                // stall detection
         if (p - lastP < 3.0f) {
+          // Pegged just under the ceiling is CLIP, not a hose problem —
+          // proceed to measure with what we have.
+          if (p >= ceiling - 12.0f) {
+            Serial.printf("[bp] stopping at ADC ceiling (%.0f mmHg) - measuring from here\n", p);
+            break;
+          }
           setPhase(BpPhase::ERROR, 0, "Cuff not inflating — check hose");
           finishSafe(); return;
         }

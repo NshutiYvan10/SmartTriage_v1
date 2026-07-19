@@ -18,7 +18,7 @@
 #pragma once
 
 // ======================== IDENTITY / NETWORK =========================
-#define FIRMWARE_VERSION   "s3-3.3.0"
+#define FIRMWARE_VERSION   "s3-3.3.1"
 
 #define WIFI_SSID          "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD      "YOUR_WIFI_PASSWORD"
@@ -219,6 +219,17 @@
 // module class is roughly 10x higher. Reference-gauge validation still
 // applies afterwards (UNCALIBRATED flag until then).
 #define BP_COUNTS_PER_MMHG 4600.0f
+
+// ADC SATURATION (measured live): the 24-bit converter pegs at +8388607
+// counts — with this bridge + fixed gain that is roughly 140 real mmHg.
+// Pressures above the clip are INVISIBLE to the electronics, so:
+//  - inflation targets just below the ceiling (clip-aware, per cycle);
+//  - the calibration anchors on the clip plateau itself (a repeatable
+//    physical constant) rather than on subjective cuff feel;
+//  - refine BOTH via one reference-monitor comparison later.
+#define BP_ADC_MAX_COUNTS     8388607L
+#define BP_CLIP_ANCHOR_MMHG   140.0f   // assumed real pressure at ADC clip
+#define BP_MIN_USABLE_TARGET  110.0f   // below this there's no room to measure
 #define BP_HISTORY_SIZE 8
 
 // These must match TFT_eSPI's User_Setup.h — used by the measurement

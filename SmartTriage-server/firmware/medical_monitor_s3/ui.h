@@ -200,7 +200,7 @@ private:
   uint32_t lastPhantomLogMs_ = 0;
   void logPhantom(uint16_t rx, uint16_t ry) {
     uint32_t now = millis();
-    if (now - lastPhantomLogMs_ < 1000) return;
+    if (now - lastPhantomLogMs_ < 15000) return;   // proven filter — keep logs readable
     lastPhantomLogMs_ = now;
     Serial.printf("[touch] phantom rejected (raw %u,%u)\n", rx, ry);
   }
