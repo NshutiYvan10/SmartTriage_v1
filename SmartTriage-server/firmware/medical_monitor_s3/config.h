@@ -18,7 +18,7 @@
 #pragma once
 
 // ======================== IDENTITY / NETWORK =========================
-#define FIRMWARE_VERSION   "s3-3.3.1"
+#define FIRMWARE_VERSION   "s3-3.3.2"
 
 #define WIFI_SSID          "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD      "YOUR_WIFI_PASSWORD"
@@ -228,8 +228,15 @@
 //    physical constant) rather than on subjective cuff feel;
 //  - refine BOTH via one reference-monitor comparison later.
 #define BP_ADC_MAX_COUNTS     8388607L
-#define BP_CLIP_ANCHOR_MMHG   140.0f   // assumed real pressure at ADC clip
-#define BP_MIN_USABLE_TARGET  110.0f   // below this there's no room to measure
+// CLIP ANCHOR — validated against a reference monitor (Physio Logic
+// EssentiA+, two readings): our sys AND dia both read ~1.21x high with
+// the 140 assumption, and 140 x 0.82 ≈ 115 — which also matches the
+// bridge/gain physics estimate (~117 mmHg full-scale at 3.3 V
+// excitation). Corrected readings project to within ~1 mmHg of the
+// reference. Stored scales calibrated under an older anchor are
+// auto-migrated at boot (bp.h).
+#define BP_CLIP_ANCHOR_MMHG   115.0f   // real pressure at ADC clip (reference-validated)
+#define BP_MIN_USABLE_TARGET   90.0f   // below this there's no room to measure
 #define BP_HISTORY_SIZE 8
 
 // These must match TFT_eSPI's User_Setup.h — used by the measurement

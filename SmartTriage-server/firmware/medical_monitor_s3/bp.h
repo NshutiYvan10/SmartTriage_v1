@@ -58,6 +58,21 @@ public:
     // default is only a first-boot placeholder.
     prefs_.begin("bp", false);
     countsPerMmHg_ = prefs_.getFloat("scale", BP_COUNTS_PER_MMHG);
+    // Anchor migration: a stored scale derived under an older clip-anchor
+    // assumption is rescaled to the current (reference-validated) anchor.
+    // Scales saved before the anchor was recorded were clip-anchored 140.
+    if (prefs_.isKey("scale")) {
+      float storedAnchor = prefs_.getFloat("anchor", 140.0f);
+      if (storedAnchor != 170.0f && fabsf(storedAnchor - BP_CLIP_ANCHOR_MMHG) > 0.5f) {
+        float old = countsPerMmHg_;
+        countsPerMmHg_ = old * storedAnchor / BP_CLIP_ANCHOR_MMHG;
+        prefs_.putFloat("scale", countsPerMmHg_);
+        prefs_.putFloat("anchor", BP_CLIP_ANCHOR_MMHG);
+        Serial.printf("[bp] scale migrated %.0f -> %.0f counts/mmHg "
+                      "(clip anchor %.0f -> %.0f, reference-validated)\n",
+                      old, countsPerMmHg_, storedAnchor, BP_CLIP_ANCHOR_MMHG);
+      }
+    }
     Serial.printf("[bp] pressure scale: %.0f counts/mmHg (%s)\n", countsPerMmHg_,
                   prefs_.isKey("scale") ? "measured, stored on device"
                                         : "factory default - run CAL PUMP on the BP page");
@@ -393,6 +408,7 @@ private:
       float newScale = constrain((float)delta / anchor, 1000.0f, 200000.0f);
       countsPerMmHg_ = newScale;
       prefs_.putFloat("scale", newScale);
+      prefs_.putFloat("anchor", anchor);   // recorded for future anchor migrations
       Serial.printf("[bp] SCALE CALIBRATED: %.0f counts/mmHg stored (anchor: %s ~%.0f mmHg)\n",
                     newScale, clipped ? "ADC ceiling" : "cuff felt tight", anchor);
       finishSafe();
