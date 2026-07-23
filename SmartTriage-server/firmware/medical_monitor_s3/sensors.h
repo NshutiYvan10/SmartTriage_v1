@@ -240,11 +240,24 @@ public:
     if (now - lastSampleMs_ < ECG_SAMPLE_INTERVAL_MS) return;
     lastSampleMs_ = now;
 
-    leadsOff_ = digitalRead(PIN_ECG_LO_P) == HIGH || digitalRead(PIN_ECG_LO_N) == HIGH;
+    // Leads-off with DEBOUNCE: the AD8232 LO pins chatter when electrode
+    // contact is marginal — a single noisy sample must not blank the HR
+    // ("sometimes a reading shows, sometimes it doesn't" — field report).
+    bool loRaw = digitalRead(PIN_ECG_LO_P) == HIGH || digitalRead(PIN_ECG_LO_N) == HIGH;
+    if (loRaw) {
+      loLowSince_ = 0;
+      if (!loHighSince_) loHighSince_ = now;
+      if (!leadsOff_ && now - loHighSince_ >= ECG_LO_ON_MS) leadsOff_ = true;
+    } else {
+      loHighSince_ = 0;
+      if (!loLowSince_) loLowSince_ = now;
+      if (leadsOff_ && now - loLowSince_ >= ECG_LO_OFF_MS) leadsOff_ = false;
+    }
     if (leadsOff_) {
       onLeadsOff(now, irFallbackBpm, fingerOn);
       return;
     }
+    if (loRaw) return;   // connected, but this sample is contact noise — skip it
     leadsOnSince_ = leadsOnSince_ ? leadsOnSince_ : now;
 
     int raw = analogRead(PIN_ECG);
@@ -285,13 +298,25 @@ private:
 
     // HR falls back to the IR beat detector when a finger is on the pulse-ox
     if (fingerOn && irFallbackBpm > 0) acceptHr(irFallbackBpm, false);
-    else expireHrIfStale(now);
+    updateQualityAndHold(now);
     publish(now);
   }
 
+  // ---- beat detection + VALIDATION (v3.4.0) ----
+  // A structural peak is only a HEARTBEAT if its R-R interval fits the
+  // established rhythm; a genuine rate change must prove itself with
+  // ECG_RHYTHM_N consecutive mutually-consistent intervals. This is what
+  // stops T-waves and motion artifacts from bouncing the display
+  // (field report: HR jumping 115 ↔ 96).
   void detectRPeak(float filtered, uint32_t now) {
     float threshold = max(adaptive_ * ECG_ADAPT_FRACTION, 150.0f);
-    bool pastRefractory = (now - lastPeakMs_) > ECG_REFRACTORY_MS;
+    // Dynamic refractory: 40% of the rhythm's median R-R (never below the
+    // hard floor) keeps the detector out of T-wave territory at slow rates.
+    uint32_t refractory = ECG_REFRACTORY_MS;
+    if (rrCnt_ >= 4) {
+      refractory = (uint32_t)constrain(0.4f * rrMedian(), (float)ECG_REFRACTORY_MS, 600.0f);
+    }
+    bool pastRefractory = (now - lastCandidateMs_) > refractory;
 
     if (filtered > threshold && pastRefractory) {
       if (!inBeat_) { inBeat_ = true; peakVal_ = filtered; peakHead_ = g_ecgWaveHead; }
@@ -300,38 +325,135 @@ private:
       inBeat_ = false;
       if (peakVal_ < ECG_MIN_PEAK_AMP) return;              // noise, not a beat
 
-      // confirmed R-peak — adapt threshold and schedule beat export
-      adaptive_ = ECG_ADAPT_ALPHA * peakVal_ + (1.0f - ECG_ADAPT_ALPHA) * adaptive_;
-      scheduleBeatExport(peakHead_);
+      long candRr = lastCandidateMs_ > 0 ? (long)(now - lastCandidateMs_) : 0;
+      lastCandidateMs_ = now;
+      qualTotal_++;
 
-      // respiration inputs
-      rAmp_[rIdx_] = peakVal_;
-      rAt_[rIdx_]  = now;
-      rIdx_ = (rIdx_ + 1) % RR_BUFFER_SIZE;
-      if (rCount_ < RR_BUFFER_SIZE) rCount_++;
+      if (validateBeat(candRr, peakVal_)) {
+        qualOk_++;
+        adaptive_ = ECG_ADAPT_ALPHA * peakVal_ + (1.0f - ECG_ADAPT_ALPHA) * adaptive_;
+        ampEma_ = ampEma_ > 0 ? 0.2f * peakVal_ + 0.8f * ampEma_ : peakVal_;
+        scheduleBeatExport(peakHead_);
 
-      if (lastPeakMs_ > 0) {
-        long rr = (long)(now - lastPeakMs_);
-        if (rr > 300 && rr < 2000) acceptHr(60000.0f / rr, true);
+        // respiration inputs — ACCEPTED beats only (artifact amplitudes
+        // were corrupting the EDR estimate too)
+        rAmp_[rIdx_] = peakVal_;
+        rAt_[rIdx_]  = now;
+        rIdx_ = (rIdx_ + 1) % RR_BUFFER_SIZE;
+        if (rCount_ < RR_BUFFER_SIZE) rCount_++;
+
+        refreshDisplayedHr(now);
       }
-      lastPeakMs_ = now;
     }
-    expireHrIfStale(now);
+    updateQualityAndHold(now);
   }
 
+  // Candidate R-R (measured candidate-to-candidate) against the rhythm.
+  bool validateBeat(long rr, float amp) {
+    if (rr <= 0) return true;                               // first anchor beat
+    if (rr < 300 || rr > 2000) { pendingCnt_ = 0; return false; }
+
+    if (rrCnt_ < 4) { pushRr(rr); pendingCnt_ = 0; return true; }   // bootstrap
+
+    float med = rrMedian();
+    if (fabsf((float)rr - med) <= ECG_RR_TOL_FRAC * med) {
+      pushRr(rr);
+      pendingCnt_ = 0;
+      return true;
+    }
+    // Classic T-wave signature: clearly early AND clearly smaller than
+    // the running R amplitude — reject outright, don't even let it argue
+    // for a "rhythm change".
+    if ((float)rr < 0.6f * med && amp < ECG_TWAVE_AMP_FRAC * ampEma_) {
+      return false;
+    }
+    // Rhythm-change gate: N consecutive off-rhythm intervals that agree
+    // WITH EACH OTHER become the new rhythm (a real HR change tracks
+    // within ~2-3 beats; scattered artifacts never agree).
+    pendingRr_[pendingCnt_ % ECG_RHYTHM_N] = (float)rr;
+    pendingCnt_++;
+    if (pendingCnt_ >= ECG_RHYTHM_N) {
+      float mean = 0;
+      for (int i = 0; i < ECG_RHYTHM_N; i++) mean += pendingRr_[i];
+      mean /= ECG_RHYTHM_N;
+      bool agree = true;
+      for (int i = 0; i < ECG_RHYTHM_N; i++) {
+        if (fabsf(pendingRr_[i] - mean) > ECG_RHYTHM_TOL_FRAC * mean) { agree = false; break; }
+      }
+      if (agree) {
+        rrCnt_ = 0; rrIdx_ = 0;                             // adopt the new rhythm
+        for (int i = 0; i < ECG_RHYTHM_N; i++) pushRr((long)pendingRr_[i]);
+        pendingCnt_ = 0;
+        return true;
+      }
+      pendingCnt_ = 0;                                      // disagreeing noise
+    }
+    return false;
+  }
+
+  void pushRr(long rr) {
+    rrBuf_[rrIdx_] = (float)rr;
+    rrIdx_ = (rrIdx_ + 1) % ECG_RR_BUF;
+    if (rrCnt_ < ECG_RR_BUF) rrCnt_++;
+  }
+
+  float rrMedian() {
+    float tmp[ECG_RR_BUF];
+    int n = rrCnt_;
+    for (int i = 0; i < n; i++) tmp[i] = rrBuf_[i];
+    for (int i = 1; i < n; i++) {                           // insertion sort (n ≤ 8)
+      float v = tmp[i]; int j = i - 1;
+      while (j >= 0 && tmp[j] > v) { tmp[j + 1] = tmp[j]; j--; }
+      tmp[j + 1] = v;
+    }
+    return n ? tmp[n / 2] : 0;
+  }
+
+  // Displayed HR = median of the accepted rhythm, with hysteresis — the
+  // number a clinician sees moves when the RHYTHM moves, not per beat.
+  void refreshDisplayedHr(uint32_t now) {
+    if (rrCnt_ < 4) return;
+    float bpm = 60000.0f / rrMedian();
+    if (bpm < HR_MIN || bpm > HR_MAX) return;
+    if (displayedHr_ <= 0 || fabsf(bpm - displayedHr_) >= ECG_HR_HYSTERESIS_BPM) {
+      displayedHr_ = bpm;
+    }
+    hrFromEcg_ = true;
+    lastHrMs_ = now;
+  }
+
+  // Fallback path (pulse-ox IR beats while ECG leads are off).
   void acceptHr(float bpm, bool fromEcg) {
-    if (bpm < HR_MIN || bpm > HR_MAX) return;               // plausibility clamp
-    hrMedian_.push(bpm);
-    float med = hrMedian_.median();
-    if (hrEma_.primed && outlierPercent(med, hrEma_.value, HR_OUTLIER_FRAC)) return;
-    hrEma_.update(med, EMA_ALPHA_HR);
+    if (bpm < HR_MIN || bpm > HR_MAX) return;
+    if (displayedHr_ <= 0 || fabsf(bpm - displayedHr_) >= ECG_HR_HYSTERESIS_BPM) {
+      displayedHr_ = bpm;
+    }
     hrFromEcg_ = fromEcg;
     lastHrMs_ = millis();
   }
 
-  void expireHrIfStale(uint32_t now) {
-    if (hrEma_.primed && now - lastHrMs_ > ECG_HR_TIMEOUT_MS) {
-      hrEma_.reset(); hrMedian_.reset();
+  // Signal-quality ladder + hold-last-good. A brief noisy patch DIMS the
+  // number instead of blanking it; only ECG_HOLD_LAST_MS of silence
+  // clears it (a value flickering in and out helps nobody at a bedside).
+  void updateQualityAndHold(uint32_t now) {
+    if (now - qualWindowStart_ >= 10000) {
+      float expected = rrCnt_ >= 4 ? 10000.0f / rrMedian() : 0;
+      bool fresh = now - lastHrMs_ < ECG_HR_TIMEOUT_MS;
+      if (displayedHr_ <= 0 || !fresh) {
+        quality_ = displayedHr_ > 0 ? 1 : 0;                // holding stale / nothing
+      } else if (expected > 0 && qualOk_ >= 0.8f * expected && qualOk_ >= qualTotal_ * 0.8f) {
+        quality_ = 3;
+      } else if (qualOk_ >= 4) {
+        quality_ = 2;
+      } else {
+        quality_ = 1;
+      }
+      qualOk_ = 0; qualTotal_ = 0; qualWindowStart_ = now;
+    }
+    if (displayedHr_ > 0 && now - lastHrMs_ > ECG_HOLD_LAST_MS) {
+      displayedHr_ = 0;
+      quality_ = 0;
+      rrCnt_ = 0; rrIdx_ = 0; pendingCnt_ = 0;
       rrEma_.reset(); rCount_ = 0;
     }
   }
@@ -385,8 +507,9 @@ private:
     lastPublishMs_ = now;
     if (!stateLock(5)) return;
     g_state.chEcg = leadsOff_ ? Chan::NO_CONTACT : Chan::OK;
-    g_state.hr = hrEma_.primed ? hrEma_.value : 0.0f;
+    g_state.hr = displayedHr_;
     g_state.hrFromEcg = hrFromEcg_;
+    g_state.ecgQuality = quality_;
     g_state.rr = rrEma_.primed ? rrEma_.value : 0.0f;
     stateUnlock();
   }
@@ -398,12 +521,21 @@ private:
   uint16_t peakHead_ = 0, exportPeakHead_ = 0;
   int   samplesUntilExport_ = 0;
   int16_t beatExport_[ECG_EXPORT_SAMPLES] = {0};
-  MedianRing<HR_MEDIAN_SIZE> hrMedian_;
-  Ema   hrEma_, rrEma_;
+  Ema   rrEma_;
   float rAmp_[RR_BUFFER_SIZE] = {0};
   uint32_t rAt_[RR_BUFFER_SIZE] = {0};
   int   rIdx_ = 0, rCount_ = 0;
-  uint32_t lastSampleMs_ = 0, lastPeakMs_ = 0, lastHrMs_ = 0,
+  // beat-validation state (v3.4.0)
+  float rrBuf_[ECG_RR_BUF] = {0};
+  int   rrIdx_ = 0, rrCnt_ = 0;
+  float pendingRr_[ECG_RHYTHM_N] = {0};
+  int   pendingCnt_ = 0;
+  float ampEma_ = 0, displayedHr_ = 0;
+  uint8_t quality_ = 0;
+  int   qualOk_ = 0, qualTotal_ = 0;
+  uint32_t qualWindowStart_ = 0, lastCandidateMs_ = 0;
+  uint32_t loHighSince_ = 0, loLowSince_ = 0;
+  uint32_t lastSampleMs_ = 0, lastHrMs_ = 0,
            lastRespMs_ = 0, lastPublishMs_ = 0, leadsOnSince_ = 0;
 };
 
@@ -429,6 +561,7 @@ public:
         g_state.hr = hr_; g_state.spo2 = spo2_; g_state.temp = temp_; g_state.rr = rr_;
         g_state.perfusionIndex = 0.02f;
         g_state.hrFromEcg = true;
+        g_state.ecgQuality = 3;                 // demo signal is always "good"
         g_state.chSpo2 = g_state.chTemp = g_state.chEcg = Chan::OK;
         stateUnlock();
       }

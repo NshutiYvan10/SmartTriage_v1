@@ -58,6 +58,10 @@ struct MonitorState {
   BpReading bpHistory[BP_HISTORY_SIZE];
   uint8_t  bpHistoryCount = 0;
   char     bpError[40] = "";
+  // ECG signal quality (0 none · 1 poor/holding stale · 2 fair · 3 good) —
+  // drives the "weak signal" presentation instead of a flickering number.
+  uint8_t  ecgQuality = 0;
+
   bool     bpRequested = false;     // UI → bpTask trigger
   bool     bpCancelRequested = false; // UI → bpTask: abort the running cycle NOW
   bool     bpCalRequested = false;  // UI → bpTask: run the guided pump-scale calibration

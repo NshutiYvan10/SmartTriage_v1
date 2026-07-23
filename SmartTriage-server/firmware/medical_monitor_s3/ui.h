@@ -387,12 +387,18 @@ private:
     }
 
     char t[20];
-    // HR (+ source tag)
+    // HR (+ source/quality tag). A weak or stale ECG signal DIMS the
+    // number and says so — a value flickering between "96" and "--" at
+    // a bedside helps nobody, and a confidently-wrong number is worse.
+    bool hrWeak = s.hrFromEcg && s.ecgQuality <= 1;
     snprintf(t, sizeof(t), s.hr > 0 ? "%.0f" : "--", s.hr);
     cell(0, 6 + 8, top + 22, tileW - 16, tileH - 42,
-         t, bandColor(s.hr, ALM_HR_WARN_LOW, ALM_HR_WARN_HIGH, ALM_HR_CRIT_LOW, ALM_HR_CRIT_HIGH), 4, 2);
+         t, hrWeak ? UI_MUTED
+                   : bandColor(s.hr, ALM_HR_WARN_LOW, ALM_HR_WARN_HIGH, ALM_HR_CRIT_LOW, ALM_HR_CRIT_HIGH), 4, 2);
     cell(10, 6 + 8, top + tileH - 20, tileW - 16, 16,
-         s.hr <= 0 ? "" : (s.hrFromEcg ? "ECG" : "PULSE-OX"), UI_MUTED, 1);
+         s.hr <= 0 ? "" : !s.hrFromEcg ? "PULSE-OX"
+                        : hrWeak ? "ECG - WEAK SIGNAL, CHECK ELECTRODES" : "ECG",
+         hrWeak ? UI_WARN : UI_MUTED, 1);
 
     snprintf(t, sizeof(t), s.spo2 > 0 ? "%.0f" : "--", s.spo2);
     cell(1, 12 + tileW + 8, top + 22, tileW - 16, tileH - 42,
@@ -477,9 +483,11 @@ private:
 
     // numerics column
     char t[16];
+    bool hrWeak = s.hrFromEcg && s.ecgQuality <= 1;
     snprintf(t, sizeof(t), s.hr > 0 ? "%.0f" : "--", s.hr);
     cell(8, W - numW, ecgY + 14, numW - 4, 40, t,
-         bandColor(s.hr, ALM_HR_WARN_LOW, ALM_HR_WARN_HIGH, ALM_HR_CRIT_LOW, ALM_HR_CRIT_HIGH), 4);
+         hrWeak ? UI_MUTED
+                : bandColor(s.hr, ALM_HR_WARN_LOW, ALM_HR_WARN_HIGH, ALM_HR_CRIT_LOW, ALM_HR_CRIT_HIGH), 4);
     if (forceRedraw_) { tft_.setTextColor(UI_MUTED, UI_BG); tft_.drawString("HR bpm", W - numW + 8, ecgY + 2, 1); }
 
     snprintf(t, sizeof(t), s.spo2 > 0 ? "%.0f%%" : "--", s.spo2);

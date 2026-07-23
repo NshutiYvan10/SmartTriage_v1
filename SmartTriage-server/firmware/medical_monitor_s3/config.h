@@ -18,7 +18,7 @@
 #pragma once
 
 // ======================== IDENTITY / NETWORK =========================
-#define FIRMWARE_VERSION   "s3-3.3.2"
+#define FIRMWARE_VERSION   "s3-3.4.0"
 
 #define WIFI_SSID          "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD      "YOUR_WIFI_PASSWORD"
@@ -170,9 +170,26 @@
 #define ECG_ADAPT_ALPHA      0.15f
 #define ECG_ADAPT_FRACTION   0.45f
 #define ECG_INITIAL_THRESHOLD 300.0f
-#define ECG_HR_TIMEOUT_MS    5000UL  // no beats for 5 s → HR unknown
+#define ECG_HR_TIMEOUT_MS    5000UL  // no valid beats for 5 s → signal "stale"
 #define HR_MEDIAN_SIZE       5
 #define RATE_RING_SIZE       12
+
+// ---- beat validation (v3.4.0 — field: HR jumped 115↔96 + flickered) ----
+// A structural peak only counts as a HEARTBEAT if its R-R interval fits
+// the established rhythm; a genuine rate change proves itself with
+// ECG_RHYTHM_N consecutive mutually-consistent intervals. The displayed
+// number is the median of the accepted-beat intervals with hysteresis.
+#define ECG_RR_BUF            8      // accepted R-R intervals kept (median = HR)
+#define ECG_RR_TOL_FRAC       0.30f  // accept: within ±30% of the rhythm median
+#define ECG_RHYTHM_N          3      // rhythm change: N consecutive agreeing intervals
+#define ECG_RHYTHM_TOL_FRAC   0.15f  // ...agreeing within ±15% of their mean
+#define ECG_TWAVE_AMP_FRAC    0.70f  // short-interval peak needs ≥70% of R amplitude
+#define ECG_HR_HYSTERESIS_BPM 2.0f   // display updates only on ≥2 bpm change
+#define ECG_HOLD_LAST_MS      12000UL // hold last-good HR (flagged) before clearing
+// Leads-off debounce: the AD8232 LO pins chatter with marginal electrode
+// contact — a single noisy sample must not blank the reading.
+#define ECG_LO_ON_MS          400    // continuous high before declaring leads-off
+#define ECG_LO_OFF_MS         800    // continuous low before declaring recovered
 // 50 Hz mains notch (Rwanda grid). Set to 60 for 60 Hz regions.
 #define ECG_MAINS_HZ         50.0f
 // Waveform ring for UI + one exported beat for the backend payload
