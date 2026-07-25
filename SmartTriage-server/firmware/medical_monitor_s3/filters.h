@@ -66,6 +66,22 @@ struct DcTracker {
   void reset() { dc = 0.0f; primed = false; }
 };
 
+// ---------- One-pole low-pass ----------
+// (raw → smoothed): removes broadband noise above a soft cutoff set by
+// alpha. Used to de-noise the DISPLAY traces and, on the pleth, to hand
+// the SpO2 AC estimator a clean pulsatile signal. alpha ≈ dt/(RC+dt):
+// higher alpha = higher cutoff = less smoothing.
+struct LowPass {
+  float value = 0.0f;
+  bool  primed = false;
+  float process(float x, float alpha) {
+    value = primed ? value + alpha * (x - value) : x;
+    primed = true;
+    return value;
+  }
+  void reset() { value = 0.0f; primed = false; }
+};
+
 // ---------- Mains-notch biquad (50/60 Hz) ----------
 // Direct-form-I notch, Q≈8. Coefficients computed once from the sample
 // rate; float math is cheap on the S3's FPU.

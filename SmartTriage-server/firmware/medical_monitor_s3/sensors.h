@@ -72,12 +72,21 @@ public:
         handleSample(ir, red, ecgLeadsOff);
       }
     } else {
-      legacy_.check();
-      while (legacy_.available()) {
-        long ir  = legacy_.getFIFOIR();
-        long red = legacy_.getFIFORed();
-        legacy_.nextSample();
-        handleSample(ir, red, ecgLeadsOff);
+      // Throttle the MAX30100 FIFO drain: two pointer-register reads every
+      // 2 ms poll kept the shared 100 kHz bus ~60% busy, starving the
+      // marginal MAX30205 temp sensor (which reads once/sec). At 100 SPS a
+      // sample lands every 10 ms and the FIFO is 16 deep, so draining every
+      // 8 ms loses nothing and frees the bus. (v3.5.1)
+      uint32_t now = millis();
+      if (now - lastLegacyCheckMs_ >= 8) {
+        lastLegacyCheckMs_ = now;
+        legacy_.check();
+        while (legacy_.available()) {
+          long ir  = legacy_.getFIFOIR();
+          long red = legacy_.getFIFORed();
+          legacy_.nextSample();
+          handleSample(ir, red, ecgLeadsOff);
+        }
       }
     }
 
@@ -107,10 +116,14 @@ private:
     if (!fingerOn_) return;
     lastFingerMs_ = millis();
 
-    // pleth trace for the waveform page (AC component around DC)
-    float ac = plethDc_.highpass((float)ir, 0.02f);
+    // pleth trace for the waveform page: high-pass to strip DC, then a
+    // ~4-5 Hz low-pass so the pulse wave is smooth instead of jagged (the
+    // high-pass alone passed every bit of sensor noise straight to the
+    // screen — "graphs are messy"). Detection thresholds are unchanged.
+    float ac     = plethDc_.highpass((float)ir, 0.02f);
+    float smooth = plethLp_.process(ac, 0.25f);
     uint16_t h = (uint16_t)((g_plethWaveHead + 1) % ECG_WAVE_RING);
-    g_plethWave[h] = (int16_t)constrain(ac / 8.0f, -2000.0f, 2000.0f);
+    g_plethWave[h] = (int16_t)constrain(smooth / 8.0f, -2000.0f, 2000.0f);
     g_plethWaveHead = h;
 
     irBuf_[bufIdx_]  = ir;
@@ -132,22 +145,28 @@ private:
   void computeSpo2() {
     int n = min(sampleCount_, (int)SPO2_BUFFER_SIZE);
     long irSum = 0, redSum = 0;
-    long irMax = irBuf_[0], irMin = irBuf_[0];
-    long redMax = redBuf_[0], redMin = redBuf_[0];
-    for (int i = 0; i < n; i++) {
-      irSum += irBuf_[i]; redSum += redBuf_[i];
-      if (irBuf_[i] > irMax) irMax = irBuf_[i];
-      if (irBuf_[i] < irMin) irMin = irBuf_[i];
-      if (redBuf_[i] > redMax) redMax = redBuf_[i];
-      if (redBuf_[i] < redMin) redMin = redBuf_[i];
-    }
+    for (int i = 0; i < n; i++) { irSum += irBuf_[i]; redSum += redBuf_[i]; }
     float irDC = (float)irSum / n, redDC = (float)redSum / n;
     if (irDC <= 0 || redDC <= 0) return;
 
-    float irAC = (float)(irMax - irMin), redAC = (float)(redMax - redMin);
-    if (irAC < 200 || redAC < 200) return;              // no pulsatile signal
+    // AC as RMS about the DC, NOT peak-to-peak min/max. Min/max is a pure
+    // worst-case: one noisy sample sets it. The RED channel is noisier than
+    // IR (lower signal), so its inflated peak-to-peak biased R high and the
+    // reading came out falsely LOW (field: 92% at rest). RMS averages the
+    // whole window, so the noise cancels and R reflects true pulsatility.
+    // For matched waveforms RMS and p-p are proportional, so the 110-25R
+    // calibration curve is unchanged — this only removes the noise bias.
+    double irSq = 0, redSq = 0;
+    for (int i = 0; i < n; i++) {
+      double a = (double)irBuf_[i]  - irDC;  irSq  += a * a;
+      double b = (double)redBuf_[i] - redDC; redSq += b * b;
+    }
+    float irAC = sqrtf((float)(irSq / n)), redAC = sqrtf((float)(redSq / n));
+    if (irAC < 60.0f || redAC < 40.0f) return;          // no pulsatile signal
 
-    perfusion_ = irAC / irDC;
+    // report the classic peak-to-peak-equivalent perfusion index (≈2.83×RMS
+    // for a pulse-shaped wave) so the published PI keeps its usual scale
+    perfusion_ = (irAC * 2.83f) / irDC;
     if (perfusion_ < 0.004f) return;                    // perfusion too weak
 
     float R = (redAC / redDC) / (irAC / irDC);
@@ -176,6 +195,7 @@ private:
   void reset() {
     sampleCount_ = 0; bufIdx_ = 0;
     rHist_.reset(); ema_.reset();
+    plethDc_.reset(); plethLp_.reset();
     irBeatBpm_ = 0; lastIrBeatMs_ = 0;
     perfusion_ = 0;
   }
@@ -190,8 +210,9 @@ private:
   MedianRing<R_RATIO_HIST_SIZE> rHist_;
   Ema   ema_;
   DcTracker plethDc_;
+  LowPass   plethLp_;
   float perfusion_ = 0, irBeatBpm_ = 0;
-  uint32_t lastFingerMs_ = 0, lastIrBeatMs_ = 0, lastCalcMs_ = 0;
+  uint32_t lastFingerMs_ = 0, lastIrBeatMs_ = 0, lastCalcMs_ = 0, lastLegacyCheckMs_ = 0;
 };
 
 // =====================================================================
@@ -208,10 +229,22 @@ public:
   void poll() {
     uint32_t now = millis();
     if (!present_) {
-      // Publish the absent state at 1 Hz, NOT every 2 ms tick — the
-      // unthrottled version hammered the state mutex ~500x/s from core 1
-      // and visibly degraded UI responsiveness on core 0.
-      if (now - lastReadMs_ >= 1000) { lastReadMs_ = now; publish(Chan::ABSENT, 0); }
+      // RE-PROBE, don't give up. A boot-time NOT FOUND used to be permanent
+      // (begin() probed 0x48 exactly once) — so a temp sensor that wasn't
+      // ready at boot, or a marginal wire on the repaired box that
+      // reconnects, would read "absent" forever. Re-probe once a second;
+      // adopt the sensor the moment it ACKs. Still 1 Hz, so the state mutex
+      // isn't hammered from core 1.
+      if (now - lastReadMs_ >= 1000) {
+        lastReadMs_ = now;
+        Wire.beginTransmission(MAX30205_ADDR);
+        if (Wire.endTransmission() == 0) {
+          present_ = true; faults_ = 0;
+          Serial.println("[temp] MAX30205 detected on bus - recovering");
+        } else {
+          publish(Chan::ABSENT, 0);
+        }
+      }
       return;
     }
     if (now - lastReadMs_ < TEMP_READ_INTERVAL_MS) return;
@@ -220,6 +253,13 @@ public:
     float raw = readRaw();
     if (isnan(raw)) {
       if (++faults_ >= 5) publish(Chan::FAULT, ema_.primed ? ema_.value : 0);
+      // Sustained silence (~30 s) = the module is physically gone, not a
+      // blip. Drop to not-present so the re-probe path above can readopt it
+      // when the connection returns, instead of holding FAULT forever.
+      if (faults_ >= 30) {
+        present_ = false; faults_ = 0; ema_.reset();
+        Serial.println("[temp] MAX30205 unresponsive ~30s - will re-probe");
+      }
       return;
     }
     faults_ = 0;
@@ -305,9 +345,15 @@ public:
     float hp = dc_.highpass((float)raw, ECG_BASELINE_ALPHA);
     float filtered = notch_.process(hp);
 
+    // A gentle ~40 Hz low-pass for the DISPLAYED trace only: the notch kills
+    // 50 Hz mains but leaves broadband EMG/sensor fuzz that made the sweep
+    // look ragged. QRS energy is <30 Hz so the beat shape is preserved.
+    // Detection runs on the UNSMOOTHED `filtered` — timing is untouched.
+    float display = ecgLp_.process(filtered, 0.5f);
+
     // waveform ring for UI + payload export
     uint16_t h = (uint16_t)((g_ecgWaveHead + 1) % ECG_WAVE_RING);
-    g_ecgWave[h] = (int16_t)constrain(filtered, -2047.0f, 2047.0f);
+    g_ecgWave[h] = (int16_t)constrain(display, -2047.0f, 2047.0f);
     g_ecgWaveHead = h;
     finalizeBeatExport(h);
 
@@ -556,6 +602,7 @@ private:
 
   DcTracker dc_;
   NotchFilter notch_;
+  LowPass ecgLp_;                                  // display-only de-noise
   bool  leadsOff_ = true, inBeat_ = false, hrFromEcg_ = false, beatReady_ = false;
   float peakVal_ = 0, adaptive_ = ECG_INITIAL_THRESHOLD;
   uint16_t peakHead_ = 0, exportPeakHead_ = 0;

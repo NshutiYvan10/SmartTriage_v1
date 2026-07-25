@@ -536,7 +536,11 @@ private:
       readHead = (uint16_t)((readHead + 1) % ECG_WAVE_RING);
       int16_t v = ring[readHead];
       float a = fabsf((float)v);
-      if (a > gainPeak) gainPeak = a;
+      // Soft attack: a lone spike only pulls the gain halfway toward it, so
+      // one artifact can't collapse the rest of the trace to a flat line; a
+      // real QRS (several samples) still reaches full height within ~3
+      // samples. Relaxation stays slow so beat height holds steady.
+      if (a > gainPeak) gainPeak += 0.5f * (a - gainPeak);
       else gainPeak *= 0.9995f;                        // ~12%/s relaxation @250 Hz
       if (gainPeak < 250.0f) gainPeak = 250.0f;        // noise floor: don't zoom into flatline
       int py = y + h / 2 - (int)((float)v / (gainPeak * 1.15f) * (h / 2 - 2));
