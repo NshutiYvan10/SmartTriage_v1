@@ -28,14 +28,14 @@ influence clinical decisions. Every rule described in this document as a “safe
 <b>on the server</b> — the UI mirrors it for convenience, but bypassing the UI cannot bypass the rule.</p></div>
 
 <h2 class="sec"><span class="secno">1.2</span>The four components</h2>
-<div class="flow">
-  <div class="fnode start">Bedside Monitor<div class="sub">ESP32-S3 + sensors<br>SpO2 · ECG · BP · Temp</div></div>
-  <div class="farrow"><span class="lbl">WiFi / HTTP</span>→</div>
-  <div class="fnode">Gateway<div class="sub">Raspberry Pi 5<br>single point of egress</div></div>
-  <div class="farrow"><span class="lbl">HTTPS</span>→</div>
-  <div class="fnode">Backend<div class="sub">Spring Boot + PostgreSQL<br>all rules live here</div></div>
-  <div class="farrow"><span class="lbl">REST + WebSocket</span>→</div>
-  <div class="fnode end">Web App<div class="sub">React (V6)<br>every role's workspace</div></div>
+<div class="flow" style="gap:8pt 3pt;">
+  <div class="fnode start" style="max-width:34mm; padding:6pt 8pt;">Bedside Monitor<div class="sub">ESP32-S3 + sensors<br>SpO2 · ECG · BP · Temp</div></div>
+  <div class="farrow" style="padding:0 1pt;"><span class="lbl">WiFi</span>→</div>
+  <div class="fnode" style="max-width:32mm; padding:6pt 8pt;">Gateway<div class="sub">Raspberry Pi 5<br>single point of egress</div></div>
+  <div class="farrow" style="padding:0 1pt;"><span class="lbl">HTTPS</span>→</div>
+  <div class="fnode" style="max-width:36mm; padding:6pt 8pt;">Backend<div class="sub">Spring Boot + PostgreSQL<br>all rules live here</div></div>
+  <div class="farrow" style="padding:0 1pt;"><span class="lbl">REST + WS</span>→</div>
+  <div class="fnode end" style="max-width:34mm; padding:6pt 8pt;">Web App<div class="sub">React (V6)<br>every role's workspace</div></div>
 </div>
 
 <table>

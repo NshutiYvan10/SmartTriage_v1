@@ -5,173 +5,194 @@
 <title>SmartTriage — System Bible</title>
 <style>
 /* ============================================================
-   SmartTriage System Bible — print design system
-   Palette: ink #132A3A · teal #0E7490 (deep #155E75) · paper #FFF
-   tint #F2F7F9 · muted #5B6B76 · danger #B4232A · warn #9A5B00
-   success #1A7A45 · Triage bands: red/orange/yellow/green
-   Type: Avenir Next (display+body) · Menlo (data)
+   SmartTriage System Bible — print design system  (Edition 1.1)
+   Type: Charter (body serif, high-legibility) + Avenir Next
+         (headings, tables, labels) + Menlo (data)
+   Palette: ink #16232C · teal #0E7490 / deep #14424E · paper #FFF
+   tint #F1F6F8 · muted #55666F · danger #B4232A · warn #92580A
+   success #1A7A45 · gap-purple #6D4E9E
+   Rhythm: 10.9pt/1.66 body · generous margins · nothing collides
    ============================================================ */
-@page { size: A4; margin: 16mm 15mm 18mm 15mm; }
+@page { size: A4; margin: 19mm 18mm 21mm 18mm; }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 body {
-  font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif;
-  font-size: 9.6pt; line-height: 1.58; color: #132A3A;
-  font-feature-settings: "kern";
+  font-family: "Charter", "Iowan Old Style", Georgia, serif;
+  font-size: 10.9pt; line-height: 1.66; color: #16232C;
+  font-feature-settings: "kern", "liga";
 }
 
-/* ---------- typography ---------- */
-h1, h2, h3, h4 { font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif; color: #132A3A; }
-p { margin: 0 0 7pt 0; max-width: 172mm; }
-strong { font-weight: 600; }
-em { font-style: italic; }
+/* ---------- type hierarchy ----------
+   H1 chapter 23pt · H2 section 15.5pt · H3 12.5pt · H4 10.5pt
+   body 10.9 · table 9.2 · caption 8.6 · label 8  (all sans except body) */
+h1, h2, h3, h4 { font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif; color: #16232C; }
+p { margin: 0 0 9pt 0; max-width: 166mm; }
+strong, b { font-weight: 700; }
+em, i { font-style: italic; }
 code, .mono {
-  font-family: "Menlo", "SF Mono", monospace; font-size: 8.2pt;
-  background: #EEF3F5; border-radius: 3px; padding: 0.5pt 3pt; color: #14424E;
+  font-family: "Menlo", monospace; font-size: 9pt;
+  background: #EEF3F5; border-radius: 3px; padding: 0.5pt 4pt; color: #14424E;
 }
-sup.xref { color: #0E7490; font-weight: 600; font-size: 7pt; }
 a { color: #0E7490; text-decoration: none; }
-ul, ol { margin: 0 0 8pt 0; padding-left: 16pt; max-width: 168mm; }
-li { margin-bottom: 2.5pt; }
-li > ul, li > ol { margin-top: 2.5pt; margin-bottom: 0; }
+ul, ol { margin: 2pt 0 10pt 0; padding-left: 17pt; max-width: 162mm; }
+li { margin-bottom: 4.5pt; }
+li > ul, li > ol { margin-top: 4pt; margin-bottom: 0; }
 
 .kicker {
-  font-size: 7.4pt; font-weight: 700; letter-spacing: 1.8pt; text-transform: uppercase;
-  color: #0E7490; margin-bottom: 4pt;
+  font-family: "Avenir Next", sans-serif;
+  font-size: 8pt; font-weight: 700; letter-spacing: 2pt; text-transform: uppercase;
+  color: #0E7490; margin-bottom: 5pt;
 }
-.muted { color: #5B6B76; }
-.small { font-size: 8.2pt; }
+.muted { color: #55666F; }
+.small { font-size: 9.2pt; }
 
 /* ---------- chapters ---------- */
 .chapter { break-before: page; }
 .ch-open {
-  background: linear-gradient(135deg, #F2F7F9 0%, #E7F1F4 100%);
-  border-radius: 10px; padding: 20pt 22pt 18pt 22pt; margin-bottom: 16pt;
-  border-left: 5px solid #0E7490;
+  background: linear-gradient(135deg, #F1F6F8 0%, #E6F0F3 100%);
+  border-radius: 12px; padding: 24pt 26pt 20pt 26pt; margin-bottom: 22pt;
+  border-left: 6px solid #0E7490;
 }
 .ch-num {
-  font-size: 34pt; font-weight: 300; color: #0E7490; line-height: 1;
-  letter-spacing: -1pt; margin-bottom: 2pt;
+  font-family: "Avenir Next", sans-serif;
+  font-size: 38pt; font-weight: 300; color: #0E7490; line-height: 1;
+  letter-spacing: -1pt; margin-bottom: 4pt;
 }
-.ch-open h1 { font-size: 20pt; font-weight: 700; letter-spacing: -0.3pt; margin: 2pt 0 6pt 0; }
-.ch-lede { font-size: 10.3pt; color: #35505F; max-width: 165mm; margin-bottom: 8pt; }
-.ch-learn { background: rgba(255,255,255,0.75); border-radius: 7px; padding: 8pt 12pt; }
-.ch-learn .kicker { margin-bottom: 3pt; }
-.ch-learn ul { margin: 0; padding-left: 14pt; columns: 2; column-gap: 18pt; }
-.ch-learn li { font-size: 8.6pt; margin-bottom: 1.5pt; break-inside: avoid; }
+.ch-open h1 { font-size: 23pt; font-weight: 700; letter-spacing: -0.3pt; margin: 3pt 0 9pt 0; line-height: 1.15; }
+.ch-lede { font-size: 11.4pt; color: #33505E; max-width: 158mm; margin-bottom: 12pt; line-height: 1.6; }
+.ch-learn { background: rgba(255,255,255,0.8); border-radius: 9px; padding: 10pt 14pt; }
+.ch-learn .kicker { margin-bottom: 5pt; }
+.ch-learn ul { margin: 0; padding-left: 14pt; columns: 2; column-gap: 22pt; }
+.ch-learn li { font-family: "Avenir Next", sans-serif; font-size: 9pt; margin-bottom: 3pt; break-inside: avoid; color: #33505E; }
 
 h2.sec {
-  font-size: 13.5pt; font-weight: 700; margin: 16pt 0 7pt 0;
-  padding-bottom: 3pt; border-bottom: 1.5px solid #D5E3E8;
-  break-after: avoid;
+  font-size: 15.5pt; font-weight: 700; margin: 24pt 0 10pt 0;
+  padding-bottom: 5pt; border-bottom: 1.5px solid #CFE0E6;
+  break-after: avoid; letter-spacing: -0.2pt;
 }
-h2.sec .secno { color: #0E7490; font-weight: 600; margin-right: 6pt; }
-h3 { font-size: 11pt; font-weight: 600; margin: 12pt 0 5pt 0; break-after: avoid; }
-h3 .secno { color: #0E7490; font-weight: 600; margin-right: 5pt; }
-h4 { font-size: 9.8pt; font-weight: 700; margin: 9pt 0 4pt 0; color: #23404F; break-after: avoid; }
+h2.sec .secno { color: #0E7490; font-weight: 600; margin-right: 8pt; }
+h3 { font-size: 12.5pt; font-weight: 600; margin: 16pt 0 7pt 0; break-after: avoid; }
+h3 .secno { color: #0E7490; font-weight: 600; margin-right: 6pt; }
+h4 { font-size: 10.5pt; font-weight: 700; margin: 13pt 0 6pt 0; color: #23404F; break-after: avoid;
+     letter-spacing: 0.1pt; }
 
 /* ---------- callouts ---------- */
-.co { border-radius: 7px; padding: 7pt 11pt 7pt 12pt; margin: 8pt 0; max-width: 172mm;
-      break-inside: avoid; border-left: 4px solid; }
-.co .co-t { font-size: 7.4pt; font-weight: 700; letter-spacing: 1.4pt; text-transform: uppercase; margin-bottom: 2pt; }
+.co { border-radius: 9px; padding: 10pt 14pt 10pt 15pt; margin: 12pt 0; max-width: 166mm;
+      break-inside: avoid; border-left: 4.5px solid; }
+.co .co-t { font-family: "Avenir Next", sans-serif; font-size: 8pt; font-weight: 700;
+            letter-spacing: 1.6pt; text-transform: uppercase; margin-bottom: 4pt;
+            display: flex; align-items: center; gap: 5pt; }
+.co .co-t::before { content: ""; width: 7pt; height: 7pt; border-radius: 50%; display: inline-block; }
+.co p, .co ul { font-size: 10.3pt; line-height: 1.6; }
 .co p:last-child, .co ul:last-child { margin-bottom: 0; }
-.co-note   { background: #EDF6F8; border-color: #0E7490; } .co-note .co-t { color: #0E7490; }
-.co-rule   { background: #F0F2F4; border-color: #44606F; } .co-rule .co-t { color: #44606F; }
-.co-warn   { background: #FBF3E4; border-color: #9A5B00; } .co-warn .co-t { color: #9A5B00; }
-.co-danger { background: #FBEDEC; border-color: #B4232A; } .co-danger .co-t { color: #B4232A; }
-.co-tip    { background: #EDF7F0; border-color: #1A7A45; } .co-tip .co-t { color: #1A7A45; }
-.co-gap    { background: #F5F1FA; border-color: #6D4E9E; } .co-gap .co-t { color: #6D4E9E; }
+.co-note   { background: #EDF6F8; border-color: #0E7490; } .co-note .co-t { color: #0E7490; } .co-note .co-t::before { background: #0E7490; }
+.co-rule   { background: #F1F3F5; border-color: #44606F; } .co-rule .co-t { color: #44606F; } .co-rule .co-t::before { background: #44606F; }
+.co-warn   { background: #FBF3E2; border-color: #92580A; } .co-warn .co-t { color: #92580A; } .co-warn .co-t::before { background: #B47516; }
+.co-danger { background: #FBEDEC; border-color: #B4232A; } .co-danger .co-t { color: #B4232A; } .co-danger .co-t::before { background: #B4232A; }
+.co-tip    { background: #EDF7F0; border-color: #1A7A45; } .co-tip .co-t { color: #1A7A45; } .co-tip .co-t::before { background: #1A7A45; }
+.co-gap    { background: #F5F1FA; border-color: #6D4E9E; } .co-gap .co-t { color: #6D4E9E; } .co-gap .co-t::before { background: #6D4E9E; }
 
 /* ---------- tables ---------- */
-table { border-collapse: collapse; width: 100%; margin: 8pt 0 10pt 0; font-size: 8.6pt;
-        font-variant-numeric: tabular-nums; }
+table { border-collapse: collapse; width: 100%; margin: 10pt 0 14pt 0;
+        font-family: "Avenir Next", sans-serif; font-size: 9.2pt;
+        font-variant-numeric: tabular-nums; line-height: 1.45; }
 th { background: #14424E; color: #fff; font-weight: 600; text-align: left;
-     padding: 4pt 7pt; font-size: 8.2pt; letter-spacing: 0.2pt; }
-td { padding: 3.5pt 7pt; border-bottom: 0.75px solid #DDE7EB; vertical-align: top; }
-tr:nth-child(even) td { background: #F7FAFB; }
-table.compact th, table.compact td { padding: 2.5pt 5pt; font-size: 8pt; }
-td .mono, th .mono { font-size: 7.6pt; }
-.tbl-cap { font-size: 7.8pt; color: #5B6B76; margin: -6pt 0 10pt 2pt; }
+     padding: 6pt 9pt; font-size: 8.6pt; letter-spacing: 0.3pt; }
+td { padding: 5.5pt 9pt; border-bottom: 0.75px solid #DCE6EA; vertical-align: top; }
+tr:nth-child(even) td { background: #F6FAFB; }
+table.compact th { padding: 4.5pt 7pt; font-size: 8.2pt; }
+table.compact td { padding: 4pt 7pt; font-size: 8.8pt; }
+td .mono, th .mono, td code { font-size: 8.2pt; }
+.tbl-cap { font-size: 8.8pt; color: #55666F; margin: -8pt 0 14pt 2pt; font-style: italic; }
 
 /* status pills */
-.pill { display: inline-block; border-radius: 8px; padding: 0.5pt 7pt; font-size: 7.6pt;
-        font-weight: 600; white-space: nowrap; }
+.pill { font-family: "Avenir Next", sans-serif; display: inline-block; border-radius: 9px;
+        padding: 1pt 8pt; font-size: 8.2pt; font-weight: 600; white-space: nowrap; }
 .p-red    { background: #FBEDEC; color: #B4232A; border: 1px solid #E4B6B8; }
 .p-orange { background: #FDF1E3; color: #B45309; border: 1px solid #EBCBA4; }
 .p-yellow { background: #FCF8E3; color: #8A6D00; border: 1px solid #E7DCA8; }
 .p-green  { background: #EDF7F0; color: #1A7A45; border: 1px solid #B9DCC6; }
 .p-teal   { background: #EDF6F8; color: #0E7490; border: 1px solid #B4D8E1; }
-.p-slate  { background: #F0F2F4; color: #44606F; border: 1px solid #C9D4DA; }
+.p-slate  { background: #F1F3F5; color: #44606F; border: 1px solid #C9D4DA; }
 .p-purple { background: #F5F1FA; color: #6D4E9E; border: 1px solid #D4C6E8; }
 
-/* ---------- flow diagrams (CSS) ---------- */
-.flow { display: flex; align-items: stretch; flex-wrap: wrap; gap: 0; margin: 10pt 0;
-        break-inside: avoid; }
-.fnode { border: 1.4px solid #14424E; border-radius: 8px; background: #fff;
-         padding: 5pt 9pt; font-size: 8.3pt; font-weight: 600; color: #14424E;
+/* ---------- flow diagrams ----------
+   PROPER GRID: real row + column gaps so wrapped rows NEVER collide;
+   nodes share a minimum height and center on the arrow line. */
+.flow { display: flex; align-items: stretch; flex-wrap: wrap; gap: 8pt 6pt;
+        margin: 14pt 0 16pt 0; break-inside: avoid; }
+.fnode { font-family: "Avenir Next", sans-serif;
+         border: 1.5px solid #14424E; border-radius: 9px; background: #fff;
+         padding: 7pt 12pt; font-size: 9pt; font-weight: 600; color: #14424E;
          display: flex; flex-direction: column; justify-content: center; text-align: center;
-         max-width: 40mm; }
-.fnode .sub { font-weight: 400; font-size: 7.2pt; color: #5B6B76; margin-top: 1pt; }
+         max-width: 44mm; min-height: 34pt; line-height: 1.3; }
+.fnode .sub { font-weight: 500; font-size: 7.8pt; color: #55666F; margin-top: 2.5pt; line-height: 1.35; }
 .fnode.start { background: #EDF6F8; border-color: #0E7490; color: #0E7490; }
 .fnode.end   { background: #EDF7F0; border-color: #1A7A45; color: #1A7A45; }
 .fnode.bad   { background: #FBEDEC; border-color: #B4232A; color: #B4232A; }
-.fnode.warn  { background: #FBF3E4; border-color: #9A5B00; color: #9A5B00; }
-.fnode.sys   { background: #F0F2F4; border-style: dashed; }
-.farrow { align-self: center; color: #7A8C96; padding: 0 5pt; font-size: 10pt; }
-.farrow .lbl { display: block; font-size: 6.8pt; color: #5B6B76; text-align: center; margin-bottom: -2pt; }
+.fnode.warn  { background: #FBF3E2; border-color: #92580A; color: #92580A; }
+.fnode.sys   { background: #F1F3F5; border-style: dashed; }
+.farrow { font-family: "Avenir Next", sans-serif; align-self: center; color: #7A8C96;
+          padding: 0 3pt; font-size: 11pt; font-weight: 500; }
+.farrow .lbl { display: block; font-size: 7.4pt; color: #55666F; text-align: center; margin-bottom: -1pt; }
 
-/* vertical step list ("what the system does") */
-.steps { counter-reset: st; margin: 8pt 0 10pt 0; max-width: 172mm; }
-.step { position: relative; padding: 0 0 7pt 24pt; border-left: 1.6px solid #C9DEE5; margin-left: 9pt; }
+/* vertical step list */
+.steps { counter-reset: st; margin: 12pt 0 14pt 0; max-width: 166mm; }
+.step { position: relative; padding: 0 0 12pt 28pt; border-left: 1.8px solid #C7DDE4; margin-left: 10pt; }
 .step:last-child { border-left-color: transparent; padding-bottom: 2pt; }
 .step::before {
   counter-increment: st; content: counter(st);
-  position: absolute; left: -10pt; top: -1pt; width: 18pt; height: 18pt; border-radius: 50%;
-  background: #0E7490; color: #fff; font-size: 8.6pt; font-weight: 700;
+  font-family: "Avenir Next", sans-serif;
+  position: absolute; left: -11pt; top: -1pt; width: 21pt; height: 21pt; border-radius: 50%;
+  background: #0E7490; color: #fff; font-size: 9.6pt; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
 }
-.step > b:first-child { color: #14424E; }
-.step p, .step ul { margin-bottom: 3pt; }
-.step .then { font-size: 8.2pt; color: #5B6B76; }
+.step > b:first-child { font-family: "Avenir Next", sans-serif; color: #14424E; font-size: 10.3pt; }
+.step p, .step ul { margin-bottom: 4pt; }
 
-/* decision tree (nested) */
-.dtree { margin: 8pt 0 10pt 4pt; max-width: 172mm; break-inside: avoid; }
-.dq { font-weight: 700; font-size: 9.2pt; color: #14424E; margin: 5pt 0 3pt 0; }
-.dq::before { content: "?"; display: inline-flex; width: 13pt; height: 13pt; border-radius: 50%;
-  background: #0E7490; color: #fff; font-size: 8pt; font-weight: 800;
-  align-items: center; justify-content: center; margin-right: 5pt; }
-.dbr { margin-left: 16pt; padding-left: 10pt; border-left: 1.6px solid #C9DEE5; margin-bottom: 4pt; }
-.dbr .dlab { font-size: 7.6pt; font-weight: 700; letter-spacing: 0.6pt; text-transform: uppercase; }
-.dbr .yes { color: #1A7A45; } .dbr .no { color: #B4232A; } .dbr .maybe { color: #9A5B00; }
+/* decision tree */
+.dtree { margin: 12pt 0 6pt 4pt; max-width: 166mm; break-inside: avoid; }
+.dq { font-family: "Avenir Next", sans-serif; font-weight: 700; font-size: 10.3pt;
+      color: #14424E; margin: 8pt 0 5pt 0; display: flex; align-items: baseline; gap: 6pt; }
+.dq::before { content: "?"; flex: 0 0 auto; display: inline-flex; width: 14pt; height: 14pt; border-radius: 50%;
+  background: #0E7490; color: #fff; font-size: 9pt; font-weight: 800;
+  align-items: center; justify-content: center; transform: translateY(2pt); }
+.dbr { margin-left: 20pt; padding: 2pt 0 2pt 12pt; border-left: 1.8px solid #C7DDE4; margin-bottom: 7pt;
+       font-size: 10.3pt; line-height: 1.6; }
+.dbr .dlab { font-family: "Avenir Next", sans-serif; font-size: 8.2pt; font-weight: 700;
+             letter-spacing: 0.8pt; text-transform: uppercase; }
+.dbr .yes { color: #1A7A45; } .dbr .no { color: #B4232A; } .dbr .maybe { color: #92580A; }
 
 /* role chips */
-.role { display: inline-block; border-radius: 4px; padding: 0 5pt; font-size: 7.5pt; font-weight: 700;
-        background: #14424E; color: #fff; letter-spacing: 0.4pt; }
-.role.r2 { background: #0E7490; } .role.r3 { background: #5B6B76; }
+.role { font-family: "Avenir Next", sans-serif; display: inline-block; border-radius: 5px;
+        padding: 0.5pt 6pt; font-size: 8pt; font-weight: 700;
+        background: #14424E; color: #fff; letter-spacing: 0.5pt; }
+.role.r2 { background: #0E7490; } .role.r3 { background: #55666F; }
 
-/* two-col layout for compact fact groups */
-.cols2 { columns: 2; column-gap: 20pt; max-width: 172mm; }
-.cols2 > * { break-inside: avoid; }
+/* two-col fact cards — explicit gaps, no collisions */
+.cols2 { columns: 2; column-gap: 8mm; max-width: 166mm; margin: 10pt 0; }
+.cols2 > * { break-inside: avoid; margin-top: 0; }
+.card { border: 1px solid #D3E2E8; border-radius: 10px; padding: 11pt 14pt; margin: 0 0 8pt 0;
+        break-inside: avoid; max-width: 166mm; background: #FDFEFE; }
+.card h4 { margin-top: 0; margin-bottom: 4pt; }
+.card p { font-size: 9.8pt; line-height: 1.58; }
+/* cards outside cols2 (FAQ) get vertical rhythm */
+.chapter > .card { margin: 10pt 0; }
 
-/* keep-together card */
-.card { border: 1px solid #D5E3E8; border-radius: 8px; padding: 9pt 12pt; margin: 8pt 0;
-        break-inside: avoid; max-width: 172mm; }
-.card h4 { margin-top: 0; }
-
-/* page-marker (invisible; read by the TOC page-number pass). Must stay IN
-   the render (white 2px text, absolutely positioned) — clipping it out
-   (height:0/overflow:hidden) removes it from the PDF text layer entirely. */
-.pgmark { position: absolute; color: #ffffff; font-size: 2px; line-height: 1; }
-
-/* scenario blocks */
-.scen { display: grid; grid-template-columns: 34mm 1fr; gap: 4pt 10pt; font-size: 8.6pt;
-        margin: 6pt 0; max-width: 172mm; }
-.scen dt { font-weight: 700; color: #44606F; }
+/* scenario definition grid */
+.scen { display: grid; grid-template-columns: 40mm 1fr; gap: 7pt 12pt; font-size: 10.2pt;
+        margin: 10pt 0 14pt 0; max-width: 166mm; line-height: 1.55; }
+.scen dt { font-family: "Avenir Next", sans-serif; font-weight: 700; color: #44606F; font-size: 9.4pt; }
 .scen dd { margin: 0; }
 
-hr.thin { border: none; border-top: 1px solid #D5E3E8; margin: 12pt 0; }
+hr.thin { border: none; border-top: 1px solid #D3E2E8; margin: 16pt 0; }
 .avoid-break { break-inside: avoid; }
+sup.xref { color: #0E7490; font-weight: 600; font-size: 7.6pt; }
+
+/* page-marker (invisible; read by the TOC page-number pass). Must stay IN
+   the render (white 2px absolute text) — clipping removes it from the text layer. */
+.pgmark { position: absolute; color: #ffffff; font-size: 2px; line-height: 1; }
 </style>
 </head>
 <body>

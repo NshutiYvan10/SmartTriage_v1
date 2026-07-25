@@ -21,7 +21,7 @@ for i in range(total):
         continue
     c.setFont("Helvetica", 7)
     c.setFillColorRGB(0.36, 0.42, 0.46)
-    c.drawString(43, 26, "SmartTriage — System Bible · Edition 1.0")
+    c.drawString(43, 26, "SmartTriage — System Bible · Edition 1.1")
     c.drawRightString(w - 43, 26, f"Page {i + 1} of {total}")
     c.setStrokeColorRGB(0.84, 0.89, 0.91)
     c.setLineWidth(0.6)
