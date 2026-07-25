@@ -50,6 +50,10 @@ def main() -> int:
     ap.add_argument("--hospital-id", required=True)
     ap.add_argument("--out", default="devices.yaml")
     ap.add_argument("--serial-prefix", default="SIM")
+    ap.add_argument("--gateway-name", default="SmartTriage Gateway",
+                    help="Display name on the kiosk lock screen and top bar")
+    ap.add_argument("--pin", action="store_true",
+                    help="Prompt for a kiosk unlock PIN (stored as a salted hash)")
     args = ap.parse_args()
     base = args.backend.rstrip("/")
 
@@ -64,8 +68,19 @@ def main() -> int:
         f"backend_url: {base}",
         "listen_port: 8090",
         "tx_interval_seconds: 5",
-        "devices:",
+        f"gateway_name: \"{args.gateway_name}\"",
     ]
+    if args.pin:
+        import hashlib, secrets
+        pin = getpass.getpass("Kiosk unlock PIN (digits, e.g. 4-6): ").strip()
+        pin2 = getpass.getpass("Repeat PIN: ").strip()
+        if not pin or pin != pin2:
+            print("PINs empty or mismatched — aborting.", file=sys.stderr)
+            return 1
+        salt = secrets.token_hex(16)
+        digest = hashlib.sha256((salt + pin).encode()).hexdigest()
+        lines += [f"kiosk_pin_salt: {salt}", f"kiosk_pin_sha256: {digest}"]
+    lines += ["devices:"]
     for i, spec in enumerate(SIM_DEVICES, start=1):
         serial = f"{args.serial_prefix}-{spec['role'].upper()}-{i:02d}"
         try:

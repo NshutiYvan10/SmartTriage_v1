@@ -1,26 +1,38 @@
-# SmartTriage Gateway (Raspberry Pi 5)
+# SmartTriage Gateway Dashboard (Raspberry Pi 5)
 
-One service, two jobs for the demo and beyond:
+The Pi is the hub between the bedside hardware and the SmartTriage backend —
+and the presentation console for panel demos, on its 800×480 DSI touchscreen.
 
-1. **Gateway** — every monitor (including the **real ESP32 monitor**) sends to
-   the Pi instead of opening its own backend connection. The Pi forwards each
-   reading upstream **with that device's own API key** (identity is never
-   blurred), buffers to SQLite when the backend is unreachable, and replays
+One FastAPI service, five jobs:
+
+1. **Gateway** — every monitor (including the **real ESP32-S3 monitor**) sends
+   to the Pi instead of opening its own backend connection. The Pi forwards
+   each reading upstream **with that device's own API key** (identity is never
+   blurred), caches to SQLite when the backend is unreachable, and replays
    oldest-first on reconnect.
-2. **Demo console** — a touch kiosk on the Pi's 800×480 DSI screen with three
-   simulator families, each speaking the same backend path as its real
-   counterpart, plus a live tile proving the real monitor is flowing:
+2. **Authenticated kiosk** — the touchscreen is locked. Unlock with real
+   SmartTriage staff credentials (proxied to the backend; JWTs stay inside the
+   gateway process, never in the browser) or with an **offline PIN** (salted
+   hash in the config) so the console stays usable when the backend is down.
+3. **Live view** — the real monitor's vitals with a pulse ring that beats on
+   every successful post (red on failure), and honest delivery states:
+   `DELIVERED · AWAITING PATIENT BIND · QUEUED ON PI · FAILED`.
+4. **Simulation** — virtual monitors driven by big severity-coded scenario
+   buttons; simulated data rides the exact same pipeline as real data, so
+   alerts, triage and dashboards react for real:
 
-   | Tile | Backend path | Scenarios |
+   | Monitor | Backend path | Scenarios |
    |---|---|---|
-   | REAL MONITOR | pass-through (verbatim) | whatever the hardware measures |
-   | SIM-BED-01/02 (bedside) | `/iot/stream/ingest` | Normal · Hypoxia · Hypertensive crisis · Fever+tachy · Bradycardia · Deteriorating (2-min slide) |
-   | SIM-TRIAGE-01 | `/iot/stream/ingest` | **GREEN / YELLOW / ORANGE / RED** — SATS-banded vitals so triage lands in the intended category |
-   | SIM-EMS-01 (paramedic) | `/iot/stream/device-telemetry` | Stable · Shock · Resp. distress · **Hypoglycemia (glu 2.1)** — pullable from the EMS run form |
+   | SIM-BED-* (bedside) | `/iot/stream/ingest` | Normal · Hypoxia · HTN crisis · Fever+tachy · Brady · Deteriorate (2-min slide) · **SEPSIS** |
+   | SIM-TRIAGE-* | `/iot/stream/ingest` | **GREEN / YELLOW / ORANGE / RED / SEPSIS** — SATS-banded so triage lands in the intended category |
+   | SIM-EMS-* (paramedic) | `/iot/stream/device-telemetry` | Stable · Shock · Resp. distress · **Hypoglycemia (glu 2.1)** — pullable from the EMS run form |
 
-   Simulated devices are registered as `SIM-*` so demo vitals can never be
-   mistaken for a real patient's. Scenario changes drift believably (no
-   teleporting numbers).
+   Severity colors are consistent everywhere: green · yellow · orange · red ·
+   **sepsis purple**. Scenario changes drift believably (no teleporting numbers).
+5. **Sync console** — offline/syncing/synced status, queue depth with ages,
+   recovered-readings counter, and an **outage drill** button that severs the
+   uplink on purpose so the store-and-forward story can be demonstrated
+   without touching a cable.
 
 > **CRITICAL for the demo:** the backend has its own fleet simulator
 > (`VitalSimulatorService`, enabled by `smarttriage.simulation.enabled=true`)
@@ -29,68 +41,139 @@ One service, two jobs for the demo and beyond:
 > double-writes contradicting vitals on top of the Pi's scenarios (verified:
 > two interleaved streams per device). The Pi gateway replaces it.
 
-## Install (Pi 5, Raspberry Pi OS)
+---
+
+## Deployment — step by step (Pi 5, Raspberry Pi OS Bookworm)
+
+### 0. Prerequisites
+- Raspberry Pi OS (64-bit) with the DSI touchscreen working.
+- The Pi and the backend host on the same network; note the backend's
+  address, an admin login, and your hospital's UUID.
+
+### 1. Install the service
 
 ```bash
 cd ~ && git clone <repo> && cd SmartTriage_v1/SmartTriage_Gateway
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+```
 
-# one-time: register the simulated devices + write the key file
+### 2. Provision devices + kiosk PIN (one-time, run by an admin)
+
+```bash
 sudo mkdir -p /etc/smarttriage
-.venv/bin/python provision.py --backend http://<backend-host>:8080 \
-    --email <admin-email> --hospital-id <hospital-uuid> \
+.venv/bin/python provision.py \
+    --backend http://<backend-host>:8080 \
+    --email <admin-email> \
+    --hospital-id <hospital-uuid> \
+    --gateway-name "Kigali ED — Ward Gateway" \
+    --pin \
     --out /tmp/devices.yaml
 sudo mv /tmp/devices.yaml /etc/smarttriage/devices.yaml
-sudo chown root:pi /etc/smarttriage/devices.yaml && sudo chmod 640 /etc/smarttriage/devices.yaml
+sudo chown root:pi /etc/smarttriage/devices.yaml
+sudo chmod 640 /etc/smarttriage/devices.yaml
+```
 
-# run as a service
+This registers the SIM-* devices in SmartTriage (each with its own API key),
+prompts for the offline PIN (stored as a salted SHA-256 hash), and writes the
+config. **The file contains live keys — never commit it.**
+
+### 3. Run as a service
+
+```bash
 sudo cp smarttriage-gateway.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now smarttriage-gateway
+curl -s http://localhost:8090/kiosk/api/me   # → {"authenticated":false,...}
 ```
 
-### Kiosk on the DSI screen
+### 4. Kiosk mode on the touchscreen
 
-Wayland (Pi OS Bookworm): add to `~/.config/wayfire.ini`:
+Wayland (Bookworm default, wayfire): add to `~/.config/wayfire.ini`:
 ```ini
 [autostart]
-kiosk = chromium-browser --kiosk --noerrdialogs --disable-infobars http://localhost:8090
+kiosk = chromium-browser --kiosk --noerrdialogs --disable-infobars --check-for-update-interval=31536000 http://localhost:8090
 ```
-(X11 fallback: put the same command in `~/.config/lxsession/LXDE-pi/autostart` prefixed with `@`.)
+labwc (newer Bookworm images): add the same command to
+`~/.config/labwc/autostart`. X11 fallback: prefix with `@` in
+`~/.config/lxsession/LXDE-pi/autostart`.
 
-### Point the real monitor at the gateway
+Optional polish: `raspi-config` → Display → disable screen blanking.
 
-In the ESP32 firmware's `config.h`, set `SERVER_BASE` to the Pi:
+### 5. Point the real monitor at the gateway
+
+In the ESP32 firmware's `config.h`:
 ```cpp
 #define SERVER_BASE "http://<pi-address>:8090"
 ```
 No other firmware change — the gateway exposes the identical `/ingest`,
 `/device-telemetry` and `/heartbeat` contract and passes the monitor's own
-`X-Device-API-Key` through untouched. Its tile appears on the kiosk
-automatically on the first reading (marked LIVE; grey after 20 s of silence).
+`X-Device-API-Key` through untouched. Its card appears on the Live tab
+automatically on the first reading (grey after 20 s of silence).
 
-## Key management (the professional version of "don't hardcode it")
+### 6. Demo-day checklist
+
+- Backend: `smarttriage.simulation.enabled=false`.
+- Unlock once with staff credentials → the Registry tab works (it needs a
+  backend identity). The PIN is the fallback if the network drops.
+- Rehearse the outage drill: Sync tab → *Simulate backend outage* → watch
+  readings queue → *Restore link* → watch **SYNCING → SYNCED** with the
+  recovered counter climbing.
+- The lock button (⏻, top right) ends the session between rehearsals.
+
+---
+
+## Authentication model
+
+- **Staff login** posts to the backend's `/auth/login`; the gateway keeps the
+  access/refresh tokens **server-side** (auto-refresh ~2 min before expiry)
+  and gives the browser only an opaque session cookie. The most recent staff
+  login powers the Registry tab for the whole kiosk (it is a shared bedside
+  appliance, not a per-user workstation).
+- **Offline PIN** unlocks the console without the backend — deliberately,
+  because the offline-resilience demo happens exactly when the backend is
+  unreachable. PIN sessions cannot read the registry (no backend identity)
+  and the UI says so.
+- Sessions live in process memory (a reboot logs everyone out) and expire
+  after 12 h idle. Device pass-through endpoints are **not** behind the kiosk
+  session — devices authenticate with their own API keys, as always.
+
+## Key management
 
 - **One key per device identity** — real and simulated alike. The backend
   cross-validates serial↔key, so attribution and revocation stay per-device;
   the gateway never re-signs traffic with its own credentials.
-- Keys live **only** in `/etc/smarttriage/devices.yaml` (chmod 600/640,
-  outside the repo — this repo ships `devices.example.yaml` with
-  placeholders). The kiosk browser never sees a key: it talks only to the
-  local service.
+- Keys live **only** in `/etc/smarttriage/devices.yaml` (outside the repo —
+  this repo ships `devices.example.yaml` with placeholders). The kiosk
+  browser never sees a key; the Registry tab shows them masked
+  (`st_dev_…abcd`), masking done server-side.
 - Revoke one device server-side and nothing else is touched. Rotation =
   deactivate + re-provision that one entry.
 - Demo runs plain HTTP on a closed LAN; production would front the backend
   with TLS — per-device identity makes mTLS/HMAC a drop-in upgrade later.
 
+## Store-and-forward semantics
+
+- Failed `/ingest` posts (network down or outage drill) are queued in SQLite
+  with `capturedAt` inside the payload, so late delivery keeps clinical time.
+  The queue survives gateway restarts and power loss.
+- Telemetry snapshots are latest-value semantics — a stale snapshot is
+  worthless, so they are dropped, never queued.
+- Drain is oldest-first, gentle (≤3/s). A replayed reading the backend
+  consciously declines ("no active monitoring session") is dropped rather
+  than retried forever — replaying it later can never succeed.
+- Auth/contract rejections (401/400) are never queued: they would loop.
+
 ## Endpoints
 
 | | |
 |---|---|
-| `GET /` | kiosk UI |
-| `GET /api/state` | tiles + link/queue status (JSON) |
-| `POST /api/sim/{serial}/scenario/{key}` | switch scenario |
-| `POST /api/sim/{serial}/toggle` | pause/resume a simulator |
-| `POST /api/v1/iot/stream/ingest` | pass-through + store-and-forward |
-| `POST /api/v1/iot/stream/device-telemetry` | pass-through (latest-value; never queued) |
-| `POST /api/v1/iot/stream/heartbeat` | pass-through |
-| `WS /ws` | live outgoing-payload feed for the ticker |
+| `GET /` | kiosk UI (login-gated views) |
+| `POST /kiosk/api/login` · `/logout` · `GET /kiosk/api/me` | session auth |
+| `GET /kiosk/api/state` | link state, sync state, queue, sims, real tiles |
+| `POST /kiosk/api/sim/{serial}/scenario/{key}` | switch scenario |
+| `POST /kiosk/api/sim/{serial}/toggle` | pause/resume a simulator |
+| `POST /kiosk/api/outage/{on\|off}` | demo outage drill |
+| `GET /kiosk/api/registry` | backend device registry (staff session required) |
+| `POST /api/v1/iot/stream/ingest` | device pass-through + store-and-forward |
+| `POST /api/v1/iot/stream/device-telemetry` | device pass-through (never queued) |
+| `POST /api/v1/iot/stream/heartbeat` | device pass-through |
+| `WS /ws` | live event feed (session-gated) |

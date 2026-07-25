@@ -2,176 +2,606 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>SmartTriage Gateway</title>
 <style>
-  /* 800×480 kiosk — dark clinical theme matching SmartTriage */
-  :root {
-    --bg:#0b1220; --panel:#111a2c; --line:#1e2a44; --text:#e8eefb;
-    --muted:#7d8db0; --cyan:#22d3ee;
-    --g:#34d399; --y:#fbbf24; --o:#fb923c; --r:#f87171;
-  }
-  * { margin:0; padding:0; box-sizing:border-box; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
-  html,body { width:100%; height:100%; background:var(--bg); color:var(--text); overflow:hidden;
-              user-select:none; -webkit-user-select:none; cursor:default; }
+/* ============================================================
+   SmartTriage Gateway kiosk — 800×480 DSI touchscreen, dark
+   clinical theme. Severity language everywhere:
+   green #2BB673 · yellow #E8C547 · orange #F08C00 · red #E5484D
+   · sepsis #9D6BFF · teal accent #26B8CE
+   Touch targets ≥ 56px. No hover states — this is a finger UI.
+   ============================================================ */
+:root {
+  --bg:#0B1418; --panel:#111F26; --panel2:#16272F; --line:#1E333C;
+  --ink:#E9F2F5; --mut:#7C929C; --teal:#26B8CE; --teal-d:#0E7490;
+  --g:#2BB673; --y:#E8C547; --o:#F08C00; --r:#E5484D; --p:#9D6BFF;
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { height:100%; }
+body {
+  background:var(--bg); color:var(--ink); overflow:hidden;
+  font-family:"Avenir Next","Segoe UI",system-ui,sans-serif;
+  font-size:15px; user-select:none; -webkit-user-select:none;
+}
+button { font-family:inherit; color:inherit; background:none; border:none; cursor:pointer; }
 
-  /* header */
-  #hdr { height:44px; display:flex; align-items:center; gap:10px; padding:0 12px;
-         border-bottom:1px solid var(--line); }
-  #hdr .logo { font-weight:800; letter-spacing:.06em; color:var(--cyan); font-size:15px; }
-  #hdr .sub { color:var(--muted); font-size:11px; }
-  .chip { font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px;
-          border:1px solid var(--line); }
-  .chip.up { color:var(--g); border-color:rgba(52,211,153,.4); }
-  .chip.down { color:var(--r); border-color:rgba(248,113,113,.5); animation:pulse 1s infinite; }
-  .chip.q { color:var(--o); }
-  #clock { margin-left:auto; font-variant-numeric:tabular-nums; color:var(--muted); font-size:13px; }
-  @keyframes pulse { 50% { opacity:.45; } }
+/* ---------- app frame ---------- */
+#app { display:none; height:100%; flex-direction:column; }
+#topbar {
+  height:52px; display:flex; align-items:center; gap:10px; padding:0 12px;
+  background:linear-gradient(180deg,#101E25,#0D181E); border-bottom:1px solid var(--line);
+}
+#brand { display:flex; align-items:center; gap:8px; font-weight:700; font-size:15px; }
+#linkchip {
+  display:flex; align-items:center; gap:7px; padding:6px 14px; border-radius:999px;
+  font-weight:700; font-size:13px; letter-spacing:.4px;
+}
+#linkchip .dot { width:9px; height:9px; border-radius:50%; }
+.link-online  { background:rgba(43,182,115,.14); color:var(--g); }
+.link-online  .dot { background:var(--g); box-shadow:0 0 8px var(--g); }
+.link-syncing { background:rgba(232,197,71,.13); color:var(--y); }
+.link-syncing .dot { background:var(--y); animation:blink 1s infinite; }
+.link-offline { background:rgba(229,72,77,.14); color:var(--r); }
+.link-offline .dot { background:var(--r); animation:blink .7s infinite; }
+@keyframes blink { 50% { opacity:.25; } }
+#clock { margin-left:auto; font-variant-numeric:tabular-nums; color:var(--mut); font-size:14px; }
+#lockbtn { width:44px; height:40px; border-radius:10px; background:var(--panel2); color:var(--mut); font-size:17px; }
 
-  /* tile grid */
-  #grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:8px 10px;
-          height:328px; }
-  .tile { background:var(--panel); border:1px solid var(--line); border-radius:12px;
-          padding:8px 10px; display:flex; flex-direction:column; overflow:hidden;
-          border-left-width:5px; }
-  .tile.sev0 { border-left-color:var(--g); } .tile.sev1 { border-left-color:var(--y); }
-  .tile.sev2 { border-left-color:var(--o); } .tile.sev3 { border-left-color:var(--r); }
-  .tile.sev3 .vitals { color:var(--r); }
-  .tile.real { border-left-color:var(--cyan); }
-  .tile.off { opacity:.45; }
-  .trow { display:flex; align-items:center; gap:6px; }
-  .tname { font-size:12px; font-weight:800; letter-spacing:.03em; }
-  .badge { font-size:9px; font-weight:800; padding:1px 6px; border-radius:6px; letter-spacing:.06em; }
-  .badge.real { background:rgba(34,211,238,.15); color:var(--cyan); animation:pulse 1.6s infinite; }
-  .badge.role { background:rgba(125,141,176,.15); color:var(--muted); }
-  .ackdot { width:8px; height:8px; border-radius:50%; margin-left:auto; background:var(--muted); }
-  .ackdot.ok { background:var(--g); } .ackdot.queued { background:var(--o); }
-  .ackdot.failed { background:var(--r); } .ackdot.idle { background:var(--cyan); opacity:.6; }
-  .idlenote { font-size:9px; color:var(--cyan); opacity:.75; font-weight:700; }
-  .vitals { font-size:15px; font-weight:800; margin:4px 0 1px; font-variant-numeric:tabular-nums; }
-  .vitals small { font-size:10px; color:var(--muted); font-weight:600; }
-  .v2 { font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
-  .scen { display:flex; flex-wrap:wrap; gap:3px; margin-top:auto; padding-top:4px; }
-  .sbtn { font-size:9px; font-weight:700; padding:4px 6px; border-radius:7px;
-          border:1px solid var(--line); background:transparent; color:var(--muted); }
-  .sbtn.active.s0 { background:rgba(52,211,153,.18); color:var(--g); border-color:var(--g); }
-  .sbtn.active.s1 { background:rgba(251,191,36,.18); color:var(--y); border-color:var(--y); }
-  .sbtn.active.s2 { background:rgba(251,146,60,.18); color:var(--o); border-color:var(--o); }
-  .sbtn.active.s3 { background:rgba(248,113,113,.18); color:var(--r); border-color:var(--r); }
-  .stat { font-size:11px; color:var(--muted); line-height:1.7; }
-  .stat b { color:var(--text); font-variant-numeric:tabular-nums; }
+#main { flex:1; overflow-y:auto; padding:12px; }
+#tabs { height:64px; display:flex; border-top:1px solid var(--line); background:#0D181E; }
+.tab {
+  flex:1; position:relative; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:2px; color:var(--mut); font-size:11.5px; font-weight:600;
+  letter-spacing:.5px;
+}
+.tab .ico { font-size:20px; line-height:1; }
+.tab.active { color:var(--teal); background:linear-gradient(180deg,rgba(38,184,206,.10),transparent); }
+.badge {
+  position:absolute; top:8px; right:22%; background:var(--r); color:#fff;
+  font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px; display:none;
+}
 
-  /* ticker */
-  #ticker { height:100px; border-top:1px solid var(--line); padding:6px 12px; overflow:hidden;
-            font:11px/1.55 ui-monospace,Menlo,Consolas,monospace; }
-  #ticker .row { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--muted); }
-  #ticker .row b { color:var(--text); }
-  #ticker .ok { color:var(--g); } #ticker .queued { color:var(--o); } #ticker .failed { color:var(--r); }
+/* ---------- shared ---------- */
+.h-row { display:flex; align-items:center; justify-content:space-between; margin:2px 2px 10px; }
+.h-row h2 { font-size:16px; letter-spacing:.2px; }
+.h-row .sub { color:var(--mut); font-size:12.5px; }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:16px;
+        padding:14px; margin-bottom:12px; }
+.sev0 { --sev:var(--g); } .sev1 { --sev:var(--y); } .sev2 { --sev:var(--o); }
+.sev3 { --sev:var(--r); } .sev4 { --sev:var(--p); }
+.chip { display:inline-flex; align-items:center; gap:6px; border-radius:999px;
+        padding:4px 12px; font-size:12px; font-weight:700; letter-spacing:.4px; }
+.ghost { color:var(--mut); border:1px solid var(--line); }
+.none { border:1.5px dashed var(--line); border-radius:16px; padding:24px; text-align:center;
+        color:var(--mut); font-size:13.5px; line-height:1.7; }
+
+/* ---------- LIVE ---------- */
+.real-card { position:relative; overflow:hidden; }
+.real-head { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.pulse { position:relative; width:16px; height:16px; flex:0 0 auto; }
+.pulse .core { position:absolute; inset:3px; border-radius:50%; background:var(--g); }
+.pulse .ring { position:absolute; inset:0; border-radius:50%; border:2px solid var(--g); opacity:0; }
+.pulse.beat .ring { animation:ring .9s ease-out; }
+@keyframes ring { 0% { transform:scale(.5); opacity:.9; } 100% { transform:scale(2.4); opacity:0; } }
+.pulse.err .core { background:var(--r); } .pulse.err .ring { border-color:var(--r); }
+.pulse.stale .core { background:var(--mut); }
+.real-title { font-weight:700; font-size:16px; }
+.real-sub { color:var(--mut); font-size:12px; }
+.ackchip { margin-left:auto; }
+.ack-ok     { background:rgba(43,182,115,.14); color:var(--g); }
+.ack-idle   { background:rgba(38,184,206,.12); color:var(--teal); }
+.ack-queued { background:rgba(232,197,71,.13); color:var(--y); }
+.ack-failed { background:rgba(229,72,77,.15); color:var(--r); }
+.vitals { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+.vt { background:var(--panel2); border-radius:12px; padding:10px 8px 8px; text-align:center; }
+.vt .v { font-size:26px; font-weight:800; font-variant-numeric:tabular-nums; line-height:1.1; }
+.vt .l { font-size:10.5px; color:var(--mut); font-weight:600; letter-spacing:.6px; margin-top:3px; }
+.vt.hr .v { color:#5EDFB8; } .vt.spo2 .v { color:#6FC7FF; } .vt.rr .v { color:#B5E48C; }
+.vt.temp .v { color:#FFC46B; } .vt.bp .v { color:#F49BAE; font-size:21px; }
+.minis { display:grid; grid-template-columns:repeat(auto-fill,minmax(178px,1fr)); gap:10px; }
+.mini { border-left:4px solid var(--sev,#334); border-radius:12px; background:var(--panel);
+        border-top:1px solid var(--line); border-right:1px solid var(--line);
+        border-bottom:1px solid var(--line); padding:10px 12px; }
+.mini .nm { font-weight:700; font-size:13px; }
+.mini .sc { color:var(--sev,#889); font-size:11.5px; font-weight:700; letter-spacing:.5px; }
+.mini .pv { color:var(--mut); font-size:12px; margin-top:4px; font-variant-numeric:tabular-nums; }
+
+/* ---------- SIMULATE ---------- */
+.sim-card { border-left:5px solid var(--sev,#334); }
+.sim-head { display:flex; align-items:center; gap:10px; }
+.sim-name { font-weight:800; font-size:16px; }
+.sim-role { color:var(--mut); font-size:11.5px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; }
+.sim-state { margin-left:auto; display:flex; align-items:center; gap:8px; }
+.run-chip { background:color-mix(in srgb,var(--sev) 16%,transparent); color:var(--sev); }
+.run-chip.paused { background:var(--panel2); color:var(--mut); }
+.sim-vitals { color:var(--mut); font-size:12.5px; margin:8px 2px 10px; font-variant-numeric:tabular-nums; }
+.scen-row { display:flex; flex-wrap:wrap; gap:8px; }
+.scen {
+  min-height:56px; min-width:104px; flex:1 1 104px; border-radius:13px; padding:6px 10px;
+  font-weight:800; font-size:14px; letter-spacing:.4px; border:1.5px solid var(--line);
+  background:var(--panel2); color:var(--ink); display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:1px;
+}
+.scen small { font-weight:600; font-size:9.5px; color:var(--mut); letter-spacing:.3px; }
+.scen.s0 { border-color:rgba(43,182,115,.5); color:var(--g); }
+.scen.s1 { border-color:rgba(232,197,71,.5); color:var(--y); }
+.scen.s2 { border-color:rgba(240,140,0,.5); color:var(--o); }
+.scen.s3 { border-color:rgba(229,72,77,.5); color:var(--r); }
+.scen.s4 { border-color:rgba(157,107,255,.55); color:var(--p); }
+.scen.on { color:#08141A; }
+.scen.on.s0 { background:var(--g); } .scen.on.s1 { background:var(--y); }
+.scen.on.s2 { background:var(--o); } .scen.on.s3 { background:var(--r); }
+.scen.on.s4 { background:var(--p); }
+.scen.on small { color:rgba(8,20,26,.75); }
+.sim-card.running { box-shadow:0 0 0 1px color-mix(in srgb,var(--sev) 45%,transparent),
+                              0 0 26px -6px color-mix(in srgb,var(--sev) 55%,transparent); }
+.toggle { min-height:44px; padding:0 16px; border-radius:11px; background:var(--panel2);
+          border:1px solid var(--line); font-weight:700; font-size:13px; color:var(--mut); }
+
+/* ---------- REGISTRY ---------- */
+.reg-row { display:flex; align-items:center; gap:10px; padding:11px 12px; border-bottom:1px solid var(--line); }
+.reg-row:last-child { border-bottom:none; }
+.reg-dot { width:11px; height:11px; border-radius:50%; flex:0 0 auto; }
+.rd-on  { background:var(--g); box-shadow:0 0 7px var(--g); }
+.rd-mon { background:var(--teal); box-shadow:0 0 7px var(--teal); }
+.rd-off { background:#54666F; }
+.rd-err { background:var(--r); }
+.reg-main { min-width:0; }
+.reg-name { font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.reg-meta { color:var(--mut); font-size:11.5px; font-variant-numeric:tabular-nums; }
+.reg-tags { margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+.tag { font-size:10px; font-weight:800; letter-spacing:.5px; border-radius:6px; padding:3px 7px; }
+.t-sim  { background:rgba(38,184,206,.13); color:var(--teal); }
+.t-real { background:rgba(43,182,115,.15); color:var(--g); }
+.t-visit{ background:rgba(157,107,255,.15); color:var(--p); }
+.t-key  { background:var(--panel2); color:var(--mut); font-family:Menlo,monospace; font-weight:600; }
+.reg-note { color:var(--mut); text-align:center; padding:26px 16px; line-height:1.7; font-size:13.5px; }
+
+/* ---------- SYNC ---------- */
+.sync-hero { display:flex; align-items:center; gap:14px; }
+.sync-ico { width:64px; height:64px; border-radius:18px; display:flex; align-items:center;
+            justify-content:center; font-size:30px; flex:0 0 auto; }
+.sy-synced  .sync-ico { background:rgba(43,182,115,.14); }
+.sy-syncing .sync-ico { background:rgba(232,197,71,.13); }
+.sy-offline .sync-ico { background:rgba(229,72,77,.14); }
+.sync-title { font-size:20px; font-weight:800; }
+.sy-synced  .sync-title { color:var(--g); }
+.sy-syncing .sync-title { color:var(--y); }
+.sy-offline .sync-title { color:var(--r); }
+.sync-sub { color:var(--mut); font-size:12.5px; margin-top:2px; }
+.stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:12px; }
+.stat { background:var(--panel2); border-radius:12px; padding:10px; text-align:center; }
+.stat .v { font-size:22px; font-weight:800; font-variant-numeric:tabular-nums; }
+.stat .l { font-size:10.5px; color:var(--mut); font-weight:600; letter-spacing:.5px; margin-top:2px; }
+.qrow { display:flex; justify-content:space-between; color:var(--mut); font-size:12.5px;
+        padding:7px 4px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; }
+.qrow:last-child { border-bottom:none; }
+#outagebtn {
+  width:100%; min-height:58px; border-radius:14px; font-weight:800; font-size:15px;
+  letter-spacing:.4px; border:1.5px solid rgba(229,72,77,.5); color:var(--r);
+  background:rgba(229,72,77,.07); margin-top:4px;
+}
+#outagebtn.armed { background:var(--r); color:#fff; border-color:var(--r); }
+
+/* ---------- LOCK SCREEN ---------- */
+#lock { position:fixed; inset:0; display:flex; z-index:50;
+        background:radial-gradient(120% 90% at 20% 0%, #12242D 0%, #0B1418 55%); }
+#lock .left { flex:1.05; display:flex; flex-direction:column; justify-content:center; padding:34px 30px; }
+#lock .right { flex:1; display:flex; align-items:center; justify-content:center; padding:18px; }
+.lk-brand { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+.lk-title { font-size:26px; font-weight:800; letter-spacing:-.4px; line-height:1.15; }
+.lk-sub { color:var(--mut); font-size:13px; margin-top:8px; max-width:300px; line-height:1.65; }
+.lk-status { margin-top:20px; }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:18px; width:340px; }
+.seg { display:flex; background:var(--panel2); border-radius:11px; padding:3px; margin-bottom:14px; }
+.seg button { flex:1; min-height:42px; border-radius:9px; font-weight:700; font-size:13px; color:var(--mut); }
+.seg button.on { background:var(--teal-d); color:#fff; }
+.fld { width:100%; min-height:50px; background:var(--panel2); border:1px solid var(--line);
+       border-radius:11px; color:var(--ink); font-size:15px; padding:0 14px; margin-bottom:10px;
+       font-family:inherit; }
+.fld:focus { outline:none; border-color:var(--teal-d); }
+#pinview { display:none; }
+#pindots { display:flex; gap:10px; justify-content:center; margin:6px 0 14px; }
+#pindots span { width:14px; height:14px; border-radius:50%; background:var(--panel2);
+                border:1.5px solid var(--line); }
+#pindots span.f { background:var(--teal); border-color:var(--teal); }
+.pinpad { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.pinpad button { min-height:54px; border-radius:12px; background:var(--panel2);
+                 font-size:20px; font-weight:700; border:1px solid var(--line); }
+.pinpad button:active { background:var(--teal-d); }
+.go { width:100%; min-height:52px; border-radius:12px; background:var(--teal-d); color:#fff;
+      font-weight:800; font-size:15px; letter-spacing:.4px; margin-top:4px; }
+#lockerr { color:var(--r); font-size:12.5px; min-height:18px; margin-top:8px; text-align:center; font-weight:600; }
+
+.view { display:none; } .view.on { display:block; }
+#toast { position:fixed; left:50%; bottom:76px; transform:translateX(-50%); background:#1B2F39;
+         border:1px solid var(--line); color:var(--ink); border-radius:12px; padding:10px 18px;
+         font-size:13px; font-weight:600; opacity:0; transition:opacity .25s; pointer-events:none; z-index:60; }
 </style>
 </head>
 <body>
-  <div id="hdr">
-    <span class="logo">SMARTTRIAGE</span><span class="sub">device gateway · demo console</span>
-    <span id="link" class="chip down">BACKEND …</span>
-    <span id="queue" class="chip q" style="display:none">QUEUE 0</span>
-    <span id="clock"></span>
+
+<!-- ==================== LOCK SCREEN ==================== -->
+<div id="lock">
+  <div class="left">
+    <div class="lk-brand">
+      <svg width="42" height="42" viewBox="0 0 46 46"><rect x="1" y="1" width="44" height="44" rx="11" fill="#0E7490"/><path d="M9 26 h7 l3.5-9 5 15 4-11 2.5 5 H37" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div>
+        <div style="font-weight:800; font-size:16px;">SmartTriage</div>
+        <div style="color:var(--mut); font-size:10.5px; letter-spacing:1.6px; font-weight:600;">GATEWAY CONSOLE</div>
+      </div>
+    </div>
+    <div class="lk-title" id="gwname">Ward Gateway</div>
+    <div class="lk-sub">Bedside uplink, monitor simulation and offline store-and-forward for the SmartTriage emergency platform.</div>
+    <div class="lk-status"><span class="chip ghost">Staff login uses SmartTriage credentials · the PIN works offline</span></div>
   </div>
-  <div id="grid"></div>
-  <div id="ticker"></div>
+  <div class="right">
+    <div class="panel">
+      <div class="seg">
+        <button id="segstaff" class="on" onclick="segTo('staff')">Staff login</button>
+        <button id="segpin" onclick="segTo('pin')">Offline PIN</button>
+      </div>
+      <div id="staffview">
+        <input class="fld" id="email" type="email" placeholder="Email" autocomplete="off">
+        <input class="fld" id="password" type="password" placeholder="Password" autocomplete="off">
+        <button class="go" onclick="loginStaff()">Unlock console</button>
+      </div>
+      <div id="pinview">
+        <div id="pindots"><span></span><span></span><span></span><span></span></div>
+        <div class="pinpad">
+          <button onclick="pinKey('1')">1</button><button onclick="pinKey('2')">2</button><button onclick="pinKey('3')">3</button>
+          <button onclick="pinKey('4')">4</button><button onclick="pinKey('5')">5</button><button onclick="pinKey('6')">6</button>
+          <button onclick="pinKey('7')">7</button><button onclick="pinKey('8')">8</button><button onclick="pinKey('9')">9</button>
+          <button onclick="pinClear()">✕</button><button onclick="pinKey('0')">0</button><button onclick="pinBack()">⌫</button>
+        </div>
+      </div>
+      <div id="lockerr"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== APP ==================== -->
+<div id="app">
+  <div id="topbar">
+    <div id="brand">
+      <svg width="26" height="26" viewBox="0 0 46 46"><rect x="1" y="1" width="44" height="44" rx="11" fill="#0E7490"/><path d="M9 26 h7 l3.5-9 5 15 4-11 2.5 5 H37" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span id="brandname">Gateway</span>
+    </div>
+    <div id="linkchip" class="link-offline"><span class="dot"></span><span id="linktext">OFFLINE</span></div>
+    <div id="clock">--:--</div>
+    <button id="lockbtn" onclick="lock()" aria-label="Lock">⏻</button>
+  </div>
+
+  <div id="main">
+    <!-- LIVE -->
+    <div class="view on" id="v-live">
+      <div class="h-row"><h2>Live monitor</h2><div class="sub">real ESP32-S3 uplink</div></div>
+      <div id="realwrap"></div>
+      <div class="h-row" style="margin-top:14px;"><h2 style="font-size:14px;">Running simulations</h2></div>
+      <div class="minis" id="minis"></div>
+    </div>
+
+    <!-- SIMULATE -->
+    <div class="view" id="v-sim">
+      <div class="h-row"><h2>Simulation</h2><div class="sub">virtual monitors · real pipeline</div></div>
+      <div id="simlist"></div>
+    </div>
+
+    <!-- REGISTRY -->
+    <div class="view" id="v-reg">
+      <div class="h-row"><h2>Monitor registry</h2>
+        <button class="toggle" onclick="loadRegistry()">↻ Refresh</button></div>
+      <div class="card" style="padding:4px 2px;" id="reglist"><div class="reg-note">Loading…</div></div>
+    </div>
+
+    <!-- SYNC -->
+    <div class="view" id="v-sync">
+      <div class="h-row"><h2>Backend link &amp; queue</h2><div class="sub" id="sync-url"></div></div>
+      <div class="card" id="synccard">
+        <div class="sync-hero">
+          <div class="sync-ico" id="sync-ico">✓</div>
+          <div>
+            <div class="sync-title" id="sync-title">SYNCED</div>
+            <div class="sync-sub" id="sync-sub"></div>
+          </div>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="v" id="st-q">0</div><div class="l">QUEUED</div></div>
+          <div class="stat"><div class="v" id="st-d">0</div><div class="l">RECOVERED</div></div>
+          <div class="stat"><div class="v" id="st-ok">0</div><div class="l">DELIVERED</div></div>
+          <div class="stat"><div class="v" id="st-f">0</div><div class="l">FAILURES</div></div>
+        </div>
+      </div>
+      <div class="card" id="qcard" style="display:none;">
+        <div style="color:var(--mut); font-weight:700; font-size:12px; letter-spacing:.5px; margin-bottom:4px;">OLDEST QUEUED READINGS</div>
+        <div id="qlist"></div>
+      </div>
+      <div class="card">
+        <div style="color:var(--mut); font-size:12.5px; line-height:1.6; margin-bottom:10px;">
+          <b style="color:var(--ink);">Outage drill</b> — sever the uplink on purpose. Readings queue on the Pi;
+          restore the link and watch them sync in order.</div>
+        <button id="outagebtn" onclick="toggleOutage()">▲ SIMULATE BACKEND OUTAGE</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tabs">
+    <button class="tab active" data-v="live" onclick="tabTo('live')"><span class="ico">◉</span>LIVE</button>
+    <button class="tab" data-v="sim" onclick="tabTo('sim')"><span class="ico">⚡</span>SIMULATE</button>
+    <button class="tab" data-v="reg" onclick="tabTo('reg')"><span class="ico">▤</span>REGISTRY</button>
+    <button class="tab" data-v="sync" onclick="tabTo('sync')"><span class="ico">⇅</span>SYNC<span class="badge" id="qbadge"></span></button>
+  </div>
+</div>
+
+<div id="toast"></div>
 
 <script>
-const grid = document.getElementById('grid');
-const ticker = document.getElementById('ticker');
-const fmt = (v, d=0) => v == null ? '--' : Number(v).toFixed(d);
-let state = null;
+"use strict";
+const $ = id => document.getElementById(id);
+let state = null, pin = "", registryLoaded = false;
 
-function vitalsLine(p, role) {
-  if (!p || Object.keys(p).length === 0) return '<span class="vitals"><small>waiting…</small></span>';
-  const bp = (p.systolicBp && p.diastolicBp) ? `${p.systolicBp}/${p.diastolicBp}` : '--/--';
-  let extra = `<div class="v2">T ${fmt(p.temperature,1)}°C · BP ${bp}` +
-              (p.glucose != null ? ` · GLU ${fmt(p.glucose,1)}` : '') +
-              (p.ecgRhythm ? ` · ${p.ecgRhythm}` : '') + `</div>`;
-  return `<div class="vitals">${fmt(p.heartRate)} <small>bpm</small>&nbsp; ${fmt(p.spo2)}<small>%</small>&nbsp; ${fmt(p.respiratoryRate)} <small>rr</small></div>` + extra;
+/* ---------------- boot ---------------- */
+async function boot() {
+  const r = await fetch("/kiosk/api/me").then(r => r.json()).catch(() => null);
+  if (r && r.gatewayName) { $("gwname").textContent = r.gatewayName; $("brandname").textContent = r.gatewayName; }
+  if (r && r.authenticated) enter();
+  else {
+    $("lock").style.display = "flex"; $("app").style.display = "none";
+    if (r && !r.pinConfigured) $("segpin").style.display = "none";
+  }
+}
+function segTo(which) {
+  $("segstaff").classList.toggle("on", which === "staff");
+  $("segpin").classList.toggle("on", which === "pin");
+  $("staffview").style.display = which === "staff" ? "block" : "none";
+  $("pinview").style.display = which === "pin" ? "block" : "none";
+  $("lockerr").textContent = "";
+}
+async function loginStaff() {
+  $("lockerr").textContent = "";
+  const body = { mode:"staff", email: $("email").value, password: $("password").value };
+  const r = await fetch("/kiosk/api/login", { method:"POST",
+    headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body) }).catch(() => null);
+  if (r && r.ok) { enter(); return; }
+  if (!r) { $("lockerr").textContent = "Gateway unreachable"; return; }
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 503) {
+    $("lockerr").textContent = "Backend unreachable — use the Offline PIN";
+    segTo("pin");
+  } else $("lockerr").textContent = j.error || "Login failed";
+}
+function pinKey(d) { if (pin.length < 4) { pin += d; pinDots(); if (pin.length === 4) submitPin(); } }
+function pinBack() { pin = pin.slice(0, -1); pinDots(); }
+function pinClear() { pin = ""; pinDots(); }
+function pinDots() {
+  [...$("pindots").children].forEach((s, i) => s.classList.toggle("f", i < pin.length));
+}
+async function submitPin() {
+  const r = await fetch("/kiosk/api/login", { method:"POST",
+    headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ mode:"pin", pin }) });
+  pin = ""; pinDots();
+  if (r.ok) enter(); else $("lockerr").textContent = "Wrong PIN";
+}
+async function lock() {
+  await fetch("/kiosk/api/logout", { method:"POST" });
+  location.reload();
+}
+function enter() {
+  $("lock").style.display = "none"; $("app").style.display = "flex";
+  poll(); setInterval(poll, 2500);
+  const tick = () => $("clock").textContent =
+    new Date().toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" });
+  tick(); setInterval(tick, 5000);
+  connectWs();
 }
 
+/* ---------------- state ---------------- */
+async function poll() {
+  const r = await fetch("/kiosk/api/state").catch(() => null);
+  if (!r) return;
+  if (r.status === 401) { location.reload(); return; }
+  state = await r.json();
+  render();
+}
+function fmtAge(sec) {
+  if (sec == null) return "";
+  if (sec < 90) return Math.round(sec) + "s";
+  if (sec < 5400) return Math.round(sec / 60) + "m";
+  return (sec / 3600).toFixed(1) + "h";
+}
 function render() {
   if (!state) return;
-  document.getElementById('link').className = 'chip ' + (state.backendUp ? 'up' : 'down');
-  document.getElementById('link').textContent = state.backendUp ? 'BACKEND LINK OK' : 'BACKEND OFFLINE';
-  const q = document.getElementById('queue');
-  q.style.display = state.queueDepth > 0 ? '' : 'none';
-  q.textContent = 'QUEUE ' + state.queueDepth;
+  const c = $("linkchip"), t = $("linktext"), s = state.syncState;
+  c.className = s === "synced" ? "link-online" : s === "syncing" ? "link-syncing" : "link-offline";
+  t.textContent = s === "synced" ? "ONLINE" :
+                  s === "syncing" ? `SYNCING · ${state.queueDepth}` :
+                  state.forcedDown ? "OUTAGE DRILL" : "OFFLINE";
+  const b = $("qbadge");
+  b.style.display = state.queueDepth > 0 ? "block" : "none";
+  b.textContent = state.queueDepth;
+  renderLive(); renderSim(); renderSync();
+}
 
-  let html = '';
-  for (const rm of state.real) {
-    html += `<div class="tile real ${rm.stale ? 'off' : ''}">
-      <div class="trow"><span class="tname">${rm.name}</span>
-        <span class="badge real">LIVE</span>
-        <span class="ackdot ${rm.ack}"></span></div>
-      ${vitalsLine(rm.last_payload, 'real')}
-      <div class="scen"><span class="sbtn">${rm.stale ? 'no data — check monitor' : 'hardware · via gateway'}</span></div>
-    </div>`;
+/* ---------------- LIVE ---------------- */
+function labelOf(s) {
+  const sc = (s.scenarios || []).find(x => x.key === s.scenario);
+  return sc ? sc.label : s.scenario;
+}
+function renderLive() {
+  const wrap = $("realwrap");
+  if (!state.real.length) {
+    wrap.innerHTML = `<div class="none">No live monitor yet.<br>
+      Power the ESP32-S3 monitor — it appears here automatically on its first reading.</div>`;
+  } else {
+    wrap.innerHTML = state.real.map(rm => {
+      const p = rm.last_payload || {};
+      const ackCls = { ok:"ack-ok", idle:"ack-idle", queued:"ack-queued", failed:"ack-failed" }[rm.ack] || "ghost";
+      const ackTxt = { ok:"DELIVERED", idle:"AWAITING PATIENT BIND", queued:"QUEUED ON PI", failed:"FAILED" }[rm.ack] || rm.ack;
+      const bp = (p.systolicBp != null && p.diastolicBp != null) ? `${p.systolicBp}/${p.diastolicBp}` : "--";
+      return `<div class="card real-card">
+        <div class="real-head">
+          <div class="pulse ${rm.stale ? "stale" : rm.ack === "failed" ? "err" : ""}" data-pulse="${rm.serial}">
+            <span class="ring"></span><span class="core"></span></div>
+          <div><div class="real-title">${rm.name}</div>
+          <div class="real-sub">${rm.serial} · last post ${fmtAge(Date.now()/1000 - rm.last_seen)} ago${rm.stale ? " · STALE" : ""}</div></div>
+          <span class="chip ackchip ${ackCls}">${ackTxt}</span>
+        </div>
+        <div class="vitals">
+          <div class="vt hr"><div class="v">${p.heartRate ?? "--"}</div><div class="l">HR bpm</div></div>
+          <div class="vt spo2"><div class="v">${p.spo2 ?? "--"}</div><div class="l">SpO2 %</div></div>
+          <div class="vt rr"><div class="v">${p.respiratoryRate ?? "--"}</div><div class="l">RESP /min</div></div>
+          <div class="vt temp"><div class="v">${p.temperature ?? "--"}</div><div class="l">TEMP °C</div></div>
+          <div class="vt bp"><div class="v">${bp}</div><div class="l">BP mmHg</div></div>
+        </div></div>`;
+    }).join("");
   }
-  for (const s of state.sims) {
-    html += `<div class="tile sev${s.severity} ${s.running ? '' : 'off'}" data-serial="${s.serial}">
-      <div class="trow"><span class="tname">${s.name}</span>
-        <span class="badge role">${s.role.toUpperCase()}</span>
-        ${s.ack === 'idle' ? '<span class="idlenote">AWAITING PATIENT BIND</span>' : ''}
-        <span class="ackdot ${s.ack}"></span></div>
-      ${vitalsLine(s.payload, s.role)}
-      <div class="scen">${s.scenarios.map(sc =>
-        `<button class="sbtn s${sc.severity} ${sc.key === s.scenario ? 'active' : ''}"
-                 onclick="setScenario('${s.serial}','${sc.key}')">${sc.label}</button>`).join('')}
+  const running = state.sims.filter(s => s.running);
+  $("minis").innerHTML = running.length ? running.map(s => {
+    const p = s.payload || {};
+    return `<div class="mini sev${s.severity}">
+      <div class="nm">${s.name}</div>
+      <div class="sc">${labelOf(s).toUpperCase()}</div>
+      <div class="pv">HR ${p.heartRate ?? "-"} · SpO2 ${p.spo2 ?? "-"} · ${p.systolicBp ?? "-"}/${p.diastolicBp ?? "-"}</div>
+    </div>`;
+  }).join("") : `<div class="none" style="grid-column:1/-1; padding:14px; font-size:12.5px;">No simulations running — start one on the Simulate tab.</div>`;
+}
+
+/* ---------------- SIMULATE ---------------- */
+function renderSim() {
+  $("simlist").innerHTML = state.sims.map(s => {
+    const p = s.payload || {};
+    const glu = p.glucose != null ? ` · glu ${p.glucose}` : "";
+    const ackTxt = { ok:"delivered", idle:"awaiting patient bind", queued:"queued on Pi", failed:"failed" }[s.ack] || "…";
+    return `<div class="card sim-card sev${s.severity} ${s.running ? "running" : ""}">
+      <div class="sim-head">
+        <div><div class="sim-name">${s.name}</div><div class="sim-role">${s.role} monitor</div></div>
+        <div class="sim-state">
+          <span class="chip run-chip ${s.running ? "" : "paused"}">${s.running ? "● " + labelOf(s).toUpperCase() : "PAUSED"}</span>
+          <button class="toggle" onclick="toggleSim('${s.serial}')">${s.running ? "Pause" : "Start"}</button>
+        </div>
       </div>
-    </div>`;
-  }
-  // gateway stats card fills the last cell
-  html += `<div class="tile"><div class="trow"><span class="tname">GATEWAY</span>
-      <span class="badge role">RPi 5</span></div>
-    <div class="stat">upstream <b>${state.backendUrl}</b><br>
-      sent <b>${state.txOk}</b> · failed <b>${state.txFail}</b> · buffered <b>${state.queueDepth}</b><br>
-      one point of egress — per-device keys preserved</div></div>`;
-  grid.innerHTML = html;
+      <div class="sim-vitals">HR ${p.heartRate ?? "-"} · SpO2 ${p.spo2 ?? "-"} · RR ${p.respiratoryRate ?? "-"} ·
+        ${p.systolicBp ?? "-"}/${p.diastolicBp ?? "-"} · ${p.temperature ?? "-"}°C${glu}
+        &nbsp;→&nbsp; ${ackTxt}</div>
+      <div class="scen-row">${s.scenarios.map(sc =>
+        `<button class="scen s${sc.severity} ${sc.key === s.scenario ? "on" : ""}"
+                 onclick="setScenario('${s.serial}','${sc.key}')">${sc.label}
+           <small>${sc.severity === 4 ? "screening demo" : ""}</small></button>`).join("")}
+      </div></div>`;
+  }).join("") || `<div class="reg-note">No simulated monitors configured.<br>Run provision.py and list them in devices.yaml.</div>`;
 }
-
 async function setScenario(serial, key) {
-  await fetch(`/api/sim/${serial}/scenario/${key}`, { method: 'POST' });
-  refresh();
+  await fetch(`/kiosk/api/sim/${serial}/scenario/${key}`, { method:"POST" });
+  toast(`Scenario → ${key.toUpperCase()}`); poll();
+}
+async function toggleSim(serial) {
+  await fetch(`/kiosk/api/sim/${serial}/toggle`, { method:"POST" }); poll();
 }
 
-async function refresh() {
-  try {
-    state = await (await fetch('/api/state')).json();
-    render();
-  } catch (e) { /* gateway restarting */ }
+/* ---------------- tabs / REGISTRY ---------------- */
+function tabTo(v) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.v === v));
+  document.querySelectorAll(".view").forEach(x => x.classList.remove("on"));
+  $("v-" + v).classList.add("on");
+  if (v === "reg" && !registryLoaded) loadRegistry();
+}
+async function loadRegistry() {
+  const el = $("reglist");
+  el.innerHTML = `<div class="reg-note">Loading…</div>`;
+  const r = await fetch("/kiosk/api/registry").then(r => r.json()).catch(() => null);
+  if (!r) { el.innerHTML = `<div class="reg-note">Gateway unreachable.</div>`; return; }
+  if (r.error) {
+    const msg = {
+      "no-identity": "Registry needs a staff login.<br>Lock the console and sign in with SmartTriage credentials.",
+      "backend-down": "Backend unreachable — registry unavailable while offline.",
+      "unauthorized": "Backend session expired — lock and sign in again.",
+    }[r.error] || r.error;
+    el.innerHTML = `<div class="reg-note">${msg}</div>`;
+    return;
+  }
+  registryLoaded = true;
+  const dot = d => d.status === "MONITORING" ? "rd-mon"
+             : d.status === "ONLINE" ? "rd-on" : d.status === "ERROR" ? "rd-err" : "rd-off";
+  el.innerHTML = r.devices.map(d => `
+    <div class="reg-row">
+      <span class="reg-dot ${dot(d)}"></span>
+      <div class="reg-main">
+        <div class="reg-name">${d.name || d.serial}</div>
+        <div class="reg-meta">${d.serial} · ${d.type || ""} · ${d.status || "?"}
+          ${d.lastHeartbeatAt ? " · hb " + fmtAge((Date.now() - new Date(d.lastHeartbeatAt)) / 1000) + " ago" : ""}
+          ${d.battery != null ? " · bat " + d.battery + "%" : ""}
+          ${d.firmware ? " · fw " + d.firmware : ""}</div>
+      </div>
+      <div class="reg-tags">
+        ${d.seenLive ? `<span class="tag t-real">LIVE HERE</span>` : ""}
+        ${d.gatewaySim ? `<span class="tag t-sim">GATEWAY SIM</span>` : ""}
+        ${d.activeVisit ? `<span class="tag t-visit">ON PATIENT</span>` : ""}
+        ${d.keyMasked ? `<span class="tag t-key">${d.keyMasked}</span>` : ""}
+      </div>
+    </div>`).join("") || `<div class="reg-note">No devices registered for this hospital.</div>`;
 }
 
-// live outgoing-payload ticker
-const rows = [];
-function tick(ev) {
-  if (ev.type !== 'tx') return;
-  const t = new Date(ev.ts * 1000).toLocaleTimeString([], {hour12:false});
-  const p = ev.payload || {};
-  const gist = ['heartRate','spo2','respiratoryRate','temperature','systolicBp','diastolicBp','glucose']
-    .filter(k => p[k] != null).map(k => `${k.replace('heartRate','hr').replace('respiratoryRate','rr')
-    .replace('temperature','t').replace('systolicBp','sys').replace('diastolicBp','dia')}=${p[k]}`).join(' ');
-  rows.unshift(`<div class="row">${t} <b>${ev.source}</b> [${ev.scenario}] → ${gist} <span class="${ev.ack}">${ev.ack.toUpperCase()}</span></div>`);
-  if (rows.length > 6) rows.pop();
-  ticker.innerHTML = rows.join('');
+/* ---------------- SYNC ---------------- */
+function renderSync() {
+  $("sync-url").textContent = state.backendUrl;
+  const s = state.syncState;
+  $("synccard").className = "card sy-" + s;
+  $("sync-ico").textContent = s === "synced" ? "✓" : s === "syncing" ? "⇅" : "✕";
+  $("sync-title").textContent = s === "synced" ? "SYNCED" : s === "syncing" ? "SYNCING" : "OFFLINE";
+  $("sync-sub").textContent =
+    s === "synced" ? "Backend link healthy — readings deliver in real time." :
+    s === "syncing" ? `Link restored — replaying ${state.queueDepth} queued reading${state.queueDepth === 1 ? "" : "s"} in order.` :
+    state.forcedDown ? "Outage drill active — readings are being cached on the Pi."
+                     : "Backend unreachable — readings are being cached on the Pi.";
+  $("st-q").textContent = state.queueDepth;
+  $("st-d").textContent = state.drainedTotal;
+  $("st-ok").textContent = state.txOk;
+  $("st-f").textContent = state.txFail;
+  const qc = $("qcard");
+  if (state.queuePreview && state.queuePreview.length) {
+    qc.style.display = "block";
+    $("qlist").innerHTML = state.queuePreview.map(q =>
+      `<div class="qrow"><span>${q.serial}</span><span>queued ${fmtAge(q.age)} ago</span></div>`).join("");
+  } else qc.style.display = "none";
+  const ob = $("outagebtn");
+  ob.classList.toggle("armed", state.forcedDown);
+  ob.textContent = state.forcedDown ? "▼ END OUTAGE DRILL — RESTORE LINK" : "▲ SIMULATE BACKEND OUTAGE";
+}
+async function toggleOutage() {
+  const to = state.forcedDown ? "off" : "on";
+  await fetch(`/kiosk/api/outage/${to}`, { method:"POST" });
+  toast(to === "on" ? "Uplink severed — watch the queue grow" : "Link restored — draining queue");
+  poll();
 }
 
+/* ---------------- WebSocket pulses ---------------- */
 function connectWs() {
-  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-  ws.onmessage = (m) => { try { tick(JSON.parse(m.data)); } catch (e) {} };
-  ws.onclose = () => setTimeout(connectWs, 2000);
-  setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 15000);
+  const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  ws.onmessage = ev => {
+    try {
+      const e = JSON.parse(ev.data);
+      if (e.type === "tx" && e.role === "real") {
+        const el = document.querySelector(`[data-pulse="${e.serial}"]`) || document.querySelector(".pulse");
+        if (el) {
+          el.classList.toggle("err", e.ack === "failed");
+          el.classList.remove("beat"); void el.offsetWidth; el.classList.add("beat");
+        }
+      }
+      if (e.type === "link" || e.type === "drain") poll();
+    } catch (_) {}
+  };
+  ws.onclose = () => setTimeout(connectWs, 3000);
+  setInterval(() => { try { ws.send("ping"); } catch (_) {} }, 20000);
 }
 
-setInterval(() => document.getElementById('clock').textContent =
-  new Date().toLocaleTimeString([], {hour12:false}), 1000);
-setInterval(refresh, 2000);
-refresh();
-connectWs();
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg; t.style.opacity = "1";
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.opacity = "0", 2200);
+}
+
+boot();
 </script>
 </body>
 </html>

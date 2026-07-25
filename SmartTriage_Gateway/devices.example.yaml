@@ -5,6 +5,11 @@
 backend_url: http://192.168.1.50:8080
 listen_port: 8090
 tx_interval_seconds: 5
+gateway_name: "Kigali ED — Ward Gateway"   # shown on the lock screen + top bar
+# Kiosk unlock PIN (works offline). provision.py --pin writes the salted
+# hash; the plain `kiosk_pin:` field also works but is for development only.
+kiosk_pin_salt: RUN_PROVISION_WITH__PIN
+kiosk_pin_sha256: RUN_PROVISION_WITH__PIN
 devices:
   - role: bedside            # continuous ED monitoring → /ingest
     name: SIM-BED-01

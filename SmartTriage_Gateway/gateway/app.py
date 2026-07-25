@@ -20,6 +20,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
+from .auth import AuthManager, Session
 from .config import GatewayConfig
 from .forwarder import Forwarder, INGEST, TELEMETRY, HEARTBEAT
 from .scenarios import family_for
@@ -27,12 +28,23 @@ from .simulator import SimulatorEngine, SimState
 
 app = FastAPI(title="SmartTriage Gateway")
 
+SESSION_COOKIE = "gw_session"
+
 cfg: GatewayConfig
 fwd: Forwarder
 engine: SimulatorEngine
+auth: AuthManager
 real_monitors: dict[str, dict] = {}       # serial → {name, last_seen, last_payload, ack}
 _ws_clients: set[WebSocket] = set()
 _event_queue: asyncio.Queue = asyncio.Queue()
+
+
+def _session_of(request: Request) -> Session | None:
+    return auth.get(request.cookies.get(SESSION_COOKIE))
+
+
+def _unauthorized() -> JSONResponse:
+    return JSONResponse({"error": "unauthorized"}, status_code=401)
 
 
 def notify(event: dict) -> None:
@@ -48,10 +60,14 @@ def notify(event: dict) -> None:
 # ====================================================================
 @app.on_event("startup")
 async def startup() -> None:
-    global cfg, fwd, engine
+    global cfg, fwd, engine, auth
     cfg = GatewayConfig.load()
     fwd = Forwarder(cfg.backend_url, cfg.queue_db, notify)
     engine = SimulatorEngine(cfg.tx_interval_seconds, _send_sim, notify)
+    auth = AuthManager(cfg.backend_url,
+                       pin_sha256=cfg.kiosk_pin_sha256,
+                       pin_salt=cfg.kiosk_pin_salt,
+                       pin_plain=cfg.kiosk_pin)
 
     for dev in cfg.devices:
         engine.add(dev)
@@ -59,6 +75,7 @@ async def startup() -> None:
 
     asyncio.create_task(fwd.drain_loop())
     asyncio.create_task(fwd.health_loop())
+    asyncio.create_task(auth.refresh_loop())
     asyncio.create_task(_ws_pump())
 
 
@@ -128,10 +145,62 @@ async def heartbeat(request: Request) -> Response:
 
 
 # ====================================================================
-#  Kiosk control API (localhost only in kiosk deployment)
+#  Kiosk auth
 # ====================================================================
-@app.get("/api/state")
-async def state() -> JSONResponse:
+@app.post("/kiosk/api/login")
+async def login(request: Request) -> JSONResponse:
+    body = await request.json()
+    mode = str(body.get("mode", "staff"))
+    if mode == "pin":
+        session = auth.login_pin(str(body.get("pin", "")))
+        if not session:
+            return JSONResponse({"error": "Wrong PIN"}, status_code=401)
+        err = ""
+    else:
+        session, err = await auth.login_staff(
+            str(body.get("email", "")).strip(), str(body.get("password", "")))
+        if not session:
+            code = 503 if err == "backend-down" else 401
+            return JSONResponse({"error": err}, status_code=code)
+    resp = JSONResponse({
+        "name": session.display_name, "role": session.role, "kind": session.kind,
+        "hospital": session.backend.hospital_name if session.backend else "",
+    })
+    resp.set_cookie(SESSION_COOKIE, session.token, httponly=True, samesite="lax")
+    return resp
+
+
+@app.post("/kiosk/api/logout")
+async def logout(request: Request) -> JSONResponse:
+    auth.logout(request.cookies.get(SESSION_COOKIE))
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(SESSION_COOKIE)
+    return resp
+
+
+@app.get("/kiosk/api/me")
+async def me(request: Request) -> JSONResponse:
+    s = _session_of(request)
+    if not s:
+        return JSONResponse({"authenticated": False,
+                             "pinConfigured": auth.pin_configured(),
+                             "gatewayName": cfg.gateway_name})
+    return JSONResponse({
+        "authenticated": True, "name": s.display_name, "role": s.role,
+        "kind": s.kind, "gatewayName": cfg.gateway_name,
+        "hospital": s.backend.hospital_name if s.backend else "",
+        "registryAvailable": auth.backend_identity is not None,
+    })
+
+
+# ====================================================================
+#  Kiosk control API (session-protected; device pass-through is NOT
+#  behind this — devices authenticate with their own API keys)
+# ====================================================================
+@app.get("/kiosk/api/state")
+async def state(request: Request) -> JSONResponse:
+    if not _session_of(request):
+        return _unauthorized()
     sims = []
     for st in engine.sims.values():
         fam = family_for(st.device.role)
@@ -140,7 +209,8 @@ async def state() -> JSONResponse:
             "running": st.running, "scenario": st.scenario_key,
             "severity": st.severity(), "ack": st.last_ack,
             "payload": st.last_payload,
-            "scenarios": [{"key": s.key, "label": s.label, "severity": s.severity}
+            "scenarios": [{"key": s.key, "label": s.label, "severity": s.severity,
+                           "note": s.note}
                           for s in fam.values()],
         })
     now = time.time()
@@ -148,25 +218,82 @@ async def state() -> JSONResponse:
         {**rm, "stale": now - rm["last_seen"] > 20}
         for rm in real_monitors.values()
     ]
+    oldest = fwd.queue_oldest_age()
     return JSONResponse({
         "backendUp": fwd.backend_up,
         "backendUrl": cfg.backend_url,
+        "syncState": fwd.sync_state(),          # offline | syncing | synced
+        "forcedDown": fwd.forced_down,
         "queueDepth": fwd.queue_depth(),
+        "queueOldestSeconds": oldest,
+        "queuePreview": fwd.queue_preview(),
+        "drainedTotal": fwd.drained_total,
         "txOk": fwd.tx_ok, "txFail": fwd.tx_fail,
         "sims": sims, "real": reals,
     })
 
 
-@app.post("/api/sim/{serial}/scenario/{key}")
-async def set_scenario(serial: str, key: str) -> JSONResponse:
+@app.post("/kiosk/api/sim/{serial}/scenario/{key}")
+async def set_scenario(request: Request, serial: str, key: str) -> JSONResponse:
+    if not _session_of(request):
+        return _unauthorized()
     ok = engine.set_scenario(serial, key)
     return JSONResponse({"ok": ok}, status_code=200 if ok else 404)
 
 
-@app.post("/api/sim/{serial}/toggle")
-async def toggle(serial: str) -> JSONResponse:
+@app.post("/kiosk/api/sim/{serial}/toggle")
+async def toggle(request: Request, serial: str) -> JSONResponse:
+    if not _session_of(request):
+        return _unauthorized()
     ok = engine.toggle(serial)
     return JSONResponse({"ok": ok}, status_code=200 if ok else 404)
+
+
+@app.post("/kiosk/api/outage/{state_}")
+async def outage(request: Request, state_: str) -> JSONResponse:
+    """Demo outage drill: 'on' severs the uplink (readings queue), 'off'
+    restores it (queue drains). Purely gateway-local."""
+    if not _session_of(request):
+        return _unauthorized()
+    fwd.set_forced_down(state_ == "on")
+    return JSONResponse({"ok": True, "forcedDown": fwd.forced_down})
+
+
+@app.get("/kiosk/api/registry")
+async def registry(request: Request) -> JSONResponse:
+    """Backend device registry for the logged-in identity's hospital,
+    enriched with what the gateway knows locally. API keys NEVER leave
+    the server side un-masked."""
+    s = _session_of(request)
+    if not s:
+        return _unauthorized()
+    devices, err = await auth.fetch_registry()
+    if err:
+        return JSONResponse({"error": err}, status_code=200)
+
+    local = {d.serial: d for d in cfg.devices}
+    seen_real = set(real_monitors.keys())
+    rows = []
+    for d in devices:
+        serial = str(d.get("serialNumber", ""))
+        key = str(d.get("apiKey") or (local[serial].api_key if serial in local else ""))
+        rows.append({
+            "serial": serial,
+            "name": d.get("deviceName"),
+            "type": d.get("deviceType"),
+            "status": d.get("status"),
+            "lastHeartbeatAt": d.get("lastHeartbeatAt"),
+            "lastDataAt": d.get("lastDataAt"),
+            "battery": d.get("batteryLevel"),
+            "wifiRssi": d.get("wifiRssi"),
+            "firmware": d.get("firmwareVersion"),
+            "inService": d.get("inService"),
+            "activeVisit": bool(d.get("activeVisitId")),
+            "keyMasked": (key[:7] + "…" + key[-4:]) if len(key) > 12 else ("set" if key else ""),
+            "gatewaySim": serial in local,
+            "seenLive": serial in seen_real,
+        })
+    return JSONResponse({"devices": rows})
 
 
 # ====================================================================
@@ -174,6 +301,10 @@ async def toggle(serial: str) -> JSONResponse:
 # ====================================================================
 @app.websocket("/ws")
 async def ws(websocket: WebSocket) -> None:
+    # same session gate as the REST API — the event stream carries vitals
+    if not auth.get(websocket.cookies.get(SESSION_COOKIE)):
+        await websocket.close(code=4401)
+        return
     await websocket.accept()
     _ws_clients.add(websocket)
     try:

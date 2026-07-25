@@ -16,7 +16,9 @@ out as a believable transition on the SmartTriage dashboards, not a
 teleporting number.
 
 `severity` drives the tile colour on the kiosk: 0 green · 1 yellow ·
-2 orange · 3 red.
+2 orange · 3 red · 4 sepsis (purple — its own colour because a sepsis
+demo is qualitatively different from "very sick": it exercises the
+backend's sepsis screening + hour-1 bundle machinery, not just triage).
 """
 from __future__ import annotations
 
@@ -27,7 +29,7 @@ from dataclasses import dataclass, field
 class Scenario:
     key: str
     label: str
-    severity: int                 # 0 green, 1 yellow, 2 orange, 3 red
+    severity: int                 # 0 green, 1 yellow, 2 orange, 3 red, 4 sepsis
     hr: float
     spo2: float
     rr: float
@@ -53,6 +55,10 @@ BEDSIDE: dict[str, Scenario] = {s.key: s for s in [
     Scenario("deteriorating","Deteriorate",       2, 118, 91, 27, 38.4,  96, 60,
              ramp_seconds=120.0,
              note="slow 2-minute slide — watch the trend lines move"),
+    Scenario("sepsis",       "SEPSIS",            4, 132, 90, 32, 39.4,  82, 50,
+             ramp_seconds=90.0,
+             note="septic shock physiology: fever + tachycardia + tachypnea +"
+                  " falling BP — trips the sepsis screening & hour-1 bundle"),
 ]}
 
 # SATS-banded presets: the point of the triage monitor is that THESE
@@ -66,6 +72,10 @@ TRIAGE: dict[str, Scenario] = {s.key: s for s in [
              note="TEWS ~5-6"),
     Scenario("red",    "RED",   3, 138, 85, 33, 39.2,  80, 52,
              note="TEWS ≥7 — resus-level physiology"),
+    Scenario("sepsis", "SEPSIS", 4, 130, 91, 31, 39.5,  84, 52,
+             ramp_seconds=90.0,
+             note="septic presentation at the front door — triage lands RED"
+                  " and the sepsis screen goes positive"),
 ]}
 
 PARAMEDIC: dict[str, Scenario] = {s.key: s for s in [

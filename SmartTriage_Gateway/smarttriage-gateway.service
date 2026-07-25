@@ -9,9 +9,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/home/pi/SmartTriage_Gateway
+WorkingDirectory=/home/pi/SmartTriage_v1/SmartTriage_Gateway
 Environment=GATEWAY_CONFIG=/etc/smarttriage/devices.yaml
-ExecStart=/home/pi/SmartTriage_Gateway/.venv/bin/uvicorn gateway.app:app --host 0.0.0.0 --port 8090
+ExecStart=/home/pi/SmartTriage_v1/SmartTriage_Gateway/.venv/bin/uvicorn gateway.app:app --host 0.0.0.0 --port 8090
 Restart=always
 RestartSec=3
 

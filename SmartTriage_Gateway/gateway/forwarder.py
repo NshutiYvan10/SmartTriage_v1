@@ -45,6 +45,28 @@ class Forwarder:
         self.last_ack_at: float = 0.0
         self.tx_ok = 0
         self.tx_fail = 0
+        self.drained_total = 0            # queued readings later delivered
+        self.last_drain_at: float = 0.0
+        # DEMO OUTAGE: when True the forwarder behaves exactly as if the
+        # network were down (posts queue, health reports offline) — so the
+        # offline-resilience story can be told on stage without pulling a
+        # cable. Flipped from the kiosk's Sync tab.
+        self.forced_down = False
+
+    def set_forced_down(self, down: bool) -> None:
+        if down and not self.forced_down:
+            self.forced_down = True
+            self.backend_up = False
+            self._notify({"type": "link", "up": False, "forced": True})
+        elif not down and self.forced_down:
+            self.forced_down = False
+            self._notify({"type": "link", "forced": False})
+
+    def sync_state(self) -> str:
+        """offline | syncing | synced — the Sync tab's headline state."""
+        if not self.backend_up:
+            return "offline"
+        return "syncing" if self.queue_depth() > 0 else "synced"
 
     # ---------------- outbound ----------------
     async def post(self, path: str, api_key: str, body: dict,
@@ -55,6 +77,12 @@ class Forwarder:
         device to a patient yet — the DESIGNED state for a bedside device
         before the ED assigns it. Not an error, never queued (the readings
         would be rejected again on replay)."""
+        if self.forced_down:
+            self.tx_fail += 1
+            if queue_on_failure:
+                self._enqueue(path, api_key, body)
+                return "queued"
+            return "failed"
         try:
             r = await self._client.post(
                 self._base + path, json=body,
@@ -84,6 +112,16 @@ class Forwarder:
         Returns (status_code, response_text); on outage the reading is queued
         and an accepted=true ack is synthesised so the monitor doesn't
         double-buffer what the gateway now guarantees to deliver."""
+        if self.forced_down:
+            if path == INGEST and raw_body:
+                try:
+                    self._enqueue(path, api_key, json.loads(raw_body))
+                    return 200, json.dumps({"accepted": True, "gatewayQueued": True,
+                                            "serverTimestamp": int(time.time() * 1000)})
+                except Exception:
+                    pass
+            return 502, json.dumps({"accepted": False,
+                                    "rejectionReason": "gateway: outage drill active"})
         try:
             r = await self._client.post(
                 self._base + path, content=raw_body,
@@ -112,6 +150,25 @@ class Forwarder:
     def queue_depth(self) -> int:
         return self._db.execute("SELECT COUNT(*) FROM queue").fetchone()[0]
 
+    def queue_oldest_age(self) -> float | None:
+        row = self._db.execute("SELECT MIN(queued_at) FROM queue").fetchone()
+        return (time.time() - row[0]) if row and row[0] else None
+
+    def queue_preview(self, limit: int = 8) -> list[dict]:
+        """Oldest queued readings for the Sync tab — serial + age only,
+        never keys or full payloads."""
+        rows = self._db.execute(
+            "SELECT body, queued_at FROM queue ORDER BY id LIMIT ?", (limit,)).fetchall()
+        out = []
+        for body, at in rows:
+            serial = ""
+            try:
+                serial = str(json.loads(body).get("serialNumber", ""))
+            except Exception:
+                pass
+            out.append({"serial": serial or "-", "age": time.time() - at})
+        return out
+
     async def drain_loop(self) -> None:
         """Oldest-first, gentle (3 per second) so a long outage replays calmly."""
         while True:
@@ -122,17 +179,28 @@ class Forwarder:
                 "SELECT id, path, api_key, body FROM queue ORDER BY id LIMIT 3").fetchall()
             for rid, path, key, body in row:
                 status = await self.post(path, key, json.loads(body), queue_on_failure=False)
-                if status != "ok":
+                # 'ok'   → delivered.
+                # 'idle' → the backend consciously declined it (no monitoring
+                #          session bound this device when the reading is
+                #          replayed). Replaying again can never succeed —
+                #          drop it, or the queue jams forever on one row.
+                if status not in ("ok", "idle"):
                     break
                 self._db.execute("DELETE FROM queue WHERE id = ?", (rid,))
                 self._db.commit()
-                self._notify({"type": "drain", "remaining": self.queue_depth()})
+                self.drained_total += 1
+                self.last_drain_at = time.time()
+                self._notify({"type": "drain", "remaining": self.queue_depth(),
+                              "drained": self.drained_total})
 
     async def health_loop(self) -> None:
         """Probe the backend when idle/down so 'link restored' is noticed
         even before the next reading is due."""
         while True:
             await asyncio.sleep(5.0)
+            if self.forced_down:
+                self.backend_up = False       # the drill outranks the probe
+                continue
             if self.backend_up and time.time() - self.last_ack_at < 30:
                 continue
             try:

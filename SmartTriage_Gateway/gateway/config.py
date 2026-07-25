@@ -36,6 +36,12 @@ class GatewayConfig:
     listen_port: int = 8090
     tx_interval_seconds: float = 5.0
     queue_db: str = "gateway-queue.db"
+    gateway_name: str = "SmartTriage Gateway"
+    # Kiosk unlock PIN — store the salted hash (provision.py --pin writes it).
+    # kiosk_pin (plain) is a development convenience only.
+    kiosk_pin_sha256: str = ""
+    kiosk_pin_salt: str = ""
+    kiosk_pin: str = ""
     devices: list[SimDevice] = field(default_factory=list)
 
     @staticmethod
@@ -48,6 +54,10 @@ class GatewayConfig:
             listen_port=int(raw.get("listen_port", 8090)),
             tx_interval_seconds=float(raw.get("tx_interval_seconds", 5.0)),
             queue_db=str(raw.get("queue_db", "gateway-queue.db")),
+            gateway_name=str(raw.get("gateway_name", "SmartTriage Gateway")),
+            kiosk_pin_sha256=str(raw.get("kiosk_pin_sha256", "")),
+            kiosk_pin_salt=str(raw.get("kiosk_pin_salt", "")),
+            kiosk_pin=str(raw.get("kiosk_pin", "")),
         )
         for d in raw.get("devices", []):
             cfg.devices.append(SimDevice(
