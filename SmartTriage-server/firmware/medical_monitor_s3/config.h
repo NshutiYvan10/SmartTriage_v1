@@ -18,7 +18,7 @@
 #pragma once
 
 // ======================== IDENTITY / NETWORK =========================
-#define FIRMWARE_VERSION   "s3-3.5.1"
+#define FIRMWARE_VERSION   "s3-3.5.2"
 
 #define WIFI_SSID          "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD      "YOUR_WIFI_PASSWORD"
@@ -161,6 +161,10 @@
 #define SPO2_MIN_SAMPLES    25
 #define R_RATIO_HIST_SIZE   10
 #define FINGER_IR_THRESHOLD 50000L
+// Release at 80% of the detect threshold: without hysteresis a finger resting
+// near the threshold flapped the finger-present state at the sample rate,
+// repainting the pleth pane each time.
+#define FINGER_IR_RELEASE_FRAC 0.80f
 #define FINGER_LOST_RESET_MS 3000UL
 
 // ======================== ECG DETECTOR ===============================
@@ -192,6 +196,32 @@
 #define ECG_LO_OFF_MS         800    // continuous low before declaring recovered
 // 50 Hz mains notch (Rwanda grid). Set to 60 for 60 Hz regions.
 #define ECG_MAINS_HZ         50.0f
+
+// ---- interference diagnostics (v3.5.2) ----
+// Field report: the ECG trace goes noisy ONLY while a finger is on the
+// pulse-ox sensor. Root-causing that needs measurements, not impressions.
+// Two numbers decide it:
+//  * the TRUE ECG sample rate — the mains notch above is configured for a
+//    fixed 250 Hz and is astonishingly intolerant of drift (bench-simulated
+//    against the real filter: a mean interval of 4.03 ms instead of 4.000
+//    drops 50 Hz rejection from ~124 dB to ~15 dB; by 4.17 ms it is ~3 dB,
+//    i.e. mains passes straight through). So if the sampler cannot hold
+//    4.000 ms, the monitor has no working mains rejection at all.
+//  * how much 50 Hz vs 100 Hz sits on the raw signal. 100 Hz is both the
+//    mains 2nd harmonic AND the pulse-ox LED switching rate, so frequency
+//    alone cannot separate them — the LED-off test below does.
+#define ECG_DIAG_BLOCK       250     // samples per diagnostic block (~1 s)
+#define ECG_DIAG_REPORT_MS  5000UL   // serial cadence for the [ecg] line
+
+// Pulse-ox LED drive levels for the interference test (MAX30100 reg 0x09 /
+// MAX30102 pulse amplitude). OFF keeps the chip and the I2C traffic running
+// but stops all LED current — with a finger still on the sensor.
+#define SPO2_LED_FULL_30100  0x88    // ~27.1 mA both LEDs (clinical default)
+#define SPO2_LED_HALF_30100  0x44    // ~14.2 mA both LEDs
+#define SPO2_LED_OFF_30100   0x00
+#define SPO2_LED_FULL_30102  0x1F
+#define SPO2_LED_HALF_30102  0x0F
+#define SPO2_LED_OFF_30102   0x00
 // Waveform ring for UI + one exported beat for the backend payload
 #define ECG_WAVE_RING        512
 #define ECG_EXPORT_SAMPLES   50      // one beat, downsampled, CSV in payload

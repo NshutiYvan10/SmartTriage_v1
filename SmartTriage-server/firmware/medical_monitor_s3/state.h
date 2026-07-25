@@ -86,6 +86,12 @@ struct MonitorState {
 
   // ---- mode ----
   bool simulation = false;          // demo data; NEVER transmitted
+
+  // Pulse-ox LED drive, for the ECG-interference test only (2 = clinical
+  // full drive, 1 = half, 0 = LEDs off). Anything other than 2 means the
+  // monitor is in a diagnostic state and SpO2 is not clinically valid —
+  // the UI says so and the value stops being reported.
+  uint8_t spo2LedLevel = 2;
 };
 
 extern MonitorState g_state;

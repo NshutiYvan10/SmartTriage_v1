@@ -108,11 +108,43 @@ public:
   float irFallbackBpm() const { return irBeatBpm_; }
   bool  fingerOn() const { return fingerOn_; }
 
+  // DIAGNOSTIC ONLY (Device page → Sensors row): 2 = full, 1 = half, 0 = off.
+  // The interference test that identifies whether pulse-ox LED current is
+  // being conducted into the patient: leave a finger on the sensor and step
+  // the drive down. If the ECG noise tracks the LED current, the coupling is
+  // the LED loop; if the noise is unchanged with the LEDs fully off, the
+  // finger itself is the electrical path and no firmware change can fix it.
+  // Level 0 also stops SpO2 reporting (no light, no reading) — that is
+  // honest, and the UI falls back to "PLACE FINGER ON SENSOR".
+  void applyLedLevel(uint8_t level) {
+    if (!present_ || level == ledLevel_) return;
+    ledLevel_ = level;
+    if (chip_ == Chip::M30102) {
+      uint8_t amp = level == 0 ? SPO2_LED_OFF_30102
+                  : level == 1 ? SPO2_LED_HALF_30102 : SPO2_LED_FULL_30102;
+      sensor_.setPulseAmplitudeRed(amp);
+      sensor_.setPulseAmplitudeIR(amp);
+    } else if (chip_ == Chip::M30100) {
+      legacy_.setLedConfig(level == 0 ? SPO2_LED_OFF_30100
+                         : level == 1 ? SPO2_LED_HALF_30100 : SPO2_LED_FULL_30100);
+    }
+    if (level != 2) reset();
+    Serial.printf("[spo2] LED drive -> %s (interference test)\n",
+                  level == 0 ? "OFF" : level == 1 ? "HALF ~14mA" : "FULL ~27mA");
+  }
+  uint8_t ledLevel() const { return ledLevel_; }
+
 private:
   // One FIFO sample, either chip (MAX30100 samples arrive pre-scaled x4
   // into the 18-bit-ish range these thresholds were tuned for).
   void handleSample(long ir, long red, bool ecgLeadsOff) {
-    fingerOn_ = ir > FINGER_IR_THRESHOLD;
+    // HYSTERESIS on finger detection. Recomputing this from every raw sample
+    // with a single threshold let a finger resting near 50k flap the state at
+    // up to 100 Hz, and each flap repaints the whole pleth pane and restarts
+    // its sweep — visible chaos next to the ECG for a signal that is simply
+    // marginal. Latch on above the threshold, release only well below it.
+    fingerOn_ = fingerOn_ ? (ir > (long)(FINGER_IR_THRESHOLD * FINGER_IR_RELEASE_FRAC))
+                          : (ir > FINGER_IR_THRESHOLD);
     if (!fingerOn_) return;
     lastFingerMs_ = millis();
 
@@ -209,6 +241,7 @@ private:
   int   bufIdx_ = 0, sampleCount_ = 0;
   MedianRing<R_RATIO_HIST_SIZE> rHist_;
   Ema   ema_;
+  uint8_t ledLevel_ = 2;                 // diagnostic LED drive (2 = clinical)
   DcTracker plethDc_;
   LowPass   plethLp_;
   float perfusion_ = 0, irBeatBpm_ = 0;
@@ -310,15 +343,20 @@ public:
     pinMode(PIN_ECG_LO_N, INPUT);
     analogReadResolution(12);
     notch_.configure(ECG_MAINS_HZ, 1000.0f / ECG_SAMPLE_INTERVAL_MS);
+    g50_.configure(ECG_MAINS_HZ, 1000.0f / ECG_SAMPLE_INTERVAL_MS);
+    g100_.configure(2.0f * ECG_MAINS_HZ, 1000.0f / ECG_SAMPLE_INTERVAL_MS);
   }
 
   bool leadsOff() const { return leadsOff_; }
 
-  // Call every SENSOR_TASK_TICK_MS; samples internally at 250 Hz.
+  // Called ONCE PER SAMPLE from ecgTask, which holds a tick-locked
+  // ECG_SAMPLE_INTERVAL_MS cadence (vTaskDelayUntil). There is deliberately
+  // no millis() gate here any more: a 1 ms-resolution gate inside a 4 ms
+  // task would occasionally drop a sample (delta reads 3), and gating on
+  // millis() was exactly what let unrelated I2C work shift the mean sample
+  // interval and silently detune the mains notch.
   void poll(float irFallbackBpm, bool fingerOn) {
     uint32_t now = millis();
-    if (now - lastSampleMs_ < ECG_SAMPLE_INTERVAL_MS) return;
-    lastSampleMs_ = now;
 
     // Leads-off with DEBOUNCE: the AD8232 LO pins chatter when electrode
     // contact is marginal — a single noisy sample must not blank the HR
@@ -343,23 +381,42 @@ public:
     int raw = analogRead(PIN_ECG);
     // baseline-wander removal (≈0.4 Hz HPF) then mains notch
     float hp = dc_.highpass((float)raw, ECG_BASELINE_ALPHA);
+    observeInterference(hp, nowUs());
     float filtered = notch_.process(hp);
 
-    // A gentle ~40 Hz low-pass for the DISPLAYED trace only: the notch kills
-    // 50 Hz mains but leaves broadband EMG/sensor fuzz that made the sweep
-    // look ragged. QRS energy is <30 Hz so the beat shape is preserved.
-    // Detection runs on the UNSMOOTHED `filtered` — timing is untouched.
-    float display = ecgLp_.process(filtered, 0.5f);
-
+    // NO cosmetic low-pass here. v3.5.1 added one believing it was ~40 Hz and
+    // display-only; it was neither. alpha 0.5 at 250 Hz is a 25.6 Hz cutoff —
+    // inside the QRS band and below the 0.5-40 Hz monitoring standard — and
+    // this ring is ALSO the source of the beat exported to SmartTriage, so it
+    // was quietly distorting the waveform in the clinical record while
+    // attenuating 50 Hz mains by only 6.4 dB. The honest fix for mains is the
+    // notch actually working, which is what the tick-locked ecgTask restores.
     // waveform ring for UI + payload export
     uint16_t h = (uint16_t)((g_ecgWaveHead + 1) % ECG_WAVE_RING);
-    g_ecgWave[h] = (int16_t)constrain(display, -2047.0f, 2047.0f);
+    g_ecgWave[h] = (int16_t)constrain(filtered, -2047.0f, 2047.0f);
     g_ecgWaveHead = h;
     finalizeBeatExport(h);
 
     detectRPeak(filtered, now);
     maybeComputeRespiration(now);
     publish(now);
+  }
+
+  // ---- interference / timing diagnostics (v3.5.2, read-only) ----
+  // Writes one line answering both questions the field report raises:
+  // is the sampler actually holding 250 Hz (without which the mains notch
+  // is inert), and how much 50/100 Hz interference is reaching the ADC.
+  // Returns false when there is nothing meaningful to report (leads off).
+  bool diagLine(char *out, size_t cap) const {
+    if (leadsOff_ || rptSamples_ == 0) return false;
+    bool notchLive = fabsf(rptRateHz_ - 1000.0f / ECG_SAMPLE_INTERVAL_MS) < 2.0f;
+    snprintf(out, cap,
+             "[ecg] rate=%.1fHz (mean %.2fms, max %.1fms, %u%% late) "
+             "notch=%s | raw rms=%.0f mains50=%.0f h100=%.0f counts | q=%u",
+             rptRateHz_, rptMeanMs_, rptMaxMs_, (unsigned)rptLatePct_,
+             notchLive ? "on-tune" : "DETUNED (no mains rejection)",
+             rptRms_, rpt50_, rpt100_, (unsigned)quality_);
+    return true;
   }
 
   // One representative beat as CSV for DeviceVitalPayload.ecgWaveform.
@@ -374,6 +431,50 @@ public:
   }
 
 private:
+  static uint32_t nowUs() { return micros(); }
+
+  // Accumulate one block of timing + interference statistics. Measured on
+  // the PRE-notch signal on purpose: the notch's whole job is to hide 50 Hz,
+  // so measuring after it would tell us nothing about what is arriving.
+  void observeInterference(float hp, uint32_t us) {
+    if (lastUs_) {
+      uint32_t dt = us - lastUs_;
+      if (dt < 100000UL) {                 // skip gaps (leads-off, BP cycle)
+        ivSumUs_ += dt;
+        ivCnt_++;
+        if (dt > ivMaxUs_) ivMaxUs_ = dt;
+        if (dt > (ECG_SAMPLE_INTERVAL_MS + 1) * 1000UL) ivLate_++;
+      }
+    }
+    lastUs_ = us;
+
+    g50_.push(hp);
+    g100_.push(hp);
+    noiseSq_ += (double)hp * (double)hp;
+
+    if (++blockN_ < ECG_DIAG_BLOCK) return;
+
+    if (ivCnt_) {
+      rptMeanMs_  = (float)ivSumUs_ / (float)ivCnt_ / 1000.0f;
+      rptRateHz_  = rptMeanMs_ > 0.1f ? 1000.0f / rptMeanMs_ : 0.0f;
+      rptMaxMs_   = ivMaxUs_ / 1000.0f;
+      rptLatePct_ = (uint32_t)((100UL * ivLate_) / ivCnt_);
+    }
+    rptRms_     = sqrtf((float)(noiseSq_ / blockN_));
+    rpt50_      = g50_.amplitude(blockN_);
+    rpt100_     = g100_.amplitude(blockN_);
+    rptSamples_ = blockN_;
+
+    // Retune the probes to the rate we ACTUALLY achieved, so the 50 Hz
+    // figure stays truthful even while the sampler is off its nominal rate.
+    float fs = rptRateHz_ > 50.0f ? rptRateHz_ : 1000.0f / ECG_SAMPLE_INTERVAL_MS;
+    g50_.configure(ECG_MAINS_HZ, fs);
+    g100_.configure(2.0f * ECG_MAINS_HZ, fs);
+
+    ivSumUs_ = 0; ivMaxUs_ = 0; ivCnt_ = 0; ivLate_ = 0;
+    noiseSq_ = 0; blockN_ = 0;
+  }
+
   void onLeadsOff(uint32_t now, float irFallbackBpm, bool fingerOn) {
     leadsOnSince_ = 0;
     inBeat_ = false;
@@ -602,7 +703,6 @@ private:
 
   DcTracker dc_;
   NotchFilter notch_;
-  LowPass ecgLp_;                                  // display-only de-noise
   bool  leadsOff_ = true, inBeat_ = false, hrFromEcg_ = false, beatReady_ = false;
   float peakVal_ = 0, adaptive_ = ECG_INITIAL_THRESHOLD;
   uint16_t peakHead_ = 0, exportPeakHead_ = 0;
@@ -622,8 +722,15 @@ private:
   int   qualOk_ = 0, qualTotal_ = 0;
   uint32_t qualWindowStart_ = 0, lastCandidateMs_ = 0;
   uint32_t loHighSince_ = 0, loLowSince_ = 0;
-  uint32_t lastSampleMs_ = 0, lastHrMs_ = 0,
-           lastRespMs_ = 0, lastPublishMs_ = 0, leadsOnSince_ = 0;
+  uint32_t lastHrMs_ = 0, lastRespMs_ = 0, lastPublishMs_ = 0, leadsOnSince_ = 0;
+  // interference / timing diagnostics (v3.5.2)
+  Goertzel g50_, g100_;
+  double   noiseSq_ = 0;
+  int      blockN_ = 0;
+  uint32_t lastUs_ = 0, ivSumUs_ = 0, ivMaxUs_ = 0, ivCnt_ = 0, ivLate_ = 0;
+  float    rptMeanMs_ = 0, rptRateHz_ = 0, rptMaxMs_ = 0,
+           rptRms_ = 0, rpt50_ = 0, rpt100_ = 0;
+  uint32_t rptLatePct_ = 0, rptSamples_ = 0;
 };
 
 // =====================================================================

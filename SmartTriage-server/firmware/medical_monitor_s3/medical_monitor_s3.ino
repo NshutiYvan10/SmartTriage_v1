@@ -75,19 +75,55 @@ static UiController ui;
 // the I2C/ADC reads themselves.
 static void sensorTask(void *) {
   for (;;) {
+    // One lock per iteration for BOTH flags: this loop runs at 500 Hz, and
+    // taking the state mutex twice that often is the contention pattern that
+    // visibly degraded the UI once already (see TempPipeline's publish note).
     bool simulating;
-    if (stateLock(5)) { simulating = g_state.simulation; stateUnlock(); }
-    else { vTaskDelay(1); continue; }
+    uint8_t ledWant;
+    if (stateLock(5)) {
+      simulating = g_state.simulation;
+      ledWant    = g_state.spo2LedLevel;
+      stateUnlock();
+    } else { vTaskDelay(1); continue; }
 
     if (simulating) {
       sim.poll();
     } else {
+      spo2.applyLedLevel(ledWant);   // diagnostic; no-op at the clinical level
       spo2.poll(ecg.leadsOff());
-      ecg.poll(spo2.irFallbackBpm(), spo2.fingerOn());
-      temp.poll();
+      temp.poll();          // ECG now samples in its own task (see ecgTask)
     }
     alarms.poll();
     vTaskDelay(pdMS_TO_TICKS(SENSOR_TASK_TICK_MS));
+  }
+}
+
+// Core 1 — ECG sampler, on its OWN tick-locked cadence.
+//
+// WHY THIS IS A SEPARATE TASK: the 50 Hz mains notch (filters.h) is
+// configured for exactly 250 Hz, and bench-simulating the real filter shows
+// it is brutally sensitive to a wrong MEAN sample interval — 4.03 ms instead
+// of 4.000 collapses mains rejection from ~124 dB to ~16 dB, and 4.25 ms
+// leaves ~2 dB, i.e. none at all. Random jitter is far more forgiving
+// (±100 µs still yields ~25 dB). Sampling on a millis() gate inside the
+// shared sampler loop made the MEAN interval a function of unrelated work
+// (the pulse-ox I2C FIFO drain, the temperature read) — precisely the fatal
+// mode, and precisely why a pulse-ox that is busier when a finger is present
+// could degrade the ECG. vTaskDelayUntil locks the mean to the tick.
+static void ecgTask(void *) {
+  TickType_t last = xTaskGetTickCount();
+  const TickType_t period = pdMS_TO_TICKS(ECG_SAMPLE_INTERVAL_MS);
+  bool simulating = false;
+  uint16_t simCheck = 0;
+  for (;;) {
+    // The simulation flag is re-read ~5x/s, not every sample: taking the
+    // state mutex 250x/s from this task is exactly the kind of contention
+    // that degrades the UI (see TempPipeline's 1 Hz-publish note).
+    if (simCheck++ % 50 == 0) {
+      if (stateLock(2)) { simulating = g_state.simulation; stateUnlock(); }
+    }
+    if (!simulating) ecg.poll(spo2.irFallbackBpm(), spo2.fingerOn());
+    vTaskDelayUntil(&last, period);
   }
 }
 
@@ -219,6 +255,9 @@ void setup() {
 
   // Samplers + BP on core 1; network + UI on core 0 (with WiFi).
   xTaskCreatePinnedToCore(sensorTask, "sensors", 8192,  nullptr, 4, nullptr, 1);
+  // ECG above the other samplers: its whole value is a cadence nothing else
+  // may shift. The work per tick is one analogRead plus float filtering.
+  xTaskCreatePinnedToCore(ecgTask,    "ecg",     4096,  nullptr, 6, nullptr, 1);
   xTaskCreatePinnedToCore(bpTask,     "bp",      6144,  nullptr, 5, nullptr, 1);
   xTaskCreatePinnedToCore(netTask,    "net",     8192,  nullptr, 3, nullptr, 0);
   xTaskCreatePinnedToCore(uiTask,     "ui",      12288, nullptr, 2, nullptr, 0);
@@ -246,6 +285,23 @@ void loop() {
     Serial.printf("[recap] fw=%s spo2:%s temp:%s ecg:%s cuff-adc:%s%s\n",
                   FIRMWARE_VERSION, chan(s.chSpo2), chan(s.chTemp), chan(s.chEcg), chan(s.chBp),
                   s.simulation ? " (SIMULATION)" : "");
+  }
+
+  // ECG timing + interference report. Prints only while the leads are on a
+  // patient (it is meaningless otherwise). This is the line that settles
+  // whether ECG noise is an electrical coupling problem or a sampling-rate
+  // problem: compare it with a finger ON vs OFF the pulse-ox sensor, and
+  // across the Device page's LED drive levels.
+  static uint32_t lastEcgDiag = 0;
+  if (millis() - lastEcgDiag >= ECG_DIAG_REPORT_MS) {
+    lastEcgDiag = millis();
+    char diag[192];
+    if (ecg.diagLine(diag, sizeof(diag))) {
+      MonitorState s = snapshotState();
+      Serial.printf("%s | spo2-led=%s finger=%s\n", diag,
+                    s.spo2LedLevel == 0 ? "OFF" : s.spo2LedLevel == 1 ? "HALF" : "full",
+                    s.chSpo2 == Chan::OK ? "yes" : "no");
+    }
   }
 
   // Serial heartbeat (runs on core 1, independent of the UI): if the UI

@@ -60,6 +60,14 @@ public:
     }
   }
 
+  // DIAGNOSTIC: override LED drive current (reg 0x09; high nibble RED, low
+  // nibble IR; 0x00 = both LEDs fully off, 0x8 = 27.1 mA per the datasheet
+  // current table). Turning the LEDs off while a finger STAYS on the sensor
+  // is the one test that separates "LED switching current is coupling into
+  // the patient" from "the finger itself is an electrical path" — the
+  // optical stimulus stops, the skin contact does not.
+  void setLedConfig(uint8_t v) { if (wire_) write8(0x09, v); }
+
   bool available() const { return count_ > 0; }
   long getFIFOIR()  const { return (long)qIr_[tail_] * 4; }   // x4 → 18-bit-ish range
   long getFIFORed() const { return (long)qRed_[tail_] * 4; }

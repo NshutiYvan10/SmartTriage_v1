@@ -67,10 +67,13 @@ struct DcTracker {
 };
 
 // ---------- One-pole low-pass ----------
-// (raw → smoothed): removes broadband noise above a soft cutoff set by
-// alpha. Used to de-noise the DISPLAY traces and, on the pleth, to hand
-// the SpO2 AC estimator a clean pulsatile signal. alpha ≈ dt/(RC+dt):
-// higher alpha = higher cutoff = less smoothing.
+// (raw → smoothed): removes broadband noise above a cutoff set by alpha.
+// Cutoff is NOT alpha·fs/2π for large alpha — compute it as
+// f_3dB = -ln(1-alpha)·fs/2π (alpha 0.25 @100 Hz ≈ 4.6 Hz; alpha 0.5
+// @250 Hz ≈ 27.6 Hz, NOT 40). Used only for the pleth DISPLAY trace: the
+// SpO2 R-ratio estimator deliberately still reads the raw buffers, and
+// nothing in the ECG signal path is smoothed (its ring feeds the beat
+// exported to the clinical record — see sensors.h).
 struct LowPass {
   float value = 0.0f;
   bool  primed = false;
@@ -80,6 +83,31 @@ struct LowPass {
     return value;
   }
   void reset() { value = 0.0f; primed = false; }
+};
+
+// ---------- Single-frequency power probe (Goertzel) ----------
+// Measures how much of ONE frequency is present in a block of samples, far
+// cheaper than an FFT. Used as a DIAGNOSTIC, never in the clinical path:
+// telling 50 Hz (mains coupling) apart from 100 Hz (pulse-ox LED switching
+// at 100 samples/s) is what distinguishes an electrical interference path
+// from a firmware one. Configure with the MEASURED sample rate — a probe
+// tuned to a rate the sampler isn't actually achieving measures nothing.
+struct Goertzel {
+  float coeff = 0.0f, s1 = 0.0f, s2 = 0.0f;
+  void configure(float targetHz, float sampleHz) {
+    coeff = 2.0f * cosf(2.0f * PI * targetHz / sampleHz);
+    s1 = s2 = 0.0f;
+  }
+  void push(float x) {
+    float s0 = coeff * s1 - s2 + x;
+    s2 = s1; s1 = s0;
+  }
+  // Sinusoid amplitude over the block, then rearm for the next one.
+  float amplitude(int n) {
+    float mag = sqrtf(fabsf(s1 * s1 + s2 * s2 - coeff * s1 * s2));
+    s1 = s2 = 0.0f;
+    return n > 0 ? 2.0f * mag / (float)n : 0.0f;
+  }
 };
 
 // ---------- Mains-notch biquad (50/60 Hz) ----------

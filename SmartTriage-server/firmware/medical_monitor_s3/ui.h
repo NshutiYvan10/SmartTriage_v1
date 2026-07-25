@@ -451,7 +451,15 @@ private:
   //  PAGE 2 — waveforms (scrolling erase-ahead traces)
   // =====================================================================
   uint16_t ecgReadHead_ = 0, plethReadHead_ = 0;
-  int waveX_ = 0;
+  // ONE SWEEP CURSOR PER TRACE. A single shared cursor was the cause of the
+  // "ECG goes unstable the moment a finger is on the pulse-ox" field report:
+  // the pleth trace only draws while a finger is detected, and it was
+  // advancing the SAME cursor as the ECG. Every pleth sample therefore stole
+  // a column from the ECG's sweep — the ECG's erase-ahead skipped those
+  // columns (leaving pixels from the previous sweep under the live trace)
+  // and its time base jumped from 4.0 to ~2.9 ms/pixel. Indexed like
+  // lastPy_/dispPeak_, by colour bit 0.
+  int waveX_[2] = {0, 0};
 
   void drawWaveforms(const MonitorState &s) {
     int top = BANNER_H + 2;
@@ -467,7 +475,7 @@ private:
       tft_.drawRect(0, plethY, plotW, plethH, UI_FAINT);
       tft_.setTextColor(UI_GOOD, UI_BG);   tft_.drawString("ECG  (Lead II)", 6, ecgY + 3, 1);
       tft_.setTextColor(UI_PLETH, UI_BG);  tft_.drawString("PLETH (SpO2)", 6, plethY + 3, 1);
-      waveX_ = 1;
+      waveX_[0] = waveX_[1] = 1;
       ecgReadHead_ = g_ecgWaveHead;
       plethReadHead_ = g_plethWaveHead;
       dispPeak_[0] = dispPeak_[1] = 400.0f;   // fresh auto-gain per page entry
@@ -494,6 +502,8 @@ private:
       tft_.setTextColor(UI_PLETH, UI_BG);
       tft_.drawString("PLETH (SpO2)", 6, plethY + 3, 1);
       plethReadHead_ = g_plethWaveHead;   // don't replay stale ring content
+      waveX_[UI_PLETH & 1] = 1;           // restart its sweep on the cleared pane
+      lastPy_[UI_PLETH & 1] = -1;
     }
     if (plethState == 0) {
       drawTrace(g_plethWave, g_plethWaveHead, plethReadHead_, plethY + 2, plethH - 4, plotW, UI_PLETH);
@@ -546,17 +556,18 @@ private:
       int py = y + h / 2 - (int)((float)v / (gainPeak * 1.15f) * (h / 2 - 2));
       py = constrain(py, y, y + h - 1);
 
-      // erase-ahead cursor (classic monitor sweep)
-      int eraseX = (waveX_ + 6) % plotW;
+      // erase-ahead cursor (classic monitor sweep), private to this trace
+      int &x = waveX_[color & 1];
+      int eraseX = (x + 6) % plotW;
       if (eraseX > 1) tft_.drawFastVLine(eraseX, y, h, UI_BG);
 
-      if (waveX_ > 1 && lastPy_[color & 1] >= 0 && waveX_ - 1 != 0) {
-        tft_.drawLine(waveX_ - 1, lastPy_[color & 1], waveX_, py, color);
+      if (x > 1 && lastPy_[color & 1] >= 0) {
+        tft_.drawLine(x - 1, lastPy_[color & 1], x, py, color);
       } else {
-        tft_.drawPixel(waveX_, py, color);
+        tft_.drawPixel(x, py, color);
       }
       lastPy_[color & 1] = py;
-      if (++waveX_ >= plotW - 1) { waveX_ = 1; lastPy_[0] = lastPy_[1] = -1; }
+      if (++x >= plotW - 1) { x = 1; lastPy_[color & 1] = -1; }
     }
   }
   int lastPy_[2] = {-1, -1};
@@ -778,9 +789,11 @@ private:
     row(6, line, UI_INK);
     snprintf(line, sizeof(line), "%u offline readings", s.offlineBuffered);
     row(7, line, s.offlineBuffered ? UI_WARN : UI_INK);
-    snprintf(line, sizeof(line), "SPO2:%s TEMP:%s ECG:%s CUFF:%s",
-             chanTxt(s.chSpo2), chanTxt(s.chTemp), chanTxt(s.chEcg), chanTxt(s.chBp));
-    row(8, line, UI_INK);
+    sensorRowY_ = y;   // this row is tappable — cycles the pulse-ox LED drive
+    snprintf(line, sizeof(line), "SPO2:%s TEMP:%s ECG:%s CUFF:%s%s",
+             chanTxt(s.chSpo2), chanTxt(s.chTemp), chanTxt(s.chEcg), chanTxt(s.chBp),
+             s.spo2LedLevel == 2 ? "" : s.spo2LedLevel == 1 ? "  [LED HALF]" : "  [LED OFF]");
+    row(8, line, s.spo2LedLevel == 2 ? UI_INK : UI_WARN);
     row(9, s.clockSynced ? "NTP synced (UTC)" : "NOT SYNCED", s.clockSynced ? UI_GOOD : UI_WARN);
 
     // simulation toggle — repainted only when its state changes
@@ -806,6 +819,7 @@ private:
     }
   }
   int lastSimBtn_ = -1;
+  int sensorRowY_ = 0;
 
   // =====================================================================
   //  On-device touch calibration (Device page → CALIBRATE TOUCH)
@@ -981,6 +995,18 @@ private:
         tone(PIN_BUZZER, 1000, 60);
         return true;
       }
+    }
+    // Sensors row → cycle the pulse-ox LED drive (full → half → off → full).
+    // The ECG-interference test: watch the ECG trace and the [ecg] serial
+    // line while stepping the LED current down with a finger still on the
+    // sensor. Nothing here changes the clinical signal path.
+    if (page_ == Page::DEVICE && sensorRowY_ > 0 && y >= sensorRowY_ - 2 && y <= sensorRowY_ + 20) {
+      if (stateLock()) {
+        g_state.spo2LedLevel = g_state.spo2LedLevel == 2 ? 1 : g_state.spo2LedLevel == 1 ? 0 : 2;
+        stateUnlock();
+      }
+      tone(PIN_BUZZER, 1400, 60);
+      return true;
     }
     if (page_ == Page::DEVICE && simBtnY_ > 0 && y >= simBtnY_ && y <= simBtnY_ + 32) {
       if (x >= 10 && x <= 230) {                 // simulation toggle
