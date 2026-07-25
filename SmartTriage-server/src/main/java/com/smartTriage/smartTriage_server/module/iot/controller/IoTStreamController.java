@@ -165,4 +165,45 @@ public class IoTStreamController {
                 .requestedIntervalSeconds(device.getDataIntervalSeconds())
                 .build());
     }
+
+    /**
+     * Hospital device registry for a GATEWAY appliance (V114).
+     *
+     * The ward gateway (Raspberry Pi) is registered by the HOSPITAL_ADMIN as
+     * a device of type {@code GATEWAY} and authenticates here with its OWN
+     * API key — never with staff credentials. The response is scoped to the
+     * gateway's hospital by construction (the key IS the tenancy), and the
+     * per-device API keys are stripped server-side: a leaked gateway key
+     * must not be able to harvest the fleet's credentials.
+     *
+     * Revocation works like any device: deactivate the gateway or flip it
+     * out of service and this endpoint answers 403 on the next poll.
+     */
+    @GetMapping("/hospital-registry")
+    public ResponseEntity<?> hospitalRegistry(
+            @RequestHeader("X-Device-API-Key") String apiKey) {
+        IoTDevice device;
+        try {
+            device = deviceService.authenticateDevice(apiKey);
+        } catch (Exception e) {
+            return ResponseEntity.status(401)
+                    .body(java.util.Map.of("error", "Device authentication failed"));
+        }
+        if (device.getDeviceType() != com.smartTriage.smartTriage_server.common.enums.DeviceType.GATEWAY) {
+            log.warn("Non-gateway device {} attempted the hospital-registry read",
+                    device.getSerialNumber());
+            return ResponseEntity.status(403)
+                    .body(java.util.Map.of("error", "This endpoint is for GATEWAY devices"));
+        }
+        if (!device.isInService()) {
+            return ResponseEntity.status(403)
+                    .body(java.util.Map.of("error", "Gateway is out of service"));
+        }
+        // the poll doubles as the gateway's keepalive — it shows ONLINE in
+        // the admin's device registry like any other appliance
+        deviceService.processHeartbeat(device, null);
+        return ResponseEntity.ok(java.util.Map.of(
+                "gatewaySerial", device.getSerialNumber(),
+                "devices", deviceService.getHospitalRegistryForGateway(device.getHospital().getId())));
+    }
 }

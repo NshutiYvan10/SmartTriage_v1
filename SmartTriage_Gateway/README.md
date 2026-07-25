@@ -123,15 +123,29 @@ automatically on the first reading (grey after 20 s of silence).
 
 ## Authentication model
 
-- **Staff login** posts to the backend's `/auth/login`; the gateway keeps the
-  access/refresh tokens **server-side** (auto-refresh ~2 min before expiry)
-  and gives the browser only an opaque session cookie. The most recent staff
-  login powers the Registry tab for the whole kiosk (it is a shared bedside
-  appliance, not a per-user workstation).
-- **Offline PIN** unlocks the console without the backend — deliberately,
-  because the offline-resilience demo happens exactly when the backend is
-  unreachable. PIN sessions cannot read the registry (no backend identity)
-  and the UI says so.
+**The gateway is a first-class, hospital-owned device.** The hospital admin
+registers it (provision.py does this) as a device of type `GATEWAY` — owned
+by exactly one hospital, with its **own API key**. That key is the only
+credential the gateway uses against the backend:
+
+- the **Registry tab** reads `GET /iot/stream/hospital-registry` with the
+  gateway key — the response is scoped to the owning hospital *by the key
+  itself* (no staff identity involved), and the backend strips every
+  device's API key from it (a leaked gateway key cannot harvest the fleet);
+- the gateway **heartbeats** with its key, so the admin's device registry
+  shows the Pi itself ONLINE/OFFLINE like any monitor;
+- **revocation is device revocation**: the admin flips the gateway out of
+  service (or deactivates it) and the backend answers 403 on its next poll —
+  verified live.
+
+Unlocking the **touchscreen** is separate from the appliance identity:
+
+- **Staff login** (backend credentials, proxied to `/auth/login`; JWTs held
+  server-side with auto-refresh, browser gets only an opaque cookie) — gives
+  named attribution for who is operating the kiosk.
+- **Offline PIN** (salted hash in the config) — works with the backend down,
+  which is exactly when the offline-resilience demo needs the screen. With
+  the gateway key configured, the Registry works from a PIN session too.
 - Sessions live in process memory (a reboot logs everyone out) and expire
   after 12 h idle. Device pass-through endpoints are **not** behind the kiosk
   session — devices authenticate with their own API keys, as always.

@@ -71,6 +71,12 @@ public class SecurityConfig {
                                           // /devices/self-register, /devices/mine + latest-vitals
                                           // READ endpoints stay JWT-gated by the default rule.
                                           "/api/v1/iot/stream/device-telemetry",
+                                          // Ward-gateway registry read (V114) — the GATEWAY
+                                          // appliance authenticates with its own device API key
+                                          // (type-checked in the controller); the response is
+                                          // hospital-scoped by the key and never carries other
+                                          // devices' keys.
+                                          "/api/v1/iot/stream/hospital-registry",
                                           // RFID reader tap (V95) — device-API-key authed, not JWT.
                                           // The registrar-facing /iot/rfid/** endpoints (bind-mode,
                                           // open-visit, devices) stay JWT-gated by the default rule.

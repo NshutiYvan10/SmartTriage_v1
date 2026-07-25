@@ -67,7 +67,8 @@ async def startup() -> None:
     auth = AuthManager(cfg.backend_url,
                        pin_sha256=cfg.kiosk_pin_sha256,
                        pin_salt=cfg.kiosk_pin_salt,
-                       pin_plain=cfg.kiosk_pin)
+                       pin_plain=cfg.kiosk_pin,
+                       gateway_api_key=cfg.gateway_api_key)
 
     for dev in cfg.devices:
         engine.add(dev)
@@ -76,7 +77,27 @@ async def startup() -> None:
     asyncio.create_task(fwd.drain_loop())
     asyncio.create_task(fwd.health_loop())
     asyncio.create_task(auth.refresh_loop())
+    asyncio.create_task(_gateway_heartbeat())
     asyncio.create_task(_ws_pump())
+
+
+async def _gateway_heartbeat() -> None:
+    """The gateway is a first-class device (V114): it heartbeats with its
+    OWN key so the hospital admin's registry shows the Pi itself ONLINE —
+    and so revoking the gateway is visible within one heartbeat period.
+    Silent during the outage drill (a severed uplink must look severed)."""
+    import httpx
+    if not cfg.gateway_api_key:
+        return
+    client = httpx.AsyncClient(timeout=4.0)
+    while True:
+        if not fwd.forced_down:
+            try:
+                await client.post(cfg.backend_url + HEARTBEAT,
+                                  headers={"X-Device-API-Key": cfg.gateway_api_key})
+            except Exception:
+                pass
+        await asyncio.sleep(15)
 
 
 async def _send_sim(st: SimState, payload: dict) -> str:
@@ -189,7 +210,7 @@ async def me(request: Request) -> JSONResponse:
         "authenticated": True, "name": s.display_name, "role": s.role,
         "kind": s.kind, "gatewayName": cfg.gateway_name,
         "hospital": s.backend.hospital_name if s.backend else "",
-        "registryAvailable": auth.backend_identity is not None,
+        "registryAvailable": auth.gateway_key_configured() or auth.backend_identity is not None,
     })
 
 

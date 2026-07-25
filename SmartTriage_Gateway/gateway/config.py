@@ -37,6 +37,12 @@ class GatewayConfig:
     tx_interval_seconds: float = 5.0
     queue_db: str = "gateway-queue.db"
     gateway_name: str = "SmartTriage Gateway"
+    # The gateway's OWN backend identity (V114): a device of type GATEWAY,
+    # registered by the HOSPITAL_ADMIN and owned by one hospital. Its key is
+    # the only credential the gateway uses against the backend — the device
+    # registry is read with it, scoped server-side to that hospital.
+    gateway_serial: str = ""
+    gateway_api_key: str = ""
     # Kiosk unlock PIN — store the salted hash (provision.py --pin writes it).
     # kiosk_pin (plain) is a development convenience only.
     kiosk_pin_sha256: str = ""
@@ -55,6 +61,8 @@ class GatewayConfig:
             tx_interval_seconds=float(raw.get("tx_interval_seconds", 5.0)),
             queue_db=str(raw.get("queue_db", "gateway-queue.db")),
             gateway_name=str(raw.get("gateway_name", "SmartTriage Gateway")),
+            gateway_serial=str(raw.get("gateway_serial", "")),
+            gateway_api_key=str(raw.get("gateway_api_key", "")),
             kiosk_pin_sha256=str(raw.get("kiosk_pin_sha256", "")),
             kiosk_pin_salt=str(raw.get("kiosk_pin_salt", "")),
             kiosk_pin=str(raw.get("kiosk_pin", "")),

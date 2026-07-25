@@ -62,6 +62,23 @@ def main() -> int:
     token = login["data"]["accessToken"]
     print("authenticated.")
 
+    # The gateway itself is a first-class, hospital-owned device (V114):
+    # registered by the admin like any monitor, with its OWN API key. That
+    # key is the only credential the gateway uses against the backend
+    # (device registry reads + its own heartbeat) — revoke the device,
+    # revoke the gateway.
+    gw_serial = f"{args.serial_prefix}-GATEWAY-01"
+    gw = post(f"{base}/api/v1/iot/devices", {
+        "serialNumber": gw_serial,
+        "deviceName": args.gateway_name,
+        "deviceType": "GATEWAY",
+        "hospitalId": args.hospital_id,
+        "firmwareVersion": "gw-2.0",
+        "notes": "Ward gateway appliance (Raspberry Pi) — fronts the bedside monitors",
+    }, token)
+    gw_key = gw["data"]["apiKey"]
+    print(f"registered GATEWAY '{args.gateway_name}'  serial={gw_serial}")
+
     lines = [
         "# SmartTriage gateway device registry — CONTAINS API KEYS.",
         "# Keep OUT of git. chmod 600. Owned by the gateway service user.",
@@ -69,6 +86,8 @@ def main() -> int:
         "listen_port: 8090",
         "tx_interval_seconds: 5",
         f"gateway_name: \"{args.gateway_name}\"",
+        f"gateway_serial: {gw_serial}",
+        f"gateway_api_key: {gw_key}",
     ]
     if args.pin:
         import hashlib, secrets

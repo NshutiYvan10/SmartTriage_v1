@@ -972,6 +972,22 @@ public class DeviceService {
         return devicePage.map(device -> IoTMapper.toResponse(device, deviceToVisit.get(device.getId())));
     }
 
+    /**
+     * The hospital device registry as served to a GATEWAY appliance
+     * authenticating with its own API key (V114 — the gateway is a
+     * first-class, hospital-owned device, not a borrower of staff JWTs).
+     *
+     * SECURITY: this view NEVER carries API keys — a compromised gateway
+     * key must not be able to harvest the fleet's credentials. Everything
+     * else mirrors the admin registry list.
+     */
+    @Transactional(readOnly = true)
+    public List<DeviceResponse> getHospitalRegistryForGateway(UUID hospitalId) {
+        return getDevicesByHospital(hospitalId, org.springframework.data.domain.Pageable.unpaged())
+                .map(d -> { d.setApiKey(null); return d; })
+                .getContent();
+    }
+
     public List<DeviceResponse> getAvailableDevices(UUID hospitalId) {
         // V53 — out-of-service devices are not assignable. Filter
         // here rather than in the repository query so the JPQL stays

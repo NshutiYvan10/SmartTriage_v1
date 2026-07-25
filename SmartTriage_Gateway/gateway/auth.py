@@ -37,6 +37,7 @@ import httpx
 LOGIN_PATH = "/api/v1/auth/login"
 REFRESH_PATH = "/api/v1/auth/refresh"
 DEVICES_PATH = "/api/v1/iot/devices/hospital/{hospital_id}"
+GATEWAY_REGISTRY_PATH = "/api/v1/iot/stream/hospital-registry"
 
 SESSION_TTL_SECONDS = 12 * 3600          # one shift
 ACCESS_REFRESH_MARGIN = 120              # refresh 2 min before expiry
@@ -89,14 +90,19 @@ class AuthManager:
     """
 
     def __init__(self, backend_url: str,
-                 pin_sha256: str = "", pin_salt: str = "", pin_plain: str = ""):
+                 pin_sha256: str = "", pin_salt: str = "", pin_plain: str = "",
+                 gateway_api_key: str = ""):
         self._base = backend_url
         self._pin_sha256 = (pin_sha256 or "").lower()
         self._pin_salt = pin_salt or ""
         self._pin_plain = pin_plain or ""          # dev convenience only
+        self._gateway_key = gateway_api_key or ""  # the appliance's own identity
         self._client = httpx.AsyncClient(timeout=6.0)
         self._sessions: dict[str, Session] = {}
         self.backend_identity: Optional[BackendIdentity] = None
+
+    def gateway_key_configured(self) -> bool:
+        return bool(self._gateway_key)
 
     # ---------------- login paths ----------------
     async def login_staff(self, email: str, password: str) -> tuple[Optional[Session], str]:
@@ -197,9 +203,32 @@ class AuthManager:
 
     # ---------------- backend data ----------------
     async def fetch_registry(self) -> tuple[Optional[list], str]:
-        """Device registry for the identity's hospital.
+        """Device registry for THIS gateway's hospital.
+
+        Primary path (V114): the gateway's OWN device API key against
+        /iot/stream/hospital-registry — hospital scoping comes from the key
+        itself, the appliance is the identity, and no staff login is needed.
+        Fallback: a staff session's JWT (kept for gateways provisioned
+        before the gateway identity existed).
+
         Returns (devices, error): error is '' on success, 'no-identity',
         'backend-down', 'unauthorized', or an http status message."""
+        if self._gateway_key:
+            try:
+                r = await self._client.get(
+                    self._base + GATEWAY_REGISTRY_PATH,
+                    headers={"X-Device-API-Key": self._gateway_key})
+            except Exception:
+                return None, "backend-down"
+            if r.status_code in (401, 403):
+                return None, "unauthorized"
+            if r.status_code != 200:
+                return None, f"backend answered {r.status_code}"
+            devices = (r.json() or {}).get("devices")
+            if not isinstance(devices, list):
+                return None, "unexpected response shape"
+            return devices, ""
+
         ident = self.backend_identity
         if not ident or not ident.hospital_id:
             return None, "no-identity"

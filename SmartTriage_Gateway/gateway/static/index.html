@@ -513,9 +513,9 @@ async function loadRegistry() {
   if (!r) { el.innerHTML = `<div class="reg-note">Gateway unreachable.</div>`; return; }
   if (r.error) {
     const msg = {
-      "no-identity": "Registry needs a staff login.<br>Lock the console and sign in with SmartTriage credentials.",
+      "no-identity": "No gateway identity configured.<br>Run provision.py so the hospital admin registers this gateway (it gets its own API key) — or sign in with staff credentials.",
       "backend-down": "Backend unreachable — registry unavailable while offline.",
-      "unauthorized": "Backend session expired — lock and sign in again.",
+      "unauthorized": "Gateway key rejected or revoked — the hospital admin controls this gateway's access.",
     }[r.error] || r.error;
     el.innerHTML = `<div class="reg-note">${msg}</div>`;
     return;

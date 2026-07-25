@@ -6,6 +6,12 @@ backend_url: http://192.168.1.50:8080
 listen_port: 8090
 tx_interval_seconds: 5
 gateway_name: "Kigali ED — Ward Gateway"   # shown on the lock screen + top bar
+# The gateway's OWN identity: a GATEWAY-type device registered by the
+# HOSPITAL_ADMIN (provision.py does this). Its key is the only credential
+# the gateway uses against the backend; revoking the device revokes the
+# gateway, and the registry it reads is scoped to the owning hospital.
+gateway_serial: SIM-GATEWAY-01
+gateway_api_key: PASTE_GATEWAY_KEY_HERE
 # Kiosk unlock PIN (works offline). provision.py --pin writes the salted
 # hash; the plain `kiosk_pin:` field also works but is for development only.
 kiosk_pin_salt: RUN_PROVISION_WITH__PIN
