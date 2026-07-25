@@ -208,7 +208,7 @@ void setup() {
   ecg.begin();
   net.attachEcg(&ecg);
 
-  Serial.printf("MAX30102: %s | MAX30205: %s\n",
+  Serial.printf("PULSE-OX: %s | MAX30205: %s\n",
                 spo2Ok ? "ok" : "NOT FOUND",
                 temp.present() ? "ok" : "NOT FOUND");
   if (stateLock()) {

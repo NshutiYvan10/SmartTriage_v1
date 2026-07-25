@@ -15,61 +15,69 @@
 #include <Wire.h>
 #include "MAX30105.h"
 #include "heartRate.h"
+#include "max30100.h"
 #include "config.h"
 #include "filters.h"
 #include "state.h"
 
 // =====================================================================
-//  SpO2 / pulse pipeline (MAX30102)
+//  SpO2 / pulse pipeline — auto-detects MAX30102 vs MAX30100 silicon.
+//  (The box's chip ACKs at 0x57 but failed the MAX3010x part-ID check,
+//  and its LED lit under the original sketch's MAX30100 library — so
+//  the fitted part is likely the 16-bit MAX30100. Both are supported;
+//  the R-ratio math downstream is scale-invariant.)
 // =====================================================================
 class Spo2Pipeline {
 public:
   bool begin() {
     // I2C_SPEED_STANDARD: the MAX30205 shares the bus and SMBus-era
     // parts are only safe at 100 kHz.
-    if (!sensor_.begin(Wire, I2C_SPEED_STANDARD)) return false;
-    // LED 60 mA, avg 4, Red+IR, 100 Hz, 411 µs (18-bit), range 4096
-    sensor_.setup(60, 4, 2, 100, 411, 4096);
-    sensor_.setPulseAmplitudeRed(0x1F);
-    sensor_.setPulseAmplitudeIR(0x1F);
-    sensor_.setPulseAmplitudeGreen(0);
-    present_ = true;
-    return true;
+    if (sensor_.begin(Wire, I2C_SPEED_STANDARD)) {
+      // LED 60 mA, avg 4, Red+IR, 100 Hz, 411 µs (18-bit), range 4096
+      sensor_.setup(60, 4, 2, 100, 411, 4096);
+      sensor_.setPulseAmplitudeRed(0x1F);
+      sensor_.setPulseAmplitudeIR(0x1F);
+      sensor_.setPulseAmplitudeGreen(0);
+      chip_ = Chip::M30102;
+      present_ = true;
+      Serial.println("[spo2] MAX30102 detected (18-bit)");
+      return true;
+    }
+    if (legacy_.begin(Wire)) {
+      chip_ = Chip::M30100;
+      present_ = true;
+      Serial.println("[spo2] MAX30100 detected (legacy 16-bit part - the chip the original sketch drove)");
+      return true;
+    }
+    // Neither driver claimed it — log the raw part ID for diagnosis.
+    Wire.beginTransmission(0x57);
+    Wire.write(0xFF);
+    if (Wire.endTransmission(false) == 0 && Wire.requestFrom(0x57, 1) == 1) {
+      Serial.printf("[spo2] chip at 0x57 rejected by both drivers (part id 0x%02X; 0x15=MAX30102, 0x11=MAX30100)\n",
+                    Wire.read());
+    }
+    return false;
   }
   bool present() const { return present_; }
 
   // Drain the FIFO; call as often as possible from the sensor task.
   void poll(bool ecgLeadsOff) {
     if (!present_) return;
-    sensor_.check();
-    while (sensor_.available()) {
-      long ir  = sensor_.getFIFOIR();
-      long red = sensor_.getFIFORed();
-      sensor_.nextSample();
-      fingerOn_ = ir > FINGER_IR_THRESHOLD;
-
-      if (!fingerOn_) continue;
-      lastFingerMs_ = millis();
-
-      // pleth trace for the waveform page (AC component around DC)
-      float ac = plethDc_.highpass((float)ir, 0.02f);
-      uint16_t h = (uint16_t)((g_plethWaveHead + 1) % ECG_WAVE_RING);
-      g_plethWave[h] = (int16_t)constrain(ac / 8.0f, -2000.0f, 2000.0f);
-      g_plethWaveHead = h;
-
-      irBuf_[bufIdx_]  = ir;
-      redBuf_[bufIdx_] = red;
-      bufIdx_ = (bufIdx_ + 1) % SPO2_BUFFER_SIZE;
-      if (sampleCount_ < SPO2_BUFFER_SIZE) sampleCount_++;
-
-      // HR fallback from the IR beat detector while ECG can't provide it
-      if (ecgLeadsOff && checkForBeat(ir)) {
-        uint32_t now = millis();
-        if (lastIrBeatMs_ > 0) {
-          long delta = (long)(now - lastIrBeatMs_);
-          if (delta > 300 && delta < 2000) irBeatBpm_ = 60000.0f / delta;
-        }
-        lastIrBeatMs_ = now;
+    if (chip_ == Chip::M30102) {
+      sensor_.check();
+      while (sensor_.available()) {
+        long ir  = sensor_.getFIFOIR();
+        long red = sensor_.getFIFORed();
+        sensor_.nextSample();
+        handleSample(ir, red, ecgLeadsOff);
+      }
+    } else {
+      legacy_.check();
+      while (legacy_.available()) {
+        long ir  = legacy_.getFIFOIR();
+        long red = legacy_.getFIFORed();
+        legacy_.nextSample();
+        handleSample(ir, red, ecgLeadsOff);
       }
     }
 
@@ -92,6 +100,35 @@ public:
   bool  fingerOn() const { return fingerOn_; }
 
 private:
+  // One FIFO sample, either chip (MAX30100 samples arrive pre-scaled x4
+  // into the 18-bit-ish range these thresholds were tuned for).
+  void handleSample(long ir, long red, bool ecgLeadsOff) {
+    fingerOn_ = ir > FINGER_IR_THRESHOLD;
+    if (!fingerOn_) return;
+    lastFingerMs_ = millis();
+
+    // pleth trace for the waveform page (AC component around DC)
+    float ac = plethDc_.highpass((float)ir, 0.02f);
+    uint16_t h = (uint16_t)((g_plethWaveHead + 1) % ECG_WAVE_RING);
+    g_plethWave[h] = (int16_t)constrain(ac / 8.0f, -2000.0f, 2000.0f);
+    g_plethWaveHead = h;
+
+    irBuf_[bufIdx_]  = ir;
+    redBuf_[bufIdx_] = red;
+    bufIdx_ = (bufIdx_ + 1) % SPO2_BUFFER_SIZE;
+    if (sampleCount_ < SPO2_BUFFER_SIZE) sampleCount_++;
+
+    // HR fallback from the IR beat detector while ECG can't provide it
+    if (ecgLeadsOff && checkForBeat(ir)) {
+      uint32_t now = millis();
+      if (lastIrBeatMs_ > 0) {
+        long delta = (long)(now - lastIrBeatMs_);
+        if (delta > 300 && delta < 2000) irBeatBpm_ = 60000.0f / delta;
+      }
+      lastIrBeatMs_ = now;
+    }
+  }
+
   void computeSpo2() {
     int n = min(sampleCount_, (int)SPO2_BUFFER_SIZE);
     long irSum = 0, redSum = 0;
@@ -144,6 +181,9 @@ private:
   }
 
   MAX30105 sensor_;
+  Max30100Raw legacy_;
+  enum class Chip { NONE, M30102, M30100 };
+  Chip  chip_ = Chip::NONE;
   bool  present_ = false, fingerOn_ = false;
   long  irBuf_[SPO2_BUFFER_SIZE] = {0}, redBuf_[SPO2_BUFFER_SIZE] = {0};
   int   bufIdx_ = 0, sampleCount_ = 0;
