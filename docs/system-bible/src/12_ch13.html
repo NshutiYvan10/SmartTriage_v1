@@ -1,0 +1,118 @@
+<!-- ======================= CHAPTER 13 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH13</span>
+<div class="ch-open">
+  <div class="ch-num">13</div>
+  <h1>Workforce: Shifts, Swaps, Leave &amp; Delegation</h1>
+  <p class="ch-lede">Who is on duty, where, doing what — the roster is not bookkeeping, it drives
+  alert routing, patient-list scoping, and who may triage today. The charge nurse runs it; the system
+  enforces the rules.</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>Shifts, periods and templates</li><li>Assignment rules and the zone policy</li>
+  <li>The swap lifecycle</li><li>Leave</li><li>Delegating the charge-nurse hat</li><li>Login &amp; account rules</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">13.1</span>Shifts &amp; templates</h2>
+<ul>
+<li>Two periods: <b>DAY 07:00–19:00</b>, <b>NIGHT 19:00–07:00</b> (Kigali time; after midnight, a night shift belongs to yesterday's date).</li>
+<li><b>Templates</b> are reusable rosters per period — at most one active template per (hospital, period). A scheduler <b>materializes</b> the template into real assignments at <code>06:45</code> and <code>18:45</code>, 15 minutes before each shift starts (idempotent; catch-up on restart).</li>
+<li>Tools for the planner: copy-week, apply-template-to-range, quick-assign; a calendar view with coverage pills (<b>GAP</b> if RESUS/ACUTE/TRIAGE has nobody, <b>THIN</b> if one person).</li>
+</ul>
+
+<h2 class="sec"><span class="secno">13.2</span>Who manages the roster</h2>
+<p>Shift <i>mutation</i> authority belongs to: the hospital's <b>charge nurse(s)</b> (designation), the
+current <b>shift-lead badge</b> holder, the previous lead within a <code>30 min</code> grace window, or an
+active <b>delegate</b> (§13.5). Notably, <b>admins cannot mutate the roster</b> — they view only. A
+manager on approved leave keeps read access but loses mutation for the covered days.</p>
+
+<h2 class="sec"><span class="secno">13.3</span>Assignment rules</h2>
+<ul>
+<li><b>Zone policy</b> (also a database constraint): <code>TRIAGE_NURSE</code> → TRIAGE zone only; zone nurses and all doctor functions → any zone <i>except</i> TRIAGE (triage is a nursing station); <code>CHARGE_NURSE</code> → anywhere.</li>
+<li>One assignment per person per (date, period) — assigning again replaces the old one.</li>
+<li>Past dates refused; date and period must be supplied together.</li>
+<li><b>Approved leave blocks scheduling</b> (“…has approved leave covering that date”).</li>
+<li>Multi-zone coverage: an assignment may carry additional zones (not duplicating the primary).</li>
+<li><b>Shift-lead badge:</b> exactly one active lead per shift (database-enforced); transferring the badge clears the previous holder; self-heals duplicates.</li>
+</ul>
+
+<h2 class="sec"><span class="secno">13.4</span>Swaps &amp; leave</h2>
+<div class="flow">
+  <div class="fnode start">Proposed</div><div class="farrow">→</div>
+  <div class="fnode">PENDING_PARTNER_ACCEPT<div class="sub">named partner only</div></div><div class="farrow">→</div>
+  <div class="fnode">PENDING_CHARGE_APPROVAL</div><div class="farrow">→</div>
+  <div class="fnode end">APPROVED<div class="sub">atomic exchange</div></div>
+  <div class="farrow">or</div><div class="fnode bad">REJECTED / CANCELLED</div>
+</div>
+<ul>
+<li>Swaps must be <b>like-for-like by role</b> (nurse↔nurse, doctor↔doctor), same hospital, not with yourself, and neither slot already in an open swap.</li>
+<li>The roster changes <b>only at charge approval</b> — an atomic exchange of the two people between the two slots. The shift-lead badge never travels with a swap. Rejection requires a reason. A slot deleted mid-flow auto-rejects the swap.</li>
+<li><b>Leave:</b> self-service requests (types: annual, sick, maternity, bereavement, compassionate, study, other); approval by roster authority; a manager can file-and-approve retroactive sick leave in one step. Only <code>APPROVED</code> leave blocks scheduling; approved leave can still be cancelled early. End before start is refused; rejection requires a note.</li>
+</ul>
+
+<h2 class="sec"><span class="secno">13.5</span>Delegating the charge-nurse hat</h2>
+<p>A charge nurse can delegate roster authority to another <b>nurse</b> at the same hospital (never
+themselves), for a window or open-ended. Delegation is <b>additive</b> — both hold authority. Revocable
+by either participant or an admin; the delegate is notified in real time. While active, the delegate
+can assign zones, approve swaps and leave, and edit templates exactly as the charge nurse.</p>
+
+<h2 class="sec"><span class="secno">13.6</span>Accounts, login &amp; lockout</h2>
+<table class="compact">
+<tr><th>Rule</th><th>Value</th></tr>
+<tr><td>Access token lifetime</td><td><code>15 min</code> (refresh token <code>24 h</code>; refresh is re-used, not rotated)</td></tr>
+<tr><td>Failed logins before lock</td><td><code>5</code> → account locked, admin must intervene</td></tr>
+<tr><td>Pending activation</td><td>Cannot log in (“check your email for the invitation link”); invitation valid <code>48 h</code>, single-use; resend invalidates the old link</td></tr>
+<tr><td>Password</td><td>8–128 characters (set at activation; self-change requires the current password and a different new one)</td></tr>
+<tr><td>Hospital deactivated</td><td>Every non-SUPER_ADMIN user of that hospital is locked out immediately — even mid-session (the per-request check re-validates)</td></tr>
+<tr><td>Last charge nurse</td><td>Cannot be deactivated/demoted — “appoint another Charge Nurse first” (the roster must never be orphaned)</td></tr>
+<tr><td>Admin separation</td><td>Nobody — not even SUPER_ADMIN — edits another admin's personal info (prevents password-reset rerouting); SUPER_ADMIN accounts cannot be created via the API at all</td></tr>
+</table>
+</div>
+
+<!-- ======================= CHAPTER 14 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH14</span>
+<div class="ch-open">
+  <div class="ch-num">14</div>
+  <h1>Consent, Privacy &amp; Cross-Hospital Records</h1>
+  <p class="ch-lede">Three consent instruments govern what crosses boundaries: informed consent for
+  procedures, data-sharing consent for the cross-hospital deep record, and break-the-glass — the
+  audited emergency override with a governance loop behind it.</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>The safety floor vs. the deep record</li><li>Informed consent lifecycle</li>
+  <li>Data-sharing consent</li><li>Break-the-glass: forensics + governance + patient-side log</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">14.1</span>Two tiers of cross-hospital access</h2>
+<table>
+<tr><th style="width:34mm"></th><th>Safety summary (“the floor”)</th><th>Deep record</th></tr>
+<tr><td><b>Contains</b></td><td>Allergies, chronic conditions, active medications — each tagged with its source hospital; demographics from the newest record; national ID masked (<code>***1234</code>)</td><td>Bounded clinical history per hospital: up to 25 visits each — diagnoses, discharge summaries (with IDs redacted inside the text), labs (critical/abnormal tagged), key notes, medication history</td></tr>
+<tr><td><b>Gate</b></td><td><b>None</b> — always readable by clinical staff (incl. registrar &amp; paramedic); this is the minimum for safe care</td><td><b>Consent</b> (a live GRANTED data-sharing consent) or <b>break-the-glass</b>; registrars excluded entirely</td></tr>
+<tr><td><b>Audited</b></td><td>Every read, explicitly</td><td>Every attempt with its basis: <code>CONSENT</code> · <code>BREAK_THE_GLASS</code> · <code>DENIED</code></td></tr>
+</table>
+
+<h2 class="sec"><span class="secno">14.2</span>Informed consent (procedures)</h2>
+<ul>
+<li>Types: procedure, surgery, anaesthesia, blood transfusion, HIV test, sedation, imaging contrast, research, photography, other. Grantors: patient, parent/guardian, next of kin, legal surrogate, court order, or emergency-no-consent-required.</li>
+<li>Recorded by <span class="role">DOCTOR</span>/<span class="role r2">NURSE</span> on the visit; the obtaining clinician is server-stamped (name, role, license). Captures the elements of validity: risks/benefits/alternatives explained, questions answered, interpreter, witness.</li>
+<li>Lifecycle: <code>GIVEN</code> or <code>REFUSED</code>; only a GIVEN consent can later be <code>WITHDRAWN</code> (with reason). You cannot record something as withdrawn directly — record it, then withdraw it, so the history is honest.</li>
+</ul>
+
+<h2 class="sec"><span class="secno">14.3</span>Data-sharing consent</h2>
+<ul>
+<li>Keyed on the <b>person</b> (national ID → shared identity), not a visit — it's about the record, not one encounter. Recorded by doctor/nurse/registrar.</li>
+<li>States: <code>GRANTED</code> / <code>DENIED</code> / <code>WITHDRAWN</code>. Exactly <b>one effective grant</b> exists at a time (a new grant supersedes the old; the database enforces it even under concurrent writes — a race returns “a concurrent consent change occurred; please retry”).</li>
+<li>Requires a national ID (“a national ID is required to record a data-sharing consent”).</li>
+</ul>
+
+<h2 class="sec"><span class="secno">14.4</span>Break-the-glass</h2>
+<div class="steps">
+<div class="step"><b>The lock.</b><p>A clinician opens the deep record without consent → access denied, no clinical data. The UI offers the break-the-glass dialog.</p></div>
+<div class="step"><b>The override.</b><p>A mandatory clinical justification (min 10 characters) re-requests the record. The server grants it <b>and simultaneously writes an immutable forensic event</b>: who (server-resolved — an unattributable override is refused outright), their role and hospital, the reason, the timestamp, and the <b>prior consent state</b> (NONE / DENIED / WITHDRAWN — overriding an explicit refusal is visibly worse than absence of consent).</p></div>
+<div class="step"><b>The governance loop.</b><p>After commit, the actor's hospital's governance feed is notified in real time. Reviewers (admin, doctors, charge nurses — the same audience as medication-override audits) see the event under range filters (24h/7d/30d/all) and <b>acknowledge</b> it with a note. Acknowledgment never touches the forensic facts; cross-hospital acknowledgment is denied; an unauthenticated reviewer is refused.</p></div>
+<div class="step"><b>The patient-side log.</b><p>The patient's own chart shows every break-the-glass access to their record <i>across all hospitals</i> — who, where, why, and whether governance has reviewed it. Accountability is symmetrical.</p></div>
+</div>
+<div class="co co-danger"><div class="co-t">Patient safety &amp; privacy</div>
+<p>Break-the-glass exists because a locked record must never cost a life — but its design cost is
+permanent, personal accountability. Never weaken the mandatory reason, the actor resolution, or the
+immutability of the event.</p></div>
+</div>

@@ -1,0 +1,78 @@
+<!-- ======================= CHAPTER 3 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH03</span>
+<div class="ch-open">
+  <div class="ch-num">03</div>
+  <h1>One Patient's Journey, End to End</h1>
+  <p class="ch-lede">Before the deep dives, follow a single patient through the whole system. Every
+  numbered stop is expanded in its own chapter. Two entrances exist — the front door and the
+  ambulance — and they merge at triage.</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>The visit lifecycle and its 14 statuses</li><li>Walk-in vs. ambulance entry</li>
+  <li>What happens automatically at each stage</li><li>The disposition endings</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">3.1</span>The visit lifecycle</h2>
+<p>A <b>visit</b> is one ED encounter. Its <code>VisitStatus</code> walks a path:</p>
+<div class="flow">
+  <div class="fnode start">REGISTERED</div><div class="farrow">→</div>
+  <div class="fnode">AWAITING_TRIAGE</div><div class="farrow">→</div>
+  <div class="fnode">TRIAGED</div><div class="farrow">→</div>
+  <div class="fnode">AWAITING_ASSESSMENT<div class="sub">set on bed placement</div></div><div class="farrow">→</div>
+  <div class="fnode">UNDER_ASSESSMENT<div class="sub">first doctor contact stamps the clock</div></div><div class="farrow">→</div>
+  <div class="fnode">UNDER_TREATMENT / UNDER_OBSERVATION</div><div class="farrow">→</div>
+  <div class="fnode">PENDING_DISPOSITION</div>
+</div>
+<div class="flow" style="margin-top:2pt;">
+  <div class="farrow">⇢ endings:</div>
+  <div class="fnode end">DISCHARGED</div><div class="fnode end">ADMITTED</div><div class="fnode end">ICU_ADMITTED</div>
+  <div class="fnode end">TRANSFERRED</div><div class="fnode warn">LEFT_WITHOUT_BEING_SEEN</div><div class="fnode bad">DECEASED</div>
+</div>
+<p class="small muted">Arrival time is stamped by the server at creation (medico-legal — never client-supplied).
+One patient can hold only <b>one open visit per hospital</b> at a time; attempting a second is refused with
+“already has an open visit”.</p>
+
+<h2 class="sec"><span class="secno">3.2</span>Entrance A — the front door</h2>
+<div class="steps">
+<div class="step"><b>Identify or register.</b><p>The registrar taps the patient's RFID card or searches by national ID / MRN / phone / name+DOB. A returning patient is recognized — even from another hospital via the shared identity (§4.4). A new patient is registered (patient + visit created atomically). An unconscious unknown becomes a NATO-phonetic placeholder — “Unknown Alpha” — identified properly later (§4.6).</p></div>
+<div class="step"><b>The safety floor appears.</b><p>For any identified patient, staff can see the cross-hospital <b>safety summary</b>: allergies, chronic conditions and active medications from every SmartTriage hospital, each tagged with its source hospital. No consent needed — this is the always-available safety minimum (§14.2).</p></div>
+<div class="step"><b>Queue for triage.</b><p>The visit sits in the triage nurse's pre-triage queue (<code>AWAITING_TRIAGE</code>). Waiting-time monitors are already watching (§5.7).</p></div>
+</div>
+
+<h2 class="sec"><span class="secno">3.3</span>Entrance B — the ambulance</h2>
+<div class="steps">
+<div class="step"><b>Run starts.</b><p>A paramedic opens an EMS run (<code>DISPATCHED</code>), records vitals and interventions on scene.</p></div>
+<div class="step"><b>Field triage.</b><p>The paramedic's app computes triage with the <b>same engines the ED uses</b> — no “ambulance math”. A GCS ≤ 8 forces RED. Downgrading a previously-computed category requires explicit acknowledgment.</p></div>
+<div class="step"><b>Pre-registration.</b><p>En route, the run pre-registers a visit at the destination (placeholder patient if unidentified). The ED sees an inbound board; a <b>pre-arrival alert</b> fires — CRITICAL if RED or lights-and-sirens, routed to the charge nurse and RESUS.</p></div>
+<div class="step"><b>Arrival + acuity split.</b><p>On confirmed arrival: field <b>RED/ORANGE</b> patients go straight to a treatment zone (formal triage follows at the bedside — a re-triage clock of <code>5 min</code> for RED, <code>15 min</code> routine, <code>2 min</code> if uncategorized ensures it happens); <b>YELLOW/GREEN</b> join the normal triage queue.</p></div>
+<div class="step"><b>Transfer of care.</b><p>An ED nurse/doctor formally accepts handover (a paramedic can never accept their own). The system writes an immutable attested handover note; the run ends <code>HANDED_OFF</code>. If nobody accepts within <code>10 min</code> of arrival, an <b>EMS_HANDOVER_PENDING</b> alert fires.</p></div>
+</div>
+
+<h2 class="sec"><span class="secno">3.4</span>The middle: triage → treatment</h2>
+<div class="steps">
+<div class="step"><b>Triage (§5).</b><p>The triage nurse completes the adult or pediatric national form. The engine computes a TEWS score and a color (RED/ORANGE/YELLOW/GREEN), routes the patient to a zone, usually auto-places them into a suitable bed, and fires zone-routed doctor alerts for RED/ORANGE/YELLOW.</p></div>
+<div class="step"><b>Automatic screenings piggyback.</b><p>The same triage save silently runs: baseline clinical-sign capture, hypoglycemia detection, infection-isolation screening, and (from the form's pregnancy answer) pregnancy status capture. None of these can block the triage itself.</p></div>
+<div class="step"><b>Monitoring begins (§7).</b><p>Vitals arrive manually or stream from a bedside monitor every 5 s. The continuous-monitoring engine watches for deterioration and fires alerts; worsening clinical signs can <b>auto-re-triage</b> the patient upward (never downward — de-escalation is only ever a suggestion).</p></div>
+<div class="step"><b>The doctor works the chart (§6, §9–10).</b><p>Assessment, diagnoses (ICD-coded), lab/imaging orders, prescriptions — each prescription passing the medication safety gates (allergy, interaction, duplicate, pregnancy) — plus notes, consents and documents. Nurses execute: administering doses on the MAR, collecting specimens, running protocol checklists.</p></div>
+<div class="step"><b>Escalation when needed (§11).</b><p>ICU escalation (nurse may raise, doctor decides), inter-zone transfers (received zone must accept), referrals to other facilities, and — at any shift boundary — auto-generated handover reports (06:30 and 18:30, before the 07:00/19:00 shift changes).</p></div>
+</div>
+
+<h2 class="sec"><span class="secno">3.5</span>The ending: disposition</h2>
+<p>Only a <span class="role">DOCTOR</span> records the disposition. Each type maps to a final status:</p>
+<table class="compact">
+<tr><th>Disposition</th><th>Final visit status</th><th>Extra rule</th></tr>
+<tr><td>Discharged home</td><td><code>DISCHARGED</code></td><td><b>Blocked until a Discharge Summary document exists</b> (422 otherwise)</td></tr>
+<tr><td>Admitted to ward</td><td><code>ADMITTED</code></td><td></td></tr>
+<tr><td>ICU admission</td><td><code>ICU_ADMITTED</code></td><td>Usually via the ICU escalation flow (§11.1)</td></tr>
+<tr><td>Transferred (other facility)</td><td><code>TRANSFERRED</code></td><td>Destination facility recorded</td></tr>
+<tr><td>Left AMA / without being seen</td><td><code>LEFT_WITHOUT_BEING_SEEN</code></td><td></td></tr>
+<tr><td>Deceased</td><td><code>DECEASED</code></td><td>Death certificate is a doctor-only document; MOH mortality reporting picks it up (§16)</td></tr>
+</table>
+<p>Disposition also <b>automatically</b>: stops any bedside-monitor session, and releases the bed into
+<code>CLEANING</code> (a bed is never reusable without the hygiene step, §12).</p>
+
+<div class="co co-tip"><div class="co-t">Tip</div>
+<p>If a “finished” patient still shows on the board, the disposition was probably never recorded —
+closing the chart is not a disposition. Everything downstream (bed release, monitor stop, reports)
+hangs off the disposition record.</p></div>
+</div>

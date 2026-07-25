@@ -1,0 +1,153 @@
+<!-- ======================= CHAPTER 9 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH09</span>
+<div class="ch-open">
+  <div class="ch-num">09</div>
+  <h1>Medications: Prescribing, Safety Gates &amp; the MAR</h1>
+  <p class="ch-lede">The medication module is the system's most safety-dense surface: a doctor-only
+  prescribing path guarded by four server-side gates, and a nurse-operated Medication Administration
+  Record (MAR) that tracks every dose from “due” to “given” — or to an honestly-recorded “refused”.</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>Prescribing step by step, with every gate</li><li>Override rules and what gets recorded</li>
+  <li>The MAR: doses, PRN, infusions, countersigning</li><li>Overdue-dose monitoring</li><li>Discontinuing &amp; edge cases</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">9.1</span>Who does what</h2>
+<table class="compact">
+<tr><th>Action</th><th>Allowed</th></tr>
+<tr><td>Prescribe / discontinue a medication</td><td><span class="role">DOCTOR</span> (visit-scoped)</td></tr>
+<tr><td>Run the safety pre-check (validate)</td><td><span class="role">DOCTOR</span></td></tr>
+<tr><td>Administer, hold, refuse doses · PRN doses · infusions · countersign</td><td><span class="role r2">NURSE</span> <span class="role">DOCTOR</span></td></tr>
+<tr><td>View the MAR</td><td>Treating team (nurses get the administration view; the prescribe button is doctor-only)</td></tr>
+</table>
+
+<h2 class="sec"><span class="secno">9.2</span>Prescribing, step by step</h2>
+<div class="steps">
+<div class="step"><b>The doctor opens the medications tab</b> on a patient's chart and picks a drug (formulary-backed), dose, route, frequency, and type (scheduled, STAT, PRN, or infusion).</div>
+<div class="step"><b>The system assembles the safety context:</b> active structured allergies (free-text fallback if none), current active medications on the visit, pregnancy status, age/weight, and the drug's interaction and teratogen classifications.</div>
+<div class="step"><b>Four gates run server-side, in order:</b>
+<div class="dtree">
+<div class="dq">Gate 1 — Allergy conflict?</div>
+<div class="dbr"><span class="dlab no">Match above MILD</span> → <b>blocked</b> (422 with the allergen named). Doctor may override with a mandatory reason (below).</div>
+<div class="dq">Gate 2 — Drug–drug interaction?</div>
+<div class="dbr"><span class="dlab no">Interaction with an active med</span> → blocked or warned by severity; blocking interactions are overridable with reason.</div>
+<div class="dq">Gate 3 — Pregnancy / teratogen?</div>
+<div class="dbr"><span class="dlab no">Teratogenic drug + pregnant / possibly pregnant / breastfeeding patient</span> → <b>blocked</b>, overridable with reason (§8.4). This is a real server gate, not a UI hint.</div>
+<div class="dq">Gate 4 — Duplicate therapy?</div>
+<div class="dbr"><span class="dlab maybe">Same drug already active on this visit</span> → warned/blocked to prevent accidental double-dosing.</div>
+</div></div>
+<div class="step"><b>Clean pass → prescription created.</b><p>Dose schedule generated per frequency; the MAR
+gains its due-times; STAT medications start their overdue clock immediately; notifications reach the
+nurses' medication board.</p></div>
+<div class="step"><b>Blocked → the doctor decides.</b><p>The block dialog names the exact conflict. Proceeding
+requires a <b>mandatory override reason</b> (server-enforced — an empty reason is refused). The
+prescription is then created <i>and</i> the override is permanently recorded with the actor's real
+identity: it appears in the Override Register (§15.2) and fires <code>MEDICATION_SAFETY_BLOCK</code> /
+<code>MEDICATION_EMERGENCY_OVERRIDE</code> alerts for governance. Severe/anaphylaxis allergy overrides
+are critical-tier.</p></div>
+</div>
+<div class="co co-danger"><div class="co-t">Patient safety</div>
+<p>The gates cannot be bypassed by calling the API directly — validation and authorization happen
+before persistence, and the mandatory-reason rule for overrides is a database-backed requirement
+(migration V109), not a front-end courtesy.</p></div>
+
+<h2 class="sec"><span class="secno">9.3</span>The MAR — dose lifecycle</h2>
+<div class="flow">
+  <div class="fnode start">DUE<div class="sub">schedule generated</div></div>
+  <div class="farrow">→</div>
+  <div class="fnode end">GIVEN<div class="sub">administered, by whom, when</div></div>
+  <div class="farrow">or</div>
+  <div class="fnode warn">HELD<div class="sub">reason required</div></div>
+  <div class="farrow">or</div>
+  <div class="fnode bad">REFUSED<div class="sub">patient refusal, recorded honestly</div></div>
+  <div class="farrow">or</div>
+  <div class="fnode bad">MISSED<div class="sub">clock ran out — alert fired</div></div>
+</div>
+<ul>
+<li><b>Administration</b> records the administering nurse (server-stamped), the time, and any variance. High-risk drugs require a <b>countersign</b> by a second clinician before the dose is complete.</li>
+<li><b>PRN</b> (as-needed) doses are created at administration time against the PRN order, with the indication recorded.</li>
+<li><b>Infusions</b> track start/adjust/stop as separate events with rates.</li>
+<li><b>Holding</b> a dose requires a reason and keeps the schedule alive; <b>refusal</b> records the patient's decision without pretending the dose happened.</li>
+</ul>
+
+<h2 class="sec"><span class="secno">9.4</span>Overdue monitoring</h2>
+<table class="compact">
+<tr><th>Alert</th><th>Fires when</th></tr>
+<tr><td><code>STAT_MEDICATION_OVERDUE</code> <span class="pill p-red">time-critical</span></td><td>A STAT order isn't administered promptly — re-pages until acknowledged</td></tr>
+<tr><td><code>URGENT_MEDICATION_OVERDUE</code></td><td>Urgent-priority order lapses</td></tr>
+<tr><td><code>MEDICATION_DOSE_OVERDUE</code> / <code>MEDICATION_DOSE_MISSED</code> <span class="pill p-red">tc</span></td><td>A scheduled dose passes its window / is conclusively missed</td></tr>
+<tr><td><code>MEDICATION_APPROVAL_REQUIRED</code></td><td>An order awaits a required approval step</td></tr>
+</table>
+
+<h2 class="sec"><span class="secno">9.5</span>Discontinuing &amp; edge cases</h2>
+<dl class="scen">
+<dt>Discontinue</dt><dd><span class="role">DOCTOR</span> only; future doses cancel, given doses remain history.</dd>
+<dt>Prescribe on a closed visit</dt><dd>Refused — the visit must be active.</dd>
+<dt>Allergy recorded after prescribing</dt><dd>The retroactive re-screen flags now-conflicting active prescriptions (same mechanism as the pregnancy re-check).</dd>
+<dt>Unknown drug</dt><dd>Free-text drugs get keyword-level checks only — the formulary link is what powers full interaction data; prefer formulary entries.</dd>
+<dt>Double-click</dt><dd>Idempotency guards prevent duplicate schedules from repeated submissions.</dd>
+</dl>
+</div>
+
+<!-- ======================= CHAPTER 10 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH10</span>
+<div class="ch-open">
+  <div class="ch-num">10</div>
+  <h1>Orders &amp; Diagnostics</h1>
+  <p class="ch-lede">Labs with a full chain of custody and critical-value governance; imaging on its
+  own worklist; ICD-coded diagnoses with amendment history; and the clinical documents that gate
+  discharge and death.</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>The lab order lifecycle and every transition</li><li>Critical values &amp; read-back</li>
+  <li>Two-step verification and its override</li><li>Imaging vs. lab</li><li>Diagnoses &amp; amendments</li><li>Clinical documents</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">10.1</span>The lab order lifecycle</h2>
+<div class="flow">
+  <div class="fnode start">ORDERED<div class="sub">doctor</div></div><div class="farrow">→</div>
+  <div class="fnode">SPECIMEN_COLLECTED<div class="sub">nurse/tech</div></div><div class="farrow">→</div>
+  <div class="fnode">RECEIVED_BY_LAB<div class="sub">accession #</div></div><div class="farrow">→</div>
+  <div class="fnode">PROCESSING</div><div class="farrow">→</div>
+  <div class="fnode warn">AWAITING_VERIFICATION<div class="sub">high-risk only</div></div><div class="farrow">→</div>
+  <div class="fnode end">RESULTED</div>
+</div>
+<div class="flow" style="margin-top:0;">
+  <div class="farrow">exits:</div>
+  <div class="fnode bad">REJECTED<div class="sub">specimen quality</div></div>
+  <div class="fnode bad">CANCELLED<div class="sub">doctor, pre-result only</div></div>
+</div>
+<ul>
+<li><b>Ordering</b> is <span class="role">DOCTOR</span>-only; priorities <code>STAT (30 min) · URGENT (2 h) · ROUTINE (24 h)</code> drive turnaround clocks and overdue alerts (<code>STAT_LAB_OVERDUE</code> etc.). Order numbers: <code>LAB-YYYYMMDD-XXXXX</code>.</li>
+<li><b>Specimen rejection</b> (tech): reason from a fixed list (haemolysed, clotted, insufficient volume, mislabelled, wrong container, expired, other) → order <code>REJECTED</code>, <code>LAB_SPECIMEN_REJECTED</code> (HIGH) pages the zone doctor to re-order.</li>
+<li><b>Cancel</b> (doctor): refused once resulted.</li>
+</ul>
+
+<h2 class="sec"><span class="secno">10.2</span>Results, critical values &amp; read-back</h2>
+<ul>
+<li>Result entry (tech) runs the <b>critical-value engine</b>: catalog-driven thresholds per analyte (unit-aware; a unit mismatch flags for manual review rather than mis-judging). Panels evaluate each analyte independently. Examples: potassium &gt; 6.0 mmol/L, glucose &lt; 2.5 mmol/L, lactate &gt; 4.0, malaria positive (critical in the Rwanda context), troponin high.</li>
+<li>A critical result fires <code>CRITICAL_LAB_RESULT</code> (time-critical — re-pages every 5 minutes until acknowledged).</li>
+<li><b>Acknowledging a critical result</b> is doctor-only and requires the contact method (phone / in person / in-app); verbal channels require the <b>read-back text</b> (the JCI patient-safety standard) — without it the acknowledgment is refused.</li>
+</ul>
+
+<h2 class="sec"><span class="secno">10.3</span>Two-step verification</h2>
+<p>Hospitals may enable verification: a high-risk result (critical, or specimen-quality concern)
+must be verified by a <b>Head Lab Technician</b> before doctors see it. Timeouts by priority
+(STAT 5 min · URGENT 15 min · ROUTINE 60 min) auto-release so verification can delay but never
+withhold a result. A junior tech may <b>release without verification</b> — reason required, identity
+recorded, and a <code>LAB_VERIFICATION_OVERRIDDEN</code> alert (critical if the result was critical)
+lands in governance. Verify-reject sends the order back to processing.</p>
+
+<h2 class="sec"><span class="secno">10.4</span>Imaging &amp; investigations</h2>
+<p>Imaging/ECG orders (X-ray, CT, MRI, ultrasound, ECG) never enter the lab inbox — they route to the
+<b>diagnostics worklist</b> with their own <code>NEW_IMAGING_ORDER</code> alert and “to perform / in
+progress” flow; recording the report fires <code>INVESTIGATION_RESULTED</code>. Both labs and imaging
+are unified in the chart's investigations view.</p>
+
+<h2 class="sec"><span class="secno">10.5</span>Diagnoses &amp; clinical documents</h2>
+<ul>
+<li><b>Diagnoses</b> are <span class="role">DOCTOR</span>-only, ICD-10-coded (searchable catalog with a curated common-in-Rwanda starter list), marked primary/secondary. <b>Amendment</b> creates a history entry rather than editing in place — the original wording stays retrievable.</li>
+<li><b>Clinical documents</b> (discharge summary, treatment plan, doctor's note, death certificate…) carry per-type authorship rules: a defined set is doctor-only (enforced at create <i>and</i> amend). The discharge summary gates discharge (§6.6); the death certificate feeds mortality reporting.</li>
+<li>Documents amend by supersession with history, like notes.</li>
+</ul>
+</div>

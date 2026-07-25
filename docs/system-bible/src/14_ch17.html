@@ -1,0 +1,118 @@
+<!-- ======================= CHAPTER 17 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH17</span>
+<div class="ch-open">
+  <div class="ch-num">17</div>
+  <h1>Devices: Bedside Monitor, Gateway &amp; RFID Desk</h1>
+  <p class="ch-lede">Three pieces of hardware extend SmartTriage past the keyboard: the ESP32-S3
+  bedside monitor, the Raspberry Pi gateway, and the RFID registration reader. This chapter covers
+  their user-visible behavior and operating rules — not electronics.</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>What the monitor measures and shows</li><li>BP measurement &amp; calibration</li>
+  <li>The honesty rules (no fake values)</li><li>Device registry, API keys, telemetry</li>
+  <li>The gateway &amp; simulators</li><li>RFID desk flow</li><li>Demo-day runbook</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">17.1</span>The bedside monitor</h2>
+<p>Measures <b>seven vitals</b>: heart rate (ECG-derived, pulse-ox fallback), SpO2 + perfusion index,
+respiratory rate (ECG-derived), systolic/diastolic blood pressure (oscillometric cuff), and
+temperature (contact sensor). A five-page touch UI: dashboard tiles · live ECG+pleth waveforms ·
+10-minute trends · guided BP measurement · device status. Vitals transmit to the backend every
+<code>5 s</code> with the device API key; an offline ring buffers ~5 minutes and flushes on reconnect.</p>
+
+<h4>Honesty rules (clinical trust)</h4>
+<ul>
+<li>Unmeasured values show <b>“--”</b>; an absent or non-delivering sensor states it in words (“SpO2 sensor not detected”, “place finger on sensor”); a disconnected stream freezes visibly stale rather than pretending to be live.</li>
+<li>Weak ECG signal dims the number and shows “ECG — weak signal, check electrodes”; heart-rate display moves only when the rhythm truly changes (beat-validation logic).</li>
+<li><b>Simulation mode</b> shows a permanent amber banner and <b>never transmits</b> — demo data cannot reach a clinical record.</li>
+</ul>
+
+<h4>Blood pressure</h4>
+<ul>
+<li>Guided oscillometric measurement with a hard safety envelope: pressure-feedback inflation, hard abort at <code>200 mmHg</code>, every error path vents the cuff, on-screen cancel (press-and-hold during measurement).</li>
+<li><b>CAL PUMP</b> is the on-device calibration: it measures the pressure scale on the real cuff and stores it in device flash; the scale was validated against a reference monitor. Operational rules: fully empty the cuff before each measurement; the current sensor board cannot read above ≈<code>115 mmHg</code>, so markedly hypertensive readings saturate (a documented hardware limit — prototype-grade, fine for normotensive demo subjects).</li>
+</ul>
+
+<h2 class="sec"><span class="secno">17.2</span>Device registry &amp; identity</h2>
+<ul>
+<li>Admins register devices (type, serial, bed binding). The <b>API key is displayed once</b>; regenerating invalidates the old key instantly. Ingest requires key + matching serial.</li>
+<li>Paramedics may <b>self-register</b> a personal transport monitor (owned by them, pinned to their hospital) and pull its live telemetry into an EMS run.</li>
+<li>Device statuses: registered → online/monitoring ⇄ offline · error · decommissioned; heartbeats every few seconds, disconnect handling per §7.2.</li>
+</ul>
+
+<h2 class="sec"><span class="secno">17.3</span>The gateway &amp; simulators</h2>
+<ul>
+<li>The Pi is the ward's single point of egress: real monitor traffic passes through unmodified.</li>
+<li>Its demo console can run three simulator families (bedside vitals, triage-style presentations, paramedic transport) — each registered as its own clearly-named device so simulated streams are always attributable and separable from real ones.</li>
+</ul>
+
+<h2 class="sec"><span class="secno">17.4</span>The RFID desk</h2>
+<ul>
+<li>Tap → the reader sends the card UID → the registrar screen resolves the person (§4.4) and opens the register/arrive flow. Unknown cards offer enrollment (attach to a person); conflicting cards refuse with the identity-conflict rule.</li>
+<li>Card operations that change identity anchors (issue, replace) are explicit, audited actions.</li>
+</ul>
+
+<h2 class="sec"><span class="secno">17.5</span>Demo-day runbook</h2>
+<div class="co co-tip"><div class="co-t">Tip — the checklist</div>
+<ul>
+<li>Backend: simulation flag <b>off</b>; devices provisioned with real API keys.</li>
+<li>Monitor: fresh batteries morning-of (the pump browns out on weak cells); cuff fully empty before each BP; calibrate touch once on-site; expect the boot recap line on serial if diagnosing.</li>
+<li>Network: monitor → gateway → backend on the venue WiFi; verify one end-to-end vital appears on the patient chart before the audience arrives.</li>
+</ul></div>
+</div>
+
+<!-- ======================= CHAPTER 18 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH18</span>
+<div class="ch-open">
+  <div class="ch-num">18</div>
+  <h1>Cross-Cutting Behaviors</h1>
+  <p class="ch-lede">The rules that apply everywhere: how errors are shaped, how records are scoped
+  and soft-deleted, what happens offline, and how the system behaves under concurrency.</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>The error model</li><li>Soft delete &amp; scoping</li><li>Offline sync</li><li>Concurrency &amp; idempotency</li><li>Time &amp; localization</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">18.1</span>The error model</h2>
+<table>
+<tr><th style="width:16mm">Code</th><th>Meaning</th><th>Typical example</th></tr>
+<tr><td><code>400</code></td><td>Invalid input (schema/validation)</td><td>Missing required field, malformed value — checked <b>before</b> permissions, so a permission probe with a bad body sees 400, not 403</td></tr>
+<tr><td><code>401</code></td><td>Not authenticated</td><td>Expired token (15 min), bad device API key</td></tr>
+<tr><td><code>403</code></td><td>Authenticated but not allowed</td><td>Nurse calling a prescribe endpoint</td></tr>
+<tr><td><code>404</code></td><td>Not found — or not yours</td><td>Record from another hospital (existence not confirmed)</td></tr>
+<tr><td><code>409</code></td><td>Conflict / duplicate</td><td>Duplicate patient identifier, duplicate bed code</td></tr>
+<tr><td><code>422</code></td><td>Business-rule refusal</td><td>Discharge without summary; withdraw a non-given consent; triage a non-awaiting visit</td></tr>
+</table>
+<p class="small muted">All responses share one envelope (success flag, message, data). Business-rule messages are
+written for humans and are quoted throughout this document.</p>
+
+<h2 class="sec"><span class="secno">18.2</span>Soft delete &amp; hospital scoping</h2>
+<ul>
+<li>Every entity carries <code>isActive</code>; deletion flips it; every read filters on it. Uniqueness rules are “partial” — they apply only among active rows, so a deactivated record frees its identifiers (e.g. a cancelled invitation frees the email).</li>
+<li>Nearly every query is hospital-scoped at the repository level; the deliberate exceptions are listed in §1.3.</li>
+</ul>
+
+<h2 class="sec"><span class="secno">18.3</span>Offline sync</h2>
+<ul>
+<li>Clients may submit batches of offline-created records (<code>CREATE</code>/<code>UPDATE</code> with JSON payloads). Each record lands as synced / conflict / failed; a failed record never aborts the batch. Admins can resolve conflicts (accept server / accept client / merge) and monitor per-hospital sync status. READ_ONLY users cannot sync.</li>
+</ul>
+<div class="co co-gap"><div class="co-t">Needs clarification</div>
+<p>The offline conflict <i>detector</i> is currently a conservative stub (it never flags version
+conflicts), and conflict “resolution” relabels the sync record without visibly re-applying data to
+the target entity. Before relying on offline mode in production, the team should decide the real
+conflict policy and implement the re-apply path. (Also listed in Appendix C.)</p></div>
+
+<h2 class="sec"><span class="secno">18.4</span>Concurrency &amp; idempotency</h2>
+<ul>
+<li><b>Durable counters</b> (MRN, visit numbers) serialize allocation in the database — restart-proof, collision-checked.</li>
+<li><b>Partial-unique indexes</b> backstop the big invariants: one bed per patient, one active visit per bed, one effective consent grant, one shift-lead per shift, one active template per period.</li>
+<li><b>Post-commit publishing:</b> WebSocket events and governance notifications fire only after the transaction commits — a rolled-back save can never announce itself.</li>
+<li><b>Idempotent writes</b> where double-submits are likely (allergies, transfers, alert dedup, EMS acknowledgments).</li>
+</ul>
+
+<h2 class="sec"><span class="secno">18.5</span>Time &amp; localization</h2>
+<ul>
+<li>Operational logic (shifts, schedulers) runs on <b>Africa/Kigali</b>; timestamps are stored UTC; device readings carry NTP-synced capture times.</li>
+<li>Rwanda's 5-level administrative hierarchy (province → village) is built-in reference data for addresses; the mains-frequency and language defaults are Rwanda-appropriate.</li>
+</ul>
+</div>

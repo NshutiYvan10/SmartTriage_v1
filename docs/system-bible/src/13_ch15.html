@@ -1,0 +1,107 @@
+<!-- ======================= CHAPTER 15 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH15</span>
+<div class="ch-open">
+  <div class="ch-num">15</div>
+  <h1>Oversight: Audit, Overrides, Incidents &amp; Alerts</h1>
+  <p class="ch-lede">Trust in a clinical system is earned by what it remembers. Four oversight
+  surfaces make sure nothing important is forgettable: the audit trail, the override register, the
+  safety-incident program, and the alert center with its escalation ladder.</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>The audit trail and the incident timeline</li><li>The unified Override Register</li>
+  <li>Safety incidents: reporting → investigation → closure</li><li>Alert severities, scoping and the 3-tier escalation</li>
+  <li>Governance policies &amp; quality metrics</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">15.1</span>The audit trail</h2>
+<ul>
+<li>Every mutating request is recorded automatically (who — from the session, what, when, outcome); sensitive reads (cross-hospital summary/deep-record) are logged explicitly too.</li>
+<li>Rows are <b>append-only, enforced by a database trigger</b> — not even an administrator with API access can rewrite history.</li>
+<li>The hospital admin's <b>incident timeline</b> view assembles a patient-centric chronology across modules for investigations.</li>
+<li>Audit writing is fail-safe (its own transaction): an audit hiccup never blocks patient care.</li>
+</ul>
+
+<h2 class="sec"><span class="secno">15.2</span>The Override Register</h2>
+<p>Every place a human overrode a safety gate, unified in one governance view (<code>/overrides</code>):</p>
+<table class="compact">
+<tr><th>Override source</th><th>What was bypassed</th></tr>
+<tr><td>Prescribe despite allergy</td><td>Allergy gate (§9.2) — critical tier for severe/anaphylaxis</td></tr>
+<tr><td>Prescribe despite interaction</td><td>Interaction gate</td></tr>
+<tr><td>Prescribe despite teratogen risk</td><td>Pregnancy gate</td></tr>
+<tr><td>Hypoglycemia resolve-incomplete</td><td>Recheck protocol (§8.2)</td></tr>
+<tr><td>Lab release-without-verification</td><td>Two-step verification (§10.3)</td></tr>
+<tr><td>Break-the-glass</td><td>Data-sharing consent (§14.4) — shown alongside</td></tr>
+</table>
+<ul>
+<li>Every entry: <b>mandatory reason</b> (database-enforced) + <b>true actor identity</b> (server-stamped) + timestamp + clinical object.</li>
+<li>Reviewers: hospital admin, doctors, charge nurses, read-only auditors — for their own hospital. Sign-off (acknowledge) is recorded; the underlying facts are immutable.</li>
+</ul>
+
+<h2 class="sec"><span class="secno">15.3</span>Safety incidents</h2>
+<div class="steps">
+<div class="step"><b>Anyone reports.</b><p>All staff roles can file an incident (fall, medication error, equipment failure, near-miss…), optionally linked to a visit, with severity. Reporting can be <b>anonymous — enforced server-side</b> (the reporter's identity is genuinely not stored, not merely hidden).</p></div>
+<div class="step"><b>Severe incidents are owned.</b><p>A severe report immediately raises an owned <code>SAFETY_INCIDENT_CRITICAL</code> alert (works even with no visit attached). Unattended severe incidents re-escalate on a governance clock.</p></div>
+<div class="step"><b>Oversight investigates.</b><p>The oversight register (admin/governance audience) tracks status, corrective actions and their <b>deadline clock</b> (<code>SAFETY_FOLLOWUP_OVERDUE</code> when missed).</p></div>
+<div class="step"><b>Closure is gated.</b><p>Severe incidents cannot be closed without completed investigation/corrective-action fields — no quiet burials.</p></div>
+</div>
+
+<h2 class="sec"><span class="secno">15.4</span>The alert system</h2>
+<p>Severities: <code>CRITICAL · HIGH · MEDIUM · LOW · INFO</code>. Lifecycle is simply
+<i>unacknowledged → acknowledged</i>, plus an <b>escalation tier</b> that climbs while nobody responds:</p>
+<div class="flow">
+  <div class="fnode start">Tier 1<div class="sub">zone doctor + charge nurse</div></div>
+  <div class="farrow"><span class="lbl">+2 min unack</span>→</div>
+  <div class="fnode warn">Tier 2<div class="sub">ALL on-duty doctors, CRITICAL</div></div>
+  <div class="farrow"><span class="lbl">+5 min unack</span>→</div>
+  <div class="fnode bad">Tier 3+<div class="sub">hospital-wide + audible alarm,<br>re-pages every 5 min forever</div></div>
+</div>
+<ul>
+<li><b>Time-critical types</b> (sepsis, critical labs, STAT meds, hypoglycemia, isolation, pathways, ICU, resus-overflow…) have their own re-page loop: first page 5 minutes after creation, then every 5 minutes, promoting to CRITICAL — there is no dead-end where an unacknowledged emergency goes quiet. Critical EMS pre-arrivals re-alarm on a 2-minute fuse.</li>
+<li><b>Who sees what:</b> charge nurses/leads/read-only see all zones; doctors/nurses see their covered zones plus personally-targeted alerts; lab techs see only lab-category alerts; registrars only identity-reconciliation; paramedics only their own; hospital admins see <i>none</i> (clinical alerts are not their surface — they have the governance registers).</li>
+<li><b>Acknowledging a CRITICAL alert requires a written reason.</b> Acknowledgment is identity-stamped and stops the escalation ladder. Automatic acknowledgments (e.g. an EMS arrival superseding its pre-arrival alert) bypass the reason gate deliberately.</li>
+<li><b>Deduplication:</b> a condition that is already alerting unacknowledged doesn't create a second row — it escalates the first.</li>
+</ul>
+
+<h2 class="sec"><span class="secno">15.5</span>Governance policies &amp; quality metrics</h2>
+<ul>
+<li><b>Policies</b> (triage rules, drug protocols, infection control…) follow a versioned lifecycle: <code>DRAFT → PENDING_APPROVAL → APPROVED → ACTIVE ⇄ SUSPENDED → ARCHIVED</code>. Activating a new version auto-archives and links the old (“superseded by version …”). Every transition is audit-logged with actor and content diff. Writing is admin-only; system-wide policies are SUPER_ADMIN-only; clinical staff read the active set.</li>
+<li><b>Quality metrics</b> snapshot the ED daily (throughput, door-to-triage/doctor, category mix, sepsis compliance, lab turnaround, occupancy, mortality…), with trends, CSV export, and on-demand recomputation for admins (§16 shows where they surface).</li>
+</ul>
+</div>
+
+<!-- ======================= CHAPTER 16 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH16</span>
+<div class="ch-open">
+  <div class="ch-num">16</div>
+  <h1>Reporting</h1>
+  <p class="ch-lede">Three reporting families: statutory Ministry of Health reports, the operational
+  Report Center (server-rendered PDFs), and the registrar's desk reports. All are generated from live
+  data — never hand-maintained spreadsheets.</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>MOH reports incl. IDSR</li><li>The 5-report PDF catalog</li><li>Registrar reports</li><li>Scoping rules</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">16.1</span>Ministry of Health reports</h2>
+<ul>
+<li>Real indicators computed from the database (attendance, mortality, triage mix, notifiable diseases…), for any period, at <b>hospital scope</b> (admins see their hospital) or <b>national scope</b> (SUPER_ADMIN aggregates all).</li>
+<li>The <b>IDSR section</b> (integrated disease surveillance) is fed directly by isolation screenings that named notifiable diseases (§8.3) — the epidemiological duty rides on clinical data entry, with no separate bookkeeping.</li>
+</ul>
+
+<h2 class="sec"><span class="secno">16.2</span>The Report Center</h2>
+<p>Server-side PDF catalog (replacing browser printing), each with authorization tiers:</p>
+<table class="compact">
+<tr><th>Report</th><th>Contents</th><th>Audience</th></tr>
+<tr><td>Daily ED report</td><td>Census, category mix, dispositions, deaths, key timers</td><td>Admin / oversight</td></tr>
+<tr><td>Shift handover</td><td>The shift's handover pack, printable</td><td>Clinical + oversight</td></tr>
+<tr><td>Period report</td><td>Any date range, trend tables</td><td>Admin / oversight</td></tr>
+<tr><td>My activity</td><td>The caller's own clinical actions</td><td>Any clinician (self)</td></tr>
+<tr><td>Quality report</td><td>Quality metric snapshots (§15.5)</td><td>Admin / oversight</td></tr>
+</table>
+<p>All are built on a shared PDF kit (headers, data tables, signature blocks) so they look like one
+institution's documents.</p>
+
+<h2 class="sec"><span class="secno">16.3</span>Registrar reports</h2>
+<p>Front-desk oriented: registration volumes, identity-resolution workload (placeholders pending),
+visit-opening statistics — the registrar's own accountability view.</p>
+</div>

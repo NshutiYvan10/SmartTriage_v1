@@ -1,0 +1,80 @@
+<!-- ======================= COVER ======================= -->
+<div style="height:252mm; display:flex; flex-direction:column; justify-content:space-between; padding-top:30mm;">
+  <div>
+    <div style="display:flex; align-items:center; gap:10pt; margin-bottom:26pt;">
+      <svg width="46" height="46" viewBox="0 0 46 46">
+        <rect x="1" y="1" width="44" height="44" rx="11" fill="#0E7490"/>
+        <path d="M9 26 h7 l3.5-9 5 15 4-11 2.5 5 H37" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div>
+        <div style="font-size:15pt; font-weight:700; letter-spacing:-0.2pt;">SmartTriage</div>
+        <div style="font-size:8pt; color:#5B6B76; letter-spacing:1.6pt; text-transform:uppercase;">Emergency Department Platform · Rwanda</div>
+      </div>
+    </div>
+
+    <div class="kicker" style="font-size:9pt;">Master Functional Specification</div>
+    <div style="font-size:37pt; font-weight:800; letter-spacing:-1.2pt; line-height:1.08; max-width:170mm;">
+      The System<br>Bible
+    </div>
+    <p style="font-size:11.5pt; color:#35505F; max-width:150mm; margin-top:12pt;">
+      The definitive reference for how SmartTriage behaves and why — every module,
+      every workflow, every rule, every edge case. Written for developers, nurses'
+      champions, testers, project managers, and every future teammate.
+    </p>
+
+    <div style="display:flex; gap:8pt; margin-top:20pt; flex-wrap:wrap;">
+      <span class="pill p-teal">42 backend modules</span>
+      <span class="pill p-teal">55 API controllers</span>
+      <span class="pill p-teal">8 user roles</span>
+      <span class="pill p-teal">7 clinical safety engines</span>
+      <span class="pill p-teal">3 hardware devices</span>
+    </div>
+  </div>
+
+  <div style="border-top:1.5px solid #D5E3E8; padding-top:10pt; display:flex; justify-content:space-between; font-size:8.6pt; color:#5B6B76;">
+    <div>
+      <b style="color:#132A3A;">Edition 1.0</b> · July 2026<br>
+      Covers backend, frontend, bedside monitor firmware &amp; gateway
+    </div>
+    <div style="text-align:right;">
+      Status: <b style="color:#1A7A45;">Current with codebase</b><br>
+      Open questions are flagged inline with <span class="pill p-purple">Needs clarification</span>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= HOW TO READ ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-HOWTO</span>
+<div class="kicker">Before you start</div>
+<h1 style="font-size:17pt; margin-bottom:8pt;">How to read this document</h1>
+
+<p>This is a <b>behavioral</b> reference, not API documentation. It explains what the system does,
+why it does it, and what happens in every scenario — in plain language. You should be able to
+understand SmartTriage completely without opening the code. When the code enforces an exact
+number (a threshold, a time limit, a dose cap), that number is printed here in
+<code>monospace</code> so you know it is the real value, not an approximation.</p>
+
+<div class="co co-tip"><div class="co-t">Tip</div>
+<p>New to the project? Read Chapter 1 (the big picture), Chapter 2 (who can do what), and Chapter 3
+(one patient’s journey end-to-end) in order — about 20 minutes — and you will understand 80% of the
+system. Every other chapter is a deep dive you can read on demand.</p></div>
+
+<h3>The building blocks used on every page</h3>
+<div class="co co-note"><div class="co-t">Note</div><p>Background information and context — why something is designed the way it is.</p></div>
+<div class="co co-rule"><div class="co-t">Business rule</div><p>A hard rule the server enforces. These cannot be bypassed from the user interface.</p></div>
+<div class="co co-warn"><div class="co-t">Warning</div><p>A behavior that surprises people, or an easy mistake with real consequences.</p></div>
+<div class="co co-danger"><div class="co-t">Patient safety</div><p>A rule that exists to protect patients. Treat these as inviolable when changing code.</p></div>
+<div class="co co-tip"><div class="co-t">Tip</div><p>A shortcut or best practice that makes daily use easier.</p></div>
+<div class="co co-gap"><div class="co-t">Needs clarification</div><p>Something the code leaves ambiguous or that the team should decide explicitly. All of these are also collected in Appendix C.</p></div>
+
+<h3>Conventions</h3>
+<ul>
+  <li><b>Roles</b> appear as chips: <span class="role">DOCTOR</span> <span class="role r2">NURSE</span> <span class="role r3">REGISTRAR</span>. When a rule names roles, those are the <i>only</i> roles allowed — everyone else receives a “403 Forbidden” response.</li>
+  <li><b>Cross-references</b> look like <a href="#">§8.2</a> — chapter § section. The Table of Contents lists page numbers for both.</li>
+  <li><b>Lifecycles</b> (a record’s allowed states, e.g. a lab order moving from ordered to resulted) are drawn as flow diagrams, with green for success ends, red for failure ends.</li>
+  <li><b>“Soft delete”</b> — SmartTriage never physically erases clinical rows. Deleting marks a record inactive (<code>isActive=false</code>); it disappears from lists but stays in the database and the audit trail. Assume every “delete” in this document is a soft delete unless stated otherwise.</li>
+  <li><b>Error codes</b> — <code>400</code> invalid input · <code>401</code> not logged in · <code>403</code> not allowed · <code>404</code> not found (or another hospital's) · <code>409</code> conflict · <code>422</code> business-rule refusal. Full model: §18.</li>
+</ul>
+
+</div>

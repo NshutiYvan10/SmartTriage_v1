@@ -1,0 +1,123 @@
+<!-- ======================= CHAPTER 4 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH04</span>
+<div class="ch-open">
+  <div class="ch-num">04</div>
+  <h1>Registration &amp; Patient Identity</h1>
+  <p class="ch-lede">Identity is where patient safety begins: the wrong record attached to the wrong
+  person poisons everything downstream. SmartTriage identifies people with deterministic keys only —
+  a national ID and/or an RFID card — and refuses to guess.</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>Registering a patient (and every validation)</li><li>MRN and visit-number formats</li>
+  <li>Duplicate detection</li><li>The shared cross-hospital identity (PersonIdentity)</li>
+  <li>Unknown patients: placeholders, resolution, merging</li><li>Allergies &amp; chronic conditions</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">4.1</span>Who can register</h2>
+<p><span class="role">SUPER_ADMIN</span> <span class="role">HOSPITAL_ADMIN</span> <span class="role r3">REGISTRAR</span>
+<span class="role r2">NURSE</span> <span class="role">DOCTOR</span> can register patients — with one twist:
+<b>today's triage nurse cannot</b> (the triage station must stay focused on triage, and separation
+of duties keeps one person from both creating and triaging a record). Registration is pinned to the
+caller's own hospital; only SUPER_ADMIN may register elsewhere.</p>
+
+<h2 class="sec"><span class="secno">4.2</span>Registering a patient, step by step</h2>
+<div class="steps">
+<div class="step"><b>Capture demographics.</b><p>Required: <b>first name, last name, hospital</b>. Everything
+else is optional: date of birth, gender, national ID, passport, birth certificate, phone, the 5-level
+Rwanda address (province→village — any subset; an unresolvable location ID is silently dropped, never
+blocks registration), emergency contact, guardian details (for children), blood type, weight,
+free-text allergies/conditions, pregnancy status.</p></div>
+<div class="step"><b>Blank means absent.</b><p>Empty strings are converted to <code>null</code> before saving,
+so the database's uniqueness rules (which ignore nulls) treat “left blank” correctly — two patients
+without passports are not “duplicates of each other”.</p></div>
+<div class="step"><b>Duplicate check.</b><p>The three Tier-1 identifiers — national ID, passport, birth
+certificate — are each checked against <i>active</i> patients <i>at this hospital</i>. A match refuses
+registration with a “duplicate patient” error naming the conflicting field. (The database enforces
+the same rule with unique indexes as a backstop.)</p></div>
+<div class="step"><b>MRN allocation.</b><p>The Medical Record Number is <code>{hospitalCode}-{sequence}</code>
+(e.g. <code>KFH-1024</code>), drawn from a durable per-hospital database counter — it survives restarts and
+concurrent registrations. Up to 10 collision-skip attempts, then the registration fails loudly rather
+than issuing a duplicate MRN.</p></div>
+<div class="step"><b>Shared identity link.</b><p>If a national ID and/or RFID card was captured, the patient
+is linked to (or creates) a cross-hospital <b>PersonIdentity</b> (§4.4). No ID and no card → the record
+stays purely local.</p></div>
+<div class="step"><b>Structured history.</b><p>Each allergy/condition entered at the desk becomes a structured
+row (allergy defaults: severity <code>UNKNOWN</code>, verification <code>PATIENT_REPORTED</code>; condition default
+status <code>ACTIVE</code>). Each row is best-effort: a malformed entry is logged and skipped, never blocking
+the registration itself.</p></div>
+<div class="step"><b>Optionally open the visit.</b><p><code>POST /patients/register</code> creates the patient
+<b>and</b> their visit in one transaction (the normal front-desk flow); <code>POST /patients</code> creates
+the person only. Visit numbers are <code>V-{hospitalCode}-{yyyyMMdd}-{00001…}</code> from their own durable
+per-day counter.</p></div>
+</div>
+
+<div class="co co-rule"><div class="co-t">Business rule</div>
+<p>One patient may hold only <b>one open visit per hospital</b>. Registering a returning patient who
+already has an open visit refuses the second visit (“already has an open visit”) — the correct move
+is to find the existing encounter.</p></div>
+
+<h2 class="sec"><span class="secno">4.3</span>Finding people: search surfaces</h2>
+<table>
+<tr><th style="width:44mm">Surface</th><th>Scope</th><th>Who</th><th>Behavior</th></tr>
+<tr><td>Hospital registry list / search</td><td>One hospital</td><td>Admin, registrar, nurse, doctor, read-only</td><td>Paginated, newest first; excludes paramedics &amp; lab techs (privacy)</td></tr>
+<tr><td>Federated lookup</td><td>One hospital</td><td>Same</td><td>Candidate match by NID / passport / birth cert / MRN / phone / guardian NID+phone / name+DOB; empty identifiers → empty list (no browsing)</td></tr>
+<tr><td><b>Global registry search</b></td><td>All hospitals</td><td><span class="role">SUPER_ADMIN</span> <span class="role r3">REGISTRAR</span> only</td><td>Blank query returns nothing (no registry dumps); rows show badges “local to my hospital” / “has open visit here”; from a result the registrar can <b>open a visit here</b> — reusing the person's identity instead of re-registering</td></tr>
+<tr><td>Tap-to-identify (RFID)</td><td>Cross-hospital</td><td>Registrar desk / clinical</td><td>Card UID resolves the PersonIdentity directly — works even for patients with no national ID</td></tr>
+</table>
+
+<h2 class="sec"><span class="secno">4.4</span>The shared identity: PersonIdentity</h2>
+<p>One <b>PersonIdentity</b> row represents one human being across all hospitals. Each hospital still
+keeps its own local Patient record; the identity links them. It is anchored by up to two keys:</p>
+<ul>
+<li><b>National ID</b> — the civil identity;</li>
+<li><b>RFID card UID</b> — a physical card, which makes identity work even for people <i>without</i> an ID (newborns, foreigners, unconscious unknowns).</li>
+</ul>
+<p>Matching is <b>deterministic-exact only</b>. There is no fuzzy or probabilistic matching anywhere —
+a wrong merge would attach one person's allergies to another and is treated as a patient-safety
+incident by design. The resolve rules:</p>
+<div class="dtree">
+<div class="dq">A registration arrives with national ID and/or card. What happens?</div>
+<div class="dbr"><span class="dlab">Neither key given</span> — no shared identity; the patient stays local.</div>
+<div class="dbr"><span class="dlab">Keys are new</span> — a new PersonIdentity is created (concurrent duplicates resolved by re-reading the winner).</div>
+<div class="dbr"><span class="dlab yes">One key matches, the other is new &amp; unused</span> — the new key is <b>attached</b> (e.g. issuing a card to a known person, or an ID arriving for a card-anchored unknown).</div>
+<div class="dbr"><span class="dlab yes">Both match the same identity</span> — that identity is used.</div>
+<div class="dbr"><span class="dlab no">Keys point to different identities, or conflict with what's on file</span> — <b>rejected</b> with an identity-conflict error (“…already belong to different patients — reconcile manually”). The system never auto-merges people.</div>
+</div>
+<div class="co co-note"><div class="co-t">Note</div>
+<p>Swapping a lost/damaged card is a separate, explicit, audited action (<i>replace card</i>). It refuses
+a card that already belongs to someone else, and returns the old card UID for the audit trail.</p></div>
+<p>What the shared identity unlocks — the always-available <b>safety summary</b> and the consent-gated
+<b>deep record</b> — is covered in §14.</p>
+
+<h2 class="sec"><span class="secno">4.5</span>Changing demographics later</h2>
+<ul>
+<li><b>Demographic correction</b> (admin/registrar/nurse/doctor): partial update; changing the national ID re-runs duplicate detection against other active patients at the hospital, then <b>re-links the shared identity</b> (keeping the existing card anchor).</li>
+<li><b>Pregnancy status</b> (<span class="role r2">NURSE</span>/<span class="role">DOCTOR</span> only — it drives medication safety): one of <code>PREGNANT · POSSIBLY_PREGNANT · BREASTFEEDING · NOT_PREGNANT · NOT_APPLICABLE · UNKNOWN</code>, with optional gestational age. Transitioning <i>into</i> a pregnant state automatically re-screens up to 10 of the patient's active visits for teratogenic medications already prescribed (§8.4).</li>
+<li><b>Allergies / chronic conditions</b> (nurse/doctor): both the free-text quick fields and the structured rows (§4.7).</li>
+</ul>
+
+<h2 class="sec"><span class="secno">4.6</span>Unknown patients: placeholders → identification → merge</h2>
+<p>An unconscious arrival can't wait for paperwork. The system creates a <b>placeholder</b>:
+first name “Unknown”, a NATO-phonetic label (“Alpha”, “Bravo-2”…), flagged <code>isUnidentified</code>.
+Care proceeds normally. Later, identity is resolved one of two ways:</p>
+<div class="dtree">
+<div class="dq">Who is this person really?</div>
+<div class="dbr"><span class="dlab yes">A new person</span> — <b>rename in place</b>: real name (and/or card, national ID) is written onto the same record; the UUID never changes, so every downstream order and note stays valid. Requires a name or a card; a card belonging to someone else is refused and routed to the merge path. The placeholder label is kept for audit.</div>
+<div class="dbr"><span class="dlab yes">An existing patient</span> — <b>merge</b>: all visits, allergies, conditions and clinical-sign events are re-pointed to the real record (in batches); the placeholder is soft-deleted with its identification stamp preserved. Guards: same hospital only, not into itself, and two different shared identities are never merged (fail-closed).</div>
+<div class="dbr"><span class="dlab no">Still unknown</span> — an <code>IDENTITY_UNRESOLVED</code> alert keeps the registrar chasing it (escalating if ignored).</div>
+</div>
+
+<h2 class="sec"><span class="secno">4.7</span>Structured allergies &amp; chronic conditions</h2>
+<table class="compact">
+<tr><th>Action</th><th>Who</th><th>Rules</th></tr>
+<tr><td>Record allergy</td><td><span class="role r2">NURSE</span> <span class="role">DOCTOR</span></td><td>Name required; severities <code>MILD/MODERATE/SEVERE/ANAPHYLAXIS/UNKNOWN</code>; idempotent (re-recording surfaces the existing row); optional link to the drug formulary</td></tr>
+<tr><td>Refute allergy</td><td><span class="role">DOCTOR</span> only</td><td>Soft — sets status <code>REFUTED</code> with reason; never deleted (refutation is itself clinical history); refuting twice is refused</td></tr>
+<tr><td>Record condition</td><td><span class="role r2">NURSE</span> <span class="role">DOCTOR</span></td><td>Statuses <code>ACTIVE/CONTROLLED/IN_REMISSION/RESOLVED</code>; only ACTIVE and CONTROLLED feed safety checks</td></tr>
+<tr><td>Resolve condition</td><td><span class="role">DOCTOR</span> only</td><td>Reason recorded; resolving twice refused</td></tr>
+</table>
+<div class="co co-danger"><div class="co-t">Patient safety</div>
+<p>Severity matters downstream: <code>SEVERE</code> and <code>ANAPHYLAXIS</code> allergies make a prescription
+override <i>critical-tier</i> in the override register; anything above <code>MILD</code> blocks prescribing
+without an explicit override (§9.3). When no structured allergy rows exist, the free-text
+“known allergies” field is used as the fallback for medication safety.</p></div>
+</div>

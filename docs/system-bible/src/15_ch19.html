@@ -1,0 +1,90 @@
+<!-- ======================= CHAPTER 19 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH19</span>
+<div class="ch-open">
+  <div class="ch-num">19</div>
+  <h1>FAQ, Common Mistakes &amp; Best Practices</h1>
+  <p class="ch-lede">The questions every new teammate asks, the mistakes everyone makes once, and the
+  habits that keep the system trustworthy.</p>
+</div>
+
+<h2 class="sec"><span class="secno">19.1</span>Frequently asked questions</h2>
+<div class="card"><h4>“Why can't this nurse prescribe / order a lab?”</h4>
+<p>By design — the ratified capability matrix (§2.3) makes prescribing and ordering doctor-only,
+enforced server-side. The nurse's medication tab is an administration view, not a lesser bug.</p></div>
+<div class="card"><h4>“Why does the doctor see an empty patient list?”</h4>
+<p>They're off-shift, or their shift doesn't cover the zone. Patient lists derive from the roster
+(§2.5). Charge-nurse/lead authority sees everything.</p></div>
+<div class="card"><h4>“Why did the patient's triage change by itself?”</h4>
+<p>Dynamic re-triage (§5.7): a worsening clinical sign or sustained critical vitals auto-escalated
+the category. The record is labeled system-triggered with its cause. The system never de-escalates
+on its own.</p></div>
+<div class="card"><h4>“Why is this record 404 when I know it exists?”</h4>
+<p>It belongs to another hospital (or is soft-deleted). Cross-hospital access has exactly two doors:
+the safety summary (always) and the consented/break-glass deep record (§14).</p></div>
+<div class="card"><h4>“Why can't I acknowledge this critical alert?”</h4>
+<p>Critical acknowledgments require a written reason — the empty note is the blocker (§15.4).</p></div>
+<div class="card"><h4>“Why won't discharge save?”</h4>
+<p>No discharge-summary document yet (§6.6). Write it first; the gate is server-side.</p></div>
+<div class="card"><h4>“Can we delete this mistaken record?”</h4>
+<p>No — soft delete + supersession is the model. Notes/documents are corrected by superseding;
+diagnoses by amending; wrong dispositions by a new visit. History is never rewritten (§18.2, §15.1).</p></div>
+<div class="card"><h4>“The monitor shows -- for a vital.”</h4>
+<p>That's the honesty rule (§17.1): unmeasured means unshown. Check sensor contact; the device
+status page and serial recap say exactly which sensors are alive.</p></div>
+
+<h2 class="sec"><span class="secno">19.2</span>Common mistakes</h2>
+<table>
+<tr><th style="width:58mm">Mistake</th><th>What actually happens / the right way</th></tr>
+<tr><td>Registering a returning patient as new</td><td>Duplicate-ID refusal — search first (federated lookup / registry / card tap), then “open visit here”</td></tr>
+<tr><td>Treating the UI as the security boundary</td><td>Hidden buttons are courtesy; every rule is re-checked server-side. Test authorization with API probes, not screenshots</td></tr>
+<tr><td>Expecting bed placement to start monitoring</td><td>Monitoring is clinician-started (§7.2) — deliberate, to stop probe-noise false alarms</td></tr>
+<tr><td>Closing a hypoglycemia event to “clean the dashboard”</td><td>Resolve-incomplete requires a reason and lands in the override register (§8.2, §15.2)</td></tr>
+<tr><td>Acknowledging an alert to silence it without acting</td><td>The acknowledgment is identity-stamped and auditable; time-critical conditions will re-fire from their source if unaddressed</td></tr>
+<tr><td>Editing a note in place (developers)</td><td>Notes are immutable; build on supersession. Same for audit rows (DB trigger will refuse)</td></tr>
+<tr><td>Using UNKNOWN sign status as “absent” (developers)</td><td>UNKNOWN means unchecked; never a ground for de-escalation (§5.7)</td></tr>
+<tr><td>Trusting client-sent identity fields (developers)</td><td>Actor identity is always resolved server-side; client-supplied names are display hints at best</td></tr>
+</table>
+
+<h2 class="sec"><span class="secno">19.3</span>Best practices</h2>
+<ul>
+<li><b>Clinical users:</b> acknowledge with substance (the note is the record); keep the roster current — everything routes off it; resolve placeholders quickly (unidentified patients age poorly).</li>
+<li><b>Admins:</b> review the override register and break-glass feed on a rhythm, not on scandal; keep at least two charge nurses; deactivate rather than delete.</li>
+<li><b>Developers:</b> preserve the eight principles of §1.4 in every change; add new safety gates with the same trio (server-enforced, override-with-reason, register entry); write migrations additively; when a save should trigger automation, make the automation best-effort after commit.</li>
+<li><b>Testers:</b> probe with schema-valid bodies (validation fires before authorization, §18.1); use throwaway users via the admin API — never repurpose real accounts; remember soft-deleted fixtures still occupy unique keys only while active.</li>
+</ul>
+</div>
+
+<!-- ======================= CHAPTER 20 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH20</span>
+<div class="ch-open">
+  <div class="ch-num">20</div>
+  <h1>Glossary</h1>
+</div>
+<table class="compact">
+<tr><th style="width:40mm">Term</th><th>Meaning</th></tr>
+<tr><td>AVPU</td><td>Consciousness scale: Alert / responds to Voice / responds to Pain / Unresponsive (+ Confused on adult &amp; child forms)</td></tr>
+<tr><td>Break-the-glass</td><td>Audited emergency override of the data-sharing consent gate (§14.4)</td></tr>
+<tr><td>Charge nurse</td><td>Nurse designation carrying unit-management authority; also a per-shift function</td></tr>
+<tr><td>Deep record</td><td>Consent-gated cross-hospital clinical history (§14.1)</td></tr>
+<tr><td>Disposition</td><td>The doctor's formal ending of a visit (discharge/admit/transfer/…)</td></tr>
+<tr><td>EDR</td><td>ECG-derived respiration — respiratory rate computed from the ECG signal</td></tr>
+<tr><td>Fast track</td><td>Accelerated lane with an SLA for eligible presentations (§8.5)</td></tr>
+<tr><td>IDSR</td><td>Integrated Disease Surveillance &amp; Response — the notifiable-disease reporting framework</td></tr>
+<tr><td>MAR</td><td>Medication Administration Record — the per-visit dose worklist (§9.3)</td></tr>
+<tr><td>MRN</td><td>Medical Record Number, format <code>HOSP-1234</code> (§4.2)</td></tr>
+<tr><td>mSAT / SATS</td><td>(Modified) South African Triage Scale — the basis of the national protocol</td></tr>
+<tr><td>Neuroglycopenia</td><td>Brain symptoms of low glucose (impaired consciousness) — makes any low glucose “severe”</td></tr>
+<tr><td>PersonIdentity</td><td>The cross-hospital identity record anchored by national ID and/or RFID card (§4.4)</td></tr>
+<tr><td>Placeholder</td><td>NATO-phonetic temporary identity for an unknown patient (§4.6)</td></tr>
+<tr><td>PRN</td><td>“As needed” medication order</td></tr>
+<tr><td>Resus-in-place</td><td>Resus team takes ownership without physically moving the patient (§11.3)</td></tr>
+<tr><td>Safety floor / summary</td><td>The always-available cross-hospital allergy/meds/conditions summary (§14.1)</td></tr>
+<tr><td>Soft delete</td><td>Marking a row inactive instead of erasing it (§18.2)</td></tr>
+<tr><td>STAT</td><td>Immediately — the highest order priority</td></tr>
+<tr><td>TEWS</td><td>Triage Early Warning Score (§5.3)</td></tr>
+<tr><td>Time-critical alert</td><td>Alert type that re-pages every 5 minutes until acknowledged (§15.4)</td></tr>
+<tr><td>Zone</td><td>Physical ED area (RESUS, ACUTE, …); drives staffing, routing and scoping</td></tr>
+</table>
+</div>

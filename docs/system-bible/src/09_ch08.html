@@ -1,0 +1,112 @@
+<!-- ======================= CHAPTER 8 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH08</span>
+<div class="ch-open">
+  <div class="ch-num">08</div>
+  <h1>The Clinical Safety Engines</h1>
+  <p class="ch-lede">Six autonomous engines watch every visit for specific dangers. They share a
+  philosophy: <b>detect without being asked, escalate loudly, never resolve silently.</b> Each engine
+  has a front door (it screens on its own), a protocol (timed obligations), and a governance tail
+  (overrides and incomplete protocols are recorded, not forgotten).</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>8.1 Sepsis screening &amp; the hour-1 bundle</li><li>8.2 Hypoglycemia &amp; the glucose clock</li>
+  <li>8.3 Infection isolation</li><li>8.4 Pregnancy awareness</li><li>8.5 Fast track</li><li>8.6 Clinical pathways</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">8.1</span>Sepsis screening &amp; the hour-1 bundle</h2>
+<p><b>Why:</b> sepsis kills by delay; every hour without antibiotics raises mortality. The engine makes
+screening automatic and the response a timed checklist.</p>
+<div class="steps">
+<div class="step"><b>Screening happens at the front door.</b><p>Triage automatically screens every eligible
+patient using objective facts already captured (vitals, mental state, suspected infection). A visit
+that somehow lacks a screening gets a nagging “screening required” prompt on the chart — the state
+of <i>not having been screened</i> is itself treated as a finding.</p></div>
+<div class="step"><b>A positive screen opens a sepsis case.</b><p>Status tracks the clinical course
+(screened → bundle in progress → completed/ruled-out). A chart banner appears; a
+<code>SEPSIS_SCREENING</code> alert (time-critical) pages the zone doctor.</p></div>
+<div class="step"><b>The hour-1 bundle is a checklist with a clock.</b><p>Items — lactate, blood cultures
+before antibiotics, broad-spectrum antibiotics, fluids, vasopressors if hypotensive — are each
+ticked with a timestamp. The monitor fires <code>SEPSIS_BUNDLE_NOT_STARTED</code> and
+<code>SEPSIS_BUNDLE_OVERDUE</code> (both time-critical, auto-re-paging) when the clock outruns the care.</p></div>
+<div class="step"><b>Closing needs a reason.</b><p>Ruling out or completing with unfinished items requires an
+explicit note; a case cannot just evaporate.</p></div>
+</div>
+
+<h2 class="sec" style="break-before:page;"><span class="secno">8.2</span><span class="pgmark">PMK-CH08B</span>Hypoglycemia &amp; the glucose clock</h2>
+<p><b>Why:</b> a low glucose can mimic stroke or psychosis, and a treated low can rebound. The engine
+guarantees a low is <i>noticed</i>, <i>treated in an age-safe way</i>, <i>rechecked on time</i>, and <i>never
+closed silently</i>.</p>
+<h4>Detection — every glucose from every source</h4>
+<ul>
+<li>Sources: triage form, manual vitals, streamed device readings, and <b>resulted lab glucose</b> — all normalized to mmol/L and run through the same evaluator.</li>
+<li>Severity bands: <code>&lt; 3.0 mmol/L</code> hypoglycemia; <code>&lt; 2.2 mmol/L</code> (or any low with neuroglycopenia — impaired consciousness) is <b>severe</b>; severe fires <code>HYPOGLYCEMIA_CRITICAL</code> (time-critical) and forces the triage floor to RED-grade attention via the emergency-sign rule (§5.4: glucose &lt; 3 is an emergency sign).</li>
+<li>Detection opens an <b>event</b> with a chart banner and a dashboard entry, deduplicated while one is already open.</li>
+</ul>
+<h4>Treatment — age-safe options</h4>
+<p>The treatment picker is neonatal-aware: adult options (e.g. concentrated dextrose boluses) are not
+offered for neonates; the protocol hint shows the weight-based pediatric alternative. Recording a
+treatment stamps the event and starts the recheck clock.</p>
+<h4>The recheck clock &amp; the measurement schedule</h4>
+<ul>
+<li>After treatment, a <b>recheck is due in 15 minutes</b>; the dashboard shows a live countdown, and <code>HYPOGLYCEMIA_RECHECK_OVERDUE</code> (time-critical) fires if it lapses.</li>
+<li>Independently, a ratified <b>measurement tier protocol</b> keeps glucose measured while risk persists: hourly (<code>q1h</code>) for active events, then <code>q4h</code>, then <code>q6h</code> as the situation de-escalates. A due measurement raises <code>GLUCOSE_MEASUREMENT_DUE</code>, an overdue one <code>GLUCOSE_MEASUREMENT_OVERDUE</code> (time-critical). Any glucose from any source satisfies the due-clock — but a <b>stale</b> reading (older than the tier window) never does.</li>
+</ul>
+<h4>Resolution — guarded</h4>
+<div class="co co-rule"><div class="co-t">Business rule</div>
+<p>Resolving an event whose protocol is incomplete (no confirmed normal recheck) requires a mandatory
+reason, recorded on the event. The dashboard keeps unresolved events visible with their clocks; the
+chart banner persists until true resolution.</p></div>
+
+<h2 class="sec" style="break-before:page;"><span class="secno">8.3</span><span class="pgmark">PMK-CH08C</span>Infection isolation</h2>
+<p><b>Why:</b> one undetected infectious patient in an open bay can seed a ward outbreak. The engine
+screens at the front door and makes isolation status impossible to miss.</p>
+<div class="steps">
+<div class="step"><b>Auto-screen at triage.</b><p>Every triage derives objective isolation facts (fever, rash,
+cough, exposure answers…) into a screening. A visit without one gets the “screening required” nag.</p></div>
+<div class="step"><b>A positive screen requires isolation.</b><p><code>ISOLATION_REQUIRED</code> (time-critical)
+fires with the indicated precaution type (contact / droplet / airborne). The <b>placement clock</b>
+starts: the dashboard shows time-to-isolation, and <code>ISOLATION_PLACEMENT_OVERDUE</code> escalates if
+the patient isn't moved.</p></div>
+<div class="step"><b>Visibility everywhere.</b><p>Chart banner with precaution type; biohazard chips on the
+bed board (§12); isolation status in handovers.</p></div>
+<div class="step"><b>Notifiable diseases.</b><p>A screening naming a notifiable disease (per the national
+list) raises <code>NOTIFIABLE_DISEASE</code> (time-critical) and feeds the MOH IDSR report (§16.1) — the
+legal reporting duty is wired into the same record.</p></div>
+</div>
+
+<h2 class="sec" style="break-before:page;"><span class="secno">8.4</span><span class="pgmark">PMK-CH08D</span>Pregnancy awareness</h2>
+<p><b>Why:</b> a teratogenic drug prescribed to an unrecognized pregnancy is one of the classic
+preventable harms. The engine makes pregnancy status a first-class, captured-early fact — and a
+<i>server-enforced</i> prescribing gate.</p>
+<ul>
+<li><b>Capture at the front door:</b> the triage forms ask; the answer writes the structured status (+ gestational age) to the patient. “Unknown” never overwrites a known status.</li>
+<li><b>The gate</b> (§9.3): prescribing a teratogenic drug to a patient who is pregnant / possibly pregnant / breastfeeding is <b>blocked server-side</b>, exactly like an allergy conflict — overridable only by a doctor with a mandatory reason, logged to the override register.</li>
+<li><b>Retroactive re-check:</b> if pregnancy is recorded <i>mid-visit</i> (or by a status change on the patient), the engine re-screens up to 10 active visits' existing prescriptions and raises warnings for anything now contraindicated.</li>
+<li><b>Visibility:</b> chart banner with gestational age; flag in handovers and the nurse medication view.</li>
+<li><b>Deliberate decision:</b> pregnancy alone does <b>not</b> bump triage priority — the ratified position is that priority follows measured acuity (the forms' pregnancy-specific discriminators, e.g. “pregnant + abdominal pain → very urgent”, already handle the clinical risk).</li>
+</ul>
+
+<h2 class="sec" style="break-before:page;"><span class="secno">8.5</span><span class="pgmark">PMK-CH08E</span>Fast track</h2>
+<p><b>Why:</b> low-acuity patients clog the main flow and wait unfairly long; certain time-critical
+presentations (e.g. suspected stroke) need a named accelerated lane. Fast track formalizes both.</p>
+<ul>
+<li><b>Eligibility</b> is screened from triage facts (category, ambulatory status, presentation type). Activation is explicit, with a type and an SLA.</li>
+<li><b>The SLA clock</b> runs from activation; <code>FAST_TRACK_ACTIVATED</code> announces the lane (time-critical routing), <code>FAST_TRACK_SLA_BREACH</code> fires when the promise is broken.</li>
+<li><b>Lifecycle:</b> activated → in progress → completed / exited (with reason). Exiting back into the main flow is always possible when the patient turns out sicker than they looked — fast track never caps care.</li>
+</ul>
+
+<h2 class="sec" style="break-before:page;"><span class="secno">8.6</span><span class="pgmark">PMK-CH08F</span>Clinical pathways</h2>
+<p><b>Why:</b> for protocolized presentations (stroke, STEMI, trauma…), evidence lives in ordered,
+timed steps. A pathway is an activatable checklist bound to the visit.</p>
+<ul>
+<li><b>Activation</b> — by the treating clinician, from a per-category catalog; announces via <code>PATHWAY_ACTIVATED</code> (time-critical).</li>
+<li><b>Steps</b> carry target times from activation; each is completed with a timestamp and author. <code>PATHWAY_STEP_OVERDUE</code> (time-critical) fires on lapses.</li>
+<li><b>Lifecycle:</b> active → completed / discontinued (reason required). The pathway state feeds handover reports so the next shift inherits the checklist, not a rumor of it.</li>
+</ul>
+
+<div class="co co-note"><div class="co-t">Note — how the engines stay honest</div>
+<p>All six engines follow the same governance pattern: automatic detection can never be turned off
+per-patient; closing anything incomplete needs a written reason; and every “the system was overridden”
+moment lands in the oversight registers of §15. When you extend an engine, preserve those three
+properties.</p></div>
+</div>

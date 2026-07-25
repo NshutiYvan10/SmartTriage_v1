@@ -1,0 +1,97 @@
+<!-- ======================= CHAPTER 1 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH01</span>
+<div class="ch-open">
+  <div class="ch-num">01</div>
+  <h1>The System at a Glance</h1>
+  <p class="ch-lede">SmartTriage is a life-critical emergency-department platform built for Rwandan
+  hospitals. It runs the entire ED encounter — from the ambulance radio call or the front desk,
+  through triage, treatment and safety monitoring, to discharge — while continuously watching for
+  the mistakes and delays that harm patients.</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>What SmartTriage is and the problem it solves</li><li>The four physical components and how they talk</li>
+  <li>The multi-hospital (tenant) model</li><li>The design principles every module obeys</li>
+  <li>A map of all 42 modules</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">1.1</span>What SmartTriage is</h2>
+<p>An emergency department succeeds or fails on <b>prioritization</b>: seeing the sickest patient
+first, noticing when a waiting patient deteriorates, and never letting a safety check depend on a
+busy human's memory. SmartTriage encodes the <b>Rwanda National Standard Triage Protocols</b>
+(a modified South African Triage Scale) into software, then wraps the whole visit in automated
+safety engines — sepsis screening, hypoglycemia clocks, medication gates, isolation screening,
+pregnancy checks — that fire on their own, whether or not anyone remembers to run them.</p>
+
+<div class="co co-danger"><div class="co-t">Patient safety</div>
+<p>This is not an administrative system. Triage colors, alerts, and medication gates directly
+influence clinical decisions. Every rule described in this document as a “safety gate” is enforced
+<b>on the server</b> — the UI mirrors it for convenience, but bypassing the UI cannot bypass the rule.</p></div>
+
+<h2 class="sec"><span class="secno">1.2</span>The four components</h2>
+<div class="flow">
+  <div class="fnode start">Bedside Monitor<div class="sub">ESP32-S3 + sensors<br>SpO2 · ECG · BP · Temp</div></div>
+  <div class="farrow"><span class="lbl">WiFi / HTTP</span>→</div>
+  <div class="fnode">Gateway<div class="sub">Raspberry Pi 5<br>single point of egress</div></div>
+  <div class="farrow"><span class="lbl">HTTPS</span>→</div>
+  <div class="fnode">Backend<div class="sub">Spring Boot + PostgreSQL<br>all rules live here</div></div>
+  <div class="farrow"><span class="lbl">REST + WebSocket</span>→</div>
+  <div class="fnode end">Web App<div class="sub">React (V6)<br>every role's workspace</div></div>
+</div>
+
+<table>
+<tr><th style="width:24mm">Component</th><th>What it does</th><th style="width:52mm">Key facts</th></tr>
+<tr><td><b>Backend</b></td><td>Every business rule, permission check, safety gate, alert, report and audit record. The single source of truth.</td><td>Spring Boot · PostgreSQL · Flyway migrations (V1…V113+) · JWT auth · REST under <code>/api/v1</code> · WebSocket topics for live updates</td></tr>
+<tr><td><b>Web app</b></td><td>Role-adapted workspaces: triage queue, doctor workspace, medication board, bed grid, lab worklists, admin consoles, dashboards.</td><td>React + TypeScript · route guards mirror server permissions · live via WebSocket</td></tr>
+<tr><td><b>Bedside monitor</b></td><td>Measures SpO2, ECG/heart rate, respiratory rate, blood pressure and temperature; shows waveforms locally; streams vitals to the backend every 5 s.</td><td>ESP32-S3 firmware (s3-3.5.x) · authenticates with a per-device API key · never shows fabricated values (§17)</td></tr>
+<tr><td><b>Pi gateway</b></td><td>Bridges the device network to the backend; hosts vital-sign simulators for demos; passes real monitor traffic through untouched.</td><td>Raspberry Pi 5 · 800×480 demo console · simulators clearly labeled, never mixed with live clinical data</td></tr>
+</table>
+<p class="tbl-cap">Plus an RFID registration desk reader (registration_reader firmware) used for tap-to-identify patient cards — see §4 and §17.</p>
+
+<h2 class="sec"><span class="secno">1.3</span>Multi-hospital model (tenancy)</h2>
+<p>One SmartTriage installation serves <b>many hospitals</b>. Almost every record — patients, visits,
+beds, users, alerts, reports — belongs to exactly one hospital, and the server refuses to show or
+modify records across hospital lines. The exceptions are deliberate and narrow:</p>
+<ul>
+  <li><b>SUPER_ADMIN</b> operates across all hospitals (platform operator).</li>
+  <li><b>Cross-hospital patient identity</b> (§4.4, §14): a person's allergy/medication “safety floor” is readable
+  at any hospital; their deep clinical record crosses hospital lines only with consent or a
+  recorded break-the-glass emergency override.</li>
+  <li><b>National reporting</b> (§16): Ministry of Health reports can aggregate nationally for SUPER_ADMIN.</li>
+</ul>
+<div class="co co-rule"><div class="co-t">Business rule</div>
+<p>Requesting a record from another hospital returns <code>404 Not Found</code>, not <code>403</code> —
+the system does not confirm that the record even exists. This “scoping as 404” pattern applies everywhere.</p></div>
+
+<h2 class="sec"><span class="secno">1.4</span>Design principles every module obeys</h2>
+<div class="cols2">
+<div class="card"><h4>1 · Server-side enforcement</h4><p class="small">Every permission and safety rule is checked in the backend (<code>@PreAuthorize</code> + authorization beans). The UI hides what you cannot do, but hiding is a courtesy, not the control.</p></div>
+<div class="card"><h4>2 · Soft delete only</h4><p class="small">Clinical rows are never physically erased. “Delete” sets <code>isActive=false</code>; every read filters on it. History and audit survive.</p></div>
+<div class="card"><h4>3 · Server-stamped identity</h4><p class="small">Who did what is always resolved from the authenticated session, never from a name typed by the client. A request claiming to be “Dr. X” is recorded as whoever actually logged in.</p></div>
+<div class="card"><h4>4 · Fail closed</h4><p class="small">If the system cannot determine that an action is safe or authorized, it refuses. An unauthenticated override, an unresolvable actor, an unknown hospital — all are rejected, never guessed.</p></div>
+<div class="card"><h4>5 · Never fake clinical data</h4><p class="small">Unmeasured vitals show “--”, absent sensors say so, simulation mode is banner-labeled and never transmitted to the clinical record.</p></div>
+<div class="card"><h4>6 · Overrides are loud</h4><p class="small">Safety gates can sometimes be overridden by a doctor — but always with a mandatory reason, and every override lands in a governance register for review (§15).</p></div>
+<div class="card"><h4>7 · Best-effort side chains</h4><p class="small">When a save triggers follow-on automation (screenings, alerts, re-triage), the automation is “best effort”: its failure never rolls back the clinician's save. A missed signal is better than a blocked record.</p></div>
+<div class="card"><h4>8 · Idempotent by design</h4><p class="small">Double-clicks and retries surface the existing record instead of creating duplicates (allergy recording, transfer requests, alert dedup, MRN counters).</p></div>
+</div>
+
+<h2 class="sec"><span class="secno">1.5</span>Module map</h2>
+<p>The backend is organized into 42 modules. This document groups them into the chapters shown:</p>
+<table class="compact">
+<tr><th style="width:34mm">Chapter</th><th>Modules covered</th></tr>
+<tr><td>§4 Identity</td><td><code>patient</code> · <code>registrar</code> (RFID) · global registry · placeholder identities</td></tr>
+<tr><td>§5 Triage</td><td><code>triage</code> · <code>retriage</code> · <code>clinicalsigns</code> · direct-resus</td></tr>
+<tr><td>§6 Visits</td><td><code>visit</code> · disposition · the clinical chart hub</td></tr>
+<tr><td>§7 Vitals</td><td><code>vital</code> · <code>iot</code> streaming · continuous monitoring engine</td></tr>
+<tr><td>§8 Safety engines</td><td><code>sepsis</code> · <code>hypoglycemia</code> · <code>isolation</code> · pregnancy · <code>fasttrack</code> · <code>pathway</code></td></tr>
+<tr><td>§9 Medications</td><td><code>medication</code> · <code>medsafety</code> (gates + MAR)</td></tr>
+<tr><td>§10 Diagnostics</td><td><code>lab</code> · <code>labcatalog</code> · <code>icd</code> · diagnoses · investigations · <code>documentation</code></td></tr>
+<tr><td>§11 Movement</td><td><code>icu</code> · <code>referral</code> · <code>zonetransfer</code> · <code>handover</code> · <code>ems</code></td></tr>
+<tr><td>§12 Beds</td><td><code>bed</code> · zones · <code>location</code></td></tr>
+<tr><td>§13 Workforce</td><td><code>shift</code> · <code>user</code> · <code>invitation</code> · <code>auth</code> · delegation</td></tr>
+<tr><td>§14 Consent</td><td><code>consent</code> (informed · data-sharing · break-the-glass) · cross-hospital identity</td></tr>
+<tr><td>§15 Oversight</td><td><code>audit</code> · <code>override</code> · <code>safety</code> incidents · <code>alert</code> · <code>governance</code> policies · <code>quality</code></td></tr>
+<tr><td>§16 Reporting</td><td><code>reporting</code> (MOH + operational) · registrar reports</td></tr>
+<tr><td>§17 Devices</td><td>monitor firmware · gateway · RFID reader · <code>iot</code> device management</td></tr>
+<tr><td>§18 Cross-cutting</td><td><code>offline</code> sync · error model · <code>hospital</code> config · scoping · concurrency</td></tr>
+</table>
+</div>

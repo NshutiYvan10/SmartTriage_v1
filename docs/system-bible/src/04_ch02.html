@@ -1,0 +1,116 @@
+<!-- ======================= CHAPTER 2 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH02</span>
+<div class="ch-open">
+  <div class="ch-num">02</div>
+  <h1>People &amp; Permissions</h1>
+  <p class="ch-lede">SmartTriage describes a person with three separate ideas: a permanent
+  <b>Role</b> (what kind of account), a professional <b>Designation</b> (seniority title), and a
+  per-shift <b>Shift Function</b> (what station they are working right now). Understanding this
+  trio explains nearly every “why can't I click this?” question.</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>The 8 roles and what each exists for</li><li>Designations vs. shift functions</li>
+  <li>The doctor/nurse clinical capability matrix</li><li>How login, invitations and activation work</li>
+  <li>Zone-scoping: why staff see only “their” patients</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">2.1</span>The three-layer identity model</h2>
+<table>
+<tr><th style="width:26mm">Layer</th><th>Question it answers</th><th>Set by</th><th>Changes</th></tr>
+<tr><td><b>Role</b></td><td>What kind of account is this? (permission ceiling)</td><td>Admin at account creation</td><td>Rarely</td></tr>
+<tr><td><b>Designation</b></td><td>What is their professional seniority title?</td><td>Admin</td><td>On promotion</td></tr>
+<tr><td><b>Shift Function</b></td><td>What station are they working <i>this shift</i>?</td><td>Charge nurse on the roster</td><td>Every shift</td></tr>
+</table>
+<div class="co co-note"><div class="co-t">Note</div>
+<p>Example: a <b>Senior Nurse</b> (designation) with role <span class="role r2">NURSE</span> might be
+<code>CHARGE_NURSE</code> on this morning's roster and <code>ZONE_NURSE</code> this afternoon. “Who's
+at triage today?” is a question about the roster, not about the person — triage was deliberately
+removed as a designation (migration V45) for exactly this reason.</p></div>
+
+<h2 class="sec"><span class="secno">2.2</span>The eight roles</h2>
+<table>
+<tr><th style="width:34mm">Role</th><th>Exists for</th><th style="width:66mm">Key boundaries</th></tr>
+<tr><td><span class="role">SUPER_ADMIN</span></td><td>Platform operator across all hospitals.</td><td>Bypasses hospital scoping; deliberately <b>excluded</b> from authoring clinical acts like triage — admins are never clinicians.</td></tr>
+<tr><td><span class="role">HOSPITAL_ADMIN</span></td><td>Runs one hospital: users, beds, devices, policies, oversight.</td><td>No clinical writes (cannot triage, prescribe, or record dispositions). Sees oversight registers and audit.</td></tr>
+<tr><td><span class="role">DOCTOR</span></td><td>Diagnoses, prescribes, orders, decides.</td><td>The only role (besides SUPER_ADMIN) for: prescribing, lab/imaging orders, diagnoses, referrals, ICU decisions, disposition, allergy refutation, death certificates.</td></tr>
+<tr><td><span class="role r2">NURSE</span></td><td>Triage, vitals, administration, protocols, escalation.</td><td>Administers and countersigns meds but cannot prescribe; may <i>raise</i> ICU escalations, doctor decides; zone-scoped to their shift assignment.</td></tr>
+<tr><td><span class="role r3">REGISTRAR</span></td><td>Front-desk registration and identity management.</td><td>Registers patients + opens visits; searches the global registry; records data-sharing consent; <b>no</b> clinical writes and no deep-record access.</td></tr>
+<tr><td><span class="role r3">PARAMEDIC</span></td><td>Pre-hospital EMS runs, field triage, handover.</td><td>Sees only their own runs (<code>/runs/mine</code>); cannot read hospital patient lists; cannot accept their own handover.</td></tr>
+<tr><td><span class="role r3">LAB_TECHNICIAN</span></td><td>Specimen collection and result entry.</td><td>Sees the lab worklist and per-visit lab chart, not the general clinical chart or patient registry.</td></tr>
+<tr><td><span class="role r3">READ_ONLY</span></td><td>Observers, quality reviewers, students.</td><td>Read access to oversight surfaces; every write endpoint refuses (including offline sync).</td></tr>
+</table>
+
+<h3><span class="secno">2.2.1</span>Designations (seniority titles)</h3>
+<p>Displayed next to the name everywhere (triage records, notes, alerts). Almost all are
+display-only. The one exception: <b>CHARGE_NURSE</b> carries real unit-management authority —
+managing shift assignments and zone coverage for their hospital.</p>
+<table class="compact">
+<tr><th>Role family</th><th>Designations (senior → junior)</th></tr>
+<tr><td>Doctor</td><td>ED Head · Consultant · Senior Medical Officer · Medical Officer · Resident · Intern</td></tr>
+<tr><td>Nurse</td><td><b>Charge Nurse</b> (authority) · Senior Nurse · Staff Nurse · Student Nurse</td></tr>
+<tr><td>Lab</td><td>Head Lab Technician · Lab Technician</td></tr>
+<tr><td>Registrar</td><td>Senior Registrar · Registrar</td></tr>
+<tr><td>Paramedic</td><td>Senior Paramedic · Paramedic</td></tr>
+</table>
+<div class="co co-rule"><div class="co-t">Business rule</div>
+<p>The server validates the (role, designation) pair at save time — e.g. a DOCTOR account can never
+hold the CHARGE_NURSE designation and inherit nurse unit-management authority. The UI's filtered
+dropdown is convenience; <code>Designation.isValidForRole</code> is the control.</p></div>
+
+<h3><span class="secno">2.2.2</span>Shift functions (per-shift stations)</h3>
+<table class="compact">
+<tr><th style="width:38mm">Function</th><th>Meaning &amp; alert routing</th></tr>
+<tr><td><code>CHARGE_NURSE</code></td><td>Runs the ED floor this shift; receives all Tier-1 alerts; manages the shift board.</td></tr>
+<tr><td><code>TRIAGE_NURSE</code></td><td>Staffs the triage station — the <b>only</b> person who can file triage today (plus charge-nurse authority). Excluded from registration duties.</td></tr>
+<tr><td><code>ZONE_NURSE</code></td><td>Covers one treatment zone; sees that zone's patients.</td></tr>
+<tr><td><code>PRIMARY_DOCTOR</code></td><td>Primary doctor for a zone — receives Tier-1 zone alerts.</td></tr>
+<tr><td><code>SUPERVISING_DOCTOR</code></td><td>Senior oversight — receives Tier-2 escalations.</td></tr>
+<tr><td><code>RESIDENT</code></td><td>Doctor-in-training under supervision.</td></tr>
+</table>
+
+<h2 class="sec"><span class="secno">2.3</span>The clinical capability matrix</h2>
+<p>The ratified doctor/nurse split (enforced server-side on every endpoint, mirrored in the UI):</p>
+<table>
+<tr><th>Capability</th><th style="width:22mm; text-align:center">Doctor</th><th style="width:22mm; text-align:center">Nurse</th><th>Notes</th></tr>
+<tr><td>Prescribe medication</td><td style="text-align:center">✔</td><td style="text-align:center">✘</td><td>Nurse med tab is a read + administer (MAR) view</td></tr>
+<tr><td>Administer / hold / refuse doses, PRN, infusions, countersign</td><td style="text-align:center">✔</td><td style="text-align:center">✔</td><td>Nursing core work</td></tr>
+<tr><td>Order labs &amp; imaging</td><td style="text-align:center">✔</td><td style="text-align:center">✘</td><td>No exceptions; nurses collect specimens</td></tr>
+<tr><td>Record diagnoses (+ amend)</td><td style="text-align:center">✔</td><td style="text-align:center">✘</td><td>ICD-10 coded</td></tr>
+<tr><td>Order investigations</td><td style="text-align:center">✔</td><td style="text-align:center">✘</td><td></td></tr>
+<tr><td>Create / cancel referrals</td><td style="text-align:center">✔</td><td style="text-align:center">✘</td><td></td></tr>
+<tr><td>ICU escalation — <i>raise</i></td><td style="text-align:center">✔</td><td style="text-align:center">✔</td><td>Nurse may raise; auto-evaluation also raises</td></tr>
+<tr><td>ICU escalation — <i>decide</i> (respond, assign bed, transfer, cancel)</td><td style="text-align:center">✔</td><td style="text-align:center">✘</td><td></td></tr>
+<tr><td>Disposition (discharge, admit, transfer…)</td><td style="text-align:center">✔</td><td style="text-align:center">✘</td><td>Hospital admin also excluded</td></tr>
+<tr><td>Triage / re-triage</td><td style="text-align:center">✘*</td><td style="text-align:center">✔*</td><td>*Only today's TRIAGE_NURSE (or charge-nurse authority); doctors read but don't author — except confirming an EMS field triage (§5.6)</td></tr>
+<tr><td>Vitals, nursing notes, beds, protocols, specimen collection, safety-incident reporting</td><td style="text-align:center">✔</td><td style="text-align:center">✔</td><td></td></tr>
+<tr><td>Refute an allergy / resolve a chronic condition</td><td style="text-align:center">✔</td><td style="text-align:center">✘</td><td>Recording either is nurse+doctor</td></tr>
+<tr><td>Doctor-only document types (e.g. discharge summary, death certificate)</td><td style="text-align:center">✔</td><td style="text-align:center">✘</td><td>Enforced per document type (§10.5)</td></tr>
+</table>
+
+<h2 class="sec"><span class="secno">2.4</span>Getting in: invitations, activation, login</h2>
+<div class="steps">
+<div class="step"><b>Admin creates the account.</b><p>A HOSPITAL_ADMIN (or SUPER_ADMIN) creates the user with role + designation. Accounts start <b>inactive</b>. (An admin may also supply a password directly — used for test fixtures.)</p></div>
+<div class="step"><b>Invitation is issued.</b><p>The user receives an activation link (email delivery configured per environment). The invitation is time-limited.</p></div>
+<div class="step"><b>User activates.</b><p>On <code>/activate</code> they set their password; the account flips to active. Expired invitations must be re-issued by the admin.</p></div>
+<div class="step"><b>Login.</b><p><code>/login</code> issues a JWT the web app sends on every request. An inactive or unknown account, or a wrong password, is rejected with a generic message (no username enumeration).</p></div>
+</div>
+<div class="co co-warn"><div class="co-t">Warning</div>
+<p>A freshly-created account that skips activation stays inactive and cannot log in — the most
+common “my new user can't log in” cause. Check the account's active flag first.</p></div>
+
+<h2 class="sec"><span class="secno">2.5</span>Zone scoping: why staff see only “their” patients</h2>
+<p>Doctors and nurses do not browse the whole hospital. Their working set is derived from the
+<b>active shift roster</b>:</p>
+<ul>
+<li>A <b>zone nurse / primary doctor</b> sees patients whose <code>currentEdZone</code> is among their shift's covered zones (primary + any additional zones).</li>
+<li><b>Today's triage nurse</b> sees the pre-triage queue (patients not yet placed in a zone).</li>
+<li><b>Cross-zone authority</b> (charge nurse, supervising doctor, admin oversight, READ_ONLY review) sees the full hospital board.</li>
+<li><b>Off-shift clinicians see an empty list.</b> Being employed is not the same as being on duty.</li>
+<li><span class="role r3">PARAMEDIC</span> and <span class="role r3">LAB_TECHNICIAN</span> get an empty general list by design — they have their own worklists.</li>
+</ul>
+<div class="co co-note"><div class="co-t">Note</div>
+<p>Zone scoping is a privacy control, not just a convenience filter: it prevents an off-duty or
+unrelated staff member from browsing patients they aren't treating. Reading a specific chart still
+works when a patient is directly under your care (or via oversight authority) — and emergency
+cross-hospital access has its own explicit, audited path (§14).</p></div>
+</div>

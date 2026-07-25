@@ -1,0 +1,726 @@
+<!-- APPENDIX A -->
+<div class="chapter">
+<span class="pgmark">PMK-APXA</span>
+<div class="ch-open"><div class="ch-num">A</div><h1>Appendix A — API Endpoint Inventory</h1><p class="ch-lede">Every REST endpoint, generated directly from the controllers. Verbs and paths are exact; authorization rules are described in the relevant chapters.</p></div>
+<p class="small muted">57 controllers · 450 endpoints.</p>
+<h4 style="margin-top:8pt;">ClinicalAlertController <span class="muted small">(alert)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/alerts/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/alerts/hospital/{hospitalId}/unacknowledged</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/alerts/hospital/{hospitalId}/all</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/alerts/hospital/{hospitalId}/critical</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/alerts/hospital/{hospitalId}/safety-overrides</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/alerts/{alertId}/acknowledge</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/alerts/{alertId}/safety-override/acknowledge</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/alerts/hospital/{hospitalId}/zone/{zone}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/alerts/doctor/{doctorId}</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">AuditController <span class="muted small">(audit)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/audit/hospital/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/audit/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/audit/hospital/{hospitalId}/export</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">AuthController <span class="muted small">(auth)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/auth/login</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/auth/refresh</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">BedController <span class="muted small">(bed)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/beds</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/beds/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>DELETE</b></td><td><code>/api/v1/beds/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/beds/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/beds/hospital/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/beds/hospital/{hospitalId}/zone/{zone}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/beds/hospital/{hospitalId}/zone/{zone}/occupancy</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/beds/hospital/{hospitalId}/zone/{zone}/available</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/beds/{id}/place</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/beds/{id}/transfer</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/beds/{id}/discharge</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/beds/{id}/mark-cleaned</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/beds/{id}/mark-out-of-service</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/beds/{id}/mark-available</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/beds/{id}/assign-device</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/beds/hospital/{hospitalId}/seed-defaults</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">ClinicalNoteController <span class="muted small">(clinical)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/clinical-notes</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/clinical-notes/{id}/supersede</code></td></tr>
+<tr><td style="width:16mm"><b>DELETE</b></td><td><code>/api/v1/clinical-notes/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/clinical-notes/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/clinical-notes/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/clinical-notes/visit/{visitId}/all</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/clinical-notes/visit/{visitId}/type/{type}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/clinical-notes/visit/{visitId}/type/{type}/latest</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">DiagnosisController <span class="muted small">(clinical)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/diagnoses</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/diagnoses/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/diagnoses/{id}/amend</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/diagnoses/{id}/history</code></td></tr>
+<tr><td style="width:16mm"><b>DELETE</b></td><td><code>/api/v1/diagnoses/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/diagnoses/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/diagnoses/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/diagnoses/visit/{visitId}/all</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/diagnoses/visit/{visitId}/type/{type}</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">InvestigationController <span class="muted small">(clinical)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/investigations</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/investigations/{id}/specimen-collected</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/investigations/{id}/in-progress</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/investigations/{id}/result</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/investigations/{id}/cancel</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/investigations/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/investigations/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/investigations/visit/{visitId}/all</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/investigations/visit/{visitId}/type/{type}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/investigations/visit/{visitId}/pending</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/investigations/doctor/me</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/investigations/hospital/{hospitalId}/imaging-worklist</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/investigations/{investigationId}/documents</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/investigations/{investigationId}/documents</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/investigations/{investigationId}/documents/{documentId}/download</code></td></tr>
+<tr><td style="width:16mm"><b>DELETE</b></td><td><code>/api/v1/investigations/{investigationId}/documents/{documentId}</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">ClinicalSignController <span class="muted small">(clinicalsigns)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/clinical-signs/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/clinical-signs/visit/{visitId}/current</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/clinical-signs/visit/{visitId}/sign/{signCode}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/clinical-signs</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">BreakTheGlassGovernanceController <span class="muted small">(consent)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/break-the-glass-events/patient/{patientId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/break-the-glass-events/hospital/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/break-the-glass-events/hospital/{hospitalId}/{eventId}/acknowledge</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">DataSharingConsentController <span class="muted small">(consent)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/data-sharing-consents/national-id/{nationalId}</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/data-sharing-consents/{id}/withdraw</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/data-sharing-consents/national-id/{nationalId}</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">InformedConsentController <span class="muted small">(consent)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/consents/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/consents/{id}/withdraw</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/consents/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/consents/{id}</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">ClinicalDocumentController <span class="muted small">(documentation)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/documents/create</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/documents/{id}/sign</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/documents/{id}/co-sign</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/documents/{id}/amend</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/documents/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/documents/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/documents/visit/{visitId}/discharge-summary</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/documents/visit/{visitId}/handover</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">EmsRunController <span class="muted small">(ems)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/ems/runs</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/ems/runs/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/ems/runs/{id}/interventions</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/ems/runs/{id}/field-triage</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/ems/runs/{id}/lights</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/ems/runs/{id}/reroute</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/ems/runs/{id}/preregister</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/ems/runs/{id}/confirm-arrival</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/ems/runs/{id}/acknowledge-arrival</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/ems/runs/{id}/transfer-of-care</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/ems/runs/{id}/cancel</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/ems/runs/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/ems/runs/{id}/pcr</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/ems/runs/mine</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/ems/hospital/{hospitalId}/inbound</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/ems/visits/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/ems/runs/{id}/patient-history</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/ems/destinations</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">FastTrackController <span class="muted small">(fasttrack)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/fast-track/activate</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/fast-track/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/fast-track/visit/{visitId}/recommendation</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/fast-track/hospital/{hospitalId}/active</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/fast-track/{id}/status</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/fast-track/{id}/ecg</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/fast-track/{id}/ct</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/fast-track/{id}/complete</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/fast-track/{id}/cancel</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/fast-track/{id}/acknowledge</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">ClinicalGovernanceController <span class="muted small">(governance)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/governance/policies</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/governance/policies/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/governance/policies/{id}/submit</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/governance/policies/{id}/approve</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/governance/policies/{id}/activate</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/governance/policies/{id}/suspend</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/governance/policies/{id}/reactivate</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/governance/policies/{id}/archive</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/governance/policies/hospital/{hospitalId}/active</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/governance/policies/hospital/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/governance/policies/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/governance/policies/{id}/history</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/governance/policies/{id}/audit</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">HandoverReportController <span class="muted small">(handover)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/handover/generate/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/handover/generate-bulk/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/handover/{id}/acknowledge</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/handover/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/handover/hospital/{hospitalId}/shift</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/handover/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/handover/{id}/pdf</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">HospitalController <span class="muted small">(hospital)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/hospitals</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/hospitals/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/hospitals/code/{code}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/hospitals</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/hospitals/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>DELETE</b></td><td><code>/api/v1/hospitals/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/hospitals/{id}/reactivate</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">HypoglycemiaController <span class="muted small">(hypoglycemia)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/hypoglycemia/check/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/hypoglycemia/{eventId}/treatment</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/hypoglycemia/{eventId}/repeat-glucose</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/hypoglycemia/{eventId}/resolve</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/hypoglycemia/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/hypoglycemia/hospital/{hospitalId}/active</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/hypoglycemia/hospital/{hospitalId}/glucose-due</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">IcdCodeController <span class="muted small">(icd)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/icd-codes/search</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/icd-codes</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/icd-codes/common</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">IcuEscalationController <span class="muted small">(icu)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/icu/request</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/icu/auto-evaluate/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/icu/{id}/notify-team</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/icu/{id}/response</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/icu/{id}/assign-bed</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/icu/{id}/transfer</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/icu/{id}/cancel</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/icu/hospital/{hospitalId}/active</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/icu/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/icu/hospital/{hospitalId}/capacity</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">InvitationController <span class="muted small">(invitation)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/users/invite</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/users/{id}/resend-invite</code></td></tr>
+<tr><td style="width:16mm"><b>DELETE</b></td><td><code>/api/v1/users/{id}/invite</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/auth/validate-token</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/auth/activate</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">IoTDeviceController <span class="muted small">(iot)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/devices</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/devices/self-register</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/iot/devices/mine</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/iot/devices/{deviceId}/latest-vitals</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/iot/devices/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/iot/devices/hospital/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/iot/devices/available/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/devices/{id}/regenerate-key</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/iot/devices/triage-monitors/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/devices/{id}/power-on</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/devices/{id}/power-off</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/monitoring/start</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/monitoring/start-for-visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/iot/monitoring/active-for-visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/monitoring/stop/{sessionId}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/monitoring/pause/{sessionId}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/monitoring/resume/{sessionId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/iot/monitoring/active/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/iot/monitoring/session/{sessionId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/iot/monitoring/history/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/iot/stream/latest/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/iot/stream/recent/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/iot/stream/history/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/iot/stream/session/{sessionId}</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">IoTStreamController <span class="muted small">(iot)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/stream/device-telemetry</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/stream/ingest</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/stream/heartbeat</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">RfidController <span class="muted small">(iot)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/rfid/tap</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/rfid/devices/{deviceId}/bind-mode</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/iot/rfid/open-visit</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/iot/rfid/replace-card</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/iot/rfid/devices/{deviceId}/assign-registrar</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/iot/rfid/devices/hospital/{hospitalId}</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">InfectionIsolationController <span class="muted small">(isolation)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/isolation/screen/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/isolation/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/isolation/hospital/{hospitalId}/active</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/isolation/{screeningId}/assign-room</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/isolation/{screeningId}/end</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/isolation/{screeningId}/notify-public-health</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/isolation/hospital/{hospitalId}/notifiable-diseases</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">LabOrderController <span class="muted small">(lab)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/lab/order</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/lab/{orderId}/collect-specimen</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/lab/{orderId}/acknowledge</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/lab/{orderId}/receive</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/lab/{orderId}/reject</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/lab/{orderId}/start-processing</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/lab/{orderId}/result</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab/{orderId}/panel-components</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/lab/{orderId}/result/panel</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/lab/{orderId}/acknowledge-critical</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/lab/{orderId}/cancel</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/lab/{orderId}/verify</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/lab/{orderId}/verify-reject</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/lab/{orderId}/release-without-verification</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab/hospital/{hospitalId}/awaiting-verification</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab/hospital/{hospitalId}/report/pdf</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab/hospital/{hospitalId}/report/csv</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab/hospital/{hospitalId}/patients</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/lab/{orderId}/documents</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab/{orderId}/documents</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab/{orderId}/documents/{documentId}/download</code></td></tr>
+<tr><td style="width:16mm"><b>DELETE</b></td><td><code>/api/v1/lab/{orderId}/documents/{documentId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab/hospital/{hospitalId}/inbox</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab/hospital/{hospitalId}/in-progress</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab/hospital/{hospitalId}/pending</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab/hospital/{hospitalId}/history</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab/hospital/{hospitalId}/critical</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab/hospital/{hospitalId}/stat</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">LabTestCatalogController <span class="muted small">(labcatalog)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab-catalog/search</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab-catalog/by-type/{type}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/lab-catalog/common</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">RwLocationController <span class="muted small">(location)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/locations/rw/provinces</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/locations/rw/districts</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/locations/rw/sectors</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/locations/rw/cells</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/locations/rw/villages</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">MedicationController <span class="muted small">(medication)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/medications</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/medications/{id}/administer</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/medications/{id}/countersign</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/medications/{id}/hold</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/medications/{id}/cancel</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/medications/{id}/refuse</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/medications/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/medications/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/medications/visit/{visitId}/all</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/medications/patient/{patientId}/history</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/medications/queue/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/medications/{id}/approve</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/medications/{id}/resume</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/medications/{id}/discontinue</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/medications/{id}/modify</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/medications/doses/{doseId}/administer</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/medications/doses/{doseId}/delay</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/medications/doses/{doseId}/refuse</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/medications/{id}/prn-dose</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/medications/{id}/infusion/start</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/medications/{id}/infusion/rate</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/medications/{id}/infusion/stop</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/medications/board/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/medications/visit/{visitId}/audit</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">MedicationSafetyController <span class="muted small">(medsafety)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/med-safety/validate</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/med-safety/{checkId}/override</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/med-safety/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/med-safety/formulary/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/med-safety/formulary/search</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/med-safety/formulary</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/med-safety/formulary/{id}</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">OfflineSyncController <span class="muted small">(offline)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/offline/sync</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/offline/conflict/{id}/resolve</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/offline/pending/{clientDeviceId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/offline/conflicts/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/offline/status/{hospitalId}</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">SystemHealthController <span class="muted small">(offline)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/system-health/check</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/system-health/{hospitalId}/latest</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/system-health/{hospitalId}/history</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">OverrideRegisterController <span class="muted small">(override)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/overrides/hospital/{hospitalId}</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">ClinicalPathwayController <span class="muted small">(pathway)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/pathways</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/pathways/{pathwayId}/steps</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/pathways/recommend/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/pathways/activate</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/pathways/visit/{visitId}/active</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/pathways/activation/{activationId}/progress</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/pathways/activation/{activationId}/step/{stepId}/complete</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/pathways/activation/{activationId}/step/{stepId}/skip</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/pathways/activation/{activationId}/complete</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/pathways/activation/{activationId}/abandon</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/pathways</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">CrossHospitalIdentityController <span class="muted small">(patient)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/patient-identity/safety-summary</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/patient-identity/deep-record</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/patient-identity/safety-summary-by-card</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/patient-identity/deep-record-by-card</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">PatientAllergyController <span class="muted small">(patient)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/patients/{patientId}/structured-allergies</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/patients/{patientId}/structured-allergies/history</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/patients/{patientId}/structured-allergies</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/patient-allergies/{allergyId}/refute</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">PatientChronicConditionController <span class="muted small">(patient)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/patients/{patientId}/structured-conditions</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/patients/{patientId}/structured-conditions/history</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/patients/{patientId}/structured-conditions</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/patient-chronic-conditions/{conditionId}/resolve</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">PatientController <span class="muted small">(patient)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/patients</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/patients/register</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/patients/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/patients/{id}/pregnancy-status</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/patients/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/patients/{id}/allergies</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/patients/{id}/chronic-conditions</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/patients/hospital/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/patients/hospital/{hospitalId}/search</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/patients/hospital/{hospitalId}/lookup</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/patients/registry/search</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/patients/{patientId}/open-visit-here</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">QualityMetricsController <span class="muted small">(quality)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/quality/hospital/{hospitalId}/realtime</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/quality/hospital/{hospitalId}/date/{date}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/quality/hospital/{hospitalId}/range</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/quality/hospital/{hospitalId}/trends</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/quality/hospital/{hospitalId}/export/csv</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/quality/hospital/{hospitalId}/compute/{date}</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">ReferralController <span class="muted small">(referral)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/referrals/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/referrals/{id}/respond</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/referrals/{id}/cancel</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/referrals/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/referrals/{id}</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">RegistrarReportsController <span class="muted small">(registrar)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/registrar-reports/hospital/{hospitalId}/intake-log</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/registrar-reports/hospital/{hospitalId}/intake-log/csv</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/registrar-reports/hospital/{hospitalId}/unidentified</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/registrar-reports/hospital/{hospitalId}/unidentified/csv</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/registrar-reports/hospital/{hospitalId}/census</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">MohReportController <span class="muted small">(reporting)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/moh-reports/generate</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/moh-reports/national/generate</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/moh-reports/national</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/moh-reports/{id}/submit</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/moh-reports/{id}/accept</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/moh-reports/{id}/reject</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/moh-reports/hospital/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/moh-reports/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/moh-reports/{id}/pdf</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">OperationalReportController <span class="muted small">(reporting)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/reports/operational/daily</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/reports/operational/shift-summary</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/reports/operational/period</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/reports/operational/my-activity</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/reports/operational/quality</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">DynamicRetriageController <span class="muted small">(retriage)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/retriage/overdue/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/retriage/waiting-exceeded/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/retriage/status/{visitId}</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">SafetyIncidentController <span class="muted small">(safety)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/safety/incidents</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/safety/incidents/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/safety/incidents/{id}/investigate</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/safety/incidents/{id}/root-cause</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/safety/incidents/{id}/corrective-action</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/safety/incidents/{id}/complete-action</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/safety/incidents/{id}/close</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/safety/incidents/hospital/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/safety/incidents/hospital/{hospitalId}/open</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/safety/incidents/hospital/{hospitalId}/stats</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/safety/incidents/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/safety/incidents/hospital/{hospitalId}/export/csv</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/safety/incidents/{id}/pdf</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">SepsisController <span class="muted small">(sepsis)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/sepsis/screen/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/sepsis/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/sepsis/visit/{visitId}/lab-suggestions</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/sepsis/visit/{visitId}/active</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/sepsis/bundle/{screeningId}/start</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/sepsis/bundle/{screeningId}/item/{item}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/sepsis/hospital/{hospitalId}/active</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">ChargeNurseDelegationController <span class="muted small">(shift)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/delegations/hospital/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/delegations/{delegationId}/revoke</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/delegations/hospital/{hospitalId}/active</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/delegations/me/issued</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/delegations/me/received</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">ShiftAssignmentController <span class="muted small">(shift)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/hospital/{hospitalId}/assign</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/hospital/{hospitalId}/current</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/hospital/{hospitalId}/zone/{zone}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/hospital/{hospitalId}/doctors-on-duty</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/current-period</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/me/current</code></td></tr>
+<tr><td style="width:16mm"><b>DELETE</b></td><td><code>/api/v1/shifts/{assignmentId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/hospital/{hospitalId}/date/{date}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/user/{userId}</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/shifts/{assignmentId}</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/shifts/{assignmentId}/end</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/hospital/{hospitalId}/shift-lead</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/{assignmentId}/shift-lead</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/hospital/{hospitalId}/copy-week</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/hospital/{hospitalId}/apply-template</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">ShiftSwapController <span class="muted small">(shift)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/swaps</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/swaps/{swapId}/partner-accept</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/swaps/{swapId}/partner-reject</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/swaps/{swapId}/cancel</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/swaps/{swapId}/charge-approve</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/swaps/{swapId}/charge-reject</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/swaps/me/open</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/swaps/me/history</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/swaps/hospital/{hospitalId}/charge-queue</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">ShiftTemplateController <span class="muted small">(shift)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shift-templates/hospital/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shift-templates/{templateId}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shift-templates/hospital/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/shift-templates/{templateId}</code></td></tr>
+<tr><td style="width:16mm"><b>DELETE</b></td><td><code>/api/v1/shift-templates/{templateId}</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">StaffLeaveController <span class="muted small">(shift)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/leaves</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/leaves/{leaveId}/approve</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/leaves/{leaveId}/reject</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/shifts/leaves/{leaveId}/cancel</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/leaves/hospital/{hospitalId}/pending</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/leaves/hospital/{hospitalId}/overlapping</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/leaves/user/{userId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/shifts/leaves/me</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">DirectResusController <span class="muted small">(triage)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/admissions/direct-resus</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/admissions/{visitId}/confirm-arrival</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/patients/{patientId}/resolve-identity</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">TriageController <span class="muted small">(triage)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/triage</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/triage/visit/{visitId}/history</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/triage/visit/{visitId}/latest</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/triage/hospital/{hospitalId}/awaiting-ed-triage</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/triage/visit/{visitId}/confirm-field</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">UserController <span class="muted small">(user)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/users</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/users/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/users/hospital/{hospitalId}</code></td></tr>
+<tr><td style="width:16mm"><b>DELETE</b></td><td><code>/api/v1/users/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/users/{id}/reactivate</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/users/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/users/me/profile</code></td></tr>
+<tr><td style="width:16mm"><b>PUT</b></td><td><code>/api/v1/users/me/password</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/users/{id}/designation</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/users/designations</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">VisitController <span class="muted small">(visit)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/visits</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/visits/{id}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/visits/hospital/{hospitalId}/active</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/visits/hospital/{hospitalId}/active/mine</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/visits/patient/{patientId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/visits/hospital/{hospitalId}/status/{status}</code></td></tr>
+<tr><td style="width:16mm"><b>PATCH</b></td><td><code>/api/v1/visits/{id}/status</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/visits/hospital/{hospitalId}/zone/{zone}</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/visits/{id}/disposition</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">VitalSignsController <span class="muted small">(vital)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/vitals</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/vitals/visit/{visitId}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/vitals/visit/{visitId}/latest</code></td></tr>
+</table>
+<h4 style="margin-top:8pt;">ZoneTransferController <span class="muted small">(zonetransfer)</span></h4>
+<table class="compact">
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/zone-transfers/{transferId}/accept</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/zone-transfers/{transferId}/decline</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/zone-transfers/{transferId}/resus-in-place</code></td></tr>
+<tr><td style="width:16mm"><b>POST</b></td><td><code>/api/v1/zone-transfers/{transferId}/cancel</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/zone-transfers/hospital/{hospitalId}/pending</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/zone-transfers/hospital/{hospitalId}/pending/zone/{zone}</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/zone-transfers/visit/{visitId}/pending</code></td></tr>
+<tr><td style="width:16mm"><b>GET</b></td><td><code>/api/v1/zone-transfers/visit/{visitId}/history</code></td></tr>
+</table>
+</div>
+<!-- APPENDIX B -->
+<div class="chapter">
+<span class="pgmark">PMK-APXB</span>
+<div class="ch-open"><div class="ch-num">B</div><h1>Appendix B — Enum &amp; Lifecycle Inventory</h1><p class="ch-lede">Every enumerated vocabulary in the backend, generated from source. These are the exact allowed values for statuses, types and categories.</p></div>
+<p class="small muted">91 enums.</p>
+<table class="compact">
+<tr><th style="width:44mm">Enum</th><th>Values</th></tr>
+<tr><td><code>AccountStatus</code></td><td class="small">PENDING_ACTIVATION · ACTIVE</td></tr>
+<tr><td><code>AlertCategory</code></td><td class="small">CLINICAL · OPERATIONAL</td></tr>
+<tr><td><code>AlertSeverity</code></td><td class="small">CRITICAL · HIGH · MEDIUM · LOW</td></tr>
+<tr><td><code>AlertType</code></td><td class="small">TEWS_CRITICAL · TEWS_ESCALATION · VITAL_SIGN_ABNORMAL · RETRIAGE_REQUIRED · WAITING_TIME_EXCEEDED · DETERIORATION_DETECTED · SEPSIS_SCREENING · PEDIATRIC_SAFETY · REASSESSMENT_DUE · CRITICAL_LAB_RESULT · IOT_DEVICE_DISCONNECTED · IOT_DEVICE_LOW_BATTERY · IOT_SIGNAL_QUALITY_DEGRADED · IOT_AUTO_RETRIAGE · DOCTOR_NOTIFICATION · DOCTOR_ESCALATION · SURGE_WARNING · INVESTIGATION_RESULTED · MEDICATION_SAFETY_BLOCK · MEDICATION_SAFETY_WARNING · STAT_MEDICATION_OVERDUE · URGENT_MEDICATION_OVERDUE · MEDICATION_DOSE_OVERDUE · MEDICATION_DOSE_MISSED · MEDICATION_APPROVAL_REQUIRED · MEDICATION_EMERGENCY_OVERRIDE · STAT_LAB_OVERDUE · URGENT_LAB_OVERDUE · ROUTINE_LAB_OVERDUE · CRITICAL_VALUE_UNACKNOWLEDGED · LAB_NOT_RECEIVED · LAB_SPECIMEN_REJECTED · LAB_VERIFICATION_OVERRIDDEN · EMS_PRE_ARRIVAL · EMS_ARRIVED · EMS_HANDOVER_PENDING · FIELD_TRIAGED_AWAITING_REVIEW · SYSTEM_OFFLINE · SYSTEM_ONLINE · SAFETY_INCIDENT_CRITICAL · SAFETY_FOLLOWUP_OVERDUE · ICU_ESCALATION_REQUESTED · ICU_BED_UNAVAILABLE · DIRECT_RESUS_ADMISSION · RESUS_OVERFLOW · IDENTITY_UNRESOLVED · IDENTITY_UNRESOLVED_ESCALATED · BED_AVAILABLE · SEPSIS_BUNDLE_NOT_STARTED · SEPSIS_BUNDLE_OVERDUE · FAST_TRACK_ACTIVATED · FAST_TRACK_SLA_BREACH · HYPOGLYCEMIA_CRITICAL · HYPOGLYCEMIA_RECHECK_OVERDUE · GLUCOSE_MEASUREMENT_DUE · GLUCOSE_MEASUREMENT_OVERDUE · ISOLATION_REQUIRED · ISOLATION_PLACEMENT_OVERDUE · NOTIFIABLE_DISEASE · ISOLATION_SCREENING_REQUIRED · PATHWAY_ACTIVATED · PATHWAY_STEP_OVERDUE · NEW_LAB_ORDER · LAB_ORDER_CANCELLED · NEW_IMAGING_ORDER · EMS_ARRIVAL_ACKNOWLEDGED · EMS_HANDOVER_COMPLETE · EMS_FIELD_TRIAGE_CONFIRMED</td></tr>
+<tr><td><code>AllergySeverity</code></td><td class="small">MILD · MODERATE · SEVERE · ANAPHYLAXIS · UNKNOWN</td></tr>
+<tr><td><code>AllergyVerificationStatus</code></td><td class="small">PATIENT_REPORTED · CONFIRMED · REFUTED</td></tr>
+<tr><td><code>ArrivalMode</code></td><td class="small">WALK_IN · AMBULANCE · REFERRAL · POLICE · HELICOPTER</td></tr>
+<tr><td><code>AvpuScore</code></td><td class="small">ALERT · CONFUSED · VERBAL · PAIN · UNRESPONSIVE</td></tr>
+<tr><td><code>BedStatus</code></td><td class="small">AVAILABLE · OCCUPIED · CLEANING · OUT_OF_SERVICE</td></tr>
+<tr><td><code>ChronicConditionStatus</code></td><td class="small">ACTIVE · CONTROLLED · IN_REMISSION · RESOLVED</td></tr>
+<tr><td><code>ClinicalDocumentType</code></td><td class="small">INITIAL_ASSESSMENT · PROGRESS_NOTE · PROCEDURE_NOTE · CONSULTATION_NOTE · DISCHARGE_SUMMARY · TRANSFER_SUMMARY · HANDOVER_DOCUMENT · DEATH_CERTIFICATE · OPERATIVE_NOTE · NURSING_ASSESSMENT · TRIAGE_NARRATIVE · INFORMED_CONSENT</td></tr>
+<tr><td><code>ClinicalSignCategory</code></td><td class="small">EMERGENCY · PEDIATRIC_EMERGENCY · MSAT_VU · MSAT_URG</td></tr>
+<tr><td><code>ClinicalSignStatus</code></td><td class="small">PRESENT · ABSENT · IMPROVING · WORSENING</td></tr>
+<tr><td><code>ConsentGrantor</code></td><td class="small">PATIENT · PARENT_OR_GUARDIAN · NEXT_OF_KIN · LEGAL_SURROGATE · COURT_ORDER</td></tr>
+<tr><td><code>ConsentStatus</code></td><td class="small">GIVEN · REFUSED</td></tr>
+<tr><td><code>ConsentType</code></td><td class="small">PROCEDURE · SURGERY · ANAESTHESIA · BLOOD_TRANSFUSION · HIV_TEST · SEDATION · IMAGING_CONTRAST · RESEARCH_PARTICIPATION · PHOTOGRAPHY</td></tr>
+<tr><td><code>CriticalContactMethod</code></td><td class="small">PHONE · IN_PERSON</td></tr>
+<tr><td><code>CriticalValueType</code></td><td class="small">POTASSIUM_HIGH · POTASSIUM_LOW · SODIUM_HIGH · SODIUM_LOW · GLUCOSE_HIGH · GLUCOSE_LOW · HEMOGLOBIN_LOW · PLATELET_LOW · WBC_HIGH · WBC_LOW · CREATININE_HIGH · LACTATE_HIGH · TROPONIN_HIGH · INR_HIGH · PH_LOW · PH_HIGH · PO2_LOW · PCO2_HIGH · BILIRUBIN_HIGH · MALARIA_POSITIVE · OTHER_CRITICAL</td></tr>
+<tr><td><code>DataSharingConsentStatus</code></td><td class="small">GRANTED</td></tr>
+<tr><td><code>Designation</code></td><td class="small">ED_HEAD · CONSULTANT · SENIOR_MEDICAL_OFFICER · MEDICAL_OFFICER · RESIDENT · INTERN · CHARGE_NURSE · SENIOR_NURSE · STAFF_NURSE · STUDENT_NURSE · HEAD_LAB_TECHNICIAN · LAB_TECHNICIAN · SENIOR_REGISTRAR · REGISTRAR · SENIOR_PARAMEDIC · PARAMEDIC · UNSPECIFIED</td></tr>
+<tr><td><code>DeteriorationPattern</code></td><td class="small">SINGLE_VITAL_CRITICAL · MULTI_VITAL_TREND · RAPID_DECLINE · SUSTAINED_ABNORMALITY · SPO2_OVERRIDE · SEPSIS_PATTERN · RESPIRATORY_FAILURE_PATTERN · HEMODYNAMIC_INSTABILITY · DEVICE_DISCONNECTED</td></tr>
+<tr><td><code>DeviceStatus</code></td><td class="small">REGISTERED · ONLINE · OFFLINE · MONITORING · ERROR · DECOMMISSIONED</td></tr>
+<tr><td><code>DeviceType</code></td><td class="small">ESP32_MONITOR · PULSE_OXIMETER · ECG_MONITOR · BP_MONITOR · TEMPERATURE_PROBE · GLUCOMETER · AMBULANCE_MONITOR · RFID_READER · PARAMEDIC_MONITOR · OTHER</td></tr>
+<tr><td><code>DiagnosisType</code></td><td class="small">PROVISIONAL · CONFIRMED · DIFFERENTIAL · WORKING</td></tr>
+<tr><td><code>DispositionType</code></td><td class="small">DISCHARGED_HOME · ADMITTED_TO_WARD · ICU_ADMISSION · TRANSFERRED · LEFT_AGAINST_MEDICAL_ADVICE · LEFT_WITHOUT_BEING_SEEN</td></tr>
+<tr><td><code>DoseKind</code></td><td class="small">ONE_TIME_DOSE · SCHEDULED_DOSE · PRN_DOSE · INFUSION_START · INFUSION_RATE_CHANGE · INFUSION_STOP</td></tr>
+<tr><td><code>DoseStatus</code></td><td class="small">DUE · GIVEN · REFUSED · MISSED · CANCELLED</td></tr>
+<tr><td><code>EdZone</code></td><td class="small">RESUS · ACUTE · GENERAL · AMBULATORY · TRIAGE · OBSERVATION · ISOLATION · PEDIATRIC · NEONATAL</td></tr>
+<tr><td><code>EmsInterventionType</code></td><td class="small">OXYGEN · IV_ACCESS · FLUID · MEDICATION · DEFIBRILLATION · AIRWAY · IMMOBILISATION · SPLINTING · TOURNIQUET · CPR · OTHER</td></tr>
+<tr><td><code>EmsRunStatus</code></td><td class="small">DISPATCHED · EN_ROUTE · ARRIVED · HANDED_OFF</td></tr>
+<tr><td><code>EmsService</code></td><td class="small">SAMU · HOSPITAL · PRIVATE</td></tr>
+<tr><td><code>FastTrackStatus</code></td><td class="small">ACTIVATED · ECG_ORDERED · ECG_COMPLETED · CT_ORDERED · CT_COMPLETED · THROMBOLYSIS_CONSIDERED · INTERVENTION_STARTED · TRANSFERRED_FOR_PCI · COMPLETED</td></tr>
+<tr><td><code>FastTrackType</code></td><td class="small">STROKE_SUSPECTED · STEMI_SUSPECTED · NSTEMI_SUSPECTED</td></tr>
+<tr><td><code>Gender</code></td><td class="small">MALE · FEMALE</td></tr>
+<tr><td><code>GlucoseUnit</code></td><td class="small">MMOL_L · MG_DL</td></tr>
+<tr><td><code>HandoverReportType</code></td><td class="small">SHIFT_HANDOVER · WARD_TRANSFER · DISCHARGE_SUMMARY · ICU_TRANSFER</td></tr>
+<tr><td><code>HypoglycemiaSeverity</code></td><td class="small">NONE · PENDING_CHECK · NORMAL · MILD · MODERATE · SEVERE</td></tr>
+<tr><td><code>IcuEscalationStatus</code></td><td class="small">REQUESTED · ICU_NOTIFIED · ICU_ACCEPTED · ICU_DECLINED · TRANSFERRED_TO_ICU · STABILIZING</td></tr>
+<tr><td><code>IcuTriggerType</code></td><td class="small">HEMODYNAMIC_INSTABILITY · RESPIRATORY_FAILURE · DECREASED_CONSCIOUSNESS · SEPTIC_SHOCK · POST_CARDIAC_ARREST · STATUS_EPILEPTICUS · MASSIVE_HEMORRHAGE · MULTI_ORGAN_DYSFUNCTION · POST_OPERATIVE</td></tr>
+<tr><td><code>IncidentSeverity</code></td><td class="small">NEAR_MISS · NO_HARM · MILD_HARM · MODERATE_HARM · SEVERE_HARM</td></tr>
+<tr><td><code>IncidentStatus</code></td><td class="small">REPORTED · UNDER_REVIEW · INVESTIGATION_STARTED · ROOT_CAUSE_IDENTIFIED · CORRECTIVE_ACTION_PLANNED · CORRECTIVE_ACTION_IMPLEMENTED</td></tr>
+<tr><td><code>IncidentType</code></td><td class="small">MEDICATION_ERROR · DIAGNOSTIC_ERROR · DELAYED_TREATMENT · WRONG_PATIENT · FALL · EQUIPMENT_FAILURE · COMMUNICATION_FAILURE · DOCUMENTATION_ERROR · TRIAGE_ERROR · MISSED_DIAGNOSIS · ALLERGIC_REACTION · PROCEDURAL_COMPLICATION · BLOOD_TRANSFUSION_ERROR · INFECTION_RELATED · PATIENT_IDENTIFICATION_ERROR</td></tr>
+<tr><td><code>InfectionRiskLevel</code></td><td class="small">CONFIRMED · HIGH_RISK · MODERATE_RISK · LOW_RISK</td></tr>
+<tr><td><code>InvestigationStatus</code></td><td class="small">ORDERED · SPECIMEN_COLLECTED · IN_PROGRESS · RESULTED · CANCELLED</td></tr>
+<tr><td><code>InvestigationType</code></td><td class="small">LABORATORY · RADIOLOGY · ECG · ULTRASOUND · CT_SCAN · MRI · XRAY · BLOOD_GAS · URINALYSIS · RAPID_TEST · POINT_OF_CARE · OTHER</td></tr>
+<tr><td><code>IsolationType</code></td><td class="small">AIRBORNE · DROPLET · CONTACT · STRICT</td></tr>
+<tr><td><code>LabOrderStatus</code></td><td class="small">ORDERED · SPECIMEN_COLLECTED · RECEIVED_BY_LAB · PROCESSING · AWAITING_VERIFICATION · RESULTED · REJECTED</td></tr>
+<tr><td><code>LabPriority</code></td><td class="small">STAT · URGENT · ROUTINE</td></tr>
+<tr><td><code>LeaveStatus</code></td><td class="small">REQUESTED · APPROVED · REJECTED · CANCELLED</td></tr>
+<tr><td><code>LeaveType</code></td><td class="small">ANNUAL · SICK · MATERNITY · BEREAVEMENT · COMPASSIONATE · STUDY · OTHER</td></tr>
+<tr><td><code>MatchType</code></td><td class="small">NATIONAL_ID · PASSPORT · BIRTH_CERTIFICATE · MRN · PHONE_AND_DOB · PHONE · GUARDIAN_NATIONAL_ID · GUARDIAN_PHONE</td></tr>
+<tr><td><code>MedicationPriority</code></td><td class="small">STAT · URGENT · ROUTINE</td></tr>
+<tr><td><code>MedicationProductType</code></td><td class="small">DRUG · BLOOD_PRODUCT · IV_FLUID · OTHER</td></tr>
+<tr><td><code>MedicationRoute</code></td><td class="small">PO · IV · IM · SC · SL · PR · INH · NEB · TOP · NASAL · OPHTHALMIC · OTIC · ETT · IO · OTHER</td></tr>
+<tr><td><code>MedicationStatus</code></td><td class="small">PENDING_APPROVAL · PRESCRIBED · ADMINISTERED · HELD · REFUSED · CANCELLED · COMPLETED · DISCONTINUED</td></tr>
+<tr><td><code>MetricPeriod</code></td><td class="small">DAILY · WEEKLY · MONTHLY · QUARTERLY</td></tr>
+<tr><td><code>MobilityStatus</code></td><td class="small">WALKING · WITH_HELP · STRETCHER</td></tr>
+<tr><td><code>MohReportType</code></td><td class="small">DAILY_SUMMARY · WEEKLY_SURVEILLANCE · MONTHLY_STATISTICS · QUARTERLY_REVIEW · ANNUAL_REPORT · OUTBREAK_NOTIFICATION</td></tr>
+<tr><td><code>MonitoringState</code></td><td class="small">NOT_STARTED · STARTING · LIVE · DEGRADED · STALLED · PAUSED · DISCONNECTED · ENDED</td></tr>
+<tr><td><code>NoteType</code></td><td class="small">PHYSICAL_FINDINGS · PROGRESS_NOTE · NURSING_NOTE · DOCTOR_NOTE · TRIAGE_NOTE · HISTORY_OF_PRESENTING_COMPLAINT · PAST_MEDICAL_HISTORY · SOCIAL_HISTORY · FAMILY_HISTORY · REVIEW_OF_SYSTEMS · ALLERGIES · CURRENT_MEDICATIONS · TREATMENT_PLAN · DISCHARGE_SUMMARY · HANDOVER</td></tr>
+<tr><td><code>NotifiableDisease</code></td><td class="small">TUBERCULOSIS · CHOLERA · MEASLES · EBOLA · MARBURG · COVID_19 · MENINGOCOCCAL · YELLOW_FEVER · RABIES · PLAGUE · TYPHOID · MALARIA_SEVERE · DENGUE · HEPATITIS_A · HEPATITIS_B · HEPATITIS_E · HIV_NEW_DIAGNOSIS · MPOX · AVIAN_INFLUENZA · ANTHRAX</td></tr>
+<tr><td><code>PathwayActivationStatus</code></td><td class="small">ACTIVE · COMPLETED · ABANDONED</td></tr>
+<tr><td><code>PathwayCategory</code></td><td class="small">MALARIA · TRAUMA · RESPIRATORY · CARDIAC · NEUROLOGICAL · OBSTETRIC · PEDIATRIC · INFECTIOUS_DISEASE · SURGICAL · POISONING · BURNS · SNAKEBITE</td></tr>
+<tr><td><code>PolicyStatus</code></td><td class="small">DRAFT</td></tr>
+<tr><td><code>PolicyType</code></td><td class="small">TRIAGE_RULE · DRUG_PROTOCOL · CLINICAL_GUIDELINE · INFECTION_CONTROL · STAFFING_REQUIREMENT · EQUIPMENT_PROTOCOL · QUALITY_STANDARD · CONSENT_FORM · DISCHARGE_CRITERIA</td></tr>
+<tr><td><code>PregnancyStatus</code></td><td class="small">PREGNANT · BREASTFEEDING · POSSIBLY_PREGNANT · NOT_PREGNANT · NOT_APPLICABLE</td></tr>
+<tr><td><code>PrescriptionType</code></td><td class="small">ONE_TIME · SCHEDULED · PRN · CONTINUOUS</td></tr>
+<tr><td><code>ReferralStatus</code></td><td class="small">REQUESTED · ACCEPTED · DECLINED · COMPLETED</td></tr>
+<tr><td><code>ReferralType</code></td><td class="small">INTERNAL_CONSULT · EXTERNAL_REFERRAL</td></tr>
+<tr><td><code>ReferralUrgency</code></td><td class="small">ROUTINE · URGENT</td></tr>
+<tr><td><code>ReportLevel</code></td><td class="small">HOSPITAL</td></tr>
+<tr><td><code>ReportStatus</code></td><td class="small">DRAFT</td></tr>
+<tr><td><code>Role</code></td><td class="small">SUPER_ADMIN · HOSPITAL_ADMIN · DOCTOR · NURSE · REGISTRAR · PARAMEDIC · LAB_TECHNICIAN</td></tr>
+<tr><td><code>SepsisBundleItem</code></td><td class="small">BLOOD_CULTURE_OBTAINED · BROAD_SPECTRUM_ANTIBIOTICS · IV_CRYSTALLOID_BOLUS · LACTATE_MEASURED · VASOPRESSORS_IF_NEEDED</td></tr>
+<tr><td><code>SepsisStatus</code></td><td class="small">NO_SEPSIS · SIRS_POSITIVE · SEPSIS_SUSPECTED · SEVERE_SEPSIS</td></tr>
+<tr><td><code>ShiftFunction</code></td><td class="small">CHARGE_NURSE · TRIAGE_NURSE · ZONE_NURSE · PRIMARY_DOCTOR · SUPERVISING_DOCTOR · RESIDENT</td></tr>
+<tr><td><code>ShiftPeriod</code></td><td class="small">DAY</td></tr>
+<tr><td><code>SignalQuality</code></td><td class="small">GOOD · ACCEPTABLE · POOR · INVALID</td></tr>
+<tr><td><code>SpecimenRejectionReason</code></td><td class="small">HAEMOLYSED · CLOTTED · INSUFFICIENT_VOLUME · MISLABELLED · WRONG_CONTAINER · EXPIRED · OTHER</td></tr>
+<tr><td><code>SwapStatus</code></td><td class="small">REQUESTED · PENDING_PARTNER_ACCEPT · PENDING_CHARGE_APPROVAL · APPROVED · REJECTED · CANCELLED</td></tr>
+<tr><td><code>SyncOperationType</code></td><td class="small">CREATE</td></tr>
+<tr><td><code>SyncStatus</code></td><td class="small">PENDING · SYNCED · CONFLICT</td></tr>
+<tr><td><code>TransportMode</code></td><td class="small">AMBULANCE_SAMU · HOSPITAL_AMBULANCE · PRIVATE_VEHICLE · HELICOPTER</td></tr>
+<tr><td><code>TraumaStatus</code></td><td class="small">NO_TRAUMA · TRAUMA</td></tr>
+<tr><td><code>TrendStatus</code></td><td class="small">WORSENING · STABLE · IMPROVING</td></tr>
+<tr><td><code>TriageCategory</code></td><td class="small">RED · ORANGE · YELLOW · GREEN · BLUE</td></tr>
+<tr><td><code>VisitStatus</code></td><td class="small">REGISTERED · AWAITING_TRIAGE · TRIAGED · AWAITING_ASSESSMENT · UNDER_ASSESSMENT · UNDER_TREATMENT · UNDER_OBSERVATION · PENDING_DISPOSITION · DISCHARGED · ADMITTED · TRANSFERRED · ICU_ADMITTED · LEFT_WITHOUT_BEING_SEEN</td></tr>
+<tr><td><code>VitalGateComparator</code></td><td class="small">GTE · LTE</td></tr>
+<tr><td><code>VitalGateParameter</code></td><td class="small">SYSTOLIC_BP · HEART_RATE · RESPIRATORY_RATE · SPO2 · TEMPERATURE · PAIN_SCORE</td></tr>
+<tr><td><code>VitalSource</code></td><td class="small">MANUAL_ENTRY · IOT_DEVICE · AMBULANCE_MONITOR</td></tr>
+<tr><td><code>ZoneTransferStatus</code></td><td class="small">PENDING_ACCEPT · ACCEPTED · DECLINED · RESUS_IN_PLACE</td></tr>
+</table></div>

@@ -1,0 +1,122 @@
+<!-- ======================= CHAPTER 11 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH11</span>
+<div class="ch-open">
+  <div class="ch-num">11</div>
+  <h1>Escalation &amp; Movement</h1>
+  <p class="ch-lede">Patients move — up in acuity (ICU), across zones, out to other facilities, and
+  between shifts. Every movement has an owner, an acceptance step, and a paper trail.</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>ICU escalation: raise vs. decide</li><li>Referrals</li><li>Zone transfers &amp; “resus in place”</li>
+  <li>Handover reports and the 06:30/18:30 automation</li><li>The full EMS run lifecycle</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">11.1</span>ICU escalation</h2>
+<div class="steps">
+<div class="step"><b>Raise.</b><p><span class="role r2">NURSE</span> or <span class="role">DOCTOR</span> may raise an
+escalation (trigger type + clinical context); the continuous-monitoring engine can also auto-evaluate.
+<code>ICU_ESCALATION_REQUESTED</code> (time-critical) pages decision-makers.</p></div>
+<div class="step"><b>Decide.</b><p>Only a <span class="role">DOCTOR</span> responds: accept (assign ICU bed,
+transfer) or decline with reason. Nurses deliberately cannot decide — the ratified split (§2.3).</p></div>
+<div class="step"><b>No bed?</b><p><code>ICU_BED_UNAVAILABLE</code> (time-critical) keeps the problem loud
+until placement or explicit standdown.</p></div>
+</div>
+
+<h2 class="sec"><span class="secno">11.2</span>Referrals</h2>
+<p><span class="role">DOCTOR</span>-only to create or cancel. A referral carries type, urgency and a
+mandatory reason; its status tracks the receiving side. Referrals appear in handover reports and the
+patient's movement history.</p>
+
+<h2 class="sec"><span class="secno">11.3</span>Zone transfers</h2>
+<p>Moving a patient between ED zones is a <b>request, not a teleport</b>:</p>
+<div class="flow">
+  <div class="fnode start">PENDING_ACCEPT<div class="sub">requested (or auto, from re-triage)</div></div>
+  <div class="farrow">→</div>
+  <div class="fnode end">ACCEPTED<div class="sub">zone + primary clinician change <b>now</b></div></div>
+  <div class="farrow">or</div>
+  <div class="fnode bad">DECLINED<div class="sub">reason; patient stays</div></div>
+  <div class="farrow">or</div>
+  <div class="fnode warn">RESUS_IN_PLACE<div class="sub">care team changes, zone doesn't</div></div>
+  <div class="farrow">or</div>
+  <div class="fnode">CANCELLED</div>
+</div>
+<ul>
+<li>The safety invariant: <code>currentEdZone</code> and the primary clinician change <b>only on acceptance</b> — nobody is reassigned without a human on the receiving end saying yes.</li>
+<li>Duplicate requests don't stack: a pending transfer is upgraded in place only if the new destination is <i>higher</i> severity; otherwise the existing request stands.</li>
+<li><b>Resus-in-place</b> handles the district-hospital reality of a single resus bay: the resus team takes clinical ownership while the patient physically stays — “physically here, clinically there.”</li>
+</ul>
+
+<h2 class="sec"><span class="secno">11.4</span>Handover reports</h2>
+<ul>
+<li>A handover report is an auto-compiled snapshot of ~18 sections: demographics, complaint, triage summary, vitals trend, orders and results, diagnoses, treatments, active alerts, outstanding tasks, plan, timeline, EMS/pre-hospital MIST, the safety-engine states (sepsis/fast-track/ICU/hypoglycemia/pathways/red-flag signs), procedures, and the medication audit.</li>
+<li>Types: shift handover, ward transfer, discharge summary, ICU transfer, inter-hospital transfer.</li>
+<li><b>Automation:</b> at <code>06:30</code> and <code>18:30</code> (Kigali time — 30 minutes before shift change) the scheduler generates bulk shift-handover reports for every active hospital. Reports stack rather than mutate: each shift gets its own snapshot.</li>
+<li>The receiving clinician <b>acknowledges</b> the report (name + time recorded). A PDF export exists for printing into paper workflows.</li>
+</ul>
+
+<h2 class="sec"><span class="secno">11.5</span>The EMS run, end to end</h2>
+<div class="flow">
+  <div class="fnode start">DISPATCHED</div><div class="farrow">→</div>
+  <div class="fnode">EN_ROUTE<div class="sub">pre-registration + pre-arrival alert</div></div><div class="farrow">→</div>
+  <div class="fnode">ARRIVED<div class="sub">acuity split + re-triage clock</div></div><div class="farrow">→</div>
+  <div class="fnode end">HANDED_OFF<div class="sub">attested transfer of care</div></div>
+</div>
+<table class="compact">
+<tr><th>Rule</th><th>Detail</th></tr>
+<tr><td>Field triage uses ED engines</td><td>Same TEWS + decision ladder; <b>GCS ≤ 8 forces RED</b>; a recompute that lowers the category requires explicit acknowledgment of the downgrade</td></tr>
+<tr><td>Lights &amp; sirens</td><td>Escalate the pre-arrival alert to CRITICAL/RESUS; clearing lights never downgrades an alert</td></tr>
+<tr><td>Pre-registration</td><td>Only while dispatched/en-route; placeholder patient if unidentified (age → approximate DOB)</td></tr>
+<tr><td>Arrival</td><td>Only from EN_ROUTE (“send the pre-arrival first”); stamps the door clock; RED/ORANGE skip the queue into a treatment zone, YELLOW/GREEN queue normally; uncategorized with lights → presumptive RESUS placement <i>without</i> fabricating a category</td></tr>
+<tr><td>Re-triage clocks</td><td>RED <code>5 min</code> · routine <code>15 min</code> · uncategorized <code>2 min</code> — monitored every minute; unmet → escalating alerts until a real triage record exists</td></tr>
+<tr><td>Handover</td><td>ED nurse/doctor only; a paramedic can never accept their own; writes an immutable attested handover note; &gt; <code>10 min</code> arrived-but-unaccepted → <code>EMS_HANDOVER_PENDING</code></td></tr>
+<tr><td>Reroute</td><td>Only pre-arrival; blocked once an identified patient is pre-registered at a hospital; placeholder reroutes stand the old ED down and announce to the new one</td></tr>
+<tr><td>Cancel</td><td>Any time before handoff</td></tr>
+<tr><td>Privacy</td><td>Paramedics see only their own runs; hospital staff see only inbound-to-their-zones</td></tr>
+</table>
+</div>
+
+<!-- ======================= CHAPTER 12 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH12</span>
+<div class="ch-open">
+  <div class="ch-num">12</div>
+  <h1>Beds &amp; Zones</h1>
+  <p class="ch-lede">Beds bind patients to physical spaces — and to the monitors mounted beside them.
+  The bed lifecycle encodes one non-negotiable: a vacated bed is never reusable until cleaned.</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>Zones and the routing matrix</li><li>The bed state machine</li><li>Placement, transfer, discharge</li>
+  <li>Device-to-bed binding</li><li>Concurrency guarantees</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">12.1</span>Zones</h2>
+<p>Nine zones: <code>RESUS · ACUTE · GENERAL · AMBULATORY · TRIAGE · OBSERVATION · ISOLATION · PEDIATRIC · NEONATAL</code>.
+Which exist in practice depends on per-hospital configuration (pediatric resus? neonatal unit?
+ambulatory/observation beds provisioned?) — the routing matrix (§5.5) adapts automatically, falling
+back to GENERAL where a specialized zone isn't provisioned.</p>
+
+<h2 class="sec"><span class="secno">12.2</span>The bed state machine</h2>
+<div class="flow">
+  <div class="fnode end">AVAILABLE</div><div class="farrow"><span class="lbl">place</span>→</div>
+  <div class="fnode">OCCUPIED</div><div class="farrow"><span class="lbl">discharge/transfer</span>→</div>
+  <div class="fnode warn">CLEANING<div class="sub">mandatory hygiene step</div></div><div class="farrow"><span class="lbl">mark cleaned</span>→</div>
+  <div class="fnode end">AVAILABLE</div>
+</div>
+<p class="small muted">Admins may also take an AVAILABLE or CLEANING bed OUT_OF_SERVICE (never an occupied one) and return it.</p>
+
+<h2 class="sec"><span class="secno">12.3</span>Placement rules</h2>
+<ul>
+<li><b>Place</b> (doctor/nurse/admin): same hospital only; bed must be occupiable; a patient already in a bed must use <b>transfer</b> instead; terminal-status visits refused. Placement promotes the visit to <code>AWAITING_ASSESSMENT</code>.</li>
+<li><b>Transfer</b>: source bed → CLEANING, destination → OCCUPIED; a monitoring session on the source closes and re-opens on the destination preserving continuity (the one auto-start that survives — deliberate).</li>
+<li><b>Discharge from bed</b>: bed → CLEANING; the <i>visit stays open</i> (closing the visit is disposition's job, which itself calls this release).</li>
+<li><b>Suggest-bed</b> trusts the visit's current zone and always prefers a monitored bed.</li>
+<li>A high-acuity zone bed becoming available (RESUS/ACUTE/PEDIATRIC/NEONATAL) emits a transient <code>BED_AVAILABLE</code> notice to the floor.</li>
+</ul>
+<div class="co co-rule"><div class="co-t">Business rule</div>
+<p>Two database-level uniqueness constraints make double-booking impossible even under concurrent
+clicks: one active visit per bed, one bed per visit. The UI also updates only after the database
+commit (events are published post-commit), so what you see is what is actually stored.</p></div>
+
+<h2 class="sec"><span class="secno">12.4</span>Devices on beds</h2>
+<p>Admins assign a monitor to a bed (detach first if it's on another). Isolation status shows as
+biohazard chips on the bed grid (§8.3). Monitoring start is clinician-initiated (§7.2).</p>
+</div>

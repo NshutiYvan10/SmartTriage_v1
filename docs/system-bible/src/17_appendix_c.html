@@ -1,0 +1,27 @@
+<!-- APPENDIX C -->
+<div class="chapter">
+<span class="pgmark">PMK-APXC</span>
+<div class="ch-open"><div class="ch-num">C</div><h1>Appendix C — Open Questions Register</h1>
+<p class="ch-lede">Everything this review found ambiguous, stale, or deliberately unfinished. Each
+item should be decided (and this register updated) before the behavior is relied on. None of these
+block current demo use.</p></div>
+
+<table>
+<tr><th style="width:8mm">#</th><th style="width:34mm">Area</th><th>Question / finding</th><th style="width:38mm">Recommendation</th></tr>
+<tr><td>1</td><td>Offline sync (§18.3)</td><td>The version-conflict detector is a stub (never flags conflicts), and conflict “resolution” relabels the sync record without re-applying data to the target entity.</td><td>Decide the conflict policy; implement re-apply; add tests before production offline use.</td></tr>
+<tr><td>2</td><td>Dead on arrival</td><td><code>BLUE</code> exists as a triage category (excluded from monitors, routed GENERAL “handled separately”) but no dedicated DOA workflow exists.</td><td>Define the DOA path (documentation, mortuary handoff, reporting) or remove the category from forms.</td></tr>
+<tr><td>3</td><td>Consent UI</td><td><code>EMERGENCY_NO_CONSENT_REQUIRED</code> grantor exists in the backend but is not offered in the data-sharing consent UI.</td><td>Confirm intent; either surface it or document the omission as policy.</td></tr>
+<tr><td>4</td><td>Pediatric TEWS</td><td>A legacy no-age calculator overload defaults to the child grid with a warning; flagged in code for removal once all callers pass age-in-months.</td><td>Thread age everywhere; delete the overload.</td></tr>
+<tr><td>5</td><td>Stale docs in code</td><td>Two stale comments: bed-suggestion Javadoc describes a removed routing table; a triage-engine comment misstates the TEWS 5–6 rule (behavior is correct: always ORANGE).</td><td>Fix comments (behavior needs no change).</td></tr>
+<tr><td>6</td><td>Frontend naming</td><td>Swap/leave approval pages reference an authorization bean method name that doesn't exist (the real ones are used); comment-level only.</td><td>Tidy comments.</td></tr>
+<tr><td>7</td><td>Refresh tokens</td><td>Refresh tokens are re-used, not rotated; staging uses 12 h vs. 24 h elsewhere.</td><td>Consider rotation for production hardening; align lifetimes deliberately.</td></tr>
+<tr><td>8</td><td>Monitor BP ceiling</td><td>The prototype pressure sensor saturates ≈115 mmHg — hypertensive systolics are unmeasurable on current hardware.</td><td>For clinical use: upgrade the sensing board (known options documented in the firmware notes).</td></tr>
+<tr><td>9</td><td>Password policy</td><td>Only a length rule (8–128) is enforced; no complexity/breach checks.</td><td>Decide the production password/lockout policy.</td></tr>
+<tr><td>10</td><td>Monitor networking</td><td>Device→gateway→backend addressing currently relies on configured IPs; an mDNS/AP design was proposed but not yet implemented.</td><td>Implement the gateway-as-AP + hostname plan before multi-site deployment.</td></tr>
+</table>
+
+<hr class="thin">
+<p class="small muted" style="margin-top:8pt;">End of the SmartTriage System Bible, Edition 1.0 (July 2026).
+Sources: the live codebase (backend, frontend, firmware), migration history V1–V113+, and the project's
+engineering logs. Regenerate Appendices A–B with <code>docs/system-bible/gen_appendix.py</code> after major changes.</p>
+</div>

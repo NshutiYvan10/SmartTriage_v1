@@ -1,0 +1,138 @@
+<!-- ======================= CHAPTER 5 ======================= -->
+<div class="chapter">
+<span class="pgmark">PMK-CH05</span>
+<div class="ch-open">
+  <div class="ch-num">05</div>
+  <h1>Triage</h1>
+  <p class="ch-lede">Triage is the heart of the system: the Rwanda National Standard Triage Protocols
+  (a modified South African Triage Scale) implemented exactly, for adults and children, with the
+  full decision logic printed here — the same numbers the code uses.</p>
+  <div class="ch-learn"><div class="kicker">In this chapter</div>
+  <ul><li>The five triage colors and their targets</li><li>The TEWS score, adult and pediatric grids</li>
+  <li>The complete decision flowchart</li><li>What one triage save triggers automatically</li>
+  <li>Direct-to-Resus and EMS field-triage confirmation</li><li>Re-triage: the three safety nets</li></ul></div>
+</div>
+
+<h2 class="sec"><span class="secno">5.1</span>The five colors</h2>
+<table>
+<tr><th>Category</th><th>Meaning</th><th>Max wait / reassess</th><th>Severity rank</th></tr>
+<tr><td><span class="pill p-red">RED</span></td><td>Immediate — resuscitation</td><td><code>0 min</code> (continuous)</td><td>4</td></tr>
+<tr><td><span class="pill p-orange">ORANGE</span></td><td>Very urgent</td><td><code>10 min</code></td><td>3</td></tr>
+<tr><td><span class="pill p-yellow">YELLOW</span></td><td>Urgent</td><td><code>30 min</code></td><td>2</td></tr>
+<tr><td><span class="pill p-green">GREEN</span></td><td>Routine</td><td><code>60 min</code></td><td>1</td></tr>
+<tr><td><span class="pill p-slate">BLUE</span></td><td>Dead on arrival</td><td>— (excluded from monitors)</td><td>0</td></tr>
+</table>
+<p class="tbl-cap">The “max wait” doubles as the reassessment interval — the clock behind the overdue monitors in §5.7.</p>
+
+<h2 class="sec"><span class="secno">5.2</span>Who can triage</h2>
+<p>Only <b>today's TRIAGE_NURSE</b> (per the shift roster) or someone with charge-nurse authority
+(designation, current shift-lead badge, or active charge shift-function). Explicitly denied: admins
+(never clinicians), doctors (they read triage, they don't author it), and ordinary zone nurses. The
+one doctor/nurse exception is <i>confirming</i> an EMS field triage at the bedside (§5.6). The UI
+shows “you're not on shift” to anyone else.</p>
+
+<h2 class="sec"><span class="secno">5.3</span>TEWS — the early-warning score</h2>
+<p>TEWS (Triage Early Warning Score) is a number computed from vitals + mobility + consciousness +
+trauma. Shared components: mobility <code>WALKING 0 / WITH_HELP 1 / STRETCHER 2</code>; AVPU
+<code>ALERT 0 / CONFUSED 1 / VERBAL 1 / PAIN 2 / UNRESPONSIVE 3</code>; trauma <code>+1</code>.</p>
+
+<h4>Adult grid (13 years and older)</h4>
+<table class="compact">
+<tr><th>Points</th><th>Resp. rate</th><th>Heart rate</th><th>Systolic BP</th><th>Temperature</th></tr>
+<tr><td><b>0</b></td><td>9–14</td><td>51–100</td><td>81–100</td><td>35.0–38.4 °C</td></tr>
+<tr><td><b>1</b></td><td>&lt;9 or 15–20</td><td>41–50 or 101–110</td><td>71–80 or 101–199</td><td>—</td></tr>
+<tr><td><b>2</b></td><td>21–29</td><td>&lt;41 or 111–129</td><td>&lt;71</td><td>&lt;35.0 or &gt;38.4 °C</td></tr>
+<tr><td><b>3</b></td><td>&gt;29</td><td>&gt;129</td><td>&gt;199</td><td>—</td></tr>
+</table>
+
+<h4>Pediatric grids (SBP is deliberately not scored)</h4>
+<table class="compact">
+<tr><th>Points</th><th>Infant RR (&lt;36 mo)</th><th>Infant HR</th><th>Child RR (≥36 mo)</th><th>Child HR</th><th>Temp (both)</th></tr>
+<tr><td><b>0</b></td><td>26–39</td><td>80–130</td><td>17–21</td><td>80–99</td><td>35–38.4 °C</td></tr>
+<tr><td><b>1</b></td><td>20–25 or 40–49</td><td>70–79 or 131–159</td><td>15–16 or 22–26</td><td>60–79 or 100–129</td><td>—</td></tr>
+<tr><td><b>2</b></td><td>&lt;20 or ≥50</td><td>&lt;70 or ≥160</td><td>&lt;15 or ≥27</td><td>&lt;60 or ≥130</td><td>&lt;35 or &gt;38.4 °C</td></tr>
+</table>
+<p class="small muted">The infant form has no “Confused” column — a confused infant scores 0 on AVPU (the child form scores +1).
+If age is unknown the child grid is used. “Pediatric” = under 13 years; “infant” = under 36 months; “neonate” = 28 days or less.</p>
+
+<h2 class="sec"><span class="secno">5.4</span>The decision flowchart</h2>
+<p>After TEWS, the engine walks this ladder top-down — first match wins:</p>
+<div class="dtree">
+<div class="dq">1. Any Emergency Sign present?</div>
+<div class="dbr"><span class="dlab no">Yes → <span class="pill p-red">RED</span></span> — airway compromise, severe respiratory distress, cardiac arrest, uncontrolled haemorrhage, stab/gunshot to neck or chest, convulsions, coma, hypoglycemia (glucose &lt; 3 mmol/L / 60 mg/dL), purpuric rash, facial/inhalation burn. Pediatric adds: central cyanosis, cold-hands circulation composite, and <b>severe dehydration = any 2 of {slow skin pinch, lethargy, sunken eyes}</b>.</div>
+</div>
+<div class="dtree">
+<div class="dq">2. TEWS ≥ 7, or SpO2 &lt; 92%?</div>
+<div class="dbr"><span class="dlab no">Yes → <span class="pill p-red">RED</span></span></div>
+</div>
+<div class="dtree">
+<div class="dq">3. TEWS 5–6?</div>
+<div class="dbr"><span class="dlab maybe">Yes → <span class="pill p-orange">ORANGE</span></span> — always, regardless of other signs (they are recorded for audit).</div>
+</div>
+<div class="dtree">
+<div class="dq">4. Any Very Urgent sign (TEWS 0–4)?</div>
+<div class="dbr"><span class="dlab maybe">Yes → <span class="pill p-orange">ORANGE</span></span> — adult medical: focal neurology, altered mental state, chest pain, poisoning/overdose, pregnant + abdominal pain, coughing/vomiting blood, diabetic with glucose &gt; 11 mmol/L (200 mg/dL), aggression, shortness of breath. Trauma: burn &gt; 20% (pediatric threshold <b>10%</b>), open fracture, threatened limb, eye injury, large-joint dislocation, severe mechanism, pain ≥ 7, pregnant + abdominal trauma. Pediatric adds: sleepier than normal, floppy/irritable, any baby under 2 months.</div>
+</div>
+<div class="dtree">
+<div class="dq">5. TEWS 3–4 (no VU sign)?</div>
+<div class="dbr"><span class="dlab maybe">Yes → <span class="pill p-yellow">YELLOW</span></span></div>
+</div>
+<div class="dtree">
+<div class="dq">6. Any Urgent sign (TEWS 0–2)?</div>
+<div class="dbr"><span class="dlab maybe">Yes → <span class="pill p-yellow">YELLOW</span></span> — unable to drink / vomits everything, abdominal pain, marked pallor, pregnant vaginal bleeding, diabetic glucose &gt; 17 mmol/L (300 mg/dL), closed fracture, small dislocations, moderate pain (5–6), lacerations/abscess, foreign-body aspiration. Pediatric adds: pitting oedema, some respiratory distress, severe wasting, unwell + known diabetes, and <b>diarrhoea/vomiting + any dehydration sign</b>.</div>
+</div>
+<div class="dtree">
+<div class="dq">7. Nothing above?</div>
+<div class="dbr"><span class="dlab yes">→ <span class="pill p-green">GREEN</span></span> — seen within the hour, reassessed every 30 minutes.</div>
+</div>
+<div class="co co-note"><div class="co-t">Note</div>
+<p>Signs observed that aren't on the national form still count: a custom “additional sign” marked as
+emergency-grade forces RED, very-urgent-grade forces ORANGE, urgent-grade forces YELLOW.</p></div>
+
+<h2 class="sec"><span class="secno">5.5</span>What one triage save actually does</h2>
+<div class="steps">
+<div class="step"><b>Resolve vitals with strict priority.</b><p>(1) an explicitly chosen vitals record; else (2) vitals typed on the form — these are saved as a fresh manual reading and are authoritative (a stale device snapshot never overrides the nurse's own measurement); else (3) the latest vitals on file; else (4) none → TEWS scores 0 with a warning — conservative, never invented.</p></div>
+<div class="step"><b>Compute TEWS + category</b> (grids and ladder above), pediatric vs adult chosen by the patient's age.</div>
+<div class="step"><b>Side-write patient facts.</b><p>A phone number captured at triage fills the emergency contact; a pregnancy answer sets the structured pregnancy status (never downgrading an existing one with “unknown”).</p></div>
+<div class="step"><b>Persist the full record</b> — every checkbox, the TEWS components, the decision path (a human-readable trace of <i>why</i> this color), and whether this was a re-triage.</div>
+<div class="step"><b>Update the visit</b> — category, score, triage time, status → <code>TRIAGED</code>, and the destination zone via the routing matrix: neonate→NEONATAL (if the hospital has one), RED→RESUS (pediatric RED→PEDIATRIC if a pediatric resus exists), non-RED child→PEDIATRIC, ORANGE→ACUTE, YELLOW→OBSERVATION (else GENERAL), GREEN→AMBULATORY (else GENERAL).</p></div>
+<div class="step"><b>Fire alerts.</b><p>RED/ORANGE/YELLOW create a zone-routed doctor alert (RED→CRITICAL). A re-triage that <i>raised</i> severity additionally fires a TEWS-escalation alert.</p></div>
+<div class="step"><b>Run the piggyback screenings</b> (each best-effort — their failure never blocks triage): baseline clinical-sign events; hypoglycemia detection; infection-isolation screening.</p></div>
+<div class="step"><b>Auto-place into a bed.</b><p>If the patient has no bed yet, the system suggests one in the destination zone (preferring monitored beds) and places them in the same transaction. Failure just means the nurse places manually. A patient already in a bed is never auto-moved — that requires a zone transfer (§11.3).</p></div>
+</div>
+
+<h2 class="sec"><span class="secno">5.6</span>Two special entry paths</h2>
+<h4>Direct-to-Resus</h4>
+<p>For a patient who is “obviously RED” (e.g. carried in seizing), staff — including the registrar —
+can admit straight to Resus with a mandatory clinical reason. The system creates the visit directly
+as <code>TRIAGED</code>/<span class="pill p-red">RED</span> with a system-generated triage record, tries to
+place into a RESUS bed (preferring monitored), and if Resus is full declares <b>RESUS_OVERFLOW</b>
+(critical alert) with a ranked list of transfer-out candidates — the admission itself never fails
+for lack of a bed. Paramedics are excluded (they have their own arrival flow); a later
+<i>confirm-arrival</i> stamps the door time for pre-notified cases.</p>
+<h4>EMS field-triage confirmation</h4>
+<p>A <span class="pill p-red">RED</span>/<span class="pill p-orange">ORANGE</span> ambulance arrival is placed
+straight into a treatment zone with the <i>paramedic's</i> category (§11.5). The receiving doctor or
+nurse then <b>confirms</b> the field triage at the bedside: allowed only while the visit is still
+<code>AWAITING_TRIAGE</code>, only for RED/ORANGE, and only once. The confirmation preserves the
+paramedic's category and field TEWS as an attributed record and notifies the paramedic their triage
+stood.</p>
+
+<h2 class="sec"><span class="secno">5.7</span>Re-triage: three safety nets</h2>
+<table>
+<tr><th style="width:36mm">Net</th><th>Trigger</th><th>What happens</th></tr>
+<tr><td><b>Reassessment clock</b><br><span class="small muted">every 120 s</span></td><td>Time since last triage exceeds the category's interval (RED continuous, ORANGE 10', YELLOW 30', GREEN 60')</td><td><code>REASSESSMENT_DUE</code> alert — CRITICAL for RED or at 2× the interval, HIGH otherwise; deduplicated while unacknowledged</td></tr>
+<tr><td><b>Waiting-time monitor</b><br><span class="small muted">every 60 s</span></td><td>An untreated patient (<code>AWAITING_TRIAGE</code>/<code>TRIAGED</code>) waits past the SATS target</td><td><code>WAITING_TIME_EXCEEDED</code> alert, same severity ladder</td></tr>
+<tr><td><b>Dynamic re-triage</b><br><span class="small muted">event-driven</span></td><td>A clinical-sign update (§6.4) reports a new or worsening sign</td><td>Emergency-grade sign → <b>auto-bump to RED</b>; very-urgent → auto-bump ORANGE; urgent → auto-bump YELLOW — each only if it raises the current category. Improving/absent signs only ever produce a <i>suggestion</i>: the system auto-escalates but never auto-de-escalates</td></tr>
+</table>
+<div class="co co-rule"><div class="co-t">Business rule</div>
+<p>An automatic re-triage never runs the vitals engine or fabricates data — it carries the last
+manual TEWS, records itself as system-triggered with the triggering sign, and respects a
+<code>60 s</code> idempotency window so repeated signals don't stack records. If the patient is already
+in a zone, the zone change goes through a pending <b>zone transfer</b> that the receiving team must
+accept — an algorithm never teleports a patient (§11.3).</p></div>
+<div class="co co-warn"><div class="co-t">Warning</div>
+<p>“UNKNOWN” sign status means <i>we couldn't check</i> — it never causes escalation, and it must never
+be treated as “absent”. This five-state distinction (present / absent / improving / worsening /
+unknown) is deliberate and load-bearing.</p></div>
+</div>
