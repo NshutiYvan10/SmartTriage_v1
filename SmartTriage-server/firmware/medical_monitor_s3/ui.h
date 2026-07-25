@@ -470,6 +470,8 @@ private:
       waveX_ = 1;
       ecgReadHead_ = g_ecgWaveHead;
       plethReadHead_ = g_plethWaveHead;
+      dispPeak_[0] = dispPeak_[1] = 400.0f;   // fresh auto-gain per page entry
+      lastPlethState_ = -1;
       waveInit_ = true;
     }
 
@@ -479,7 +481,27 @@ private:
       cell(7, plotW / 2 - 90, ecgY + ecgH / 2 - 10, 1, 1, "", UI_BG, 1); // clear marker
       drawTrace(g_ecgWave, g_ecgWaveHead, ecgReadHead_, ecgY + 2, ecgH - 4, plotW, UI_GOOD);
     }
-    drawTrace(g_plethWave, g_plethWaveHead, plethReadHead_, plethY + 2, plethH - 4, plotW, UI_PLETH);
+
+    // Pleth pane: NEVER show a stale/frozen curve for a sensor that is
+    // not delivering — freeze-frames read as live data to a clinician.
+    // State the truth in the pane and clear it once on transition.
+    int plethState = s.simulation ? 0
+                   : s.chSpo2 == Chan::OK ? 0
+                   : s.chSpo2 == Chan::NO_CONTACT ? 1 : 2;
+    if (plethState != lastPlethState_) {
+      lastPlethState_ = plethState;
+      tft_.fillRect(1, plethY + 1, plotW - 2, plethH - 2, UI_BG);
+      tft_.setTextColor(UI_PLETH, UI_BG);
+      tft_.drawString("PLETH (SpO2)", 6, plethY + 3, 1);
+      plethReadHead_ = g_plethWaveHead;   // don't replay stale ring content
+    }
+    if (plethState == 0) {
+      drawTrace(g_plethWave, g_plethWaveHead, plethReadHead_, plethY + 2, plethH - 4, plotW, UI_PLETH);
+    } else {
+      cell(23, plotW / 2 - 110, plethY + plethH / 2 - 9, 220, 18,
+           plethState == 1 ? "PLACE FINGER ON SENSOR" : "SPO2 SENSOR NOT DETECTED",
+           plethState == 1 ? UI_WARN : UI_MUTED, 2);
+    }
 
     // numerics column
     char t[16];
@@ -496,15 +518,28 @@ private:
     if (forceRedraw_) { tft_.setTextColor(UI_MUTED, UI_BG); tft_.drawString("SpO2", W - numW + 8, plethY + 2, 1); }
   }
 
-  // consume new ring samples; draw one column per sample with an erase-ahead cursor
+  // consume new ring samples; draw one column per sample with an erase-ahead cursor.
+  //
+  // AUTO-GAIN (v3.4.1): the pane is normalised to the signal's own recent
+  // peak amplitude — professional-monitor behaviour. The previous fixed
+  // ±2047 mapping made a normal QRS a small squiggle and every motion
+  // artifact a full-height spike ("line spikes very high, then shrinks
+  // down small" — field report). Gain rises instantly to contain a
+  // bigger signal and relaxes slowly (~12%/s), so beat height stays
+  // steady and an artifact compresses the trace only briefly.
   void drawTrace(volatile int16_t *ring, volatile uint16_t &headRef,
                  uint16_t &readHead, int y, int h, int plotW, uint16_t color) {
     uint16_t head = headRef;
+    float &gainPeak = dispPeak_[color & 1];
     int budget = 40;                                   // samples per frame cap
     while (readHead != head && budget-- > 0) {
       readHead = (uint16_t)((readHead + 1) % ECG_WAVE_RING);
       int16_t v = ring[readHead];
-      int py = y + h / 2 - (int)((float)v / 2047.0f * (h / 2 - 2));
+      float a = fabsf((float)v);
+      if (a > gainPeak) gainPeak = a;
+      else gainPeak *= 0.9995f;                        // ~12%/s relaxation @250 Hz
+      if (gainPeak < 250.0f) gainPeak = 250.0f;        // noise floor: don't zoom into flatline
+      int py = y + h / 2 - (int)((float)v / (gainPeak * 1.15f) * (h / 2 - 2));
       py = constrain(py, y, y + h - 1);
 
       // erase-ahead cursor (classic monitor sweep)
@@ -521,6 +556,8 @@ private:
     }
   }
   int lastPy_[2] = {-1, -1};
+  float dispPeak_[2] = {400.0f, 400.0f};   // per-trace display auto-gain
+  int lastPlethState_ = -1;
 
   // =====================================================================
   //  PAGE 3 — trends

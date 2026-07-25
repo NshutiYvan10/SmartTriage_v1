@@ -157,15 +157,25 @@ void setup() {
     esp_task_wdt_reconfigure(&wdtCfg);
   }
 
+  // Bus electrical pre-check (v3.4.1): with only the ESP32's weak internal
+  // pullups, a line held LOW means a short / mis-wire; both lines idling
+  // HIGH but nobody ACKing means the sensor module itself has no power
+  // (the usual suspect since the box's battery-supply rework) or its
+  // wires don't reach these pins. Same pins the OLD working firmware
+  // used (SDA 6 / SCL 7 — verified against the original sketch).
+  pinMode(PIN_I2C_SDA, INPUT_PULLUP);
+  pinMode(PIN_I2C_SCL, INPUT_PULLUP);
+  delay(5);
+  bool sdaIdleHigh = digitalRead(PIN_I2C_SDA) == HIGH;
+  bool sclIdleHigh = digitalRead(PIN_I2C_SCL) == HIGH;
+
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
   Wire.setClock(100000);          // MAX30205 is SMBus-class: 100 kHz only
   delay(50);
 
   // Boot I2C census — both clinical sensors have reported NOT FOUND on
   // this hardware, so print exactly who answers on the bus. Expected:
-  // 0x57 (MAX30102) and 0x48 (MAX30205). Nothing at all = wiring/pullup
-  // problem on SDA 6 / SCL 7; different addresses = different parts or
-  // address straps.
+  // 0x57 (MAX30102) and 0x48 (MAX30205).
   {
     int found = 0;
     Serial.print("[i2c] scan:");
@@ -174,6 +184,14 @@ void setup() {
       if (Wire.endTransmission() == 0) { Serial.printf(" 0x%02X", a); found++; }
     }
     Serial.printf("%s (%d device%s)\n", found ? "" : " none", found, found == 1 ? "" : "s");
+    if (found == 0) {
+      Serial.printf("[i2c] diagnosis: SDA %s, SCL %s -> %s\n",
+                    sdaIdleHigh ? "idles high" : "HELD LOW",
+                    sclIdleHigh ? "idles high" : "HELD LOW",
+                    (!sdaIdleHigh || !sclIdleHigh)
+                        ? "a line is shorted or mis-wired"
+                        : "wiring idle but no chip answers - check the sensor module's VCC/GND with a meter");
+    }
   }
 
   // BP first, screen second — deliberately: the cuff-pressure zero
