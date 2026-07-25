@@ -5,7 +5,9 @@ import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundExcep
 import com.smartTriage.smartTriage_server.module.consent.dto.BreakTheGlassEventResponse;
 import com.smartTriage.smartTriage_server.module.consent.entity.BreakTheGlassEvent;
 import com.smartTriage.smartTriage_server.module.consent.repository.BreakTheGlassEventRepository;
+import com.smartTriage.smartTriage_server.module.hospital.repository.HospitalRepository;
 import com.smartTriage.smartTriage_server.module.patient.entity.PersonIdentity;
+import com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,7 +43,10 @@ import static org.mockito.Mockito.when;
 class BreakTheGlassEventServiceTest {
 
     private final BreakTheGlassEventRepository repository = mock(BreakTheGlassEventRepository.class);
-    private final BreakTheGlassEventService service = new BreakTheGlassEventService(repository);
+    private final PatientRepository patientRepository = mock(PatientRepository.class);
+    private final HospitalRepository hospitalRepository = mock(HospitalRepository.class);
+    private final BreakTheGlassEventService service =
+            new BreakTheGlassEventService(repository, patientRepository, hospitalRepository);
 
     private final UUID hospitalId = UUID.randomUUID();
 
