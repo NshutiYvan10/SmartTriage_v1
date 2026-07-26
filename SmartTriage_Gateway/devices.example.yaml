@@ -2,7 +2,9 @@
 # Generate the real file with provision.py; it will contain live API
 # keys, so it lives OUTSIDE the repo (/etc/smarttriage/devices.yaml,
 # chmod 600) and is loaded via GATEWAY_CONFIG.
-backend_url: http://192.168.1.50:8080
+# Prefer the backend host's mDNS NAME over an IP — it survives DHCP churn
+# (requires libnss-mdns on the Pi, preinstalled on Raspberry Pi OS):
+backend_url: http://Your-Backend-Host.local:8080
 listen_port: 8090
 tx_interval_seconds: 5
 gateway_name: "Kigali ED — Ward Gateway"   # shown on the lock screen + top bar

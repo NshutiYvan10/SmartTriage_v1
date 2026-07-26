@@ -164,6 +164,43 @@ Unlocking the **touchscreen** is separate from the appliance identity:
 - Demo runs plain HTTP on a closed LAN; production would front the backend
   with TLS — per-device identity makes mTLS/HMAC a drop-in upgrade later.
 
+## Networking: no hardcoded IPs (the "fixed center" design)
+
+The failure mode this kills: laptop, Pi and monitors all on one venue WiFi,
+every DHCP reshuffle breaking something, every change re-flashing firmware.
+
+1. **Devices join the Pi, not the venue.** Run the Pi as a WiFi access
+   point; on that network the Pi is always `10.42.0.1`. The monitor and the
+   RFID desk reader are flashed ONCE with
+   `SERVER_BASE "http://10.42.0.1:8090"` + the Pi's SSID and never again —
+   the gateway proxies everything they need (`/ingest`, `/device-telemetry`,
+   `/heartbeat`, `/iot/rfid/tap`). Create the AP with NetworkManager:
+
+   ```
+   sudo nmcli con add type wifi ifname wlan0 con-name ward-ap autoconnect yes \
+        ssid SmartTriage-Ward 802-11-wireless.mode ap 802-11-wireless.band bg \
+        ipv4.method shared ipv4.addresses 10.42.0.1/24 \
+        wifi-sec.key-mgmt wpa-psk wifi-sec.psk "<ap-password>"
+   sudo nmcli con up ward-ap
+   ```
+
+   CAUTION: this claims wlan0, so the Pi's own uplink must move to
+   **Ethernet** (direct cable to the backend laptop, or a small router).
+   Run it from the touchscreen terminal, not over WiFi SSH. Revert with
+   `nmcli con down ward-ap && nmcli con up <your-wifi-profile>`.
+
+2. **The Pi finds the backend by NAME.** `backend_url` uses the backend
+   host's mDNS name (e.g. `http://Nshutis-MacBook-Pro.local:8080`) — immune
+   to IP churn. Works over a direct Ethernet cable too (link-local mDNS),
+   which makes laptop+Pi+devices a self-contained island that runs with no
+   venue network at all. `libnss-mdns` must be installed on the Pi
+   (preinstalled on Raspberry Pi OS).
+
+3. Humans already use names: the kiosk is `http://<pi-hostname>.local:8090`.
+
+For a backend that later moves off the laptop to a server, add a VPN overlay
+(e.g. Tailscale) — names keep working, nothing else changes.
+
 ## Store-and-forward semantics
 
 - Failed `/ingest` posts (network down or outage drill) are queued in SQLite
@@ -190,4 +227,5 @@ Unlocking the **touchscreen** is separate from the appliance identity:
 | `POST /api/v1/iot/stream/ingest` | device pass-through + store-and-forward |
 | `POST /api/v1/iot/stream/device-telemetry` | device pass-through (never queued) |
 | `POST /api/v1/iot/stream/heartbeat` | device pass-through |
+| `POST /api/v1/iot/rfid/tap` | RFID desk-reader pass-through (never queued — taps are interactive) |
 | `WS /ws` | live event feed (session-gated) |

@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from .auth import AuthManager, Session
 from .config import GatewayConfig
-from .forwarder import Forwarder, INGEST, TELEMETRY, HEARTBEAT
+from .forwarder import Forwarder, INGEST, TELEMETRY, HEARTBEAT, RFID_TAP
 from .scenarios import family_for
 from .simulator import SimulatorEngine, SimState
 
@@ -163,6 +163,19 @@ async def telemetry(request: Request) -> Response:
 @app.post(HEARTBEAT)
 async def heartbeat(request: Request) -> Response:
     return await _passthrough(request, HEARTBEAT)
+
+
+@app.post(RFID_TAP)
+async def rfid_tap(request: Request) -> Response:
+    """RFID desk-reader pass-through — so the reader can live on the Pi's
+    own WiFi network with a NEVER-CHANGING backend address (10.42.0.1),
+    like the monitor. Verbatim proxy with the reader's own key; a tap is
+    interactive, so an outage answers 502 immediately — a stale queued tap
+    replayed minutes later would open the wrong patient at the desk."""
+    api_key = request.headers.get("X-Device-API-Key", "")
+    raw = await request.body()
+    status, text = await fwd.passthrough(RFID_TAP, api_key, raw)
+    return Response(content=text, status_code=status, media_type="application/json")
 
 
 # ====================================================================

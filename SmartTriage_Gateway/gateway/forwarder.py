@@ -27,6 +27,7 @@ import httpx
 INGEST = "/api/v1/iot/stream/ingest"
 TELEMETRY = "/api/v1/iot/stream/device-telemetry"
 HEARTBEAT = "/api/v1/iot/stream/heartbeat"
+RFID_TAP = "/api/v1/iot/rfid/tap"
 
 
 class Forwarder:
