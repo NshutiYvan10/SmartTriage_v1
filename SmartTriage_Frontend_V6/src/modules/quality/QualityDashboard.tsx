@@ -17,12 +17,13 @@ import { saveBlob } from '@/api/client';
 import type { QualityMetricSnapshot } from '@/api/quality';
 import { format } from 'date-fns';
 
-/* ── Period options ── */
-type SnapshotPeriod = 'HOURLY' | 'SHIFT' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
+/* ── Period options ──
+ * Mirrors the backend MetricPeriod values that support manual generation
+ * (DAILY computes the day; WEEKLY/MONTHLY aggregate the daily snapshots).
+ */
+type SnapshotPeriod = 'DAILY' | 'WEEKLY' | 'MONTHLY';
 
 const PERIODS: { value: SnapshotPeriod; label: string }[] = [
-  { value: 'HOURLY', label: 'Hourly' },
-  { value: 'SHIFT', label: 'Shift' },
   { value: 'DAILY', label: 'Daily' },
   { value: 'WEEKLY', label: 'Weekly' },
   { value: 'MONTHLY', label: 'Monthly' },
@@ -185,9 +186,6 @@ export function QualityDashboard() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                {/* Computing a snapshot is an admin-only write; READ_ONLY (auditor)
-                    can view but not trigger a recompute (backend enforces this). */}
-                {user?.role !== 'READ_ONLY' && (
                 <button
                   onClick={handleGenerate}
                   disabled={generating}
@@ -196,7 +194,6 @@ export function QualityDashboard() {
                   {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                   Generate Snapshot
                 </button>
-                )}
                 <button
                   onClick={handleExportCsv}
                   disabled={exporting}

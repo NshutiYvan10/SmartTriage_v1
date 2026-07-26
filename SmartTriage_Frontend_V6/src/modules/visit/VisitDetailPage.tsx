@@ -102,6 +102,7 @@ import type {
 } from '@/api/types';
 import { format } from 'date-fns';
 import { RecentActivityBanner } from './RecentActivityBanner';
+import { dialog } from '@/components/dialog';
 
 // ── Category color config ──
 const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string; dot: string }> = {
@@ -432,7 +433,7 @@ export function VisitDetailPage() {
     } catch (err) {
       // Surface the failure and keep the form open (setShow..(false) above is skipped on throw),
       // so the clinician can correct + retry rather than believe stale/absent data was recorded.
-      window.alert(err instanceof Error ? err.message : 'Could not record vitals');
+      dialog.notify(err instanceof Error ? err.message : 'Could not record vitals', { type: 'error' });
       console.error(err);
     } finally { setFormLoading(false); }
   };
@@ -444,7 +445,7 @@ export function VisitDetailPage() {
       setShowNoteForm(false);
       loadData();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Could not save the note');
+      dialog.notify(err instanceof Error ? err.message : 'Could not save the note', { type: 'error' });
       console.error(err);
     } finally { setFormLoading(false); }
   };
@@ -456,7 +457,7 @@ export function VisitDetailPage() {
       setShowDiagnosisForm(false);
       loadData();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Could not save the diagnosis');
+      dialog.notify(err instanceof Error ? err.message : 'Could not save the diagnosis', { type: 'error' });
       console.error(err);
     } finally { setFormLoading(false); }
   };
@@ -468,7 +469,7 @@ export function VisitDetailPage() {
       await diagnosisApi.amend(id, { diagnosedByName: userName, ...data } as AmendDiagnosisRequest);
       loadData();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Could not amend the diagnosis');
+      dialog.notify(err instanceof Error ? err.message : 'Could not amend the diagnosis', { type: 'error' });
       console.error(err);
     } finally { setFormLoading(false); }
   };
@@ -480,7 +481,7 @@ export function VisitDetailPage() {
       setShowInvestigationForm(false);
       loadData();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Could not order the investigation');
+      dialog.notify(err instanceof Error ? err.message : 'Could not order the investigation', { type: 'error' });
       console.error(err);
     } finally { setFormLoading(false); }
   };
@@ -592,8 +593,7 @@ export function VisitDetailPage() {
       // (window.alert for a backend ClinicalBusinessException); the form and
       // safety dialog stay open so the prescriber can adjust or cancel.
       const message = err instanceof Error ? err.message : 'Failed to prescribe medication';
-      // eslint-disable-next-line no-alert
-      window.alert(message);
+      dialog.notify(message, { type: 'error' });
       console.error(err);
     } finally { setFormLoading(false); }
   };
@@ -742,7 +742,7 @@ export function VisitDetailPage() {
       return true;
     } catch (err) {
       // A failed acknowledge must NOT read as "cleared" — surface it so the clinician retries.
-      window.alert(err instanceof Error ? err.message : 'Could not acknowledge the alert');
+      dialog.notify(err instanceof Error ? err.message : 'Could not acknowledge the alert', { type: 'error' });
       console.error(err);
       return false;
     }
@@ -769,7 +769,7 @@ export function VisitDetailPage() {
       }
       loadData();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Could not update the investigation');
+      dialog.notify(err instanceof Error ? err.message : 'Could not update the investigation', { type: 'error' });
       console.error(err);
     }
   };
@@ -798,8 +798,7 @@ export function VisitDetailPage() {
       // separation-of-duties violation when the prescriber tries to
       // administer their own order.
       const message = err instanceof Error ? err.message : 'Action failed';
-      // eslint-disable-next-line no-alert
-      window.alert(message);
+      dialog.notify(message, { type: 'error' });
       console.error(err);
     }
   };
@@ -2384,8 +2383,7 @@ function MedicationsTab({ medications, isDoctor, showForm, setShowForm, onSubmit
     try {
       await fn();
     } catch (err) {
-      // eslint-disable-next-line no-alert
-      window.alert(err instanceof Error ? err.message : 'Action failed');
+      dialog.notify(err instanceof Error ? err.message : 'Action failed', { type: 'error' });
     }
     await loadAudit();
     await onAction(medId, 'refresh');
@@ -2648,9 +2646,11 @@ function MedicationsTab({ medications, isDoctor, showForm, setShowForm, onSubmit
               {(med.status === 'PRESCRIBED' || med.status === 'PENDING_APPROVAL' || med.status === 'HELD')
                 && med.prescriptionType && isDoctor && (
                 <button
-                  onClick={() => {
-                    // eslint-disable-next-line no-alert
-                    const reason = window.prompt('Discontinue reason (required)');
+                  onClick={async () => {
+                    const reason = await dialog.prompt({
+                      title: 'Discontinue order', tone: 'danger', confirmLabel: 'Discontinue', required: true,
+                      message: 'Discontinue reason (min 3 characters):', placeholder: 'Reason',
+                    });
                     if (reason && reason.trim().length >= 3) {
                       void runDoseAction(med.id, () =>
                         medicationApi.discontinue(med.id, { reason: reason.trim() }));
@@ -2674,9 +2674,11 @@ function MedicationsTab({ medications, isDoctor, showForm, setShowForm, onSubmit
                       procedure) or a refusal (patient declined)
                       without having to bypass the system. */}
                   <button
-                    onClick={() => {
-                      // eslint-disable-next-line no-alert
-                      const reason = window.prompt('Hold reason (e.g. NPO before procedure, awaiting labs)');
+                    onClick={async () => {
+                      const reason = await dialog.prompt({
+                        title: 'Hold medication', tone: 'danger', confirmLabel: 'Hold', required: true,
+                        message: 'Hold reason (min 3 characters):', placeholder: 'e.g. NPO before procedure, awaiting labs',
+                      });
                       if (reason && reason.trim().length >= 3) {
                         onAction(med.id, 'hold', reason.trim());
                       }
@@ -2687,9 +2689,11 @@ function MedicationsTab({ medications, isDoctor, showForm, setShowForm, onSubmit
                     Hold
                   </button>
                   <button
-                    onClick={() => {
-                      // eslint-disable-next-line no-alert
-                      const reason = window.prompt('Refusal reason (patient declined / unable to take)');
+                    onClick={async () => {
+                      const reason = await dialog.prompt({
+                        title: 'Record refusal', tone: 'danger', confirmLabel: 'Record refusal', required: true,
+                        message: 'Refusal reason (min 3 characters):', placeholder: 'patient declined / unable to take',
+                      });
                       if (reason && reason.trim().length >= 3) {
                         onAction(med.id, 'refuse', reason.trim());
                       }
@@ -2824,13 +2828,15 @@ function TypedOrderActions({ med, entry, runDoseAction }: {
   const infusionRunning = !!lastInfusion && lastInfusion.kind !== 'INFUSION_STOP';
 
   /** Witness prompt shared by every administering action. */
-  const promptWitness = (): string | null | undefined => {
+  const promptWitness = async (): Promise<string | null | undefined> => {
     if (!med.requiresWitness) return undefined;
-    // eslint-disable-next-line no-alert
-    const w = window.prompt(
-      med.productType === 'BLOOD_PRODUCT'
-        ? 'Blood product — witness (second clinician) full name, REQUIRED:'
-        : 'Witness (second clinician) full name, REQUIRED:');
+    const w = await dialog.prompt({
+      title: 'Witness required', tone: 'primary', confirmLabel: 'Confirm', required: true, singleLine: true,
+      message: med.productType === 'BLOOD_PRODUCT'
+        ? 'Blood product — witness (second clinician) full name:'
+        : 'Witness (second clinician) full name:',
+      placeholder: 'Full name',
+    });
     return w && w.trim() ? w.trim() : null; // null = abort
   };
 
@@ -2839,8 +2845,8 @@ function TypedOrderActions({ med, entry, runDoseAction }: {
       {(med.prescriptionType === 'SCHEDULED' || med.prescriptionType === 'ONE_TIME') && nextDue && (
         <>
           <button
-            onClick={() => {
-              const witness = promptWitness();
+            onClick={async () => {
+              const witness = await promptWitness();
               if (witness === null) return;
               void runDoseAction(med.id, () => medicationApi.administerDose(nextDue.id, {
                 witnessName: witness,
@@ -2852,12 +2858,16 @@ function TypedOrderActions({ med, entry, runDoseAction }: {
             <CheckCircle2 className="w-3 h-3 inline mr-1" /> Give dose{nextDue.sequenceNumber != null ? ` #${nextDue.sequenceNumber}` : ''}
           </button>
           <button
-            onClick={() => {
-              // eslint-disable-next-line no-alert
-              const mins = window.prompt('Delay by how many minutes? (15–720)', '60');
+            onClick={async () => {
+              const mins = await dialog.prompt({
+                title: 'Delay dose', tone: 'primary', confirmLabel: 'Next', required: true, singleLine: true,
+                message: 'Delay by how many minutes? (15–720)', defaultValue: '60',
+              });
               if (!mins) return;
-              // eslint-disable-next-line no-alert
-              const reason = window.prompt('Delay reason (required)');
+              const reason = await dialog.prompt({
+                title: 'Delay dose', tone: 'primary', confirmLabel: 'Delay', required: true,
+                message: 'Delay reason (min 3 characters):', placeholder: 'Reason',
+              });
               if (!reason || reason.trim().length < 3) return;
               void runDoseAction(med.id, () => medicationApi.delayDose(nextDue.id, {
                 delayMinutes: Number(mins), reason: reason.trim(),
@@ -2868,9 +2878,11 @@ function TypedOrderActions({ med, entry, runDoseAction }: {
             Delay dose
           </button>
           <button
-            onClick={() => {
-              // eslint-disable-next-line no-alert
-              const reason = window.prompt('Refusal reason — the order stays active for the next dose:');
+            onClick={async () => {
+              const reason = await dialog.prompt({
+                title: 'Dose refused', tone: 'danger', confirmLabel: 'Record refusal', required: true,
+                message: 'Refusal reason — the order stays active for the next dose:', placeholder: 'Reason',
+              });
               if (!reason || reason.trim().length < 3) return;
               void runDoseAction(med.id, () => medicationApi.refuseDose(nextDue.id, {
                 reason: reason.trim(),
@@ -2885,12 +2897,14 @@ function TypedOrderActions({ med, entry, runDoseAction }: {
 
       {med.prescriptionType === 'PRN' && (
         <button
-          onClick={() => {
-            // eslint-disable-next-line no-alert
-            const indication = window.prompt(
-              `PRN indication (what triggered this dose)? Order is for: ${med.prnIndication ?? ''}`);
+          onClick={async () => {
+            const indication = await dialog.prompt({
+              title: 'Give PRN dose', tone: 'primary', confirmLabel: 'Next', required: true,
+              message: `PRN indication (what triggered this dose)? Order is for: ${med.prnIndication ?? ''}`,
+              placeholder: 'Indication',
+            });
             if (!indication || !indication.trim()) return;
-            const witness = promptWitness();
+            const witness = await promptWitness();
             if (witness === null) return;
             void runDoseAction(med.id, () => medicationApi.recordPrnDose(med.id, {
               prnReason: indication.trim(), witnessName: witness,
@@ -2905,8 +2919,8 @@ function TypedOrderActions({ med, entry, runDoseAction }: {
 
       {med.prescriptionType === 'CONTINUOUS' && !infusionRunning && (
         <button
-          onClick={() => {
-            const witness = promptWitness();
+          onClick={async () => {
+            const witness = await promptWitness();
             if (witness === null) return;
             void runDoseAction(med.id, () => medicationApi.startInfusion(med.id, {
               witnessName: witness,
@@ -2920,10 +2934,12 @@ function TypedOrderActions({ med, entry, runDoseAction }: {
       {med.prescriptionType === 'CONTINUOUS' && infusionRunning && (
         <>
           <button
-            onClick={() => {
-              // eslint-disable-next-line no-alert
-              const rate = window.prompt(`New rate (${med.rateUnit ?? 'mL/hr'})?`,
-                String(lastInfusion?.rateValue ?? med.rateValue ?? ''));
+            onClick={async () => {
+              const rate = await dialog.prompt({
+                title: 'Change infusion rate', tone: 'primary', confirmLabel: 'Change rate', required: true, singleLine: true,
+                message: `New rate (${med.rateUnit ?? 'mL/hr'})?`,
+                defaultValue: String(lastInfusion?.rateValue ?? med.rateValue ?? ''),
+              });
               if (!rate || !Number(rate)) return;
               void runDoseAction(med.id, () => medicationApi.changeInfusionRate(med.id, {
                 rateValue: Number(rate),
@@ -2934,9 +2950,11 @@ function TypedOrderActions({ med, entry, runDoseAction }: {
             Change rate
           </button>
           <button
-            onClick={() => {
-              // eslint-disable-next-line no-alert
-              const reason = window.prompt('Stop infusion — reason (required):');
+            onClick={async () => {
+              const reason = await dialog.prompt({
+                title: 'Stop infusion', tone: 'danger', confirmLabel: 'Stop infusion', required: true,
+                message: 'Stop infusion — reason (min 3 characters):', placeholder: 'Reason',
+              });
               if (!reason || reason.trim().length < 3) return;
               void runDoseAction(med.id, () => medicationApi.stopInfusion(med.id, {
                 reason: reason.trim(),
@@ -2952,9 +2970,11 @@ function TypedOrderActions({ med, entry, runDoseAction }: {
       {/* Hold works for every live typed order (open doses are
           cancelled; Resume re-creates a due dose). */}
       <button
-        onClick={() => {
-          // eslint-disable-next-line no-alert
-          const reason = window.prompt('Hold reason (e.g. NPO before procedure)');
+        onClick={async () => {
+          const reason = await dialog.prompt({
+            title: 'Hold medication', tone: 'danger', confirmLabel: 'Hold', required: true,
+            message: 'Hold reason (min 3 characters):', placeholder: 'e.g. NPO before procedure',
+          });
           if (reason && reason.trim().length >= 3) {
             void runDoseAction(med.id, () => medicationApi.hold(med.id, reason.trim()));
           }

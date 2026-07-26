@@ -40,6 +40,7 @@ import type {
   MedicationResponse, ZoneMedicationBoard,
 } from '@/api/types';
 import { formatDistanceToNow } from 'date-fns';
+import { dialog } from '@/components/dialog';
 
 const ZONES: EdZone[] = [
   'RESUS', 'ACUTE', 'GENERAL', 'TRIAGE', 'OBSERVATION',
@@ -248,8 +249,7 @@ export function MedicationBoard() {
     } catch (e) {
       // Surface the backend's gate message (vitals gate, verification,
       // witness, interval/cap, approval) — the nurse needs the reason.
-      // eslint-disable-next-line no-alert
-      window.alert(e instanceof Error ? e.message : 'Action failed');
+      dialog.notify(e instanceof Error ? e.message : 'Action failed', { type: 'error' });
     } finally {
       setActionBusy(false);
     }

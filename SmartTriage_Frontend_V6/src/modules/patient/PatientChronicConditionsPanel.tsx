@@ -37,6 +37,7 @@ import {
   type ChronicConditionCatalogEntry,
 } from '@/utils/chronicConditionCatalog';
 import { useAuthStore } from '@/store/authStore';
+import { useTheme } from '@/hooks/useTheme';
 
 interface Props {
   patientId: string;
@@ -276,9 +277,20 @@ function AddConditionForm({
   onCreated: (created: PatientChronicConditionResponse) => void;
   onSubmit: (req: RecordChronicConditionRequest) => Promise<PatientChronicConditionResponse>;
 }) {
+  const { isDark } = useTheme();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<ChronicConditionCatalogEntry | null>(null);
   const [showPicker, setShowPicker] = useState(false);
+
+  // Theme-aware form styling — mirrors AddAllergyForm; the hardcoded
+  // light-mode colors were unreadable on the dark profile surface.
+  const labelCls = `block text-[9px] font-bold uppercase tracking-wider mb-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`;
+  const hintCls = 'text-slate-400 normal-case font-normal';
+  const inputCls = `w-full px-2 py-1.5 text-xs rounded outline-none border focus:ring-1 focus:ring-cyan-500/30 ${
+    isDark
+      ? 'bg-white/5 border-white/15 text-slate-100 placeholder-slate-500 [color-scheme:dark]'
+      : 'bg-white border-slate-300 text-slate-800 placeholder-slate-400'
+  }`;
 
   const [status, setStatus] = useState<ChronicConditionStatus>('ACTIVE');
   const [notes, setNotes] = useState('');
@@ -325,42 +337,42 @@ function AddConditionForm({
   }, [canSubmit, selected, query, status, notes, onsetDate, recordedByName, onSubmit, onCreated]);
 
   return (
-    <div className="rounded-md border border-emerald-200 bg-emerald-50/50 p-2.5 space-y-2">
+    <div className={`rounded-md border p-2.5 space-y-2 ${isDark ? 'border-emerald-500/25 bg-emerald-500/10' : 'border-emerald-200 bg-emerald-50/50'}`}>
       <div className="flex items-center justify-between">
-        <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 inline-flex items-center gap-1">
+        <div className={`text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
           <Plus className="w-3 h-3" /> Add chronic condition
         </div>
-        <button type="button" onClick={onCancel} className="text-slate-500 hover:text-slate-700" aria-label="Cancel">
+        <button type="button" onClick={onCancel} className={isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'} aria-label="Cancel">
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
 
       {/* Condition picker — searchable catalog with free-text fallback */}
       <div>
-        <label className="block text-[9px] font-bold uppercase tracking-wider mb-1 text-slate-600">
-          Condition <span className="text-slate-400 normal-case font-normal">(pick from catalog or type free text)</span>
+        <label className={labelCls}>
+          Condition <span className={hintCls}>(pick from catalog or type free text)</span>
         </label>
         {selected ? (
-          <div className="rounded-md border border-cyan-300 bg-cyan-50 p-2 flex items-start gap-2">
-            <HeartPulse className="w-3.5 h-3.5 text-cyan-600 mt-0.5" />
+          <div className={`rounded-md border p-2 flex items-start gap-2 ${isDark ? 'border-cyan-500/30 bg-cyan-500/10' : 'border-cyan-300 bg-cyan-50'}`}>
+            <HeartPulse className={`w-3.5 h-3.5 mt-0.5 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs font-bold">{selected.label}</span>
-                <span className="text-[9px] font-mono uppercase tracking-wider px-1 py-0.5 rounded bg-slate-200 text-slate-700">
+                <span className={`text-xs font-bold ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>{selected.label}</span>
+                <span className={`text-[9px] font-mono uppercase tracking-wider px-1 py-0.5 rounded ${isDark ? 'bg-white/10 text-slate-300' : 'bg-slate-200 text-slate-700'}`}>
                   {selected.code}
                 </span>
-                <span className="text-[9px] uppercase tracking-wider text-slate-500">
+                <span className={`text-[9px] uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   {selected.category}
                 </span>
               </div>
               {selected.help && (
-                <p className="text-[10px] text-slate-600 mt-0.5">{selected.help}</p>
+                <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{selected.help}</p>
               )}
             </div>
             <button
               type="button"
               onClick={() => { setSelected(null); setQuery(''); }}
-              className="text-slate-400 hover:text-slate-600"
+              className={isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-400 hover:text-slate-600'}
             >
               <X className="w-3 h-3" />
             </button>
@@ -373,13 +385,13 @@ function AddConditionForm({
               onChange={(e) => { setQuery(e.target.value); setShowPicker(true); }}
               onFocus={() => setShowPicker(true)}
               placeholder="e.g. hypertension, T2DM, CKD, sickle cell…"
-              className="w-full pl-7 pr-2 py-1.5 text-xs rounded border border-slate-300 outline-none"
+              className={`${inputCls} pl-7`}
             />
             {showPicker && results.length > 0 && (
-              <div className="absolute z-10 mt-1 w-full max-h-72 overflow-y-auto rounded border border-slate-200 bg-white shadow-md">
+              <div className={`absolute z-10 mt-1 w-full max-h-72 overflow-y-auto rounded border shadow-md ${isDark ? 'border-white/15 bg-slate-800' : 'border-slate-200 bg-white'}`}>
                 {grouped.map(([cat, entries]) => (
                   <div key={cat} className="py-1">
-                    <div className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50">
+                    <div className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400 bg-white/5' : 'text-slate-400 bg-slate-50'}`}>
                       {cat}
                     </div>
                     {entries.map((e) => (
@@ -387,14 +399,14 @@ function AddConditionForm({
                         key={e.code}
                         type="button"
                         onClick={() => { setSelected(e); setShowPicker(false); }}
-                        className="w-full text-left px-2 py-1.5 hover:bg-cyan-50 border-b border-slate-100 last:border-0"
+                        className={`w-full text-left px-2 py-1.5 border-b last:border-0 ${isDark ? 'hover:bg-cyan-500/10 border-white/10' : 'hover:bg-cyan-50 border-slate-100'}`}
                       >
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold flex-1">{e.label}</span>
-                          <span className="text-[9px] font-mono text-slate-500">{e.code}</span>
+                          <span className={`text-xs font-bold flex-1 ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>{e.label}</span>
+                          <span className={`text-[9px] font-mono ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{e.code}</span>
                         </div>
                         {e.help && (
-                          <div className="text-[10px] text-slate-500">{e.help}</div>
+                          <div className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{e.help}</div>
                         )}
                       </button>
                     ))}
@@ -403,7 +415,7 @@ function AddConditionForm({
               </div>
             )}
             {showPicker && results.length === 0 && query.trim().length >= 2 && (
-              <p className="absolute z-10 mt-1 w-full px-2 py-2 rounded border border-slate-200 bg-white text-[10px] text-slate-500 text-center shadow-md">
+              <p className={`absolute z-10 mt-1 w-full px-2 py-2 rounded border text-[10px] text-center shadow-md ${isDark ? 'border-white/15 bg-slate-800 text-slate-400' : 'border-slate-200 bg-white text-slate-500'}`}>
                 No catalog match — submit "{query.trim()}" as free text below.
               </p>
             )}
@@ -413,8 +425,8 @@ function AddConditionForm({
 
       {/* Status chips */}
       <div>
-        <label className="block text-[9px] font-bold uppercase tracking-wider mb-1 text-slate-600">
-          Status <span className="text-red-600">*</span>
+        <label className={labelCls}>
+          Status <span className="text-red-500">*</span>
         </label>
         <div className="grid grid-cols-4 gap-1">
           {CHRONIC_CONDITION_STATUSES.map((row) => {
@@ -426,7 +438,11 @@ function AddConditionForm({
                 onClick={() => setStatus(row.value)}
                 title={row.description}
                 className={`px-1.5 py-1 text-[10px] font-bold rounded border transition-all ${
-                  active ? row.tint : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                  active
+                    ? row.tint
+                    : isDark
+                      ? 'bg-white/5 border-white/15 text-slate-400 hover:bg-white/10'
+                      : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
                 }`}
               >
                 {row.label}
@@ -438,37 +454,37 @@ function AddConditionForm({
 
       {/* Notes */}
       <div>
-        <label className="block text-[9px] font-bold uppercase tracking-wider mb-1 text-slate-600">
-          Notes <span className="text-slate-400 normal-case font-normal">(stage / regimen / control)</span>
+        <label className={labelCls}>
+          Notes <span className={hintCls}>(stage / regimen / control)</span>
         </label>
         <input
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="e.g. Stage 3b CKD, on losartan; T2DM on metformin"
-          className="w-full px-2 py-1.5 text-xs rounded border border-slate-300 outline-none"
+          className={inputCls}
         />
       </div>
 
       {/* Onset */}
       <div>
-        <label className="block text-[9px] font-bold uppercase tracking-wider mb-1 text-slate-600">
-          Onset date <span className="text-slate-400 normal-case font-normal">(optional)</span>
+        <label className={labelCls}>
+          Onset date <span className={hintCls}>(optional)</span>
         </label>
         <input
           type="date"
           value={onsetDate}
           onChange={(e) => setOnsetDate(e.target.value)}
-          className="w-full px-2 py-1.5 text-xs rounded border border-slate-300 outline-none"
+          className={inputCls}
         />
       </div>
 
-      {error && <div className="text-[11px] text-red-700">{error}</div>}
+      {error && <div className={`text-[11px] ${isDark ? 'text-red-400' : 'text-red-700'}`}>{error}</div>}
 
       <div className="flex items-center gap-2 justify-end pt-1">
         <button
           type="button"
           onClick={onCancel}
-          className="px-2 py-1 text-[11px] font-bold text-slate-500 hover:text-slate-700"
+          className={`px-2 py-1 text-[11px] font-bold ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
         >
           Cancel
         </button>

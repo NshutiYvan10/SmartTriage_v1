@@ -24,8 +24,10 @@ const ROLE_COLORS: Record<string, { color: string; style: { background: string; 
   REGISTRAR:      { color: 'text-blue-600',     style: { background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' } },
   PARAMEDIC:      { color: 'text-amber-600',    style: { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' } },
   LAB_TECHNICIAN: { color: 'text-pink-600',     style: { background: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.2)' } },
-  READ_ONLY:      { color: 'text-slate-600',    style: { background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' } },
 };
+
+/** Neutral badge for roles this build doesn't recognise. */
+const FALLBACK_ROLE_COLOR = { color: 'text-slate-600', style: { background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' } };
 
 const STATUS_STYLES: Record<AccountStatus, { color: string; style: { background: string; border: string }; label: string }> = {
   PENDING_ACTIVATION: { color: 'text-amber-600',   style: { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' },  label: 'Pending' },
@@ -43,7 +45,7 @@ const STATUS_STYLES: Record<AccountStatus, { color: string; style: { background:
 // HA from minting peers). The `rolesAvailableTo` helper below applies
 // these limits at the render layer; the backend's UserAdminAuthz
 // enforces the same rules independently.
-const ALL_ROLES = ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'REGISTRAR', 'PARAMEDIC', 'LAB_TECHNICIAN', 'READ_ONLY'];
+const ALL_ROLES = ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'REGISTRAR', 'PARAMEDIC', 'LAB_TECHNICIAN'];
 
 function rolesAvailableTo(callerRole: string | undefined): string[] {
   // SUPER_ADMIN cannot be minted via the API even by another SA.
@@ -182,7 +184,14 @@ export function UserManagement() {
     setLoading(true);
     try {
       const data = await userApi.getByHospital(hospitalId, 0, 100, true);
-      setUsers(data.content || []);
+      // includeInactive=true is needed so DEACTIVATED users stay visible
+      // (they carry the Reactivate action) — but a soft-deleted row that is
+      // still PENDING_ACTIVATION is a CANCELLED invitation and must NOT
+      // render as a live pending invite (that made "cancel invitation"
+      // look like a no-op).
+      setUsers((data.content || []).filter(
+        (u) => !(u.accountStatus === 'PENDING_ACTIVATION' && u.isActive === false),
+      ));
     } catch (err) {
       console.error('Failed to load users:', err);
       flash('error', 'Failed to load users');
@@ -584,7 +593,7 @@ export function UserManagement() {
                 </thead>
                 <tbody>
                   {users.map((u) => {
-                    const rc = ROLE_COLORS[u.role] || ROLE_COLORS.READ_ONLY;
+                    const rc = ROLE_COLORS[u.role] || FALLBACK_ROLE_COLOR;
                     const status = u.accountStatus || 'ACTIVE';
                     const sc = STATUS_STYLES[status] || STATUS_STYLES.ACTIVE;
                     const isPending = status === 'PENDING_ACTIVATION';

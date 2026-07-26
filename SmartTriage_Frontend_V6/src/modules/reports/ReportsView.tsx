@@ -108,7 +108,7 @@ export function ReportsView() {
 
   /* ── Role → catalog visibility (mirrors the endpoint authz) ── */
   const opsLeadership = access.canSeeAllZones; // admin / CN / shift lead / super admin
-  const governance = opsLeadership || role === 'READ_ONLY';
+  const governance = opsLeadership;
   const clinician = role === 'DOCTOR' || role === 'NURSE' || role === 'HOSPITAL_ADMIN' || role === 'SUPER_ADMIN';
 
   interface CatalogEntry {

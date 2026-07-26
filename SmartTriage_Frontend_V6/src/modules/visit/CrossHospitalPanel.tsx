@@ -23,7 +23,9 @@ import {
 } from '@/api/crossHospital';
 import { ApiError } from '@/api/client';
 import { useTheme } from '@/hooks/useTheme';
+import { useAuthStore, canBreakGlass, canManageConsent } from '@/store/authStore';
 import { BreakTheGlassModal } from './BreakTheGlassModal';
+import { DataSharingConsentModal } from '@/modules/entry/DataSharingConsentModal';
 
 interface Props {
   nationalId: string | null;
@@ -99,10 +101,12 @@ function parseDischargeSummary(content: string) {
 
 export function CrossHospitalPanel({ nationalId }: Props) {
   const { glassCard, isDark, text } = useTheme();
+  const user = useAuthStore((state) => state.user);
   const [record, setRecord] = useState<CrossHospitalDeepRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showBreakGlass, setShowBreakGlass] = useState(false);
+  const [showConsentModal, setShowConsentModal] = useState(false);
 
   const load = useCallback(async (breakTheGlassReason?: string) => {
     if (!nationalId?.trim()) { setLoading(false); return; }
@@ -148,9 +152,13 @@ export function CrossHospitalPanel({ nationalId }: Props) {
     );
   }
 
-  // Access denied → locked state with break-the-glass.
+  // Access denied → locked state: record consent (incl. re-granting a withdrawn
+  // one), or break the glass — the override is reserved for senior clinical
+  // authority (doctor / paramedic / charge or senior nurse; staff nurses escalate).
   if (!record.accessGranted) {
     const label = `${record.firstName ?? ''} ${record.lastName ?? ''}`.trim() || undefined;
+    const mayBreakGlass = canBreakGlass(user);
+    const mayRecordConsent = canManageConsent(user);
     return (
       <div className="space-y-4">
         <div className="rounded-xl p-6 text-center" style={glassCard}>
@@ -158,22 +166,49 @@ export function CrossHospitalPanel({ nationalId }: Props) {
           <h3 className={`text-sm font-bold ${text.heading}`}>Cross-hospital record is locked</h3>
           <p className={`text-xs ${text.muted} mt-1 max-w-md mx-auto`}>
             This patient is registered at {record.linkedHospitalCount} SmartTriage hospital
-            {record.linkedHospitalCount === 1 ? '' : 's'}, but has not consented to sharing their
-            deep clinical record. Consent can be recorded at registration. In an emergency, you may
-            break the glass — an audited, governance-notified override.
+            {record.linkedHospitalCount === 1 ? '' : 's'}, but has no active consent to share their
+            deep clinical record. Consent can be recorded (or re-granted after a withdrawal) at any
+            time. In an emergency, senior clinicians may break the glass — an audited,
+            governance-notified override.
           </p>
-          <button
-            onClick={() => setShowBreakGlass(true)}
-            className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-lg text-xs font-bold text-white bg-red-600 hover:bg-red-500"
-          >
-            <ShieldAlert className="w-4 h-4" /> Break the glass
-          </button>
+          <div className="flex items-center justify-center gap-2 mt-4">
+            {mayRecordConsent && (
+              <button
+                onClick={() => setShowConsentModal(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700"
+              >
+                <ShieldCheck className="w-4 h-4" /> Record consent
+              </button>
+            )}
+            {mayBreakGlass && (
+              <button
+                onClick={() => setShowBreakGlass(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white bg-red-600 hover:bg-red-500"
+              >
+                <ShieldAlert className="w-4 h-4" /> Break the glass
+              </button>
+            )}
+          </div>
+          {!mayBreakGlass && (
+            <p className={`text-[11px] ${text.muted} mt-3 max-w-md mx-auto`}>
+              Break-the-glass requires senior clinical authority — a doctor, paramedic, or a
+              charge/senior nurse. Please escalate to the shift lead or a physician if this is
+              an emergency.
+            </p>
+          )}
         </div>
         {showBreakGlass && (
           <BreakTheGlassModal
             patientLabel={label}
             onConfirm={async (reason) => { await load(reason); setShowBreakGlass(false); }}
             onClose={() => setShowBreakGlass(false)}
+          />
+        )}
+        {showConsentModal && nationalId && (
+          <DataSharingConsentModal
+            nationalId={nationalId}
+            patientName={label}
+            onClose={() => { setShowConsentModal(false); load(); }}
           />
         )}
       </div>

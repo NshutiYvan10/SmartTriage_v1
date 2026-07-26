@@ -9,9 +9,9 @@
  *  2. Briefly flashes a full-viewport red border so the alert is
  *     impossible to miss even when the user is scrolled deep into a
  *     non-alert page.
- *  3. Renders a top-right toast that links to the patient/visit. The
- *     toast auto-dismisses after 12 seconds; the user can also click
- *     it to navigate, or click the X to dismiss earlier.
+ *  3. Renders a top-right card with explicit "Open chart" and "Dismiss"
+ *     buttons (separate targets — dismissing can't accidentally
+ *     navigate). Auto-dismisses after 12 seconds.
  *
  * <p>The point of this component is to close the gap a clinician would
  * otherwise have between "alert was generated server-side" and "I
@@ -26,8 +26,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, ExternalLink, X } from 'lucide-react';
 import { useAlertStore } from '@/store/alertStore';
+import { useTheme } from '@/hooks/useTheme';
 import type { AIAlert } from '@/types';
 
 const QUIET_PATH_PREFIXES = ['/alerts', '/alert-dashboard', '/notifications', '/login', '/activate'];
@@ -55,6 +56,7 @@ export function CriticalAlertNotifier() {
   const alerts = useAlertStore((s) => s.alerts);
   const navigate = useNavigate();
   const location = useLocation();
+  const { glassCard, isDark, text } = useTheme();
 
   const [flashing, setFlashing] = useState(false);
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
@@ -190,23 +192,23 @@ export function CriticalAlertNotifier() {
         />
       )}
 
-      {/* Toast stack — top right, below sidebar header. */}
-      <div className="fixed top-4 right-4 z-[9998] flex flex-col gap-2 max-w-sm">
+      {/* Toast stack — top right, below sidebar header. Each entry is a
+          design-system glass card with explicit action buttons: dismissing
+          and opening the chart are SEPARATE targets, so a nurse trying to
+          clear the popup can't accidentally navigate away mid-task. */}
+      <div className="fixed top-4 right-4 z-[9998] flex flex-col gap-2 w-[min(92vw,400px)]">
         {notices.map((n) => (
-          <div
-            key={n.id}
-            className="bg-cyan-700 text-white rounded-xl shadow-2xl border-2 border-cyan-300 p-3 animate-fade-down"
-          >
-            <div className="flex items-start gap-2">
+          <div key={n.id} style={glassCard} className="rounded-xl shadow-2xl overflow-hidden animate-fade-down border-l-4 border-cyan-500">
+            <div className="flex items-start gap-3 p-3.5">
               <div className="flex-1 min-w-0">
-                <div className="text-[10px] font-bold uppercase tracking-widest opacity-80">
+                <div className={`text-[10px] font-bold uppercase tracking-widest text-cyan-600`}>
                   {n.title}
                 </div>
-                <div className="text-xs opacity-95">{n.message}</div>
+                <div className={`text-xs mt-0.5 ${text.body}`}>{n.message}</div>
               </div>
               <button
                 onClick={() => setNotices((prev) => prev.filter((x) => x.id !== n.id))}
-                className="opacity-70 hover:opacity-100"
+                className={`p-1.5 -m-1 rounded-lg ${text.muted} hover:opacity-70 ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}
                 aria-label="Dismiss"
               >
                 <X className="w-4 h-4" />
@@ -215,37 +217,49 @@ export function CriticalAlertNotifier() {
           </div>
         ))}
         {toasts.map((t) => (
-          <div
-            key={t.alertId}
-            className="bg-rose-600 text-white rounded-xl shadow-2xl border-2 border-rose-300 p-3 animate-fade-down cursor-pointer hover:bg-rose-700 transition-colors"
-            onClick={() => {
-              if (t.visitId) navigate(`/visit/${t.visitId}`);
-              dismiss(t.alertId);
-            }}
-          >
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5 animate-pulse" />
+          <div key={t.alertId} style={glassCard} className="rounded-xl shadow-2xl overflow-hidden animate-fade-down border-l-4 border-rose-500">
+            <div className="flex items-start gap-3 p-3.5">
+              <span className="w-8 h-8 rounded-lg bg-rose-500/15 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-4 h-4 text-rose-500 animate-pulse" />
+              </span>
               <div className="flex-1 min-w-0">
-                <div className="text-[10px] font-bold uppercase tracking-widest opacity-80">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-rose-500">
                   Critical alert
                 </div>
-                <div className="text-sm font-bold truncate">
+                <div className={`text-sm font-bold truncate ${text.heading}`}>
                   {t.patientName ?? 'Patient'}
                 </div>
-                <div className="text-xs opacity-95 line-clamp-2">
+                <div className={`text-xs line-clamp-2 ${text.body}`}>
                   {t.message}
                 </div>
-                {t.visitId && (
-                  <div className="text-[10px] opacity-80 mt-1">Click to open chart →</div>
-                )}
               </div>
               <button
-                onClick={(e) => { e.stopPropagation(); dismiss(t.alertId); }}
-                className="opacity-70 hover:opacity-100"
+                onClick={() => dismiss(t.alertId)}
+                className={`p-1.5 -m-1 rounded-lg ${text.muted} hover:opacity-70 ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}
                 aria-label="Dismiss"
               >
                 <X className="w-4 h-4" />
               </button>
+            </div>
+            <div
+              className="flex items-center justify-end gap-2 px-3.5 py-2"
+              style={{ borderTop: isDark ? '1px solid rgba(244,63,94,0.2)' : '1px solid rgba(244,63,94,0.15)' }}
+            >
+              <button
+                onClick={() => dismiss(t.alertId)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold ${text.body} ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}
+              >
+                Dismiss
+              </button>
+              {t.visitId && (
+                <button
+                  onClick={() => { navigate(`/visit/${t.visitId}`); dismiss(t.alertId); }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-rose-600 hover:bg-rose-500"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Open chart
+                </button>
+              )}
             </div>
           </div>
         ))}

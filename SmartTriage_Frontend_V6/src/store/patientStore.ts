@@ -157,7 +157,7 @@ interface PatientState {
     cellId?: string; villageId?: string;
   }) => Promise<Patient | null>;
   /** Fetch active visits from backend and populate patient store */
-  fetchActiveVisits: (hospitalId: string) => Promise<void>;
+  fetchActiveVisits: (hospitalId: string, opts?: { allHospital?: boolean }) => Promise<void>;
   ensurePatient: (patient: Patient) => void;
   updatePatient: (id: string, updates: Partial<Patient>) => void;
   /** Persist a registrar demographic correction (PUT /patients/{realPatientId}), then merge the
@@ -224,7 +224,7 @@ export const usePatientStore = create<PatientState>((set, get) => ({
    *  wide regardless of who was logged in. The backend now refuses the
    *  unscoped call from non-leads with a 403 — switching the store
    *  default keeps the UI working AND honoring the zone boundary. */
-  fetchActiveVisits: async (hospitalId: string) => {
+  fetchActiveVisits: async (hospitalId: string, opts?: { allHospital?: boolean }) => {
     set({ isLoading: true });
     try {
       // Single bulk fetch — drops the N+1 patient-detail call per
@@ -234,7 +234,12 @@ export const usePatientStore = create<PatientState>((set, get) => ({
       // flag, status, arrival time); detailed patient fields (gender,
       // age, allergies, etc.) are lazy-loaded by PatientDetailView
       // when the nurse clicks into a specific patient.
-      const visitsPage = await visitApi.getActiveForCallerByHospital(hospitalId, 0, 200);
+      // Admins / charge-nurse / shift-lead (allHospital) load the WHOLE
+      // hospital census; zone-scoped clinicians get only their own patients.
+      // The all-hospital endpoint is server-gated by canSeeAllZonesAtHospital.
+      const visitsPage = opts?.allHospital
+        ? await visitApi.getActiveByHospital(hospitalId, 0, 200)
+        : await visitApi.getActiveForCallerByHospital(hospitalId, 0, 200);
       const visits: VisitResponse[] = visitsPage.content;
 
       const mapped: Patient[] = visits.map(visitResponseToPatient);

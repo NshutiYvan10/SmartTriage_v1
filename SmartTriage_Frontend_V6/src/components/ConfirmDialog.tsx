@@ -6,6 +6,7 @@
  * can require a typed reason (e.g. rejection reason) before confirming.
  */
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 
@@ -53,7 +54,12 @@ export function ConfirmDialog({
   };
   const close = () => { setReason(''); onClose(); };
 
-  return (
+  // PORTAL to <body>: callers often render this inside glass cards whose
+  // backdrop-filter creates a CSS containing block — position:fixed then
+  // resolves against the CARD, so the dialog (and its backdrop) rendered
+  // clipped inside the row: a half-screen dark band with the action
+  // buttons cut off. Portaling out guarantees true viewport positioning.
+  return createPortal(
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -105,6 +111,7 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

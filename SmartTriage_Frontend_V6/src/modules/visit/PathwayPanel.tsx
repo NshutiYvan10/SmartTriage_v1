@@ -14,7 +14,7 @@ import {
   SkipForward, Flag, XCircle, RefreshCw, ListChecks,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore, canActivatePathway } from '@/store/authStore';
 import {
   pathwayApi, type PathwayActivation, type PathwayProgress, type PathwayRecommendation,
 } from '@/api/pathway';
@@ -56,6 +56,10 @@ interface PathwayPanelProps {
 export function PathwayPanel({ visitId, onChanged }: PathwayPanelProps) {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const hospitalId = useAuthStore((s) => s.user?.hospitalId) || '';
+  // Activation is a senior clinical decision (doctor / charge or senior nurse /
+  // shift lead) — mirrors the backend gate. Staff nurses still see and work
+  // active pathways below; they just cannot start one.
+  const mayActivate = canActivatePathway(useAuthStore((s) => s.user));
   const wsGen = useWebSocketGeneration();
 
   const [recs, setRecs] = useState<PathwayRecommendation[]>([]);
@@ -201,10 +205,16 @@ export function PathwayPanel({ visitId, onChanged }: PathwayPanelProps) {
                         </div>
                         <p className={`text-[11px] mt-0.5 ${text.body}`}>{r.reason}</p>
                       </div>
-                      <button onClick={() => activate(r.pathwayId)} disabled={busy}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold rounded-xl bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20 transition-colors disabled:opacity-50 shrink-0">
-                        <Play className="w-3.5 h-3.5" />Activate
-                      </button>
+                      {mayActivate ? (
+                        <button onClick={() => activate(r.pathwayId)} disabled={busy}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold rounded-xl bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20 transition-colors disabled:opacity-50 shrink-0">
+                          <Play className="w-3.5 h-3.5" />Activate
+                        </button>
+                      ) : (
+                        <span className={`text-[10px] ${text.muted} shrink-0 self-center max-w-[130px] text-right`}>
+                          Activation requires a doctor or charge/senior nurse
+                        </span>
+                      )}
                     </div>
                   );
                 })}

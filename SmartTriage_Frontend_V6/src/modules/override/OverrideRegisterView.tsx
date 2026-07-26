@@ -3,10 +3,11 @@ import {
   ShieldAlert, Search, Clock, User, Loader2, RefreshCw, Calendar,
   ChevronDown, ChevronRight, Pill, FlaskConical, Eye, CheckCircle2,
 } from 'lucide-react';
-import { useAuthStore } from '@/store/authStore';
 import { overridesApi, OverrideRecord } from '@/api/overrides';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
+import { useHospitalScope } from '@/hooks/useHospitalScope';
+import { HospitalScopePicker } from '@/components/HospitalScopePicker';
 
 const startIso = (d: string) => (d ? new Date(`${d}T00:00:00`).toISOString() : undefined);
 const endIso = (d: string) => (d ? new Date(`${d}T23:59:59`).toISOString() : undefined);
@@ -37,7 +38,8 @@ function categoryIcon(category: string) {
 export function OverrideRegisterView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
-  const hospitalId = useAuthStore((s) => s.user?.hospitalId) || '';
+  const hospitalScope = useHospitalScope();
+  const hospitalId = hospitalScope.hospitalId;
 
   const [records, setRecords] = useState<OverrideRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -102,13 +104,16 @@ export function OverrideRegisterView() {
                   <p className="text-sm text-white/50">Every safety-gate override — who, on whom, when, and why. For incident investigation.</p>
                 </div>
               </div>
-              <button
-                onClick={load}
-                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all"
-                title="Refresh"
-              >
-                <RefreshCw className={`w-4 h-4 text-white ${loading ? 'animate-spin' : ''}`} />
-              </button>
+              <div className="flex items-center gap-3">
+                <HospitalScopePicker scope={hospitalScope} variant="dark" />
+                <button
+                  onClick={load}
+                  className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all"
+                  title="Refresh"
+                >
+                  <RefreshCw className={`w-4 h-4 text-white ${loading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
             </div>
           </div>
         </div>

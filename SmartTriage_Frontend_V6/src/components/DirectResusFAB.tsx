@@ -20,7 +20,7 @@
  * open instantly.
  *
  * Hidden when:
- *   - User is not a clinical role (LAB_TECHNICIAN, READ_ONLY)
+ *   - User is not a clinical role (LAB_TECHNICIAN)
  *   - Route is /entry (the registration page already has the
  *     Stable/Unstable banner; a second action would be visual noise)
  *   - Route is unauthenticated (login, accept-invite, public pages)

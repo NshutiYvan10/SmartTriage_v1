@@ -23,6 +23,7 @@ import { userApi } from '@/api/users';
 import { hospitalApi } from '@/api/hospitals';
 import type { DeviceResponse, DeviceSessionResponse, HospitalResponse, BedResponse, UserResponse } from '@/api/types';
 import { format } from 'date-fns';
+import { dialog } from '@/components/dialog';
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; icon: typeof Wifi }> = {
   REGISTERED:   { color: 'text-slate-500', bg: 'bg-slate-500/10', icon: WifiOff },
@@ -224,10 +225,13 @@ export function IoTDeviceManagement() {
   // lost — it mints a NEW key (the old one stops working immediately) and pops the
   // same "shown once" modal with a copy button. Backend-gated to owner/admin.
   const handleRegenerateKey = async (device: DeviceResponse) => {
-    const ok = window.confirm(
-      `Re-issue the API key for "${device.deviceName}"?\n\n` +
-      `The current key STOPS working immediately. You'll need to paste the NEW key into the ` +
-      `device firmware (DEVICE_API_KEY) and re-flash it. The new key is shown ONCE — copy it right away.`);
+    const ok = await dialog.confirm({
+      title: 'Re-issue API key', tone: 'danger', confirmLabel: 'Re-issue key',
+      message:
+        `Re-issue the API key for "${device.deviceName}"?\n\n` +
+        `The current key STOPS working immediately. You'll need to paste the NEW key into the ` +
+        `device firmware (DEVICE_API_KEY) and re-flash it. The new key is shown ONCE — copy it right away.`,
+    });
     if (!ok) return;
     setRegenKeyLoadingId(device.id);
     try {
@@ -239,8 +243,7 @@ export function IoTDeviceManagement() {
       loadDevices();
     } catch (err: any) {
       console.error(err);
-      // eslint-disable-next-line no-alert
-      window.alert(err?.message || 'Failed to re-issue the API key. Check your permissions and try again.');
+      dialog.notify(err?.message || 'Failed to re-issue the API key. Check your permissions and try again.', { type: 'error' });
     } finally {
       setRegenKeyLoadingId(null);
     }

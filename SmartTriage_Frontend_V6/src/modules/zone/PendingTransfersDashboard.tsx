@@ -36,6 +36,7 @@ import { useMyShift } from '@/hooks/useMyShift';
 import { zoneTransferApi, type ZoneTransferResponse } from '@/api/zoneTransfers';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
+import { dialog } from '@/components/dialog';
 
 /**
  * SATS acceptance windows in minutes — the slowest the charge nurse
@@ -359,8 +360,11 @@ export function PendingTransfersDashboard() {
                       <button
                         type="button"
                         disabled={acting}
-                        onClick={() => {
-                          const reason = window?.prompt('Decline reason (e.g. Resus full):');
+                        onClick={async () => {
+                          const reason = await dialog.prompt({
+                            title: 'Decline transfer', tone: 'danger', confirmLabel: 'Decline', required: true,
+                            message: 'Decline reason:', placeholder: 'e.g. Resus full',
+                          });
                           if (reason && reason.trim()) onAct(t.id, 'decline', reason.trim());
                         }}
                         className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-red-500/20 border border-red-500/30 hover:bg-red-500/30 disabled:opacity-50 ${isDark ? 'text-red-300' : 'text-red-700'}`}

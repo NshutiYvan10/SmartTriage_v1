@@ -315,6 +315,11 @@ export function PediatricTriageForm() {
         }
         setPatientNames((prev) => prev || `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim());
         if (p.gender) setGender((prev) => prev === 'MALE' && !patient?.gender ? p.gender : prev);
+        // Weight is mandatory for pediatric triage and is captured at
+        // registration — backfill it so the nurse isn't re-weighing on paper.
+        if (typeof p.weightKg === 'number' && p.weightKg > 0) {
+          setWeightVal((prev) => prev || String(p.weightKg));
+        }
       })
       .catch(() => { /* non-fatal — nurse can still fill manually */ });
     return () => { cancelled = true; };
@@ -540,6 +545,11 @@ export function PediatricTriageForm() {
     const rr = fieldValues['respiratory_rate'] ? parseInt(fieldValues['respiratory_rate']) : null;
     const hr = fieldValues['heart_rate'] ? parseInt(fieldValues['heart_rate']) : null;
     setTewsInput((prev) => ({ ...prev, respiratoryRate: rr ?? prev.respiratoryRate, heartRate: hr ?? prev.heartRate }));
+    // Mirror the "Oxygen saturation" emergency-sign value into the SpO₂
+    // vital — previously it was dropped, so an SpO₂ entered on the
+    // discriminator row never scored or forced RED (mirrors AdultTriageForm).
+    const spo2Sign = fieldValues['oxygen_saturation'];
+    if (spo2Sign) setSpo2(spo2Sign);
   }, [fieldValues]);
 
   // --- Validation ---

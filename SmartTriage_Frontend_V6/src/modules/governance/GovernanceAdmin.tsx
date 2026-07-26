@@ -5,12 +5,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Scale, Plus, Send, CheckCircle2, ShieldCheck, Archive, PauseCircle,
+  Scale, Plus, CheckCircle2, ShieldCheck, Archive, ArchiveRestore, PauseCircle,
   ChevronDown, ChevronRight, Loader2, RefreshCw, Clock, FileText,
   Search, History, User, AlertTriangle, ArrowRight, Filter, X,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { dialog } from '@/components/dialog';
 import { useAuthStore } from '@/store/authStore';
 import { governanceApi } from '@/api/governance';
 import type { ClinicalPolicy, PolicyAuditLog } from '@/api/governance';
@@ -55,7 +56,11 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string;
   ARCHIVED:          { color: 'text-slate-600',   bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)', label: 'Archived' },
 };
 
-const STATUS_PIPELINE = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'ACTIVE'];
+// Admin one-step lifecycle: a DRAFT policy is approved + activated in a
+// single action (the audit trail still records both steps). The
+// intermediate PENDING_APPROVAL / APPROVED statuses remain valid states
+// (styled via STATUS_CONFIG) but are no longer the advertised path.
+const STATUS_PIPELINE = ['DRAFT', 'ACTIVE'];
 const ALL_STATUSES = ['', 'DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'ACTIVE', 'SUSPENDED', 'ARCHIVED'];
 
 function getTypeLabel(type: string): string {
@@ -203,25 +208,20 @@ export function GovernanceAdmin() {
     } finally { setActionLoading(null); }
   }, [hospitalId, formType, formName, formCode, formDesc, formContent, formEffective, user?.fullName, loadPolicies]);
 
-  const handleSubmitForApproval = useCallback(async (id: string) => {
-    setActionLoading(id);
-    try { await governanceApi.submitForApproval(id); await loadPolicies(); }
-    catch { /* */ } finally { setActionLoading(null); }
-  }, [loadPolicies]);
-
+  // One-step approve + activate (admin lifecycle). The backend records
+  // APPROVED and ACTIVATED audit rows separately.
   const handleApprove = useCallback(async () => {
     if (!approveTarget) return;
     setActionLoading(approveTarget);
     try {
-      await governanceApi.approve(approveTarget, {
-        approverName: user?.fullName || 'Unknown',
-        notes: approveNotes || undefined,
-      });
+      await governanceApi.approveActivate(approveTarget, approveNotes || undefined);
       setApproveTarget(null);
       setApproveNotes('');
       await loadPolicies();
-    } catch { /* */ } finally { setActionLoading(null); }
-  }, [approveTarget, approveNotes, user, loadPolicies]);
+    } catch (err: any) {
+      dialog.notify(err?.message ?? 'Failed to approve and activate policy.', { type: 'error' });
+    } finally { setActionLoading(null); }
+  }, [approveTarget, approveNotes, loadPolicies]);
 
   const handleActivate = useCallback(async (id: string) => {
     setActionLoading(id);
@@ -249,6 +249,26 @@ export function GovernanceAdmin() {
     setActionLoading(id);
     try { await governanceApi.archive(id); await loadPolicies(); }
     catch { /* */ } finally { setActionLoading(null); setArchiveTarget(null); }
+  }, [loadPolicies]);
+
+  // Restore an archived policy → DRAFT (must re-pass approval before it is
+  // active again — the backend enforces the same rule).
+  const handleUnarchive = useCallback(async (id: string) => {
+    const ok = await dialog.confirm({
+      title: 'Restore policy',
+      message: 'Restore this archived policy to DRAFT? It will need to go through submit, approval, and activation again before it is back in clinical use.',
+      confirmLabel: 'Restore to draft',
+      tone: 'primary',
+    });
+    if (!ok) return;
+    setActionLoading(id);
+    try {
+      await governanceApi.unarchive(id);
+      dialog.notify('Policy restored to draft.', { type: 'success' });
+      await loadPolicies();
+    } catch (err: any) {
+      dialog.notify(err?.message ?? 'Failed to restore policy.', { type: 'error' });
+    } finally { setActionLoading(null); }
   }, [loadPolicies]);
 
   const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
@@ -612,24 +632,19 @@ export function GovernanceAdmin() {
 
                             {/* Action buttons */}
                             <div className="flex items-center gap-2 mt-4 pt-3 flex-wrap" style={{ borderTop: borderStyle }}>
-                              {policy.status === 'DRAFT' && (
-                                <button
-                                  onClick={() => handleSubmitForApproval(policy.id)}
-                                  disabled={isLoading}
-                                  className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
-                                >
-                                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                                  Submit for Approval
-                                </button>
-                              )}
-                              {policy.status === 'PENDING_APPROVAL' && (
+                              {/* Policy administration is SA/HA-owned — the
+                                  admin answers to no higher reviewer, so a
+                                  DRAFT (or already-submitted) policy goes
+                                  live in ONE action. The audit trail still
+                                  records APPROVED + ACTIVATED separately. */}
+                              {(policy.status === 'DRAFT' || policy.status === 'PENDING_APPROVAL') && (
                                 <button
                                   onClick={() => setApproveTarget(policy.id)}
                                   disabled={isLoading}
                                   className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
                                 >
-                                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                                  Approve
+                                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                                  Approve &amp; Activate
                                 </button>
                               )}
                               {policy.status === 'APPROVED' && (
@@ -660,6 +675,16 @@ export function GovernanceAdmin() {
                                 >
                                   {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
                                   Archive
+                                </button>
+                              )}
+                              {policy.status === 'ARCHIVED' && (
+                                <button
+                                  onClick={() => handleUnarchive(policy.id)}
+                                  disabled={isLoading}
+                                  className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
+                                >
+                                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArchiveRestore className="w-3.5 h-3.5" />}
+                                  Restore to Draft
                                 </button>
                               )}
 
@@ -845,8 +870,8 @@ export function GovernanceAdmin() {
                     <CheckCircle2 className="w-5 h-5 text-blue-400" />
                   </div>
                   <div>
-                    <h3 className={`text-sm font-extrabold ${text.heading}`}>Approve Policy</h3>
-                    <p className={`text-[10px] ${text.muted}`}>Approving as {user?.fullName || 'Unknown'}</p>
+                    <h3 className={`text-sm font-extrabold ${text.heading}`}>Approve &amp; Activate Policy</h3>
+                    <p className={`text-[10px] ${text.muted}`}>Goes live immediately — approving as {user?.fullName || 'Unknown'}</p>
                   </div>
                 </div>
                 <button
@@ -879,8 +904,8 @@ export function GovernanceAdmin() {
                   disabled={actionLoading === approveTarget}
                   className="flex items-center gap-2 px-5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all duration-300 disabled:opacity-50"
                 >
-                  {actionLoading === approveTarget ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                  Approve Policy
+                  {actionLoading === approveTarget ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                  Approve &amp; Activate
                 </button>
               </div>
             </div>
@@ -998,7 +1023,7 @@ export function GovernanceAdmin() {
         <ConfirmDialog
           open={archiveTarget !== null}
           title="Archive policy"
-          message="Are you sure you want to archive this policy? It will no longer be active for clinical use and this cannot be undone from this screen."
+          message="Are you sure you want to archive this policy? It will no longer be active for clinical use. You can restore it later, but it returns as a DRAFT and must re-pass approval."
           confirmLabel="Archive policy"
           busy={actionLoading === archiveTarget}
           onConfirm={() => archiveTarget && handleArchive(archiveTarget)}

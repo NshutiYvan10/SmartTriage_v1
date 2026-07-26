@@ -34,6 +34,7 @@ import {
   type RecordAllergyRequest,
 } from '@/api/types';
 import { useAuthStore } from '@/store/authStore';
+import { useTheme } from '@/hooks/useTheme';
 
 interface Props {
   patientId: string;
@@ -298,11 +299,23 @@ function AddAllergyForm({
   onCreated: (created: PatientAllergyResponse) => void;
   onSubmit: (req: RecordAllergyRequest) => Promise<PatientAllergyResponse>;
 }) {
+  const { isDark } = useTheme();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<DrugFormulary[]>([]);
   const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState<DrugFormulary | null>(null);
   const searchSeq = useRef(0);
+
+  // The form previously hardcoded light-mode colors (slate-600 labels,
+  // bg-white inputs with inherited text) which rendered unreadable on the
+  // dark patient-profile surface. All form styling is theme-aware now.
+  const labelCls = `block text-[9px] font-bold uppercase tracking-wider mb-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`;
+  const hintCls = `${isDark ? 'text-slate-400' : 'text-slate-400'} normal-case font-normal`;
+  const inputCls = `w-full px-2 py-1.5 text-xs rounded outline-none border focus:ring-1 focus:ring-cyan-500/30 ${
+    isDark
+      ? 'bg-white/5 border-white/15 text-slate-100 placeholder-slate-500 [color-scheme:dark]'
+      : 'bg-white border-slate-300 text-slate-800 placeholder-slate-400'
+  }`;
 
   const [severity, setSeverity] = useState<AllergySeverity>('MODERATE');
   const [reaction, setReaction] = useState('');
@@ -366,15 +379,15 @@ function AddAllergyForm({
   }, [canSubmit, selected, query, severity, reaction, onsetDate, recordedByName, onSubmit, onCreated]);
 
   return (
-    <div className="rounded-md border border-emerald-200 bg-emerald-50/50 p-2.5 space-y-2">
+    <div className={`rounded-md border p-2.5 space-y-2 ${isDark ? 'border-emerald-500/25 bg-emerald-500/10' : 'border-emerald-200 bg-emerald-50/50'}`}>
       <div className="flex items-center justify-between">
-        <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 inline-flex items-center gap-1">
+        <div className={`text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
           <Plus className="w-3 h-3" /> Add allergy
         </div>
         <button
           type="button"
           onClick={onCancel}
-          className="text-slate-500 hover:text-slate-700"
+          className={isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'}
           aria-label="Cancel"
         >
           <X className="w-3.5 h-3.5" />
@@ -383,32 +396,32 @@ function AddAllergyForm({
 
       {/* Allergen picker */}
       <div>
-        <label className="block text-[9px] font-bold uppercase tracking-wider mb-1 text-slate-600">
-          Allergen <span className="text-slate-400 normal-case font-normal">(search drug catalog or type free text)</span>
+        <label className={labelCls}>
+          Allergen <span className={hintCls}>(search drug catalog or type free text)</span>
         </label>
         {selected ? (
-          <div className="rounded-md border border-cyan-300 bg-cyan-50 p-2 flex items-start gap-2">
-            <FlaskConical className="w-3.5 h-3.5 text-cyan-600 mt-0.5" />
+          <div className={`rounded-md border p-2 flex items-start gap-2 ${isDark ? 'border-cyan-500/30 bg-cyan-500/10' : 'border-cyan-300 bg-cyan-50'}`}>
+            <FlaskConical className={`w-3.5 h-3.5 mt-0.5 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs font-bold">{selected.genericName}</span>
+                <span className={`text-xs font-bold ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>{selected.genericName}</span>
                 {selected.drugClass && (
                   <span
-                    className="text-[9px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg text-slate-600"
-                    style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)' }}
+                    className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg ${isDark ? 'text-slate-300' : 'text-slate-600'}`}
+                    style={{ background: 'rgba(100,116,139,0.15)', border: '1px solid rgba(100,116,139,0.3)' }}
                   >
                     {selected.drugClass}
                   </span>
                 )}
               </div>
               {selected.allergenGroups && (
-                <p className="text-[10px] text-slate-600 mt-0.5">Groups: {selected.allergenGroups}</p>
+                <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Groups: {selected.allergenGroups}</p>
               )}
             </div>
             <button
               type="button"
               onClick={() => { setSelected(null); setQuery(''); }}
-              className="text-slate-400 hover:text-slate-600"
+              className={isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-400 hover:text-slate-600'}
             >
               <X className="w-3 h-3" />
             </button>
@@ -420,15 +433,15 @@ function AddAllergyForm({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="e.g. penicillin, sulfa, shellfish, latex…"
-              className="w-full pl-7 pr-2 py-1.5 text-xs rounded border border-slate-300 outline-none"
+              className={`${inputCls} pl-7`}
             />
             {(searching || results.length > 0) && (
-              <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded border border-slate-200 bg-white shadow-md">
+              <div className={`absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded border shadow-md ${isDark ? 'border-white/15 bg-slate-800' : 'border-slate-200 bg-white'}`}>
                 {searching && results.length === 0 && (
                   <p className="text-[11px] text-slate-400 text-center py-2">Searching…</p>
                 )}
                 {!searching && results.length === 0 && query.trim().length >= 2 && (
-                  <p className="text-[10px] text-slate-500 text-center py-2 px-2">
+                  <p className={`text-[10px] text-center py-2 px-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                     No catalog match — submit as free text or refine the search.
                   </p>
                 )}
@@ -437,11 +450,11 @@ function AddAllergyForm({
                     key={r.id}
                     type="button"
                     onClick={() => { setSelected(r); }}
-                    className="w-full text-left px-2 py-1.5 hover:bg-cyan-50 border-b border-slate-100 last:border-0"
+                    className={`w-full text-left px-2 py-1.5 border-b last:border-0 ${isDark ? 'hover:bg-cyan-500/10 border-white/10' : 'hover:bg-cyan-50 border-slate-100'}`}
                   >
-                    <div className="text-xs font-bold">{r.genericName}</div>
+                    <div className={`text-xs font-bold ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>{r.genericName}</div>
                     {(r.drugClass || r.allergenGroups) && (
-                      <div className="text-[10px] text-slate-500">
+                      <div className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                         {r.drugClass}{r.allergenGroups ? ` · ${r.allergenGroups}` : ''}
                       </div>
                     )}
@@ -455,8 +468,8 @@ function AddAllergyForm({
 
       {/* Severity chips */}
       <div>
-        <label className="block text-[9px] font-bold uppercase tracking-wider mb-1 text-slate-600">
-          Severity <span className="text-red-600">*</span>
+        <label className={labelCls}>
+          Severity <span className="text-red-500">*</span>
         </label>
         <div className="grid grid-cols-5 gap-1">
           {ALLERGY_SEVERITIES.map((row) => {
@@ -468,7 +481,11 @@ function AddAllergyForm({
                 onClick={() => setSeverity(row.value)}
                 title={row.description}
                 className={`px-1.5 py-1 text-[10px] font-bold rounded border transition-all ${
-                  active ? row.tint : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                  active
+                    ? row.tint
+                    : isDark
+                      ? 'bg-white/5 border-white/15 text-slate-400 hover:bg-white/10'
+                      : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
                 }`}
               >
                 {row.label}
@@ -480,39 +497,39 @@ function AddAllergyForm({
 
       {/* Reaction */}
       <div>
-        <label className="block text-[9px] font-bold uppercase tracking-wider mb-1 text-slate-600">
-          Reaction <span className="text-slate-400 normal-case font-normal">(what happened)</span>
+        <label className={labelCls}>
+          Reaction <span className={hintCls}>(what happened)</span>
         </label>
         <input
           value={reaction}
           onChange={(e) => setReaction(e.target.value)}
           placeholder="e.g. facial swelling, hives, anaphylactic shock"
-          className="w-full px-2 py-1.5 text-xs rounded border border-slate-300 outline-none"
+          className={inputCls}
         />
       </div>
 
       {/* Onset */}
       <div>
-        <label className="block text-[9px] font-bold uppercase tracking-wider mb-1 text-slate-600">
-          Onset date <span className="text-slate-400 normal-case font-normal">(optional)</span>
+        <label className={labelCls}>
+          Onset date <span className={hintCls}>(optional)</span>
         </label>
         <input
           type="date"
           value={onsetDate}
           onChange={(e) => setOnsetDate(e.target.value)}
-          className="w-full px-2 py-1.5 text-xs rounded border border-slate-300 outline-none"
+          className={inputCls}
         />
       </div>
 
       {error && (
-        <div className="text-[11px] text-red-700">{error}</div>
+        <div className={`text-[11px] ${isDark ? 'text-red-400' : 'text-red-700'}`}>{error}</div>
       )}
 
       <div className="flex items-center gap-2 justify-end pt-1">
         <button
           type="button"
           onClick={onCancel}
-          className="px-2 py-1 text-[11px] font-bold text-slate-500 hover:text-slate-700"
+          className={`px-2 py-1 text-[11px] font-bold ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
         >
           Cancel
         </button>

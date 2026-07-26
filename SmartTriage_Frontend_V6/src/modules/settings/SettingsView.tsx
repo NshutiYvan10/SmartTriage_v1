@@ -1,5 +1,7 @@
-import { Settings, Moon, Sun, Cpu, Database, Zap, Palette, CheckCircle } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Settings, Moon, Sun, Cpu, Database, Zap, Palette, CheckCircle, XCircle, Loader2, RefreshCw } from 'lucide-react';
 import { useTheme } from '../../hooks/useTheme';
+import { get } from '../../api/client';
 
 /* ═══════════════════════════════════════════════════════════════
    Settings (admin) — deliberately lean.
@@ -22,6 +24,24 @@ import { useTheme } from '../../hooks/useTheme';
 export function SettingsView() {
   const { isDark, toggle, glassCard, glassInner, text } = useTheme();
   const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
+
+  // Real connectivity check — previously these rows hardcoded "Connected".
+  // One cheap authenticated round-trip proves both the API layer and the
+  // database behind it (the endpoint reads the caller's shift from the DB).
+  const [health, setHealth] = useState<'checking' | 'up' | 'down'>('checking');
+  const [checkedAt, setCheckedAt] = useState<Date | null>(null);
+  const checkHealth = useCallback(async () => {
+    setHealth('checking');
+    try {
+      await get('/shifts/me/current');
+      setHealth('up');
+    } catch {
+      setHealth('down');
+    } finally {
+      setCheckedAt(new Date());
+    }
+  }, []);
+  useEffect(() => { void checkHealth(); }, [checkHealth]);
 
   return (
     <div className="min-h-full">
@@ -73,22 +93,35 @@ export function SettingsView() {
 
         {/* ── System Information ── */}
         <div className="rounded-3xl overflow-hidden animate-fade-up" style={{ ...glassCard, animationDelay: '0.16s' }}>
-          <div className="px-5 py-4" style={{ borderBottom: borderStyle }}>
+          <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: borderStyle }}>
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-cyan-500/20 flex items-center justify-center shadow-sm">
                 <Cpu className="w-4 h-4 text-cyan-400" />
               </div>
               <div>
                 <h2 className={`text-sm font-bold ${text.heading}`}>System Information</h2>
-                <p className={`text-xs ${text.muted} mt-0.5`}>Current environment</p>
+                <p className={`text-xs ${text.muted} mt-0.5`}>
+                  Live status{checkedAt ? ` — checked ${checkedAt.toLocaleTimeString()}` : ''}
+                </p>
               </div>
             </div>
+            <button
+              onClick={() => void checkHealth()}
+              disabled={health === 'checking'}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold disabled:opacity-50 ${text.body}`}
+              style={glassInner}
+            >
+              {health === 'checking'
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <RefreshCw className="w-3.5 h-3.5" />}
+              Re-check
+            </button>
           </div>
           <div className="p-5 space-y-3">
             {[
-              { label: 'Application', value: 'SmartTriage', icon: Cpu },
-              { label: 'Database', value: 'Connected', icon: Database, ok: true },
-              { label: 'API', value: 'Connected', icon: Zap, ok: true },
+              { label: 'Application', value: 'SmartTriage', icon: Cpu, state: 'static' as const },
+              { label: 'API', icon: Zap, state: health },
+              { label: 'Database', icon: Database, state: health },
             ].map((item) => (
               <div key={item.label} className="flex items-center justify-between rounded-xl px-3 py-2" style={glassInner}>
                 <div className="flex items-center gap-2.5">
@@ -96,8 +129,10 @@ export function SettingsView() {
                   <span className={`text-xs font-medium ${text.body}`}>{item.label}</span>
                 </div>
                 <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${text.heading}`}>
-                  {item.ok && <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />}
-                  {item.value}
+                  {item.state === 'static' && item.value}
+                  {item.state === 'checking' && <><Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" /> Checking…</>}
+                  {item.state === 'up' && <><CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Connected</>}
+                  {item.state === 'down' && <><XCircle className="w-3.5 h-3.5 text-rose-500" /> Unreachable</>}
                 </span>
               </div>
             ))}

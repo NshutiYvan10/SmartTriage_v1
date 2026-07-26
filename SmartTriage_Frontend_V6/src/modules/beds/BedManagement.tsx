@@ -10,6 +10,7 @@
  * the bedside hardware layout.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { dialog } from '@/components/dialog';
 import {
   BedDouble, Plus, RefreshCw, Loader2, Pencil, Trash2, X, Building2,
   AlertTriangle, CheckCircle2, Monitor, Save, Link2, Link2Off, Sparkles,
@@ -178,7 +179,10 @@ export function BedManagement() {
       flash('error', `Cannot delete ${bed.code} — a patient is currently in this bed.`);
       return;
     }
-    if (!confirm(`Delete bed ${bed.code}?\n\nThe bed will be removed from the inventory. This cannot be undone from this screen.`)) return;
+    if (!(await dialog.confirm({
+      title: 'Delete bed', tone: 'danger', confirmLabel: 'Delete',
+      message: `Delete bed ${bed.code}?\n\nThe bed will be removed from the inventory. This cannot be undone from this screen.`,
+    }))) return;
     try {
       await deleteBed(bed.id);
       flash('success', `Bed ${bed.code} deleted.`);
@@ -199,12 +203,14 @@ export function BedManagement() {
 
   const handleSeedDefaults = async () => {
     if (!hospitalId) return;
-    if (!confirm(
-      'Seed the default bed inventory for this hospital?\n\n' +
-      'Beds will be created in zones that are currently empty, using the ' +
-      'Rwanda MoH bed standards for this hospital tier. Zones that already ' +
-      'have any beds (active or out-of-service) will be skipped.'
-    )) return;
+    if (!(await dialog.confirm({
+      title: 'Seed default beds', tone: 'primary', confirmLabel: 'Seed beds',
+      message:
+        'Seed the default bed inventory for this hospital?\n\n' +
+        'Beds will be created in zones that are currently empty, using the ' +
+        'Rwanda MoH bed standards for this hospital tier. Zones that already ' +
+        'have any beds (active or out-of-service) will be skipped.',
+    }))) return;
     setSeeding(true);
     try {
       const result = await seedDefaults(hospitalId);
@@ -231,7 +237,11 @@ export function BedManagement() {
   const handleStatusAction = async (bed: BedResponse, action: 'oos' | 'available' | 'cleaned') => {
     try {
       if (action === 'oos') {
-        const reason = prompt(`Take ${bed.code} out of service?\nOptional reason:`, '');
+        const reason = await dialog.prompt({
+          title: 'Out of service', tone: 'danger', confirmLabel: 'Take out of service',
+          message: `Take ${bed.code} out of service?`,
+          placeholder: 'Optional reason', singleLine: true,
+        });
         if (reason === null) return;
         await markOutOfService(bed.id, reason.trim() || undefined);
       } else if (action === 'available') {

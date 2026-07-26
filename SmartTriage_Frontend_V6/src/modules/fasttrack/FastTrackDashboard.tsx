@@ -21,6 +21,7 @@ import { chartPath } from '@/lib/chartNav';
 import type { FastTrackActivation, FastTrackType } from '@/api/fasttrack';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
+import { dialog } from '@/components/dialog';
 
 /* ── Tabs map to the REAL backend enum families ── */
 type TabMode = 'STROKE' | 'MI';
@@ -128,8 +129,7 @@ export function FastTrackDashboard() {
 
   const reportError = (err: unknown, fallback: string) => {
     const message = err instanceof Error ? err.message : fallback;
-    // eslint-disable-next-line no-alert
-    window.alert(message);
+    dialog.notify(message, { type: 'error' });
     console.error(fallback, err);
   };
 
@@ -178,8 +178,12 @@ export function FastTrackDashboard() {
   };
 
   const handleComplete = async (id: string) => {
-    // eslint-disable-next-line no-alert
-    const outcome = window.prompt('Outcome / disposition for this fast-track (optional):', '') ?? undefined;
+    const outcomeRaw = await dialog.prompt({
+      title: 'Complete fast-track', tone: 'primary', confirmLabel: 'Complete',
+      message: 'Outcome / disposition for this fast-track:', placeholder: 'Optional', singleLine: true,
+    });
+    if (outcomeRaw === null) return; // dismissed
+    const outcome = outcomeRaw || undefined;
     setActionLoading(id);
     try {
       await fasttrackApi.complete(id, { outcome });
@@ -192,8 +196,10 @@ export function FastTrackDashboard() {
   };
 
   const handleCancel = async (id: string) => {
-    // eslint-disable-next-line no-alert
-    const reason = window.prompt('Reason for cancelling this fast-track:', '');
+    const reason = await dialog.prompt({
+      title: 'Cancel fast-track', tone: 'danger', confirmLabel: 'Cancel fast-track',
+      message: 'Reason for cancelling this fast-track:', placeholder: 'Reason',
+    });
     if (reason === null) return; // user dismissed
     setActionLoading(id);
     try {

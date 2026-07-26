@@ -47,7 +47,7 @@ export type PregnancyStatus =
   | 'NOT_PREGNANT'
   | 'NOT_APPLICABLE'
   | 'UNKNOWN';
-export type Role = 'SUPER_ADMIN' | 'HOSPITAL_ADMIN' | 'DOCTOR' | 'NURSE' | 'REGISTRAR' | 'PARAMEDIC' | 'LAB_TECHNICIAN' | 'READ_ONLY';
+export type Role = 'SUPER_ADMIN' | 'HOSPITAL_ADMIN' | 'DOCTOR' | 'NURSE' | 'REGISTRAR' | 'PARAMEDIC' | 'LAB_TECHNICIAN';
 export type ArrivalMode = 'WALK_IN' | 'AMBULANCE' | 'REFERRAL' | 'POLICE' | 'HELICOPTER' | 'OTHER';
 export type VisitStatus = 'REGISTERED' | 'AWAITING_TRIAGE' | 'TRIAGED' | 'AWAITING_ASSESSMENT' | 'UNDER_ASSESSMENT' | 'UNDER_TREATMENT' | 'UNDER_OBSERVATION' | 'PENDING_DISPOSITION' | 'DISCHARGED' | 'ADMITTED' | 'TRANSFERRED' | 'ICU_ADMITTED' | 'LEFT_WITHOUT_BEING_SEEN' | 'DECEASED';
 export type TriageCategory = 'RED' | 'ORANGE' | 'YELLOW' | 'GREEN' | 'BLUE';
@@ -295,6 +295,11 @@ export interface UserResponse {
   hospitalId: string;
   hospitalName: string;
   accountStatus: AccountStatus;
+  /**
+   * Soft-delete flag. A CANCELLED invitation is soft-deleted while still
+   * PENDING_ACTIVATION — admin lists use this to hide those rows.
+   */
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -422,6 +427,8 @@ export interface GlobalPatientRow {
   unidentified: boolean;
   localToMyHospital: boolean;
   hasOpenVisitAtMyHospital: boolean;
+  /** The open visit's id when hasOpenVisitAtMyHospital is true — direct "go to it" target. */
+  openVisitIdAtMyHospital: string | null;
 }
 
 /** Registrar "open a visit here" for a global-registry patient (identified by path). */

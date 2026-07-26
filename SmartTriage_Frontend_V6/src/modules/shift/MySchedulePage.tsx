@@ -41,6 +41,7 @@ import type {
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
 import { ProposeSwapModal } from './ProposeSwapModal';
+import { dialog } from '@/components/dialog';
 
 const LEAVE_TYPES: LeaveType[] = [
   'ANNUAL', 'SICK', 'MATERNITY', 'BEREAVEMENT', 'COMPASSIONATE', 'STUDY', 'OTHER',
@@ -593,8 +594,11 @@ function SwapRow({
               size="md"
               busy={busy}
               icon={<XCircle className="w-3.5 h-3.5" />}
-              onClick={() => {
-                const note = window.prompt('Reason for declining (visible to requester):');
+              onClick={async () => {
+                const note = await dialog.prompt({
+                  title: 'Decline swap', tone: 'danger', confirmLabel: 'Decline',
+                  message: 'Reason for declining (visible to requester):', placeholder: 'Optional',
+                });
                 if (note === null) return;
                 return wrap(() => swapApi.partnerReject(swap.id, { note }));
               }}
@@ -608,8 +612,8 @@ function SwapRow({
             variant="ghost"
             busy={busy}
             icon={<XCircle className="w-3 h-3" />}
-            onClick={() => {
-              if (!window.confirm('Cancel this swap request?')) return;
+            onClick={async () => {
+              if (!(await dialog.confirm({ title: 'Cancel swap', tone: 'danger', confirmLabel: 'Cancel request', message: 'Cancel this swap request?' }))) return;
               return wrap(() => swapApi.cancel(swap.id));
             }}
           >
@@ -729,7 +733,7 @@ function LeaveRow({
             busy={busy}
             icon={<XCircle className="w-3 h-3" />}
             onClick={async () => {
-              if (!window.confirm('Cancel this leave?')) return;
+              if (!(await dialog.confirm({ title: 'Cancel leave', tone: 'danger', confirmLabel: 'Cancel leave', message: 'Cancel this leave?' }))) return;
               setBusy(true); setErr(null);
               try { await leaveApi.cancel(leave.id); await onChange(); }
               catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Action failed'); }

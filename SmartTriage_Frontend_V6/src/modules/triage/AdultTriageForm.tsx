@@ -300,7 +300,12 @@ export function AdultTriageForm() {
   const [ipMrNumber, setIpMrNumber] = useState(patient?.id || '');
   const [chiefComplaint, setChiefComplaint] = useState(patient?.chiefComplaint || '');
   const [nextOfKin, setNextOfKin] = useState(patient?.contactPerson?.name || '');
-  const [phoneNumber, setPhoneNumber] = useState(patient?.contactPerson?.phone || '');
+  // Prefer the patient's OWN phone captured at registration; fall back to the
+  // contact person's. Store rows built from the visit list omit both — the
+  // hydration effect below backfills from the full patient record.
+  const [phoneNumber, setPhoneNumber] = useState(
+    (patient as { phoneNumber?: string } | undefined)?.phoneNumber || patient?.contactPerson?.phone || '',
+  );
   const [arrivalMode, setArrivalMode] = useState(patient?.arrivalMode || 'WALK_IN');
   // Phase 13c — pregnancy captured at the front door (drives the prescribe-time
   // teratogen gate). Prefilled from the patient's current structured status.
@@ -345,6 +350,13 @@ export function AdultTriageForm() {
         // Never overwrite a value the nurse has already typed.
         setPatientNames((prev) => prev || `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim());
         if (p.gender) setGender((prev) => prev === 'MALE' && !patient?.gender ? p.gender : prev);
+        // Contact + weight captured at registration — surface them here so
+        // the nurse doesn't re-type what the registrar already collected.
+        if (p.phoneNumber) setPhoneNumber((prev) => prev || p.phoneNumber!);
+        if (p.emergencyContactName) setNextOfKin((prev) => prev || p.emergencyContactName!);
+        if (typeof p.weightKg === 'number' && p.weightKg > 0) {
+          setWeightVal((prev) => prev || String(p.weightKg));
+        }
       })
       .catch(() => { /* non-fatal — nurse can still fill manually */ });
     return () => { cancelled = true; };
@@ -376,7 +388,9 @@ export function AdultTriageForm() {
   // Glucose unit the nurse is entering in. Stored/classified value is mmol/L;
   // a mg/dL glucometer reading is converted at the edge before it is sent.
   const [glucoseUnit, setGlucoseUnit] = useState<'MMOL_L' | 'MG_DL'>('MMOL_L');
-  const [weightVal, setWeightVal] = useState('');
+  // Prefill from the registered weight when the store row carries it
+  // (mirrors PediatricTriageForm); hydration above backfills otherwise.
+  const [weightVal, setWeightVal] = useState(patient?.weight?.toString() || '');
   const [heightVal, setHeightVal] = useState('');
   const [painScore, setPainScore] = useState('');
 
@@ -601,6 +615,11 @@ export function AdultTriageForm() {
     const rr = fieldValues['respiratory_rate'] ? parseInt(fieldValues['respiratory_rate']) : null;
     const hr = fieldValues['heart_rate'] ? parseInt(fieldValues['heart_rate']) : null;
     setTewsInput((prev) => ({ ...prev, respiratoryRate: rr ?? prev.respiratoryRate, heartRate: hr ?? prev.heartRate }));
+    // Mirror the "Oxygen saturation" emergency-sign value into the SpO₂
+    // vital — previously it was dropped, so an SpO₂ entered on the
+    // discriminator row never scored or forced RED (<92).
+    const spo2Sign = fieldValues['oxygen_saturation'];
+    if (spo2Sign) setSpo2(spo2Sign);
   }, [fieldValues]);
 
   useEffect(() => {

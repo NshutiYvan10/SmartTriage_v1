@@ -31,9 +31,8 @@ import { useAuthStore } from '@/store/authStore';
 import { Gender, ArrivalMode, Mobility } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
-import { userApi } from '@/api/users';
 import { visitApi } from '@/api/visits';
-import type { UserResponse, PatientResponse } from '@/api/types';
+import type { PatientResponse } from '@/api/types';
 import { PatientLookupPanel } from './PatientLookupPanel';
 import { PatientHistoryPanel } from './PatientHistoryPanel';
 import { PatientProfilePanel } from './PatientProfilePanel';
@@ -61,16 +60,6 @@ const CHIEF_COMPLAINTS = [
 
 const RELATIONSHIPS = ['Parent', 'Spouse', 'Sibling', 'Child', 'Guardian', 'Friend', 'Colleague', 'Other'];
 const GUARDIAN_RELATIONSHIPS = ['Mother', 'Father', 'Guardian', 'Grandparent', 'Aunt/Uncle', 'Sibling', 'Other'];
-
-/**
- * Roles eligible to be the on-shift triage nurse for a new
- * registration. Triage is performed by NURSE-role users — the
- * triage station is a per-shift assignment
- * (ShiftAssignment.shiftFunction = TRIAGE_NURSE), not a role of
- * its own. Any nurse can be assigned to triage; the assignment
- * itself is enforced by the shift planner / charge nurse.
- */
-const TRIAGE_ROLES = ['NURSE'];
 
 const STEPS = [
   { id: 1, label: 'Personal', icon: User },
@@ -130,8 +119,6 @@ interface FormData {
   mobility: Mobility | '';
   referringFacility: string;
   referralDocumentFile: File | null;
-  // Nurse Assignment
-  assignedNurseId: string;
   // Step 4 — Medical History
   bloodType: string;
   allergies: string[];
@@ -174,7 +161,6 @@ const INITIAL_FORM: FormData = {
   mobility: '',
   referringFacility: '',
   referralDocumentFile: null,
-  assignedNurseId: '',
   bloodType: '',
   allergies: [],
   existingConditions: [],
@@ -263,31 +249,6 @@ export function EntryRegistration() {
    */
   const [pickedPatient, setPickedPatient] = useState<PatientResponse | null>(null);
 
-  /* ── Load real nurses from backend ── */
-  const [nurses, setNurses] = useState<{ id: string; name: string }[]>([]);
-  useEffect(() => {
-    const hospitalId = authUser?.hospitalId || 'a0000000-0000-0000-0000-000000000001';
-    userApi.getByHospital(hospitalId, 0, 100)
-      .then((res) => {
-        const list = (res.content || [])
-          .filter((u: UserResponse) => TRIAGE_ROLES.includes(u.role))
-          .map((u: UserResponse) => ({ id: u.id, name: `${u.firstName} ${u.lastName}` }));
-        // Also include the current user if they're a nurse-type role and not already listed
-        if (authUser && TRIAGE_ROLES.includes(authUser.role as any) && !list.find((n: {id: string}) => n.id === authUser.id)) {
-          list.unshift({ id: authUser.id, name: authUser.fullName });
-        }
-        // If no nurses found from API, add current user as fallback
-        if (list.length === 0 && authUser) {
-          list.push({ id: authUser.id, name: authUser.fullName });
-        }
-        setNurses(list);
-      })
-      .catch(() => {
-        // Fallback to current user
-        if (authUser) setNurses([{ id: authUser.id, name: authUser.fullName }]);
-      });
-  }, [authUser]);
-
   // Rwanda mSAT triage form boundary: Adult Triage Form "Over 12
   // years"; Child Triage Form "3–12 years". A 12-year-old is on the
   // child form, a 13-year-old is on the adult form. KFH's peds
@@ -306,12 +267,6 @@ export function EntryRegistration() {
 
   /* \u2500\u2500 Guardian missing warning \u2500\u2500 */
   const guardianMissing = isPediatric && !formData.guardianName.trim();
-
-  /* \u2500\u2500 Selected nurse name \u2500\u2500 */
-  const selectedNurseName = useMemo(() => {
-    const nurse = nurses.find((n) => n.id === formData.assignedNurseId);
-    return nurse?.name || '';
-  }, [formData.assignedNurseId, nurses]);
 
   /* ── Helpers ── */
   const set = (field: keyof FormData, value: string) =>
@@ -455,8 +410,6 @@ export function EntryRegistration() {
         if (!formData.guardianPhone.trim()) e.guardianPhone = 'Guardian phone is required';
         if (!formData.guardianRelationship) e.guardianRelationship = 'Guardian relationship is required';
       }
-      // Nurse assignment required
-      if (!formData.assignedNurseId) e.assignedNurseId = 'Triage nurse must be assigned before proceeding';
     }
 
     if (s === 4) {
@@ -484,13 +437,6 @@ export function EntryRegistration() {
       return;
     }
 
-    // Final gate: nurse must be assigned
-    if (!formData.assignedNurseId) {
-      setErrors({ assignedNurseId: 'Triage nurse must be assigned before registration' });
-      setStep(3);
-      return;
-    }
-
     setIsSubmitting(true);
 
     // ── Persist to backend API (single source of truth) ──
@@ -515,7 +461,7 @@ export function EntryRegistration() {
           referringFacility: formData.referringFacility || undefined,
         });
       } catch (err: any) {
-        setErrors({ assignedNurseId: err?.message ?? 'Failed to create visit for this patient.' });
+        setErrors({ submit: err?.message ?? 'Failed to create visit for this patient.' });
         setIsSubmitting(false);
         return;
       }
@@ -567,7 +513,10 @@ export function EntryRegistration() {
         gender: formData.gender,
         nationalId: formData.nationalId || undefined,
         rfidCardId: formData.rfidCardId || undefined,
-        phoneNumber: formData.contactPersonPhone || undefined,
+        // The patient's OWN phone (Step 3 "Phone Number"). This previously
+        // sent contactPersonPhone, so the number the registrar typed for the
+        // patient never reached the record (and never prefilled at triage).
+        phoneNumber: formData.phoneNumber || undefined,
         // Address is the optional building / landmark string. The
         // administrative location (province → village) lives on the
         // structured FK chain below.
@@ -610,7 +559,7 @@ export function EntryRegistration() {
       });
 
       if (!patient) {
-        setErrors({ assignedNurseId: 'Failed to register patient. Please try again.' });
+        setErrors({ submit: 'Failed to register patient. Please try again.' });
         setIsSubmitting(false);
         return;
       }
@@ -621,20 +570,12 @@ export function EntryRegistration() {
     // "fresh registration" so the trail is honest about what happened.
     addAuditEntry({
       action: existingPatientId ? 'VISIT_CREATED_FOR_EXISTING_PATIENT' : 'PATIENT_REGISTERED',
-      performedBy: formData.assignedNurseId,
-      performedByName: selectedNurseName,
+      performedBy: authUser?.id ?? 'unknown',
+      performedByName: authUser?.fullName ?? 'Unknown',
       patientId,
       details: existingPatientId
-        ? `New visit created for existing patient "${fullName}". Arrival: ${formData.arrivalMode}, Mobility: ${formData.mobility || 'N/A'}, Nurse: ${selectedNurseName}${isPediatric ? ', Pediatric patient' : ''}`
-        : `Patient "${fullName}" registered. Arrival: ${formData.arrivalMode}, Mobility: ${formData.mobility || 'N/A'}, Nurse: ${selectedNurseName}${isPediatric ? ', Pediatric patient' : ''}`,
-    });
-
-    addAuditEntry({
-      action: 'NURSE_ASSIGNED',
-      performedBy: formData.assignedNurseId,
-      performedByName: selectedNurseName,
-      patientId,
-      details: `Triage nurse "${selectedNurseName}" assigned to patient "${fullName}"`,
+        ? `New visit created for existing patient "${fullName}". Arrival: ${formData.arrivalMode}, Mobility: ${formData.mobility || 'N/A'}${isPediatric ? ', Pediatric patient' : ''}`
+        : `Patient "${fullName}" registered. Arrival: ${formData.arrivalMode}, Mobility: ${formData.mobility || 'N/A'}${isPediatric ? ', Pediatric patient' : ''}`,
     });
 
     setShowSuccess(true);
@@ -997,13 +938,19 @@ export function EntryRegistration() {
                   </p>
                 </div>
 
-                {isPediatric && (
-                  <div>
-                    <label className={labelCls}>Weight (kg) <span className="text-red-400">*</span></label>
-                    <input type="number" step="0.1" className={inputClass('weight')} style={glassInner} value={formData.weight} onChange={(e) => set('weight', e.target.value)} placeholder="0.0" />
-                    {errors.weight && <p className="text-red-500 text-xs mt-1.5 ml-1 font-medium">{errors.weight}</p>}
-                  </div>
-                )}
+                {/* Weight — mandatory for pediatric (drives dosing + pediatric
+                    TEWS), optional for adults. Whatever is captured here
+                    prefills the triage form so the nurse never re-types it. */}
+                <div>
+                  <label className={labelCls}>
+                    Weight (kg){' '}
+                    {isPediatric
+                      ? <span className="text-red-400">*</span>
+                      : <span className={`ml-1 text-[10px] font-medium ${text.muted} uppercase tracking-wider`}>Optional</span>}
+                  </label>
+                  <input type="number" step="0.1" className={inputClass('weight')} style={glassInner} value={formData.weight} onChange={(e) => set('weight', e.target.value)} placeholder="0.0" />
+                  {errors.weight && <p className="text-red-500 text-xs mt-1.5 ml-1 font-medium">{errors.weight}</p>}
+                </div>
               </div>
             </div>
           </div>
@@ -1104,8 +1051,8 @@ export function EntryRegistration() {
                   <Phone className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className={`text-sm font-bold ${text.heading} tracking-tight`}>Contact, Arrival & Assignment</h3>
-                  <p className={`text-xs ${text.muted} font-medium`}>Contacts, transport details, and triage nurse</p>
+                  <h3 className={`text-sm font-bold ${text.heading} tracking-tight`}>Contact & Arrival</h3>
+                  <p className={`text-xs ${text.muted} font-medium`}>Contacts and transport details</p>
                 </div>
               </div>
 
@@ -1333,45 +1280,6 @@ export function EntryRegistration() {
                   {errors.mobility && <p className="text-red-500 text-xs mt-1.5 ml-1 font-medium">{errors.mobility}</p>}
                 </div>
 
-                {/* ─── Triage Nurse Assignment ─── */}
-                <div className="md:col-span-2 flex items-center gap-3 py-1">
-                  <div className="flex-1 h-px" style={{ background: isDark ? 'rgba(2,132,199,0.2)' : 'rgba(203,213,225,0.4)' }} />
-                  <span className={`text-[10px] font-bold uppercase tracking-widest ${text.muted} flex items-center gap-1.5`}>
-                    <UserCheck className="w-3 h-3" /> Triage Nurse Assignment
-                  </span>
-                  <div className="flex-1 h-px" style={{ background: isDark ? 'rgba(2,132,199,0.2)' : 'rgba(203,213,225,0.4)' }} />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className={labelCls}>Assign Triage Nurse <span className="text-red-400">*</span></label>
-                  <p className={`text-xs ${text.muted} font-medium mb-3`}>A triage nurse must be assigned before the patient can proceed to triage.</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {nurses.map((nurse) => (
-                      <button
-                        key={nurse.id}
-                        type="button"
-                        onClick={() => set('assignedNurseId', nurse.id)}
-                        className={`p-4 rounded-xl transition-all duration-300 font-semibold text-sm flex items-center gap-3 hover:-translate-y-1 ${formData.assignedNurseId === nurse.id
-                            ? 'ring-2 ring-cyan-500/40 scale-[1.02]'
-                            : ''
-                          }`}
-                        style={formData.assignedNurseId === nurse.id
-                          ? { ...glassInner, background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.3)' }
-                          : glassInner
-                        }
-                      >
-                        <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${formData.assignedNurseId === nurse.id ? 'from-cyan-500 to-cyan-600' : 'from-slate-300 to-slate-400'} flex items-center justify-center shadow-sm transition-all duration-300`}>
-                          <UserCheck className={`w-4 h-4 ${formData.assignedNurseId === nurse.id ? 'text-white' : 'text-white/80'}`} />
-                        </div>
-                        <span className={formData.assignedNurseId === nurse.id ? 'text-cyan-700' : text.body}>{nurse.name}</span>
-                        {formData.assignedNurseId === nurse.id && (
-                          <Check className="w-4 h-4 text-cyan-600 ml-auto" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                  {errors.assignedNurseId && <p className="text-red-500 text-xs mt-2 ml-1 font-medium">{errors.assignedNurseId}</p>}
-                </div>
               </div>
             </div>
           </div>
@@ -1535,21 +1443,6 @@ export function EntryRegistration() {
                 </div>
               )}
 
-              {/* Nurse assignment gate warning */}
-              {!formData.assignedNurseId && (
-                <div className="p-4 rounded-xl flex items-center gap-4 animate-fade-in" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.25)' }}>
-                  <div className="w-10 h-10 bg-gradient-to-br from-red-400 to-red-500 rounded-xl flex items-center justify-center shadow-md flex-shrink-0">
-                    <AlertTriangle className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-red-600 text-sm">Triage Nurse Not Assigned</p>
-                    <p className="text-xs text-red-500/70 font-medium mt-0.5">
-                      Cannot proceed to triage without assigning a clinician. Go back to Step 3 to assign a nurse.
-                    </p>
-                  </div>
-                </div>
-              )}
-
               {/* Personal */}
               <div className="rounded-xl p-5" style={glassInner}>
                 <h4 className={`text-xs font-bold ${text.body} uppercase tracking-wider mb-4 flex items-center gap-2`}>
@@ -1564,7 +1457,7 @@ export function EntryRegistration() {
                   ['Age', formData.age ? `${formData.age} years` : ''],
                   ['Gender', formData.gender],
                   ['National ID', formData.nationalId],
-                  ...(isPediatric ? [['Weight', formData.weight ? `${formData.weight} kg` : '']] : []),
+                  ['Weight', formData.weight ? `${formData.weight} kg` : ''],
                 ].map(([label, value]) => (
                   <div key={label} className="flex justify-between py-2.5" style={{ borderBottom: isDark ? '1px solid rgba(2,132,199,0.15)' : '1px solid rgba(203,213,225,0.25)' }}>
                     <span className={`text-sm ${text.muted} font-medium`}>{label}</span>
@@ -1617,22 +1510,6 @@ export function EntryRegistration() {
                     <span className={`text-sm font-semibold text-right max-w-[60%] ${label === 'Guardian' && value === 'NOT SET' ? 'text-red-500' : text.label}`}>{value || '\u2014'}</span>
                   </div>
                 ))}
-              </div>
-
-              {/* Assigned Nurse */}
-              <div className="rounded-xl p-5" style={glassInner}>
-                <h4 className={`text-xs font-bold ${text.body} uppercase tracking-wider mb-4 flex items-center gap-2`}>
-                  <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
-                    <UserCheck className="w-3.5 h-3.5 text-white" />
-                  </div>
-                  Triage Assignment
-                </h4>
-                <div className="flex justify-between py-2.5" style={{ borderBottom: isDark ? '1px solid rgba(2,132,199,0.15)' : '1px solid rgba(203,213,225,0.25)' }}>
-                  <span className={`text-sm ${text.muted} font-medium`}>Assigned Triage Nurse</span>
-                  <span className={`text-sm font-semibold ${selectedNurseName ? 'text-emerald-600' : 'text-red-500'}`}>
-                    {selectedNurseName || 'NOT ASSIGNED'}
-                  </span>
-                </div>
               </div>
 
               {/* Medical */}
@@ -1689,12 +1566,14 @@ export function EntryRegistration() {
                 <ChevronRight className="w-4 h-4" />
               </button>
             ) : (
+              <div className="flex flex-col items-end gap-2">
+                {errors.submit && <p className="text-red-500 text-xs font-medium">{errors.submit}</p>}
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={!formData.assignedNurseId || isSubmitting || showSuccess}
+                disabled={isSubmitting || showSuccess}
                 className={`inline-flex items-center gap-2 px-10 py-3 rounded-xl text-sm font-bold transition-all duration-300 shadow-lg ${
-                  formData.assignedNurseId && !isSubmitting && !showSuccess
+                  !isSubmitting && !showSuccess
                     ? 'bg-cyan-600 hover:bg-cyan-700 text-white shadow-cyan-500/25 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/30'
                     : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed shadow-none'
                 }`}
@@ -1711,6 +1590,7 @@ export function EntryRegistration() {
                   </>
                 )}
               </button>
+              </div>
             )}
           </div>
         </form>

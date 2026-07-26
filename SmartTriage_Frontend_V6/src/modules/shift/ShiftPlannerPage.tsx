@@ -10,6 +10,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { dialog } from '@/components/dialog';
 import {
   CalendarDays, Loader2, RefreshCw, Save, Trash2, UserPlus,
   Crown, Users, Search, AlertCircle, CheckCircle2, Info,
@@ -335,7 +336,10 @@ export function ShiftPlannerPage() {
 
   const handleDelete = async () => {
     if (!draft.id) return;
-    if (!window.confirm(`Delete the ${activePeriod.toLowerCase()} shift plan? This cannot be undone.`)) {
+    if (!(await dialog.confirm({
+      title: 'Delete shift plan', tone: 'danger', confirmLabel: 'Delete',
+      message: `Delete the ${activePeriod.toLowerCase()} shift plan? This cannot be undone.`,
+    }))) {
       return;
     }
     setDeleting(true);

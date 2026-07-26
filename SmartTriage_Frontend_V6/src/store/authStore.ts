@@ -92,7 +92,45 @@ interface AuthState {
   refreshCurrentShift: () => Promise<void>;
 }
 
-/** Map backend Role to frontend UserRole */
+/**
+ * Map backend Role to frontend UserRole. The two unions are identical,
+ * so this is an identity mapping; the fallback guards against a newer
+ * backend sending a role this build doesn't know (map to the least
+ * privileged surviving role rather than crash the RBAC lookups).
+ */
+/**
+ * Senior nursing authority — a Charge / Senior Nurse designation, or the
+ * current transferable shift-lead badge. Mirrors ClinicalAuthz
+ * .hasSeniorNurseAuthority on the backend; the server remains the
+ * authoritative enforcement point.
+ */
+export function hasSeniorNurseAuthority(user: AuthUser | null): boolean {
+  if (!user || user.role !== 'NURSE') return false;
+  return user.designation === 'CHARGE_NURSE'
+    || user.designation === 'SENIOR_NURSE'
+    || !!user.isShiftLead;
+}
+
+/** May invoke the break-the-glass override (mirrors ClinicalAuthz.canInvokeBreakTheGlass). */
+export function canBreakGlass(user: AuthUser | null): boolean {
+  if (!user) return false;
+  return user.role === 'SUPER_ADMIN' || user.role === 'DOCTOR' || user.role === 'PARAMEDIC'
+    || hasSeniorNurseAuthority(user);
+}
+
+/** May activate a clinical pathway (mirrors ClinicalAuthz.canActivateClinicalPathway). */
+export function canActivatePathway(user: AuthUser | null): boolean {
+  if (!user) return false;
+  return user.role === 'SUPER_ADMIN' || user.role === 'DOCTOR' || hasSeniorNurseAuthority(user);
+}
+
+/** May record / withdraw a data-sharing consent (mirrors ClinicalAuthz.canManageDataSharingConsent). */
+export function canManageConsent(user: AuthUser | null): boolean {
+  if (!user) return false;
+  return user.role === 'SUPER_ADMIN' || user.role === 'DOCTOR'
+    || user.role === 'NURSE' || user.role === 'REGISTRAR';
+}
+
 function mapRole(backendRole: Role): UserRole {
   switch (backendRole) {
     case 'SUPER_ADMIN': return 'SUPER_ADMIN';
@@ -102,8 +140,7 @@ function mapRole(backendRole: Role): UserRole {
     case 'REGISTRAR': return 'REGISTRAR';
     case 'PARAMEDIC': return 'PARAMEDIC';
     case 'LAB_TECHNICIAN': return 'LAB_TECHNICIAN';
-    case 'READ_ONLY': return 'READ_ONLY';
-    default: return 'READ_ONLY';
+    default: return 'LAB_TECHNICIAN';
   }
 }
 
@@ -183,15 +220,6 @@ const DEMO_USERS: Record<UserRole, AuthUser> = {
     email: 'bosco.nsengimana@kfh.rw',
     role: 'LAB_TECHNICIAN',
     department: 'Laboratory',
-    hospital: 'King Faisal Hospital',
-    hospitalId: 'a0000000-0000-0000-0000-000000000001',
-  },
-  READ_ONLY: {
-    id: 'U006',
-    fullName: 'Ishimwe Grace',
-    email: 'grace.ishimwe@kfh.rw',
-    role: 'READ_ONLY',
-    department: 'Quality Assurance',
     hospital: 'King Faisal Hospital',
     hospitalId: 'a0000000-0000-0000-0000-000000000001',
   },

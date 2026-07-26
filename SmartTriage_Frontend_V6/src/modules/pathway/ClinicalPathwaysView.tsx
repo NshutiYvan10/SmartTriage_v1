@@ -12,7 +12,7 @@ import {
   SkipForward, Flag, XCircle, Stethoscope, Zap, Baby,
   Bug, Wind, Brain, Droplets, Heart, Siren, FileText,
 } from 'lucide-react';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore, canActivatePathway } from '@/store/authStore';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
 import { pathwayApi } from '@/api/pathway';
@@ -75,6 +75,7 @@ export function ClinicalPathwaysView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const mayActivate = canActivatePathway(user);
   const hospitalId = user?.hospitalId || '';
 
   // ── Data state ──
@@ -408,7 +409,7 @@ export function ClinicalPathwaysView() {
                     value={activeVisitIdInput}
                     onChange={(e) => setActiveVisitIdInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && loadActivePathways(activeVisitIdInput)}
-                    placeholder="Enter Visit ID to view active pathways..."
+                    placeholder="Enter visit ID or visit number (V-…) to view active pathways..."
                     className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all placeholder-slate-400 ${text.body}`}
                     style={glassInner}
                   />
@@ -518,12 +519,14 @@ export function ClinicalPathwaysView() {
 
                           {/* Actions */}
                           <div className="flex-shrink-0 flex flex-col gap-2 pt-1">
-                            <button
-                              onClick={() => openActivateDialog(pathway.id, pathway.pathwayName)}
-                              className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-slate-800 to-slate-700 hover:shadow-lg hover:-translate-y-0.5 rounded-xl transition-all shadow-md shadow-slate-800/15"
-                            >
-                              <Play className="w-3.5 h-3.5" /> Activate
-                            </button>
+                            {mayActivate && (
+                              <button
+                                onClick={() => openActivateDialog(pathway.id, pathway.pathwayName)}
+                                className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-slate-800 to-slate-700 hover:shadow-lg hover:-translate-y-0.5 rounded-xl transition-all shadow-md shadow-slate-800/15"
+                              >
+                                <Play className="w-3.5 h-3.5" /> Activate
+                              </button>
+                            )}
                             <button
                               onClick={() => togglePathwaySteps(pathway.id)}
                               className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold rounded-xl transition-all ${

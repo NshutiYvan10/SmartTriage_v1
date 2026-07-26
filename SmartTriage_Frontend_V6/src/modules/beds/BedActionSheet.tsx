@@ -21,6 +21,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { Badge } from '@/components/ui/Badge';
 import { PlacePatientDialog } from './PlacePatientDialog';
 import { TransferPatientDialog } from './TransferPatientDialog';
+import { dialog } from '@/components/dialog';
 
 interface BedActionSheetProps {
   bed: BedResponse;
@@ -183,8 +184,11 @@ export function BedActionSheet({ bed, onClose, onActionComplete }: BedActionShee
                   <DangerButton
                     isDark={isDark}
                     disabled={busy}
-                    onClick={() => {
-                      if (confirm(`Discharge ${bed.currentPatientName || 'this patient'} from bed ${bed.code}?\n\nThe bed will move to CLEANING.`)) {
+                    onClick={async () => {
+                      if (await dialog.confirm({
+                        title: 'Discharge from bed', tone: 'danger', confirmLabel: 'Discharge',
+                        message: `Discharge ${bed.currentPatientName || 'this patient'} from bed ${bed.code}?\n\nThe bed will move to CLEANING.`,
+                      })) {
                         run(() => dischargePatient(bed.id));
                       }
                     }}

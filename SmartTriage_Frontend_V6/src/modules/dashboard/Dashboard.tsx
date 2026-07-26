@@ -15,6 +15,8 @@ import { useVitalStore } from '@/store/vitalStore';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
 import { ROLE_META } from '@/types/roles';
+import { useHospitalScope } from '@/hooks/useHospitalScope';
+import { HospitalScopePicker } from '@/components/HospitalScopePicker';
 import { Badge } from '@/components/ui/Badge';
 import { AlertPanel } from '@/components/ui/AlertPanel';
 import { Patient, TriageCategory } from '@/types';
@@ -58,6 +60,11 @@ function HospitalDashboard() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  // SUPER_ADMIN is national and its own hospital is the empty system hospital;
+  // let it pick which hospital's live census/metrics to view. Every other role
+  // resolves to their own hospital and never sees the picker.
+  const hospitalScope = useHospitalScope();
+  const scopedHospitalId = hospitalScope.hospitalId;
   const roleMeta = user ? ROLE_META[user.role] : null;
   const patients = usePatientStore((state) => state.patients);
   // Subscribe to the RAW store array (reference-stable — only changes when the store
@@ -126,29 +133,29 @@ function HospitalDashboard() {
   const fetchActiveVisits = usePatientStore((s) => s.fetchActiveVisits);
   const fetchAlerts = useAlertStore((s) => s.fetchAlerts);
   useEffect(() => {
-    if (!user?.hospitalId) return;
-    if (patients.length === 0) {
-      void fetchActiveVisits(user.hospitalId);
-      void fetchAlerts(user.hospitalId);
-    }
-    // Run on first mount with a logged-in user. Re-renders that
-    // change patients.length should NOT re-trigger; that's what
-    // useDataInit + the WebSocket subscriptions are for.
+    if (!scopedHospitalId) return;
+    // Fetch on mount and whenever the scoped hospital changes (super-admin
+    // switching hospitals). Admins / charge-nurse / shift-lead load the whole
+    // hospital census; zone-scoped clinicians get only their own patients.
+    // Idempotent for fixed inputs; useDataInit + the WebSocket subscriptions
+    // keep it live thereafter.
+    void fetchActiveVisits(scopedHospitalId, { allHospital: canSeeAllZones });
+    void fetchAlerts(scopedHospitalId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.hospitalId]);
+  }, [scopedHospitalId, canSeeAllZones]);
 
   // B4 — refresh the active-patient list live when a new admission is
   // registered anywhere in this hospital. The self-heal effect above only
   // fetches when the list is empty, so without this a new admission while the
   // list is non-empty never appears until a manual reload.
   useEffect(() => {
-    const hid = user?.hospitalId;
+    const hid = scopedHospitalId;
     if (!hid) return;
     const unsub = subscribeToVisits(hid, () => {
-      void fetchActiveVisits(hid);
+      void fetchActiveVisits(hid, { allHospital: canSeeAllZones });
     });
     return () => unsub();
-  }, [user?.hospitalId, fetchActiveVisits]);
+  }, [scopedHospitalId, canSeeAllZones, fetchActiveVisits]);
 
   // Zone-aware filter: DOCTOR/NURSE see only their zone's patients;
   // SUPER_ADMIN/HOSPITAL_ADMIN see all patients.
@@ -309,6 +316,7 @@ function HospitalDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <HospitalScopePicker scope={hospitalScope} />
             {/* Search Bar */}
             <div className="relative group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-colors duration-300 group-focus-within:text-cyan-600" />

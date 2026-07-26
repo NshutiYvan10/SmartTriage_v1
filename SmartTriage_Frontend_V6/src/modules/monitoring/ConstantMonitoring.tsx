@@ -25,6 +25,8 @@ import {
   getBatteryColor,
 } from '@/utils/iotDeviceManager';
 import { useTheme } from '@/hooks/useTheme';
+import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
+import { useMyShift } from '@/hooks/useMyShift';
 import MonitoringStatePill from './MonitoringStatePill';
 import StartMonitoringConfirmModal from './StartMonitoringConfirmModal';
 import EndMonitoringConfirmModal from './EndMonitoringConfirmModal';
@@ -424,6 +426,31 @@ export function ConstantMonitoring() {
   const fetchVitalHistory = useVitalStore((s) => s.fetchVitalHistory);
   const authUser = useAuthStore((s) => s.user);
   const storeAlerts = useAlertStore((s) => s.alerts);
+
+  // ── Zone scoping (B12) ──
+  //
+  // Monitored patients are visible ONLY to the clinicians covering the
+  // zone the patient is physically in (primary shift zone ∪ additional
+  // zones), plus cross-zone authorities (Charge Nurse designation,
+  // shift-lead badge, admins). The visit store is already caller-scoped
+  // server-side, but a triage nurse's worklist legitimately contains
+  // triaged-but-unplaced patients (currentEdZone NULL) — without this
+  // filter those rendered here as "monitored patients" she has no
+  // business watching. Zone-less patients are visible to cross-zone
+  // authorities only.
+  const { canSeeAllZones, isLoading: scopeLoading } = useCanSeeAllZones();
+  const { assignment: myShiftAssignment } = useMyShift();
+  const coveredZones = useMemo(() => {
+    const zones = new Set<string>();
+    if (myShiftAssignment?.zone) zones.add(myShiftAssignment.zone);
+    (myShiftAssignment?.additionalZones ?? []).forEach((z) => zones.add(z));
+    return zones;
+  }, [myShiftAssignment]);
+  const inMyScope = useCallback((p: Patient) => {
+    if (canSeeAllZones) return true;
+    if (scopeLoading) return false; // never flash other zones while resolving
+    return !!p.currentEdZone && coveredZones.has(p.currentEdZone);
+  }, [canSeeAllZones, scopeLoading, coveredZones]);
   // Group store alerts by visitId (== patient.id in the monitoring view) for O(1) lookup
   const alertsByVisitId = useMemo(() => {
     const m = new Map<string, AIAlert[]>();
@@ -477,12 +504,12 @@ export function ConstantMonitoring() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch vitals for all monitorable patients on mount and every 30s
+  // Fetch vitals for all monitorable patients (in scope) on mount and every 30s
   const monitorableIds = useMemo(() => {
     return storePatients
-      .filter((p) => p.triageStatus === 'TRIAGED' || p.triageStatus === 'IN_TREATMENT' || p.triageStatus === 'IN_TRIAGE')
+      .filter((p) => (p.triageStatus === 'TRIAGED' || p.triageStatus === 'IN_TREATMENT' || p.triageStatus === 'IN_TRIAGE') && inMyScope(p))
       .map((p) => p.id);
-  }, [storePatients]);
+  }, [storePatients, inMyScope]);
 
   useEffect(() => {
     monitorableIds.forEach((id) => {
@@ -743,12 +770,13 @@ export function ConstantMonitoring() {
 
   const patients = useMemo(() => {
     const monitorable = storePatients.filter((p) =>
-      p.triageStatus === 'TRIAGED' || p.triageStatus === 'IN_TREATMENT' || p.triageStatus === 'IN_TRIAGE'
+      (p.triageStatus === 'TRIAGED' || p.triageStatus === 'IN_TREATMENT' || p.triageStatus === 'IN_TRIAGE')
+      && inMyScope(p)
     );
     return monitorable.map((p) =>
       toMonitoredPatient(p, vitalsByPatient.get(p.id), vitalHistoryStore.get(p.id), trendByVisitId.get(p.id), alertsByVisitId.get(p.id))
     );
-  }, [storePatients, vitalsByPatient, vitalHistoryStore, trendByVisitId, alertsByVisitId]);
+  }, [storePatients, vitalsByPatient, vitalHistoryStore, trendByVisitId, alertsByVisitId, inMyScope]);
 
   const filtered = useMemo(() => {
     return patients.filter((p) => {
@@ -909,9 +937,26 @@ export function ConstantMonitoring() {
               <h3 className={`text-base font-extrabold ${text.heading} tracking-tight`}>Monitored Patients</h3>
               <p className={`text-xs ${text.body} font-medium mt-0.5`}>{filtered.length} patient{filtered.length !== 1 ? 's' : ''} under active monitoring</p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
-              <span className="text-[10px] font-bold text-cyan-600 uppercase tracking-wider">Live Feed</span>
+            <div className="flex items-center gap-3">
+              {/* Visibility-scope chip — says WHY the list is what it is. */}
+              {!scopeLoading && (
+                <span
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${canSeeAllZones ? 'text-emerald-600' : coveredZones.size > 0 ? 'text-cyan-700' : 'text-amber-600'}`}
+                  style={glassInner}
+                  title={canSeeAllZones
+                    ? 'Cross-zone authority (charge nurse / shift lead / admin) — all zones visible'
+                    : coveredZones.size > 0
+                      ? 'Monitoring is scoped to the zone(s) your current shift covers'
+                      : 'No active shift zone — monitored patients are visible to their zone team and the charge nurse'}
+                >
+                  <Shield className="w-3 h-3" />
+                  {canSeeAllZones ? 'All zones' : coveredZones.size > 0 ? `Your zone: ${[...coveredZones].join(', ')}` : 'No zone coverage'}
+                </span>
+              )}
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
+                <span className="text-[10px] font-bold text-cyan-600 uppercase tracking-wider">Live Feed</span>
+              </div>
             </div>
           </div>
 
@@ -922,7 +967,11 @@ export function ConstantMonitoring() {
                   <Monitor className="w-12 h-12 mx-auto mb-3 text-slate-300" />
                   <h4 className={`text-sm font-bold ${text.label} mb-1`}>No patients under active monitoring</h4>
                   <p className={`text-xs ${text.muted} max-w-sm mx-auto mb-4`}>
-                    Patients will appear here once they are triaged and have vitals recorded or an IoT device assigned.
+                    {!canSeeAllZones && coveredZones.size === 0 && !scopeLoading
+                      ? 'Monitoring is scoped to the zone team caring for each patient (plus the charge nurse). You have no zone coverage on your current shift.'
+                      : !canSeeAllZones && coveredZones.size > 0
+                        ? `No monitored patients in your zone${coveredZones.size > 1 ? 's' : ''} (${[...coveredZones].join(', ')}) right now.`
+                        : 'Patients will appear here once they are triaged and have vitals recorded or an IoT device assigned.'}
                   </p>
                   <button
                     onClick={() => navigate('/iot-devices')}

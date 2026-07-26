@@ -71,6 +71,7 @@ import { ParamedicDashboard } from './modules/ems/ParamedicDashboard';
 import { MonitorManagementView } from './modules/ems/MonitorManagementView';
 import { ParamedicPatientsView } from './modules/ems/ParamedicPatientsView';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { DialogProvider } from './components/dialog';
 
 function AppContent() {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -194,7 +195,10 @@ function AppContent() {
             <Route path="/pediatric-triage/:patientId" element={<RoleGuard page="triage" requiresShiftFunction={['TRIAGE_NURSE']}><PediatricTriageForm /></RoleGuard>} />
             <Route path="/adult-triage/new" element={<RoleGuard page="triage" requiresShiftFunction={['TRIAGE_NURSE']}><AdultTriageForm /></RoleGuard>} />
             <Route path="/adult-triage/:patientId" element={<RoleGuard page="triage" requiresShiftFunction={['TRIAGE_NURSE']}><AdultTriageForm /></RoleGuard>} />
-            <Route path="/visit/:visitId" element={<RoleGuard page="triage"><VisitDetailPage /></RoleGuard>} />
+            {/* Visit chart — gated by the 'patients' page (doctor, nurse, registrar):
+                the registrar's prior-visit cards and registry rows land here, and the
+                backend hospital-scopes every data read independently. */}
+            <Route path="/visit/:visitId" element={<RoleGuard page="patients"><VisitDetailPage /></RoleGuard>} />
             <Route path="/doctor-workspace" element={<RoleGuard page="triage"><DoctorWorkspace /></RoleGuard>} />
             <Route path="/vitals/:patientId" element={<RoleGuard page="monitoring"><VitalMonitoring /></RoleGuard>} />
             <Route path="/monitoring" element={<RoleGuard page="monitoring"><ConstantMonitoring /></RoleGuard>} />
@@ -247,8 +251,8 @@ function AppContent() {
             <Route path="/med-safety" element={<RoleGuard page="med-safety"><MedicationSafetyView /></RoleGuard>} />
             {/* CHARGE_NURSE is a real Designation and grants floor-oversight access here;
                 the previous SUPERVISOR/SAFETY_OFFICER values are not in the Designation enum
-                (the safety-officer persona is the READ_ONLY role, which has the page) so they
-                were dead no-ops. Backend canAuditSafetyOverrides mirrors this audience. */}
+                so they were dead no-ops. Backend canAuditSafetyOverrides mirrors this
+                audience. */}
             <Route path="/med-safety/overrides" element={<RoleGuard page="med-safety-overrides" allowDesignations={['CHARGE_NURSE']}><MedicationSafetyOverridesView /></RoleGuard>} />
             <Route path="/overrides" element={<RoleGuard page="override-register"><OverrideRegisterView /></RoleGuard>} />
             <Route path="/icu" element={<RoleGuard page="icu"><IcuEscalationView /></RoleGuard>} />
@@ -293,7 +297,9 @@ function AppContent() {
 function App() {
   return (
     <BrowserRouter>
-      <AppContent />
+      <DialogProvider>
+        <AppContent />
+      </DialogProvider>
     </BrowserRouter>
   );
 }

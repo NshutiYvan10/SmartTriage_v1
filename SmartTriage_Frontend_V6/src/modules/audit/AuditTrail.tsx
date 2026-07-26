@@ -4,11 +4,12 @@ import {
   ChevronDown, ChevronRight, ChevronLeft, Loader2, RefreshCw,
   User, History, X, Eye, EyeOff,
 } from 'lucide-react';
-import { useAuthStore } from '@/store/authStore';
 import { auditApi, AuditLogEntry } from '@/api/audit';
 import { saveBlob } from '@/api/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
+import { useHospitalScope } from '@/hooks/useHospitalScope';
+import { HospitalScopePicker } from '@/components/HospitalScopePicker';
 import { describeAuditEntry, CATEGORY_STYLE } from './auditEventLabels';
 
 const startIso = (d: string) => (d ? new Date(`${d}T00:00:00`).toISOString() : undefined);
@@ -28,7 +29,8 @@ const PAGE_SIZE = 50;
 export function AuditTrail() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
-  const hospitalId = useAuthStore((s) => s.user?.hospitalId) || '';
+  const hospitalScope = useHospitalScope();
+  const hospitalId = hospitalScope.hospitalId;
 
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
   const [totalElements, setTotalElements] = useState(0);
@@ -146,6 +148,7 @@ export function AuditTrail() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                <HospitalScopePicker scope={hospitalScope} variant="dark" />
                 <button
                   onClick={load}
                   className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all"

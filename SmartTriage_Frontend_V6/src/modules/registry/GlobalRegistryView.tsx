@@ -222,7 +222,9 @@ export function GlobalRegistryView() {
                   <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                     {row.hasOpenVisitAtMyHospital ? (
                       <button
-                        onClick={() => navigate(`/patients/${row.patientId}`)}
+                        onClick={() => navigate(row.openVisitIdAtMyHospital
+                          ? `/visit/${row.openVisitIdAtMyHospital}`
+                          : `/patients/${row.patientId}`)}
                         className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-1.5 rounded-xl transition-colors"
                       >
                         <CheckCircle2 className="w-3.5 h-3.5" /> Open visit active — go to it

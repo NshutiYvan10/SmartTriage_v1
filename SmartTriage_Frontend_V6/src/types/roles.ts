@@ -7,8 +7,7 @@ export type UserRole =
   | 'NURSE'
   | 'REGISTRAR'
   | 'PARAMEDIC'
-  | 'LAB_TECHNICIAN'
-  | 'READ_ONLY';
+  | 'LAB_TECHNICIAN';
 
 /** Every routable view / feature the sidebar can reference */
 export type AppPage =
@@ -165,13 +164,6 @@ export const ROLE_META: Record<UserRole, RoleMeta> = {
     textColor: 'text-purple-600',
     borderColor: 'border-purple-300',
   },
-  READ_ONLY: {
-    label: 'Read Only',
-    description: 'Audit, reporting & observation-only access',
-    color: 'bg-slate-500',
-    textColor: 'text-slate-600',
-    borderColor: 'border-slate-300',
-  },
 };
 
 /* ─── Page-level permissions per role ───
@@ -186,7 +178,6 @@ export const ROLE_META: Record<UserRole, RoleMeta> = {
  * REGISTRAR    → Registration only: entry, patient list.
  * PARAMEDIC    → Pre-hospital: registration, handover, basic patient view.
  * LAB_TECHNICIAN → Lab-focused: lab orders/results, patient data for context.
- * READ_ONLY    → View-only: reports, audit, quality metrics.
  */
 export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
 
@@ -385,11 +376,6 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'safety-incidents',
   ],
 
-  // ── View-only ──
-  READ_ONLY: [
-    'dashboard', 'patients', 'profile',
-    'audit-trail', 'reports', 'quality', 'med-safety-overrides', 'override-register', 'moh-reports',
-  ],
 };
 
 /* ─── Feature-level permissions per role ─── */
@@ -420,9 +406,6 @@ export const ROLE_FEATURES: Record<UserRole, AppFeature[]> = {
   ],
   LAB_TECHNICIAN: [
     'view_reports',
-  ],
-  READ_ONLY: [
-    'view_audit', 'view_reports',
   ],
 };
 

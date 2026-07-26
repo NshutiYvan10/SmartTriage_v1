@@ -44,6 +44,7 @@ import type {
 } from '@/api/types';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
+import { dialog } from '@/components/dialog';
 
 export function DelegationsPage() {
   const { glassCard, text } = useTheme();
@@ -237,7 +238,10 @@ function DelegationRow({
   const [err, setErr] = useState<string | null>(null);
 
   const revoke = async () => {
-    const note = window.prompt('Reason for revoking (visible to delegate, optional):');
+    const note = await dialog.prompt({
+      title: 'Revoke delegation', tone: 'danger', confirmLabel: 'Revoke',
+      message: 'Reason for revoking (visible to delegate):', placeholder: 'Optional',
+    });
     if (note === null) return;     // user cancelled
     setBusy(true); setErr(null);
     try {

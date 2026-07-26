@@ -18,6 +18,7 @@ import { hospitalApi } from '@/api/hospitals';
 import type { HospitalResponse } from '@/api/types';
 import { format } from 'date-fns';
 import { PdfPreviewModal, usePdfPreview } from '@/components/PdfPreviewModal';
+import { dialog } from '@/components/dialog';
 
 /** Sentinel scope value for the national (cross-hospital) rollup. */
 const NATIONAL = 'NATIONAL';
@@ -48,12 +49,15 @@ const REPORT_TYPE_CONFIG: Record<string, { color: string; bg: string; border: st
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string; label: string }> = {
   DRAFT:     { color: 'text-slate-600',   bg: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.2)', label: 'Draft' },
+  // The backend creates reports in GENERATED status; both DRAFT and
+  // GENERATED are submittable (see MohReportService.submitReport).
+  GENERATED: { color: 'text-cyan-700',    bg: 'rgba(6,182,212,0.08)',   border: '1px solid rgba(6,182,212,0.2)',   label: 'Generated' },
   SUBMITTED: { color: 'text-blue-600',    bg: 'rgba(59,130,246,0.08)',  border: '1px solid rgba(59,130,246,0.2)',  label: 'Submitted' },
   ACCEPTED:  { color: 'text-emerald-600', bg: 'rgba(16,185,129,0.08)',  border: '1px solid rgba(16,185,129,0.2)',  label: 'Accepted' },
   REJECTED:  { color: 'text-red-600',     bg: 'rgba(239,68,68,0.08)',   border: '1px solid rgba(239,68,68,0.2)',   label: 'Rejected' },
 };
 
-const STATUS_PIPELINE = ['DRAFT', 'SUBMITTED', 'ACCEPTED'];
+const STATUS_PIPELINE = ['GENERATED', 'SUBMITTED', 'ACCEPTED'];
 
 function getTypeLabel(type: string): string {
   return REPORT_TYPES.find((t) => t.value === type)?.label || type;
@@ -154,8 +158,11 @@ export function MohReportView() {
     setActionLoading(id);
     try {
       await mohReportApi.submit(id);
+      dialog.notify('Report submitted to MoH for review.', { type: 'success' });
       await loadReports();
-    } catch { /* */ } finally { setActionLoading(null); }
+    } catch (err: any) {
+      dialog.notify(err?.message ?? 'Failed to submit report.', { type: 'error' });
+    } finally { setActionLoading(null); }
   }, [loadReports]);
 
   const handleAccept = useCallback(async (id: string) => {
@@ -163,7 +170,9 @@ export function MohReportView() {
     try {
       await mohReportApi.accept(id);
       await loadReports();
-    } catch { /* */ } finally { setActionLoading(null); }
+    } catch (err: any) {
+      dialog.notify(err?.message ?? 'Failed to accept report.', { type: 'error' });
+    } finally { setActionLoading(null); }
   }, [loadReports]);
 
   const handleReject = useCallback(async () => {
@@ -174,7 +183,9 @@ export function MohReportView() {
       setRejectTarget(null);
       setRejectReason('');
       await loadReports();
-    } catch { /* */ } finally { setActionLoading(null); }
+    } catch (err: any) {
+      dialog.notify(err?.message ?? 'Failed to reject report.', { type: 'error' });
+    } finally { setActionLoading(null); }
   }, [rejectTarget, rejectReason, loadReports]);
 
   const handleDownloadPdf = useCallback(async (id: string) => {
@@ -586,7 +597,7 @@ export function MohReportView() {
                               : <Download className="w-3.5 h-3.5" />}
                             Download PDF
                           </button>
-                          {report.status === 'DRAFT' && (
+                          {(report.status === 'DRAFT' || report.status === 'GENERATED') && (
                             <button
                               onClick={() => handleSubmit(report.id)}
                               disabled={isLoading}

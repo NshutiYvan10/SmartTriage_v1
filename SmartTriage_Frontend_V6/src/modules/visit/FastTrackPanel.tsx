@@ -24,6 +24,7 @@ import {
 import { subscribeToFastTrack } from '@/api/websocket';
 import { useWebSocketGeneration } from '@/hooks/useWebSocket';
 import { ApiError } from '@/api/client';
+import { dialog } from '@/components/dialog';
 import { format } from 'date-fns';
 
 const TYPE_LABEL: Record<FastTrackType, string> = {
@@ -140,6 +141,14 @@ export function FastTrackPanel({ visitId, onChanged }: FastTrackPanelProps) {
 
   const activate = async () => {
     if (!form.fastTrackType) { setError('Select a pathway type first.'); return; }
+    // Activation pages the receiving team immediately — confirm first.
+    const ok = await dialog.confirm({
+      title: 'Activate fast-track',
+      message: `Activate the ${form.fastTrackType.replace(/_/g, ' ')} fast-track pathway for this patient? The receiving team is notified immediately.`,
+      confirmLabel: 'Activate',
+      tone: 'primary',
+    });
+    if (!ok) return;
     setBusy(true);
     setError(null);
     try {

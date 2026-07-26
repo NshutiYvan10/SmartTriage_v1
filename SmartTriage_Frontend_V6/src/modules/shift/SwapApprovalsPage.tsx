@@ -45,6 +45,7 @@ import { swapApi } from '@/api';
 import type { ShiftSwapResponse, SwapAssignmentSnapshot } from '@/api/types';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
+import { dialog } from '@/components/dialog';
 
 export function SwapApprovalsPage() {
   const { glassCard, text } = useTheme();
@@ -170,8 +171,11 @@ function SwapApprovalRow({
   };
 
   const approve = () => wrap(() => swapApi.chargeApprove(swap.id));
-  const reject = () => {
-    const note = window.prompt('Reason for rejecting (visible to both staff):');
+  const reject = async () => {
+    const note = await dialog.prompt({
+      title: 'Reject swap', tone: 'danger', confirmLabel: 'Reject', required: true,
+      message: 'Reason for rejecting (visible to both staff):', placeholder: 'Reason',
+    });
     if (note === null) return;                  // user cancelled prompt
     if (!note.trim()) {
       setErr('A rejection reason is required.');

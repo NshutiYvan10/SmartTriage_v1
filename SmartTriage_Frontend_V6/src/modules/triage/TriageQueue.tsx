@@ -2,15 +2,16 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Stethoscope, Search, Clock, Users, Baby, Filter,
-  Activity, ChevronRight, Siren,
+  Activity, ChevronRight, Siren, AlertTriangle,
   Timer, UserPlus, HeartPulse, ShieldAlert, Leaf, Droplets, BedDouble,
 } from 'lucide-react';
 import { usePatientStore, visitResponseToPatient } from '@/store/patientStore';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
 import { triageApi } from '@/api/triage';
+import { shiftApi } from '@/api/shifts';
 import type { Patient, TriageCategory } from '@/types';
-import type { VisitResponse } from '@/api/types';
+import type { ShiftAssignmentResponse, VisitResponse } from '@/api/types';
 import { PlacePatientDialog } from '@/modules/beds/PlacePatientDialog';
 
 /* ─── Config ─── */
@@ -346,6 +347,58 @@ export function TriageQueue() {
     refreshCurrentShift().catch(() => { /* silent — stale cache is the fallback */ });
   }, [refreshCurrentShift]);
 
+  // "Forgot the triage nurse" recovery — people with staffing authority see
+  // a banner + one-click assign when the current shift has nobody rostered
+  // on the triage station. Everyone else just sees the normal queue states.
+  const canFixRoster = !!user && (
+    user.role === 'HOSPITAL_ADMIN'
+    || user.isShiftLead
+    || user.currentShiftFunction === 'CHARGE_NURSE'
+    || user.designation === 'CHARGE_NURSE'
+  );
+  const [shiftAssignments, setShiftAssignments] = useState<ShiftAssignmentResponse[] | null>(null);
+  const [assigneeId, setAssigneeId] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+
+  const loadShiftAssignments = useCallback(async () => {
+    if (!canFixRoster || !user?.hospitalId) return;
+    try {
+      setShiftAssignments(await shiftApi.getCurrentShift(user.hospitalId));
+    } catch { /* non-blocking — banner simply doesn't render */ }
+  }, [canFixRoster, user?.hospitalId]);
+
+  useEffect(() => { loadShiftAssignments(); }, [loadShiftAssignments]);
+
+  const triageNurseMissing = shiftAssignments !== null
+    && !shiftAssignments.some((a) => a.shiftFunction === 'TRIAGE_NURSE');
+  const assignableNurses = (shiftAssignments ?? []).filter(
+    (a) => a.userRole === 'NURSE' && a.shiftFunction !== 'CHARGE_NURSE',
+  );
+
+  const assignTriageNurse = useCallback(async () => {
+    if (!assigneeId || !user?.hospitalId) return;
+    setAssigning(true);
+    setAssignError(null);
+    try {
+      // Omitting date/period targets TODAY's current shift; the backend
+      // soft-ends the nurse's existing assignment and re-rosters them as
+      // the triage nurse (function TRIAGE_NURSE requires zone TRIAGE).
+      await shiftApi.assign(user.hospitalId, {
+        userId: assigneeId,
+        zone: 'TRIAGE',
+        shiftFunction: 'TRIAGE_NURSE',
+      });
+      setAssigneeId('');
+      await loadShiftAssignments();
+      await refreshCurrentShift().catch(() => { /* stale cache fallback */ });
+    } catch (e) {
+      setAssignError(e instanceof Error ? e.message : 'Failed to assign the triage nurse');
+    } finally {
+      setAssigning(false);
+    }
+  }, [assigneeId, user?.hospitalId, loadShiftAssignments, refreshCurrentShift]);
+
   // Fetch patients from backend
   useEffect(() => {
     fetchActiveVisits(user?.hospitalId || '');
@@ -481,6 +534,55 @@ export function TriageQueue() {
   return (
     <div className="min-h-full p-5 animate-fade-in">
       <div className="space-y-5">
+
+        {/* ── No triage nurse on this shift — staffing recovery banner ── */}
+        {canFixRoster && triageNurseMissing && (
+          <div className={`rounded-xl p-4 border animate-fade-up ${isDark
+            ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-50 border-amber-300'}`}>
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-bold ${isDark ? 'text-amber-300' : 'text-amber-800'}`}>
+                  No triage nurse is assigned for this shift
+                </p>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-amber-300/70' : 'text-amber-700/80'}`}>
+                  New arrivals cannot be triaged until someone takes the triage station.
+                  Assign one of the nurses currently on shift:
+                </p>
+                <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                  <select
+                    value={assigneeId}
+                    onChange={(e) => setAssigneeId(e.target.value)}
+                    className={`px-3 py-2 rounded-lg text-xs font-semibold border focus:outline-none ${isDark
+                      ? 'bg-slate-800 border-white/10 text-slate-200' : 'bg-white border-slate-300 text-slate-700'}`}
+                  >
+                    <option value="">Select a nurse on shift…</option>
+                    {assignableNurses.map((a) => (
+                      <option key={a.userId} value={a.userId}>
+                        {a.userName} — currently {a.shiftFunction.replace(/_/g, ' ').toLowerCase()} ({a.zone})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={assignTriageNurse}
+                    disabled={!assigneeId || assigning}
+                    className="px-4 py-2 rounded-lg text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50"
+                  >
+                    {assigning ? 'Assigning…' : 'Assign as triage nurse'}
+                  </button>
+                  {assignableNurses.length === 0 && (
+                    <span className={`text-xs ${text.muted}`}>
+                      No other nurses are on this shift — add one from Shift Assignment.
+                    </span>
+                  )}
+                </div>
+                {assignError && (
+                  <p className="text-xs font-semibold text-red-500 mt-2">{assignError}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Header ── */}
         <div className="flex items-start justify-between animate-fade-up">
