@@ -27,7 +27,7 @@ import java.util.UUID;
  *       ({@code canSeeAllZonesAtHospital}: hospital admin, charge nurse, shift lead,
  *       super admin). These contain hospital-wide patient-flow data.</li>
  *   <li>Period activity + quality metrics — the governance/reporting tier
- *       ({@code canViewHospitalReports} OR operational leadership, so READ_ONLY
+ *       ({@code canViewHospitalReports} OR operational leadership, so
  *       auditors keep their reporting access).</li>
  *   <li>My activity — ANY clinician, but self-scoped BY CONSTRUCTION: the subject
  *       is always the authenticated principal; there is deliberately no userId

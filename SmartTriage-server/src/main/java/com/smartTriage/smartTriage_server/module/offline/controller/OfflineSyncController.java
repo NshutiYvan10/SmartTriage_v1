@@ -28,7 +28,7 @@ public class OfflineSyncController {
     private final OfflineSyncService offlineSyncService;
 
     @PostMapping("/sync")
-    @PreAuthorize("isAuthenticated() and !hasRole('READ_ONLY')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<SyncBatchResponse>> syncBatch(
             @Valid @RequestBody List<OfflineSyncRequest> records) {
         SyncBatchResponse response = offlineSyncService.syncBatch(records);

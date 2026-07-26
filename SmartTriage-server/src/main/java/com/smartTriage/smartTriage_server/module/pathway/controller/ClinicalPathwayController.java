@@ -64,6 +64,7 @@ public class ClinicalPathwayController {
     // ── Activation ──────────────────────────────────────────────────────
     @PostMapping("/activate")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canActivateClinicalPathway(authentication) "
             + "and @clinicalAuthz.canAccessVisit(authentication, #request.visitId)")
     public ResponseEntity<ApiResponse<PathwayActivationResponse>> activate(
             @Valid @RequestBody ActivatePathwayRequest request) {
@@ -72,11 +73,16 @@ public class ClinicalPathwayController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Pathway activated", response));
     }
 
-    @GetMapping("/visit/{visitId}/active")
+    /**
+     * Accepts a loose visit reference — internal UUID or the human-readable
+     * visit number (V-KFH-001-…) users see on screens and paste into the
+     * search box. A pasted visit number previously 500-ed on UUID parsing.
+     */
+    @GetMapping("/visit/{visitRef}/active")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR', 'NURSE') "
-            + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
-    public ResponseEntity<ApiResponse<List<PathwayActivationResponse>>> getActive(@PathVariable UUID visitId) {
-        return ResponseEntity.ok(ApiResponse.success(pathwayService.getActivePathways(visitId)));
+            + "and @clinicalAuthz.canAccessVisitRef(authentication, #visitRef)")
+    public ResponseEntity<ApiResponse<List<PathwayActivationResponse>>> getActive(@PathVariable String visitRef) {
+        return ResponseEntity.ok(ApiResponse.success(pathwayService.getActivePathwaysByRef(visitRef)));
     }
 
     @GetMapping("/activation/{activationId}/progress")

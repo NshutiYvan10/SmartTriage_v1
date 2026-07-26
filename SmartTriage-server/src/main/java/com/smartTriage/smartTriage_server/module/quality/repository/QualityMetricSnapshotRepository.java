@@ -16,6 +16,14 @@ import java.util.UUID;
 @Repository
 public interface QualityMetricSnapshotRepository extends JpaRepository<QualityMetricSnapshot, UUID> {
 
+    /** Most recent snapshot of any period for a hospital — drives the dashboard's default view. */
+    Optional<QualityMetricSnapshot> findFirstByHospitalIdAndIsActiveTrueOrderBySnapshotDateDescCreatedAtDesc(
+            UUID hospitalId);
+
+    /** Paged snapshot history, newest first — drives the dashboard's previous-period comparison. */
+    org.springframework.data.domain.Page<QualityMetricSnapshot>
+            findByHospitalIdAndIsActiveTrueOrderBySnapshotDateDescCreatedAtDesc(UUID hospitalId, Pageable pageable);
+
     Optional<QualityMetricSnapshot> findByIdAndIsActiveTrue(UUID id);
 
     Optional<QualityMetricSnapshot> findByHospitalIdAndSnapshotDateAndSnapshotPeriodAndIsActiveTrue(

@@ -61,7 +61,7 @@ public class RealTimeEventPublisher {
      */
     public void publishHospitalAlert(UUID hospitalId, ClinicalAlertResponse alertResponse) {
         // Hospital-wide firehose — only oversight roles (canSeeAllZones: charge
-        // nurse, shift lead, super-admin, read-only) may SUBSCRIBE here
+        // nurse, shift lead, super-admin) may SUBSCRIBE here
         // (StompAuthChannelInterceptor). Zone-bound staff are cut off this topic.
         messagingTemplate.convertAndSend("/topic/alerts/" + hospitalId, (Object) alertResponse);
         log.debug("Published typed alert to /topic/alerts/{}", hospitalId);

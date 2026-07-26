@@ -98,11 +98,25 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
          * hospital — one query for a whole registry-search page ("already has an
          * open visit here" badge) instead of one lookup per row.
          */
-        @Query("SELECT DISTINCT v.patient.id FROM Visit v WHERE v.patient.id IN :patientIds " +
+        @Query("SELECT v.patient.id, v.id FROM Visit v WHERE v.patient.id IN :patientIds " +
                         "AND v.hospital.id = :hospitalId AND v.isActive = true " +
                         "AND v.status NOT IN ('DISCHARGED', 'ADMITTED', 'TRANSFERRED', 'ICU_ADMITTED', 'DECEASED', 'LEFT_WITHOUT_BEING_SEEN')")
-        List<UUID> findPatientIdsWithOpenVisitAtHospital(
+        List<Object[]> findOpenVisitPairsByPatientAtHospital(
                         @Param("patientIds") List<UUID> patientIds,
+                        @Param("hospitalId") UUID hospitalId);
+
+        /**
+         * Same open-visit detection keyed on the SHARED PERSON IDENTITY: the
+         * registry shows one row per patient RECORD (per hospital), so a
+         * person's row from hospital B must still light up "open visit here"
+         * when their LOCAL record at :hospitalId has an open encounter.
+         */
+        @Query("SELECT v.patient.personIdentity.id, v.id FROM Visit v " +
+                        "WHERE v.patient.personIdentity.id IN :identityIds " +
+                        "AND v.hospital.id = :hospitalId AND v.isActive = true " +
+                        "AND v.status NOT IN ('DISCHARGED', 'ADMITTED', 'TRANSFERRED', 'ICU_ADMITTED', 'DECEASED', 'LEFT_WITHOUT_BEING_SEEN')")
+        List<Object[]> findOpenVisitPairsByIdentityAtHospital(
+                        @Param("identityIds") List<UUID> identityIds,
                         @Param("hospitalId") UUID hospitalId);
 
         @Query("SELECT v FROM Visit v WHERE v.hospital.id = :hospitalId AND v.isActive = true " +

@@ -160,6 +160,38 @@ public class ClinicalAuthz {
     }
 
     /**
+     * Like {@link #canAccessVisit(Authentication, UUID)} but accepts a loose
+     * visit REFERENCE: either the internal UUID or the human-readable visit
+     * number (V-KFH-001-…) that users actually see on screens. Used by search
+     * endpoints where users paste whatever identifier they have; previously a
+     * pasted visit number 500-ed on UUID parsing.
+     *
+     * <p>An unresolvable reference returns {@code true} so the controller can
+     * answer with a clear 404 ("no visit found") instead of a misleading 403 —
+     * no data is exposed because the controller's own lookup fails first.
+     */
+    @Transactional(readOnly = true)
+    public boolean canAccessVisitRef(Authentication authentication, String visitRef) {
+        try {
+            if (visitRef == null || visitRef.isBlank()) return false;
+            String trimmed = visitRef.trim();
+            UUID id;
+            try {
+                id = UUID.fromString(trimmed);
+            } catch (IllegalArgumentException notUuid) {
+                id = visitRepository.findByVisitNumberAndIsActiveTrue(trimmed)
+                        .map(v -> v.getId())
+                        .orElse(null);
+            }
+            if (id == null) return true; // controller 404s with a clear message
+            return canAccessVisit(authentication, id);
+        } catch (Exception e) {
+            log.error("canAccessVisitRef error for ref {}: {}", visitRef, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
      * @return true if the visit identified by {@code visitId} belongs to the
      *         authenticated user's hospital. Returns false when the visit
      *         does not exist (no information leak about which ids exist).
@@ -411,8 +443,8 @@ public class ClinicalAuthz {
     /**
      * Reporting/analytics read gate — for hospital-wide aggregate reports (Quality
      * KPIs, MoH statistics, operational analytics). Restricted to the governance /
-     * management / audit readers: SUPER_ADMIN, and the HOSPITAL_ADMIN or READ_ONLY
-     * (safety-officer / auditor) AT THIS HOSPITAL. Deliberately NOT every clinician
+     * management / audit readers: SUPER_ADMIN, and the HOSPITAL_ADMIN AT THIS
+     * HOSPITAL. Deliberately NOT every clinician
      * — a bedside doctor/nurse/paramedic/lab-tech/registrar has no need for
      * hospital-wide mortality / LWBS / throughput aggregates, and the Quality
      * endpoints were previously gated only by hospital membership (any role).
@@ -430,7 +462,7 @@ public class ClinicalAuthz {
             if (!belongsToHospital(user, hospitalId)) {
                 return false;
             }
-            return user.getRole() == Role.HOSPITAL_ADMIN || user.getRole() == Role.READ_ONLY;
+            return user.getRole() == Role.HOSPITAL_ADMIN;
         } catch (Exception e) {
             log.error("canViewHospitalReports error for hospital {}: {}", hospitalId, e.getMessage(), e);
             return false;
@@ -507,8 +539,8 @@ public class ClinicalAuthz {
     /**
      * Object-level read gate for a single MoH report by id (JSON + PDF). NATIONAL rollups
      * are SUPER_ADMIN-only; a HOSPITAL report is readable only by the SUPER_ADMIN or the
-     * HOSPITAL_ADMIN/READ_ONLY of THAT report's hospital. Closes the by-id IDOR hole where
-     * the class-level role gate alone let any admin/read-only read national or other-hospital
+     * HOSPITAL_ADMIN of THAT report's hospital. Closes the by-id IDOR hole where
+     * the class-level role gate alone let any admin read national or other-hospital
      * reports by guessing/holding the UUID. Denies on unknown id (no existence leak).
      */
     @Transactional(readOnly = true)
@@ -572,7 +604,7 @@ public class ClinicalAuthz {
      * returning patient is recognised instead of re-registered. It therefore DELIBERATELY does
      * NOT scope to the caller's hospital ({@code canAccessHospital}) — cross-hospital read is the
      * whole point. It is role-gated to the clinical/registration roles that register or treat
-     * patients (SUPER_ADMIN, DOCTOR, NURSE, REGISTRAR, PARAMEDIC); admins/lab/read-only are denied.
+     * patients (SUPER_ADMIN, DOCTOR, NURSE, REGISTRAR, PARAMEDIC); admins/lab are denied.
      * It does NOT open the deep clinical record — that stays hospital-owned (a later phase).
      * Every read is separately written to the audit log.
      */
@@ -641,6 +673,79 @@ public class ClinicalAuthz {
     }
 
     /**
+     * May this user INVOKE the break-the-glass emergency override on the
+     * cross-hospital deep record? Deliberately STRICTER than the deep-record
+     * ATTEMPT gate above: overriding an absent consent is a senior clinical
+     * act with legal weight. Doctors and paramedics (pre-arrival emergency
+     * lookup) qualify; a nurse qualifies only with senior authority — a
+     * Charge / Senior Nurse designation or the current shift-lead badge.
+     * Staff and student nurses still read consented records normally; they
+     * just cannot bypass a missing consent on their own.
+     */
+    @Transactional(readOnly = true)
+    public boolean canInvokeBreakTheGlass(Authentication authentication) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null) {
+                return false;
+            }
+            return switch (user.getRole()) {
+                case SUPER_ADMIN, DOCTOR, PARAMEDIC -> true;
+                case NURSE -> hasSeniorNurseAuthority(user);
+                default -> false;
+            };
+        } catch (Exception e) {
+            log.error("canInvokeBreakTheGlass error: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * May this user ACTIVATE a clinical pathway on a visit? Activation
+     * commits the care team to protocol compliance timers, so it is a
+     * senior clinical decision: doctors always; nurses only with senior
+     * authority (Charge / Senior Nurse designation or the shift-lead
+     * badge). Every nurse can still SEE active pathways and work them —
+     * completing and skipping steps stays open to the whole care team.
+     */
+    @Transactional(readOnly = true)
+    public boolean canActivateClinicalPathway(Authentication authentication) {
+        try {
+            User user = currentUser(authentication);
+            if (user == null) {
+                return false;
+            }
+            return switch (user.getRole()) {
+                case SUPER_ADMIN, DOCTOR -> true;
+                case NURSE -> hasSeniorNurseAuthority(user);
+                default -> false;
+            };
+        } catch (Exception e) {
+            log.error("canActivateClinicalPathway error: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Senior nursing authority: a Charge / Senior Nurse designation, or the
+     * current transferable shift-lead badge. Used by the break-the-glass and
+     * pathway-activation gates; NOT a general privilege tier — each gate that
+     * needs it opts in explicitly.
+     */
+    public boolean hasSeniorNurseAuthority(User user) {
+        if (user == null || user.getRole() != Role.NURSE) {
+            return false;
+        }
+        if (user.getDesignation() == Designation.CHARGE_NURSE
+                || user.getDesignation() == Designation.SENIOR_NURSE) {
+            return true;
+        }
+        return userRepository.findHospitalIdByUserId(user.getId())
+                .map(hid -> shiftAssignmentService.isUserCurrentShiftLead(user.getId(), hid))
+                .orElse(false);
+    }
+
+    /**
      * May this user view the FORENSIC medication-safety override audit?
      *
      * <p>This is a governance / quality surface (hospital safety officer,
@@ -652,9 +757,9 @@ public class ClinicalAuthz {
      * needs its own, broader-but-still-bounded authority:
      * <ul>
      *   <li>SUPER_ADMIN — always;</li>
-     *   <li>at the SAME hospital: HOSPITAL_ADMIN (governance), READ_ONLY (the
-     *       safety-officer / auditor persona), DOCTOR (peer review), and a
-     *       Charge Nurse / current shift-lead nurse (floor oversight).</li>
+     *   <li>at the SAME hospital: HOSPITAL_ADMIN (governance), DOCTOR (peer
+     *       review), and a Charge Nurse / current shift-lead nurse (floor
+     *       oversight).</li>
      * </ul>
      * These are exactly the roles the frontend surfaces the Override Audit page
      * to, so "can see the page" now implies "can load it" — closing the blank-
@@ -674,7 +779,7 @@ public class ClinicalAuthz {
                 return false;
             }
             return switch (user.getRole()) {
-                case HOSPITAL_ADMIN, READ_ONLY, DOCTOR -> true;
+                case HOSPITAL_ADMIN, DOCTOR -> true;
                 case NURSE -> user.getDesignation() == Designation.CHARGE_NURSE
                         || shiftAssignmentService.isUserCurrentShiftLead(user.getId(), hospitalId);
                 default -> false;
@@ -831,7 +936,7 @@ public class ClinicalAuthz {
      *       receiving Resus/Acute team), resolved via the same shift-coverage check that gates
      *       zone alerts ({@link #canReceiveZoneAlerts}).</li>
      * </ul>
-     * Admins, read-only accounts, registrars and paramedics are excluded. A clinician who
+     * Admins, registrars and paramedics are excluded. A clinician who
      * DISAGREES with the field category does not confirm — they re-run the full triage form
      * (gated by {@link #callerCanPerformTriage}), so widening confirmation never widens the
      * ability to author an arbitrary triage from scratch.
@@ -891,9 +996,10 @@ public class ClinicalAuthz {
             // (e.g. PARAMEDIC handoff vitals). Read paths already permit them.
             Role role = user.getRole();
             if (role == Role.REGISTRAR || role == Role.LAB_TECHNICIAN
-                    || role == Role.PARAMEDIC || role == Role.READ_ONLY) {
-                // READ_ONLY may NOT write; others depend on the specific endpoint's role gate.
-                return role != Role.READ_ONLY;
+                    || role == Role.PARAMEDIC) {
+                // Non-zone-bound operational roles; whether they may write
+                // depends on the specific endpoint's role gate.
+                return true;
             }
 
             // Resolve the visit's current ED zone.
@@ -1260,7 +1366,7 @@ public class ClinicalAuthz {
      * clinical patient summary (diagnoses, meds, labs, isolation, disposition), so
      * reading it requires a CLINICAL role in addition to hospital scope — the
      * previous {@link #canAccessHandoverReport} was hospital-membership only, which
-     * let a REGISTRAR / LAB_TECHNICIAN / READ_ONLY token enumerate any patient's SBAR
+     * let a REGISTRAR / LAB_TECHNICIAN token enumerate any patient's SBAR
      * PDF by id. Permitted: SUPER_ADMIN, DOCTOR, NURSE, PARAMEDIC (the same clinical
      * set allowed to GENERATE a handover), still bounded to the report's hospital.
      */

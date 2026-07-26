@@ -170,6 +170,39 @@ public class ClinicalGovernanceService {
     }
 
     /**
+     * One-step approve + activate. Policy administration is owned by the
+     * SUPER_ADMIN / HOSPITAL_ADMIN who answers to no higher reviewer inside
+     * the system, so forcing them through submit → approve → activate adds
+     * ceremony without adding control. This compresses the lifecycle for a
+     * DRAFT (or already-submitted PENDING_APPROVAL) policy while keeping the
+     * full audit trail: an APPROVED audit row is written, then the standard
+     * activation (including superseding any previous ACTIVE version) runs.
+     */
+    @Transactional
+    public ClinicalPolicy approveAndActivatePolicy(UUID policyId, String notes) {
+        ClinicalPolicy policy = findPolicy(policyId);
+
+        if (policy.getStatus() != PolicyStatus.DRAFT
+                && policy.getStatus() != PolicyStatus.PENDING_APPROVAL) {
+            throw new IllegalStateException(
+                    "Only DRAFT or PENDING_APPROVAL policies can be approved and activated. Current status: "
+                            + policy.getStatus());
+        }
+
+        String actor = currentActorName();
+        policy.setStatus(PolicyStatus.APPROVED);
+        policy.setApprovedByName(actor);
+        policy.setApprovedAt(Instant.now());
+        policy.setApprovalNotes(notes);
+        policy = policyRepository.save(policy);
+
+        createAuditLog(policy, "APPROVED", actor, null, null,
+                (notes != null && !notes.isBlank()) ? notes : "Administrator one-step approval");
+
+        return activatePolicy(policy.getId());
+    }
+
+    /**
      * Activate an approved policy. Any previous ACTIVE version of the same type+code
      * (for the same hospital, or system-wide when the policy is system-wide) is archived
      * and linked as the previous version.
@@ -273,6 +306,30 @@ public class ClinicalGovernanceService {
         createAuditLog(policy, "ARCHIVED", currentActorName(), null, null, "Policy archived");
 
         log.info("Policy {} archived", policyId);
+        return policy;
+    }
+
+    /**
+     * Restore an archived policy back to DRAFT. Not straight to ACTIVE:
+     * a restored policy must re-pass submit → approve → activate so nothing
+     * re-enters clinical use without review.
+     */
+    @Transactional
+    public ClinicalPolicy unarchivePolicy(UUID policyId) {
+        ClinicalPolicy policy = findPolicy(policyId);
+
+        if (policy.getStatus() != PolicyStatus.ARCHIVED) {
+            throw new IllegalStateException(
+                    "Only ARCHIVED policies can be restored. Current status: " + policy.getStatus());
+        }
+
+        policy.setStatus(PolicyStatus.DRAFT);
+        policy = policyRepository.save(policy);
+
+        createAuditLog(policy, "UNARCHIVED", currentActorName(), null, null,
+                "Policy restored from archive to draft for re-review");
+
+        log.info("Policy {} unarchived (restored to DRAFT)", policyId);
         return policy;
     }
 

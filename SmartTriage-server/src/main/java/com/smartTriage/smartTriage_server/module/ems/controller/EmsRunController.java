@@ -154,7 +154,7 @@ public class EmsRunController {
     }
 
     @GetMapping("/runs/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PARAMEDIC', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'READ_ONLY')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PARAMEDIC', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN')")
     public ResponseEntity<ApiResponse<EmsRunResponse>> getById(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(emsRunService.getById(id)));
     }
@@ -165,7 +165,7 @@ public class EmsRunController {
      * runs; ED staff/admin only runs at their hospital; super-admin any — enforced in the service).
      */
     @GetMapping("/runs/{id}/pcr")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PARAMEDIC', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'READ_ONLY')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PARAMEDIC', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN')")
     public ResponseEntity<byte[]> downloadPcr(@PathVariable UUID id, Authentication authentication) {
         String exportedBy = "SmartTriage user";
         if (authentication != null && authentication.getPrincipal() instanceof User u) {
@@ -196,7 +196,7 @@ public class EmsRunController {
     }
 
     @GetMapping("/visits/{visitId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PARAMEDIC', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'READ_ONLY') "
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PARAMEDIC', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN') "
             + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
     public ResponseEntity<ApiResponse<EmsRunResponse>> getByVisit(@PathVariable UUID visitId) {
         return emsRunService.getByVisitId(visitId)

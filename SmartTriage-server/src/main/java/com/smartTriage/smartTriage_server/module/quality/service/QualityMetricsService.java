@@ -260,6 +260,29 @@ public class QualityMetricsService {
     /**
      * Get snapshots for a date range.
      */
+    /**
+     * Most recent persisted snapshot of any period, if one exists. Mapped to
+     * the response DTO INSIDE the transaction — the mapper reads the lazy
+     * {@code hospital} association, which would throw
+     * LazyInitializationException if left to the controller.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<com.smartTriage.smartTriage_server.module.quality.dto.QualityMetricSnapshotResponse>
+            getLatestSnapshot(UUID hospitalId) {
+        return snapshotRepository
+                .findFirstByHospitalIdAndIsActiveTrueOrderBySnapshotDateDescCreatedAtDesc(hospitalId)
+                .map(com.smartTriage.smartTriage_server.module.quality.mapper.QualityMetricSnapshotMapper::toResponse);
+    }
+
+    /** Paged snapshot history, newest first (DTO-mapped in-transaction; see getLatestSnapshot). */
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<com.smartTriage.smartTriage_server.module.quality.dto.QualityMetricSnapshotResponse>
+            getSnapshotHistory(UUID hospitalId, org.springframework.data.domain.Pageable pageable) {
+        return snapshotRepository
+                .findByHospitalIdAndIsActiveTrueOrderBySnapshotDateDescCreatedAtDesc(hospitalId, pageable)
+                .map(com.smartTriage.smartTriage_server.module.quality.mapper.QualityMetricSnapshotMapper::toResponse);
+    }
+
     public List<QualityMetricSnapshot> getMetricsByRange(UUID hospitalId, LocalDate from, LocalDate to) {
         return snapshotRepository.findByHospitalAndDateRange(hospitalId, from, to);
     }

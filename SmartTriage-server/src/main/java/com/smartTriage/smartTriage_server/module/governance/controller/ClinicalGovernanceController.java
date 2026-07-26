@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
  * REST controller for clinical governance policy management.
  * Supports full lifecycle: create, update, approve, activate, suspend, reactivate, archive.
  *
- * <p>Authorization: writes are SUPER_ADMIN / HOSPITAL_ADMIN; reads add READ_ONLY / NURSE /
+ * <p>Authorization: writes are SUPER_ADMIN / HOSPITAL_ADMIN; reads add NURSE /
  * DOCTOR. Because a method-level {@code @PreAuthorize} REPLACES the class-level one, every
  * method carries its OWN complete expression (role gate AND object-level scope), and the
  * class-level annotation is only a floor for any method without its own. Object-level gates
@@ -35,11 +35,11 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/v1/governance/policies")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'READ_ONLY', 'NURSE', 'DOCTOR')")
+@PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR')")
 public class ClinicalGovernanceController {
 
     private static final String ROLE_WRITE = "hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN')";
-    private static final String ROLE_READ = "hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'READ_ONLY', 'NURSE', 'DOCTOR')";
+    private static final String ROLE_READ = "hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR')";
 
     private final ClinicalGovernanceService governanceService;
 
@@ -91,6 +91,25 @@ public class ClinicalGovernanceController {
                 "Policy approved", ClinicalPolicyMapper.toResponse(policy)));
     }
 
+    /**
+     * One-step approve + activate for the policy administrator (SUPER_ADMIN /
+     * HOSPITAL_ADMIN — the only write roles). The admin answers to no higher
+     * reviewer, so the submit → approve → activate ceremony is compressed
+     * into a single action; the audit trail still records APPROVED and
+     * ACTIVATED separately.
+     */
+    @PutMapping("/{id}/approve-activate")
+    @PreAuthorize(ROLE_WRITE + " and @clinicalAuthz.canManagePolicy(authentication, #id)")
+    public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> approveAndActivatePolicy(
+            @PathVariable UUID id,
+            @RequestBody(required = false) ApprovePolicyRequest request) {
+        log.info("Approve+activate policy {}", id);
+        ClinicalPolicy policy = governanceService.approveAndActivatePolicy(
+                id, request != null ? request.getNotes() : null);
+        return ResponseEntity.ok(ApiResponse.success(
+                "Policy approved and activated", ClinicalPolicyMapper.toResponse(policy)));
+    }
+
     @PutMapping("/{id}/activate")
     @PreAuthorize(ROLE_WRITE + " and @clinicalAuthz.canManagePolicy(authentication, #id)")
     public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> activatePolicy(@PathVariable UUID id) {
@@ -127,6 +146,20 @@ public class ClinicalGovernanceController {
         ClinicalPolicy policy = governanceService.archivePolicy(id);
         return ResponseEntity.ok(ApiResponse.success(
                 "Policy archived", ClinicalPolicyMapper.toResponse(policy)));
+    }
+
+    /**
+     * Restore an ARCHIVED policy back to DRAFT. Deliberately NOT straight to
+     * ACTIVE — a restored policy must re-pass the submit → approve → activate
+     * lifecycle so nothing re-enters clinical use without review.
+     */
+    @PutMapping("/{id}/unarchive")
+    @PreAuthorize(ROLE_WRITE + " and @clinicalAuthz.canManagePolicy(authentication, #id)")
+    public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> unarchivePolicy(@PathVariable UUID id) {
+        log.info("Unarchiving policy {}", id);
+        ClinicalPolicy policy = governanceService.unarchivePolicy(id);
+        return ResponseEntity.ok(ApiResponse.success(
+                "Policy restored to draft", ClinicalPolicyMapper.toResponse(policy)));
     }
 
     /**

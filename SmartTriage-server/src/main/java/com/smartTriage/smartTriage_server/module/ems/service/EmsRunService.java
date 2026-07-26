@@ -1182,7 +1182,7 @@ public class EmsRunService {
      *   <li>PARAMEDIC — only runs they own (run.paramedic == caller),
      *       regardless of destination hospital (a crew may transport across
      *       facilities, so we scope by ownership, not hospital).</li>
-     *   <li>everyone else (NURSE / DOCTOR / HOSPITAL_ADMIN / READ_ONLY) —
+     *   <li>everyone else (NURSE / DOCTOR / HOSPITAL_ADMIN) —
      *       only runs destined for their own hospital.</li>
      * </ul>
      */

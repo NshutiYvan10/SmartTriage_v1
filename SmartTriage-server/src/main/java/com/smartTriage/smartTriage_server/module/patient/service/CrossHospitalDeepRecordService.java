@@ -73,6 +73,7 @@ public class CrossHospitalDeepRecordService {
     private final DataSharingConsentService dataSharingConsentService;
     private final BreakTheGlassEventRepository breakTheGlassEventRepository;
     private final UserRepository userRepository;
+    private final com.smartTriage.smartTriage_server.security.ClinicalAuthz clinicalAuthz;
     private final AuditService auditService;
     private final com.smartTriage.smartTriage_server.module.iot.service.RealTimeEventPublisher realTimeEventPublisher;
 
@@ -152,6 +153,21 @@ public class CrossHospitalDeepRecordService {
             // Never serve an unattributed emergency override.
             throw new ClinicalBusinessException(
                     "Break-the-glass requires an authenticated clinician — cannot resolve the actor.");
+        }
+        // Senior-authority gate (data-side, so the shared deep-record endpoint
+        // cannot be used to sneak an override past the role check): doctors and
+        // paramedics qualify; a nurse needs Charge/Senior designation or the
+        // current shift-lead badge. Staff/student nurses must escalate.
+        boolean authorised = switch (actor.getRole()) {
+            case SUPER_ADMIN, DOCTOR, PARAMEDIC -> true;
+            case NURSE -> clinicalAuthz.hasSeniorNurseAuthority(actor);
+            default -> false;
+        };
+        if (!authorised) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Break-the-glass requires senior clinical authority — a doctor, paramedic, "
+                    + "or a charge/senior nurse (or the current shift lead). "
+                    + "Please escalate to the shift lead or a physician.");
         }
         String priorState = priorConsentState(identity.getNationalId());
         UUID hospitalId = userRepository.findHospitalIdByUserId(actor.getId()).orElse(null);

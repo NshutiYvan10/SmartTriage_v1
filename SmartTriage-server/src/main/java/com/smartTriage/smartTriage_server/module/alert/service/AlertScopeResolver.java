@@ -146,9 +146,6 @@ public class AlertScopeResolver {
         }
 
         switch (role) {
-            case READ_ONLY:
-                // Safety officer / auditor — read-only oversight across the floor.
-                return AlertScope.all();
             case LAB_TECHNICIAN:
                 return AlertScope.category(LAB_ALERT_TYPES);
             case REGISTRAR:

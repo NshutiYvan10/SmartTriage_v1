@@ -2,6 +2,8 @@ package com.smartTriage.smartTriage_server.module.quality.controller;
 
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.common.enums.MetricPeriod;
+import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
+import com.smartTriage.smartTriage_server.module.quality.dto.GenerateSnapshotRequest;
 import com.smartTriage.smartTriage_server.module.quality.dto.QualityMetricSnapshotResponse;
 import com.smartTriage.smartTriage_server.module.quality.dto.RealTimeMetricsResponse;
 import com.smartTriage.smartTriage_server.module.quality.dto.TrendDataResponse;
@@ -17,7 +19,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.validation.Valid;
+
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -163,5 +169,60 @@ public class QualityMetricsController {
         QualityMetricSnapshot snapshot = qualityMetricsService.computeDailyMetrics(hospitalId, date);
         return ResponseEntity.ok(ApiResponse.success(
                 "Metrics computed for " + date, QualityMetricSnapshotMapper.toResponse(snapshot)));
+    }
+
+    /**
+     * Latest persisted snapshot of any period — the dashboard's default view.
+     * 200 with {@code null} data when the hospital has no snapshots yet (the
+     * dashboard renders its empty state and offers Generate).
+     */
+    @GetMapping("/hospital/{hospitalId}/latest")
+    @PreAuthorize("@clinicalAuthz.canViewHospitalReports(authentication, #hospitalId)")
+    public ResponseEntity<ApiResponse<QualityMetricSnapshotResponse>> getLatest(@PathVariable UUID hospitalId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                qualityMetricsService.getLatestSnapshot(hospitalId).orElse(null)));
+    }
+
+    /**
+     * Paged snapshot history, newest first — the dashboard uses this to find
+     * the previous snapshot of the same period for delta comparisons.
+     */
+    @GetMapping("/hospital/{hospitalId}")
+    @PreAuthorize("@clinicalAuthz.canViewHospitalReports(authentication, #hospitalId)")
+    public ResponseEntity<ApiResponse<org.springframework.data.domain.Page<QualityMetricSnapshotResponse>>> getHistory(
+            @PathVariable UUID hospitalId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "30") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                qualityMetricsService.getSnapshotHistory(hospitalId,
+                        org.springframework.data.domain.PageRequest.of(page, Math.min(size, 100)))));
+    }
+
+    /**
+     * Generate a snapshot for the requested period, anchored on {@code date}:
+     * DAILY computes that day; WEEKLY the Monday-anchored week containing it;
+     * MONTHLY its calendar month (aggregates roll up the DAILY snapshots).
+     * Matches the dashboard's Generate Snapshot button.
+     */
+    @PostMapping("/generate")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN') "
+            + "and @clinicalAuthz.canAccessHospital(authentication, #request.hospitalId)")
+    public ResponseEntity<ApiResponse<QualityMetricSnapshotResponse>> generateSnapshot(
+            @Valid @RequestBody GenerateSnapshotRequest request) {
+        MetricPeriod period = request.getPeriod() != null ? request.getPeriod() : MetricPeriod.DAILY;
+        LocalDate date = request.getDate();
+        QualityMetricSnapshot snapshot = switch (period) {
+            case DAILY -> qualityMetricsService.computeDailyMetrics(request.getHospitalId(), date);
+            case WEEKLY -> qualityMetricsService.computeWeeklyMetrics(
+                    request.getHospitalId(), date.with(DayOfWeek.MONDAY));
+            case MONTHLY -> qualityMetricsService.computeMonthlyMetrics(
+                    request.getHospitalId(), YearMonth.from(date));
+            default -> throw new ClinicalBusinessException(
+                    "Snapshot period " + period + " is not supported for manual generation. "
+                    + "Use DAILY, WEEKLY, or MONTHLY.");
+        };
+        return ResponseEntity.ok(ApiResponse.success(
+                period + " metrics computed for " + date,
+                QualityMetricSnapshotMapper.toResponse(snapshot)));
     }
 }

@@ -81,7 +81,7 @@ public class PatientController {
     // Patients / EMS runs), not full-registry PHI. Mirrors the list/search allowlist,
     // closing the enumerate-then-read IDOR (scoped lists must never become a PHI key).
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR', 'READ_ONLY') "
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR') "
             + "and @clinicalAuthz.canAccessPatient(authentication, #id)")
     public ResponseEntity<ApiResponse<PatientResponse>> getPatient(@PathVariable UUID id) {
         PatientResponse response = patientService.getPatientById(id);
@@ -169,7 +169,7 @@ public class PatientController {
     //     the full registry with full PHI is not the lab's business.
     // Allowlist = the roles that legitimately need the full registry.
     @GetMapping("/hospital/{hospitalId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR', 'READ_ONLY') "
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR') "
             + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<PatientResponse>>> getPatientsByHospital(
             @PathVariable UUID hospitalId,
@@ -181,7 +181,7 @@ public class PatientController {
     }
 
     @GetMapping("/hospital/{hospitalId}/search")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR', 'READ_ONLY') "
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'REGISTRAR', 'NURSE', 'DOCTOR') "
             + "and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
     public ResponseEntity<ApiResponse<Page<PatientResponse>>> searchPatients(
             @PathVariable UUID hospitalId,

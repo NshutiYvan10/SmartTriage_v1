@@ -54,4 +54,12 @@ public class GlobalPatientRow {
 
     /** True when this patient already has an OPEN visit at the searching registrar's hospital. */
     private boolean hasOpenVisitAtMyHospital;
+
+    /**
+     * The open visit's id when {@link #hasOpenVisitAtMyHospital} is true —
+     * lets the registry's "go to it" action open the visit chart directly,
+     * even when the open visit belongs to the person's LOCAL record and this
+     * row is their record from another hospital.
+     */
+    private UUID openVisitIdAtMyHospital;
 }

@@ -362,11 +362,9 @@ class ClinicalAuthzTest {
     // ── canViewHospitalReports (R1: quality/aggregate reporting read gate) ──
 
     @Test
-    void canViewHospitalReports_allowsHospitalAdminAndReadOnly_atOwnHospital() {
+    void canViewHospitalReports_allowsHospitalAdmin_atOwnHospital() {
         org.junit.jupiter.api.Assertions.assertTrue(authz.canViewHospitalReports(
                 authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), hospitalId));
-        org.junit.jupiter.api.Assertions.assertTrue(authz.canViewHospitalReports(
-                authFor(user(Role.READ_ONLY, null, hospitalId)), hospitalId));
     }
 
     @Test
@@ -390,7 +388,6 @@ class ClinicalAuthzTest {
         // No repo stub needed — the clinical-role check fails first.
         assertFalse(authz.canReadHandoverReport(authFor(user(Role.REGISTRAR, null, hospitalId)), UUID.randomUUID()));
         assertFalse(authz.canReadHandoverReport(authFor(user(Role.LAB_TECHNICIAN, null, hospitalId)), UUID.randomUUID()));
-        assertFalse(authz.canReadHandoverReport(authFor(user(Role.READ_ONLY, null, hospitalId)), UUID.randomUUID()));
     }
 
     @Test
@@ -456,11 +453,10 @@ class ClinicalAuthzTest {
     }
 
     @Test
-    void hospitalAdminAndReadOnlyCannotViewNationalReportById() {
+    void hospitalAdminCannotViewNationalReportById() {
         UUID reportId = UUID.randomUUID();
         when(mohReportRepository.findReportLevelById(reportId)).thenReturn(Optional.of(ReportLevel.NATIONAL));
         assertFalse(authz.canViewMohReport(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), reportId));
-        assertFalse(authz.canViewMohReport(authFor(user(Role.READ_ONLY, null, hospitalId)), reportId));
     }
 
     @Test
@@ -496,8 +492,6 @@ class ClinicalAuthzTest {
         when(mohReportRepository.findHospitalIdById(reportId)).thenReturn(Optional.of(hospitalId));
         assertTrue(authz.canSubmitMohReport(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), reportId));
         assertFalse(authz.canSubmitMohReport(authFor(user(Role.HOSPITAL_ADMIN, null, UUID.randomUUID())), reportId));
-        // READ_ONLY may read (elsewhere) but never advance lifecycle.
-        assertFalse(authz.canSubmitMohReport(authFor(user(Role.READ_ONLY, null, hospitalId)), reportId));
     }
 
     // ── canAuditSafetyOverrides ──────────────────────────────────────
@@ -505,7 +499,6 @@ class ClinicalAuthzTest {
     @Test
     void governanceAndSeniorClinicalRolesCanAuditAtTheirHospital() {
         assertTrue(authz.canAuditSafetyOverrides(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), hospitalId));
-        assertTrue(authz.canAuditSafetyOverrides(authFor(user(Role.READ_ONLY, null, hospitalId)), hospitalId));
         assertTrue(authz.canAuditSafetyOverrides(authFor(user(Role.DOCTOR, null, hospitalId)), hospitalId));
         assertTrue(authz.canAuditSafetyOverrides(
                 authFor(user(Role.NURSE, Designation.CHARGE_NURSE, hospitalId)), hospitalId));
@@ -575,8 +568,6 @@ class ClinicalAuthzTest {
     void canAcknowledgeEmergencyOverride() {
         ClinicalAlert a = overrideAlert(AlertType.MEDICATION_EMERGENCY_OVERRIDE);
         when(clinicalAlertRepository.findByIdAndIsActiveTrue(a.getId())).thenReturn(Optional.of(a));
-        assertTrue(authz.canAcknowledgeSafetyOverride(
-                authFor(user(Role.READ_ONLY, null, hospitalId)), a.getId()));
     }
 
     @Test
@@ -613,7 +604,6 @@ class ClinicalAuthzTest {
         assertFalse(authz.canManageDataSharingConsent(authFor(user(Role.PARAMEDIC, null, hospitalId))));
         assertFalse(authz.canManageDataSharingConsent(authFor(user(Role.LAB_TECHNICIAN, null, hospitalId))));
         assertFalse(authz.canManageDataSharingConsent(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId))));
-        assertFalse(authz.canManageDataSharingConsent(authFor(user(Role.READ_ONLY, null, hospitalId))));
         assertFalse(authz.canManageDataSharingConsent(null));
         assertFalse(authz.canManageDataSharingConsent(
                 new UsernamePasswordAuthenticationToken("not-a-user", null)));
@@ -635,10 +625,65 @@ class ClinicalAuthzTest {
         assertFalse(authz.canAccessCrossHospitalDeepRecord(authFor(user(Role.REGISTRAR, null, hospitalId))));
         assertFalse(authz.canAccessCrossHospitalDeepRecord(authFor(user(Role.LAB_TECHNICIAN, null, hospitalId))));
         assertFalse(authz.canAccessCrossHospitalDeepRecord(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId))));
-        assertFalse(authz.canAccessCrossHospitalDeepRecord(authFor(user(Role.READ_ONLY, null, hospitalId))));
         assertFalse(authz.canAccessCrossHospitalDeepRecord(null));
         assertFalse(authz.canAccessCrossHospitalDeepRecord(
                 new UsernamePasswordAuthenticationToken("not-a-user", null)));
+    }
+
+    // ── canInvokeBreakTheGlass / canActivateClinicalPathway (senior-authority gates) ──
+
+    @Test
+    void doctorsParamedicsAndSuperAdminCanBreakTheGlass() {
+        assertTrue(authz.canInvokeBreakTheGlass(authFor(user(Role.DOCTOR, null, hospitalId))));
+        assertTrue(authz.canInvokeBreakTheGlass(authFor(user(Role.PARAMEDIC, null, hospitalId))));
+        assertTrue(authz.canInvokeBreakTheGlass(authFor(user(Role.SUPER_ADMIN, null, null))));
+    }
+
+    @Test
+    void staffAndStudentNursesCannotBreakTheGlass() {
+        assertFalse(authz.canInvokeBreakTheGlass(authFor(user(Role.NURSE, Designation.STAFF_NURSE, hospitalId))));
+        assertFalse(authz.canInvokeBreakTheGlass(authFor(user(Role.NURSE, Designation.STUDENT_NURSE, hospitalId))));
+    }
+
+    @Test
+    void chargeAndSeniorNursesCanBreakTheGlass() {
+        assertTrue(authz.canInvokeBreakTheGlass(authFor(user(Role.NURSE, Designation.CHARGE_NURSE, hospitalId))));
+        assertTrue(authz.canInvokeBreakTheGlass(authFor(user(Role.NURSE, Designation.SENIOR_NURSE, hospitalId))));
+    }
+
+    @Test
+    void shiftLeadStaffNurseCanBreakTheGlass() {
+        // The transferable shift-lead badge carries the authority even when the
+        // holder's permanent designation is STAFF_NURSE.
+        User nurse = user(Role.NURSE, Designation.STAFF_NURSE, hospitalId);
+        when(shiftAssignmentService.isUserCurrentShiftLead(nurse.getId(), hospitalId)).thenReturn(true);
+        assertTrue(authz.canInvokeBreakTheGlass(authFor(nurse)));
+    }
+
+    @Test
+    void nonClinicalRolesCannotBreakTheGlass() {
+        assertFalse(authz.canInvokeBreakTheGlass(authFor(user(Role.REGISTRAR, null, hospitalId))));
+        assertFalse(authz.canInvokeBreakTheGlass(authFor(user(Role.LAB_TECHNICIAN, null, hospitalId))));
+        assertFalse(authz.canInvokeBreakTheGlass(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId))));
+        assertFalse(authz.canInvokeBreakTheGlass(null));
+    }
+
+    @Test
+    void pathwayActivationRequiresSeniorClinicalAuthority() {
+        assertTrue(authz.canActivateClinicalPathway(authFor(user(Role.DOCTOR, null, hospitalId))));
+        assertTrue(authz.canActivateClinicalPathway(authFor(user(Role.SUPER_ADMIN, null, null))));
+        assertTrue(authz.canActivateClinicalPathway(authFor(user(Role.NURSE, Designation.CHARGE_NURSE, hospitalId))));
+        assertTrue(authz.canActivateClinicalPathway(authFor(user(Role.NURSE, Designation.SENIOR_NURSE, hospitalId))));
+        assertFalse(authz.canActivateClinicalPathway(authFor(user(Role.NURSE, Designation.STAFF_NURSE, hospitalId))));
+        assertFalse(authz.canActivateClinicalPathway(authFor(user(Role.PARAMEDIC, null, hospitalId))));
+        assertFalse(authz.canActivateClinicalPathway(null));
+    }
+
+    @Test
+    void shiftLeadStaffNurseCanActivatePathways() {
+        User nurse = user(Role.NURSE, Designation.STAFF_NURSE, hospitalId);
+        when(shiftAssignmentService.isUserCurrentShiftLead(nurse.getId(), hospitalId)).thenReturn(true);
+        assertTrue(authz.canActivateClinicalPathway(authFor(nurse)));
     }
 
     // ── canAccessRegistrarReports (R11 — front-desk operational reporting) ──
@@ -659,14 +704,12 @@ class ClinicalAuthzTest {
     }
 
     @Test
-    void canAccessRegistrarReports_deniesClinicalAndReadOnlyRoles() {
-        // Operational desk reporting is NOT a clinical-role need. READ_ONLY is the
+    void canAccessRegistrarReports_deniesClinicalRoles() {
         // governance auditor (canViewHospitalReports) — deliberately NOT this audience.
         assertFalse(authz.canAccessRegistrarReports(authFor(user(Role.DOCTOR, null, hospitalId)), hospitalId));
         assertFalse(authz.canAccessRegistrarReports(authFor(user(Role.NURSE, null, hospitalId)), hospitalId));
         assertFalse(authz.canAccessRegistrarReports(authFor(user(Role.LAB_TECHNICIAN, null, hospitalId)), hospitalId));
         assertFalse(authz.canAccessRegistrarReports(authFor(user(Role.PARAMEDIC, null, hospitalId)), hospitalId));
-        assertFalse(authz.canAccessRegistrarReports(authFor(user(Role.READ_ONLY, null, hospitalId)), hospitalId));
     }
 
     @Test
@@ -703,7 +746,6 @@ class ClinicalAuthzTest {
         assertFalse(authz.canSearchGlobalRegistry(authFor(user(Role.LAB_TECHNICIAN, null, hospitalId))));
         assertFalse(authz.canSearchGlobalRegistry(authFor(user(Role.PARAMEDIC, null, hospitalId))));
         assertFalse(authz.canSearchGlobalRegistry(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId))));
-        assertFalse(authz.canSearchGlobalRegistry(authFor(user(Role.READ_ONLY, null, hospitalId))));
     }
 
     @Test
@@ -870,7 +912,6 @@ class ClinicalAuthzTest {
         assertFalse(authz.callerCanConfirmFieldTriage(authFor(user(Role.HOSPITAL_ADMIN, null, hospitalId)), visitId));
         assertFalse(authz.callerCanConfirmFieldTriage(authFor(user(Role.REGISTRAR, null, hospitalId)), visitId));
         assertFalse(authz.callerCanConfirmFieldTriage(authFor(user(Role.PARAMEDIC, null, hospitalId)), visitId));
-        assertFalse(authz.callerCanConfirmFieldTriage(authFor(user(Role.READ_ONLY, null, hospitalId)), visitId));
         // SUPER_ADMIN is not a bedside clinician either — confirmation is a clinical act.
         assertFalse(authz.callerCanConfirmFieldTriage(authFor(user(Role.SUPER_ADMIN, null, null)), visitId));
     }

@@ -247,15 +247,40 @@ public class PatientService {
         }
         Page<Patient> page = patientRepository.globalRegistrySearch(q, pageable);
         java.util.List<UUID> ids = page.getContent().stream().map(Patient::getId).toList();
-        java.util.Set<UUID> withOpenVisit = ids.isEmpty() || myHospitalId == null
-                ? java.util.Set.of()
-                : new java.util.HashSet<>(visitRepository.findPatientIdsWithOpenVisitAtHospital(ids, myHospitalId));
-        return page.map(p -> toGlobalRow(p, myHospitalId, withOpenVisit));
+        // Open-visit detection is PERSON-level, not patient-record-level: the
+        // registry lists one row per record (per hospital), and the person's
+        // row from another hospital must still show "open visit here" when
+        // their LOCAL record has an open encounter — otherwise the row offers
+        // "Start visit here" for someone already in the department.
+        java.util.Map<UUID, UUID> openByPatient = new java.util.HashMap<>();
+        java.util.Map<UUID, UUID> openByIdentity = new java.util.HashMap<>();
+        if (!ids.isEmpty() && myHospitalId != null) {
+            for (Object[] pair : visitRepository.findOpenVisitPairsByPatientAtHospital(ids, myHospitalId)) {
+                openByPatient.putIfAbsent((UUID) pair[0], (UUID) pair[1]);
+            }
+            java.util.List<UUID> identityIds = page.getContent().stream()
+                    .map(Patient::getPersonIdentity)
+                    .filter(java.util.Objects::nonNull)
+                    .map(com.smartTriage.smartTriage_server.module.patient.entity.PersonIdentity::getId)
+                    .distinct()
+                    .toList();
+            if (!identityIds.isEmpty()) {
+                for (Object[] pair : visitRepository.findOpenVisitPairsByIdentityAtHospital(identityIds, myHospitalId)) {
+                    openByIdentity.putIfAbsent((UUID) pair[0], (UUID) pair[1]);
+                }
+            }
+        }
+        return page.map(p -> toGlobalRow(p, myHospitalId, openByPatient, openByIdentity));
     }
 
     private com.smartTriage.smartTriage_server.module.patient.dto.GlobalPatientRow toGlobalRow(
-            Patient p, UUID myHospitalId, java.util.Set<UUID> withOpenVisit) {
+            Patient p, UUID myHospitalId,
+            java.util.Map<UUID, UUID> openByPatient, java.util.Map<UUID, UUID> openByIdentity) {
         var identity = p.getPersonIdentity();
+        UUID openVisitId = openByPatient.get(p.getId());
+        if (openVisitId == null && identity != null) {
+            openVisitId = openByIdentity.get(identity.getId());
+        }
         boolean local = p.getHospital() != null && p.getHospital().getId().equals(myHospitalId);
         return com.smartTriage.smartTriage_server.module.patient.dto.GlobalPatientRow.builder()
                 .patientId(p.getId())
@@ -274,7 +299,8 @@ public class PatientService {
                 .hasRfidCard(identity != null && identity.getRfidCardId() != null)
                 .unidentified(p.isUnidentified())
                 .localToMyHospital(local)
-                .hasOpenVisitAtMyHospital(withOpenVisit.contains(p.getId()))
+                .hasOpenVisitAtMyHospital(openVisitId != null)
+                .openVisitIdAtMyHospital(openVisitId)
                 .build();
     }
 

@@ -24,8 +24,8 @@ import java.util.UUID;
 
 /**
  * Audit-log read + export endpoints. Restricted to the governance/audit readers
- * via {@code canViewHospitalReports} (SUPER_ADMIN, or same-hospital HOSPITAL_ADMIN
- * / READ_ONLY) and scoped to the requested hospital. Write is automatic
+ * via {@code canViewHospitalReports} (SUPER_ADMIN, or same-hospital
+ * HOSPITAL_ADMIN) and scoped to the requested hospital. Write is automatic
  * (AuditInterceptor) — there is no create endpoint.
  *
  *   GET /api/v1/audit/hospital/{hospitalId}         → paged audit entries (optional from/to)

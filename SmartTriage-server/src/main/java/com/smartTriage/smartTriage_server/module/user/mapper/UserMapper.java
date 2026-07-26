@@ -24,6 +24,7 @@ public final class UserMapper {
                 .hospitalId(user.getHospital().getId())
                 .hospitalName(user.getHospital().getName())
                 .accountStatus(user.getAccountStatus())
+                .isActive(user.isActive())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .build();

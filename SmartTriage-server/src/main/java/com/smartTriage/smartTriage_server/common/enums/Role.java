@@ -19,7 +19,10 @@ package com.smartTriage.smartTriage_server.common.enums;
  * <p>Notable removals (V39): {@code TRIAGE_NURSE} was previously a
  * role; it was merged into {@link #NURSE}. PHARMACIST and MIDWIFE were
  * never roles in this system and remain out of scope (not relevant to
- * ED operations).
+ * ED operations). (V115): {@code READ_ONLY} (view-only safety-officer /
+ * auditor accounts) was retired — its governance surfaces are covered
+ * by {@link #HOSPITAL_ADMIN}, and no deployment used dedicated
+ * read-only accounts.
  */
 public enum Role {
     SUPER_ADMIN,
@@ -28,6 +31,5 @@ public enum Role {
     NURSE,
     REGISTRAR,
     PARAMEDIC,
-    LAB_TECHNICIAN,
-    READ_ONLY
+    LAB_TECHNICIAN
 }

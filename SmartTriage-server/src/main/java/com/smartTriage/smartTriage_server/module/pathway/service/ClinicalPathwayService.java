@@ -282,6 +282,15 @@ public class ClinicalPathwayService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Active pathways for a loose visit reference — internal UUID or the
+     * human-readable visit number users actually paste into the search box.
+     * Unknown references 404 with a clear message instead of a UUID-parse 500.
+     */
+    public List<PathwayActivationResponse> getActivePathwaysByRef(String visitRef) {
+        return getActivePathways(visitService.resolveVisitIdByRef(visitRef));
+    }
+
     public PathwayProgressResponse getPathwayProgress(UUID activationId) {
         PathwayActivation activation = findActivationOrThrow(activationId);
         ClinicalPathway pathway = activation.getPathway();

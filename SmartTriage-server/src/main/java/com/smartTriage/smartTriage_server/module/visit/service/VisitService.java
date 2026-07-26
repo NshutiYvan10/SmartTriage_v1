@@ -203,6 +203,25 @@ public class VisitService {
                         .build());
     }
 
+    /**
+     * Resolve a loose visit reference — the internal UUID or the
+     * human-readable visit number (V-KFH-001-…) users see on screens —
+     * to the visit's UUID. Search surfaces accept whatever the user
+     * pastes; a plain UUID parse used to 500 on visit numbers.
+     *
+     * @throws ResourceNotFoundException when neither form matches a visit.
+     */
+    public UUID resolveVisitIdByRef(String visitRef) {
+        String trimmed = visitRef == null ? "" : visitRef.trim();
+        try {
+            return UUID.fromString(trimmed);
+        } catch (IllegalArgumentException notUuid) {
+            return visitRepository.findByVisitNumberAndIsActiveTrue(trimmed)
+                    .map(v -> v.getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Visit", "reference", trimmed));
+        }
+    }
+
     public VisitResponse getVisitById(UUID id) {
         Visit visit = findVisitOrThrow(id);
         return VisitMapper.toResponse(visit);
@@ -395,11 +414,10 @@ public class VisitService {
 
         // 3. Non-zone-bound operational roles — REGISTRAR (front
         //    desk: needs the active queue to answer "where is patient
-        //    X / has the family arrived") and READ_ONLY (governance
-        //    audit). Neither takes a zone shift, so they were previously
-        //    falling through the zone-resolution branch and getting an
-        //    empty page — that was the "Registrar registered a patient
-        //    but couldn't see them in the list" bug.
+        //    X / has the family arrived"). It takes no zone shift, so
+        //    it was previously falling through the zone-resolution
+        //    branch and getting an empty page — that was the "Registrar
+        //    registered a patient but couldn't see them in the list" bug.
         //
         //    PARAMEDIC and LAB_TECHNICIAN are deliberately EXCLUDED:
         //    - a paramedic's patients are the ones THEY transported
@@ -412,8 +430,7 @@ public class VisitService {
         //
         //    They still must belong to this hospital — the controller
         //    enforces that with @PreAuthorize canAccessHospital.
-        if (role == com.smartTriage.smartTriage_server.common.enums.Role.REGISTRAR
-                || role == com.smartTriage.smartTriage_server.common.enums.Role.READ_ONLY) {
+        if (role == com.smartTriage.smartTriage_server.common.enums.Role.REGISTRAR) {
             return getActiveVisits(hospitalId, pageable);
         }
 

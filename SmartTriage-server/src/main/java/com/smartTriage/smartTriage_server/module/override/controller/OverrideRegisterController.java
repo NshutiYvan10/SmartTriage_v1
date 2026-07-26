@@ -21,7 +21,7 @@ import java.util.UUID;
  *   GET /api/v1/overrides/hospital/{hospitalId}?from&to&patientId&type
  *
  * Gated by {@code canAuditSafetyOverrides} (SUPER_ADMIN, or same-hospital HOSPITAL_ADMIN /
- * READ_ONLY safety-officer) — the same governance tier that reviews the med-safety-override
+ * safety officer) — the same governance tier that reviews the med-safety-override
  * alerts and the break-the-glass register.
  */
 @RestController

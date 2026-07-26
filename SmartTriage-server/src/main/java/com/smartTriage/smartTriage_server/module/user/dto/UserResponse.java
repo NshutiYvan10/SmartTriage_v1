@@ -31,6 +31,14 @@ public class UserResponse {
     private UUID hospitalId;
     private String hospitalName;
     private AccountStatus accountStatus;
+    /**
+     * Soft-delete flag. Needed by admin list views (which request
+     * includeInactive=true) to tell a CANCELLED invitation — soft-deleted
+     * while still PENDING_ACTIVATION — apart from a live pending one.
+     * Without it, cancelled invites rendered as still-pending rows and
+     * "cancel invitation" looked like a no-op.
+     */
+    private Boolean isActive;
     private Instant createdAt;
     private Instant updatedAt;
 }
