@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Activity, Heart, Wind, Thermometer, Droplet, Search, Zap, Candy, Cpu,
+  Activity, Heart, Wind, Thermometer, Droplet, Search, Zap, Cpu,
   AlertTriangle, TrendingUp, TrendingDown, Minus, Clock,
   Eye, ChevronRight, RefreshCw, Users, Baby,
   Shield, Stethoscope, Monitor, Siren,
@@ -1263,7 +1263,10 @@ export function ConstantMonitoring() {
                           <MiniVitalBadge label="SpO2" value={patient.currentVitals.spo2} unit="%" icon={Activity} status={getVitalStatus('spo2', patient.currentVitals.spo2, patient.isPediatric)} />
                           <MiniVitalBadge label="BP" value={patient.currentVitals.systolicBP} unit="mmHg" icon={Droplet} status={getVitalStatus('sbp', patient.currentVitals.systolicBP, patient.isPediatric)} />
                           <MiniVitalBadge label="ECG" value={patient.currentVitals.ecg} unit="mV" icon={Zap} status={getVitalStatus('ecg', patient.currentVitals.ecg, patient.isPediatric)} />
-                          <MiniVitalBadge label="Gluc" value={patient.currentVitals.glucose} unit="mg/dL" icon={Candy} status={getVitalStatus('glucose', patient.currentVitals.glucose, patient.isPediatric)} />
+                          {/* No glucose badge: the bedside monitor has no
+                              glucometer — glucose reaches the chart via the
+                              glucometer/lab workflows (Hypoglycemia module),
+                              not the monitor stream. */}
                         </div>
 
                         {/* Spacer — pushes status chips to the right when there's room */}
@@ -1424,7 +1427,8 @@ export function ConstantMonitoring() {
                                 { label: 'Blood Pressure', value: patient.currentVitals.systolicBP, unit: `/${patient.currentVitals.diastolicBP} mmHg`, icon: Droplet, key: 'sbp', color: 'text-red-500' },
                                 { label: 'Temperature', value: patient.currentVitals.temperature, unit: '°C', icon: Thermometer, key: 'temp', color: 'text-orange-500' },
                                 { label: 'ECG (ST)', value: patient.currentVitals.ecg, unit: 'mV', icon: Zap, key: 'ecg', color: 'text-yellow-500' },
-                                { label: 'Glucose', value: patient.currentVitals.glucose, unit: 'mg/dL', icon: Candy, key: 'glucose', color: 'text-pink-500' },
+                                // Glucose deliberately absent — not a
+                                // monitor-sourced vital (glucometer/lab only).
                               ].map((v) => {
                                 const status = getVitalStatus(v.key, v.value, patient.isPediatric);
                                 return (

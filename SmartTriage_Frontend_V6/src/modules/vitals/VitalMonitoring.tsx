@@ -29,7 +29,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Activity, AlertTriangle, ArrowLeft, BatteryMedium, CheckCircle2,
-  Droplets, Gauge, HeartPulse, Loader2, MonitorSpeaker, Pause, Play,
+  Gauge, HeartPulse, Loader2, MonitorSpeaker, Pause, Play,
   ShieldAlert, Square, Stethoscope, Thermometer, TrendingDown,
   TrendingUp, Minus, Wifi, Wind,
 } from 'lucide-react';
@@ -107,7 +107,10 @@ const CATEGORY_PILL: Record<string, string> = {
   GREEN: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/40',
 };
 
-type VitalKey = 'heartRate' | 'spo2' | 'respiratoryRate' | 'systolicBp' | 'temperature' | 'bloodGlucose';
+/* Glucose is deliberately NOT a monitor vital: the bedside monitor has no
+   glucometer. Glucose readings reach the chart through the glucometer/lab
+   workflows (Hypoglycemia module) and the paramedic telemetry path. */
+type VitalKey = 'heartRate' | 'spo2' | 'respiratoryRate' | 'systolicBp' | 'temperature';
 
 /** Adult display thresholds: [criticalLow, warnLow, warnHigh, criticalHigh]. */
 const BANDS: Record<VitalKey, [number, number, number, number]> = {
@@ -116,7 +119,6 @@ const BANDS: Record<VitalKey, [number, number, number, number]> = {
   respiratoryRate: [6, 9, 20, 30],
   systolicBp: [70, 90, 160, 200],
   temperature: [34, 35.5, 38, 40],
-  bloodGlucose: [2.2, 3.9, 11, 20],
 };
 
 function vitalStatus(key: VitalKey, value: number | null | undefined): 'critical' | 'warning' | 'normal' | 'none' {
@@ -321,7 +323,6 @@ export function VitalMonitoring() {
     sbp: r.systolicBp,
     dbp: r.diastolicBp,
     temp: r.temperature,
-    glucose: r.bloodGlucose,
   })), [readings]);
 
   const sortedAlerts = useMemo(() => {
@@ -502,7 +503,6 @@ export function VitalMonitoring() {
             <VitalTile icon={Wind} label="Resp. rate" unit="/min" value={latest?.respiratoryRate} k="respiratoryRate" data={chartData} dataKey="rr" glassInner={glassInner} text={text} />
             <VitalTile icon={Gauge} label="Blood pressure" unit="mmHg" value={latest?.systolicBp} secondary={latest?.diastolicBp != null ? `/${latest.diastolicBp}` : undefined} k="systolicBp" data={chartData} dataKey="sbp" glassInner={glassInner} text={text} />
             <VitalTile icon={Thermometer} label="Temperature" unit="°C" value={latest?.temperature} k="temperature" data={chartData} dataKey="temp" glassInner={glassInner} text={text} />
-            <VitalTile icon={Droplets} label="Glucose" unit="mmol/L" value={latest?.bloodGlucose} k="bloodGlucose" data={chartData} dataKey="glucose" glassInner={glassInner} text={text} />
           </div>
 
           {/* Trend charts */}
