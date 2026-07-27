@@ -73,7 +73,10 @@ class ContinuousMonitoringEngineTest {
     private final ContinuousMonitoringEngine engine = new ContinuousMonitoringEngine(
             streamRepository, triageRecordRepository, clinicalAlertRepository, visitRepository,
             sessionRepository, vitalStreamService, tewsCalculator, pediatricTewsCalculator,
-            eventPublisher, alertEscalationService);
+            eventPublisher, alertEscalationService,
+            mock(com.smartTriage.smartTriage_server.module.visit.service.ZoneRoutingService.class),
+            mock(com.smartTriage.smartTriage_server.module.zonetransfer.service.ZoneTransferService.class),
+            mock(com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository.class));
 
     private final UUID HOSPITAL = UUID.randomUUID();
     private final UUID VISIT = UUID.randomUUID();

@@ -115,6 +115,7 @@ class ClinicalAuthzTest {
                 mock(com.smartTriage.smartTriage_server.module.medication.repository.MedicationAdministrationRepository.class),
                 mock(com.smartTriage.smartTriage_server.module.medication.repository.MedicationDoseRepository.class),
                 mock(com.smartTriage.smartTriage_server.module.icu.repository.IcuEscalationRepository.class),
+                mock(com.smartTriage.smartTriage_server.module.zonetransfer.repository.ZoneTransferRepository.class),
                 ioTDeviceRepository,
                 mock(com.smartTriage.smartTriage_server.module.safety.repository.SafetyIncidentRepository.class),
                 mock(com.smartTriage.smartTriage_server.module.governance.repository.ClinicalPolicyRepository.class),
