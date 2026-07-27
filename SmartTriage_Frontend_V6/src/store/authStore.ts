@@ -275,10 +275,14 @@ export const useAuthStore = create<AuthState>((set, get) => {
         // "blank screen / need to reload" bug).
         const hospitalId = user.hospitalId ?? '';
         const PREFETCH_CAP_MS = 3000;
+        // HOSPITAL_ADMIN is denied the clinical-alert endpoints by design — skip
+        // the alert pre-fetch for them (it would only 403 and the AdminHome
+        // console doesn't use the alert store).
+        const isAdmin = user.role === 'HOSPITAL_ADMIN';
         const prefetch = hospitalId
           ? Promise.allSettled([
               usePatientStore.getState().fetchActiveVisits(hospitalId),
-              useAlertStore.getState().fetchAlerts(hospitalId),
+              ...(isAdmin ? [] : [useAlertStore.getState().fetchAlerts(hospitalId)]),
               useDeviceStore.getState().fetchDevicesFromApi(hospitalId),
               get().refreshCurrentShift(),
             ])

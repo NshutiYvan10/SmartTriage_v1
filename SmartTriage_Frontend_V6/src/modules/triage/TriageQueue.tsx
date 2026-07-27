@@ -502,6 +502,8 @@ export function TriageQueue() {
     visitNumber: '',
     patientId: p.id,
     patientName: p.fullName,
+    patientDateOfBirth: null,
+    patientGender: null,
     hospitalId: user?.hospitalId || '',
     arrivalMode: (p.arrivalMode as VisitResponse['arrivalMode']) ?? 'WALK_IN',
     arrivalTime: new Date(p.arrivalTimestamp).toISOString(),
@@ -514,6 +516,8 @@ export function TriageQueue() {
     dispositionType: null,
     dispositionTime: null,
     dispositionNotes: null,
+    dispositionDestinationWard: null,
+    dispositionReceivingFacility: null,
     referringFacility: p.referringFacility ?? null,
     isPediatric: p.isPediatric,
     retriageCount: 0,
@@ -523,6 +527,11 @@ export function TriageQueue() {
     currentEdZone: null,
     primaryClinicianId: null,
     primaryClinicianName: null,
+    // Direct-resus / ambulance pre-arrival flags don't apply to a
+    // pre-triage walk-in built locally for the placement dialog.
+    pendingResusOverflow: false,
+    ambulancePreArrival: false,
+    arrivalConfirmedAt: null,
     createdAt: new Date(p.arrivalTimestamp).toISOString(),
     updatedAt: new Date().toISOString(),
   }), [user?.hospitalId]);

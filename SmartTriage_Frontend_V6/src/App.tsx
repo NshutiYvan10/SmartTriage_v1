@@ -283,8 +283,11 @@ function AppContent() {
       {/* ── Global critical-alert notifier ──
           Beeps + flashes + toasts when a new CRITICAL alert lands in
           the store from the WebSocket. Self-quiets on the alert center
-          pages where the user is already looking at alerts. */}
-      <CriticalAlertNotifier />
+          pages where the user is already looking at alerts.
+          HOSPITAL_ADMIN is excluded — clinical alerts are not an admin
+          concern (the backend denies them the alert endpoints), so an
+          admin never receives one and must not be interrupted by the cue. */}
+      {user?.role !== 'HOSPITAL_ADMIN' && <CriticalAlertNotifier />}
 
       {/* ── Global RFID desk listener ──
           The single WebSocket subscriber to /topic/rfid/{hospitalId} for

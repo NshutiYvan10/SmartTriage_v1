@@ -27,6 +27,7 @@ import { useDeviceStore } from '@/store/deviceStore';
 export function useDataInit() {
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const hospitalId = useAuthStore((s) => s.user?.hospitalId ?? null);
+  const role = useAuthStore((s) => s.user?.role ?? null);
   // Track the last *successful* fetch key. Reset to null whenever
   // userId becomes null (logout) so a subsequent log-in as the same
   // user still triggers a fresh fetch. Previously the ref persisted
@@ -44,10 +45,14 @@ export function useDataInit() {
     if (lastFetchedFor.current === key) return;
 
     lastFetchedFor.current = key;
+    // HOSPITAL_ADMIN is denied the clinical-alert endpoints by design, so skip
+    // fetchAlerts for them (it would only 403). Their AdminHome console reads
+    // beds/devices/staffing directly — no clinical alert store needed.
+    const isAdmin = role === 'HOSPITAL_ADMIN';
     Promise.allSettled([
       usePatientStore.getState().fetchActiveVisits(hospitalId),
-      useAlertStore.getState().fetchAlerts(hospitalId),
+      ...(isAdmin ? [] : [useAlertStore.getState().fetchAlerts(hospitalId)]),
       useDeviceStore.getState().fetchDevicesFromApi(hospitalId),
     ]).catch(() => { /* individual store catches log already */ });
-  }, [userId, hospitalId]);
+  }, [userId, hospitalId, role]);
 }

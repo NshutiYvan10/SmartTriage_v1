@@ -36,6 +36,7 @@ import { chartPath } from '@/lib/chartNav';
 import { ParamedicHome } from '@/modules/ems/ParamedicHome';
 import { LabHome } from '@/modules/dashboard/LabHome';
 import { RegistrarHome } from '@/modules/dashboard/RegistrarHome';
+import { AdminHome } from '@/modules/dashboard/AdminHome';
 
 /**
  * '/dashboard' entry point — branches by role BEFORE the hospital dashboard
@@ -53,6 +54,11 @@ export function Dashboard() {
   // REGISTRAR gets the desk-scoped home (intake / identity resolution / lookup),
   // not the hospital-wide clinical census + arrival charts.
   if (role === 'REGISTRAR') return <RegistrarHome />;
+  // HOSPITAL_ADMIN gets the administrative console (beds / devices / staffing /
+  // config) — NOT the charge-nurse clinical board. Patient-level clinical alerts
+  // carry PHI and are a clinical need-to-know signal the backend deliberately
+  // denies admins; branching here means the alert fetches never start for them.
+  if (role === 'HOSPITAL_ADMIN') return <AdminHome />;
   return <HospitalDashboard />;
 }
 

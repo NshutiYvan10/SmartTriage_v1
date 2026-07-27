@@ -52,8 +52,11 @@ import type { UserRole } from '@/types/roles';
 // pre-arrival alert → placed on arrival), which reaches resus without
 // bypassing the ED's own placement authority. Mirrored in the backend
 // @PreAuthorize on POST /admissions/direct-resus.
+// HOSPITAL_ADMIN is intentionally excluded — an administrator runs the
+// facility, not the floor; a door-to-resus admission is a clinical
+// placement action they should not initiate. Their home is the admin
+// operations console, which surfaces no patient-level clinical controls.
 const CLINICAL_ROLES: UserRole[] = [
-  'HOSPITAL_ADMIN',
   'DOCTOR',
   'NURSE',
   'REGISTRAR',

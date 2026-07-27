@@ -143,6 +143,12 @@ export function useWebSocket(myZone?: EdZone | null) {
       console.warn('[useWebSocket] No hospitalId on the authenticated user — subscribing to '
         + 'user-targeted alerts only (hospital/zone topics skipped).');
     }
+    // HOSPITAL_ADMIN is an administrative role: patient-level clinical alerts are
+    // a clinical need-to-know signal (PHI) the backend deliberately withholds from
+    // admins (@clinicalAuthz.canReadHospitalAlerts denies them). Don't subscribe an
+    // admin session to the hospital-wide / zone alert firehoses — mirror that intent
+    // on the client so the alert store stays empty for admins (no envelope/bell).
+    const suppressClinicalAlerts = user.role === 'HOSPITAL_ADMIN';
 
     // Ensure an in-memory access token before opening the socket. The backend now requires
     // a valid bearer token at STOMP CONNECT, and after a page reload the access token is null
@@ -154,8 +160,9 @@ export function useWebSocket(myZone?: EdZone | null) {
       connectWebSocket(() => {
         console.log('[useWebSocket] Connected, subscribing to hospital + user + zone topics');
 
-      // Subscribe to hospital-wide alerts (only when the user is hospital-scoped)
-      if (hospitalId) {
+      // Subscribe to hospital-wide alerts (only when the user is hospital-scoped
+      // AND the role is allowed clinical alerts — HOSPITAL_ADMIN is excluded)
+      if (hospitalId && !suppressClinicalAlerts) {
         const unsubAlerts = subscribeToAlerts(hospitalId, (alert: any) => {
           dedupeAndAdd(alert);
         });
@@ -202,7 +209,7 @@ export function useWebSocket(myZone?: EdZone | null) {
       // RESUS + ACUTE + PEDIATRIC receives alerts for all three.
       // Dedup against backendId in dedupeAndAdd keeps overlapping
       // hospital-wide + zone topics from double-rendering.
-      if (hospitalId) {
+      if (hospitalId && !suppressClinicalAlerts) {
         for (const zone of coveredZones) {
           console.log(`[useWebSocket] Subscribing to zone: ${zone}`);
           const unsubZone = subscribeToZoneAlerts(hospitalId, zone, (alert: ClinicalAlertResponse) => {

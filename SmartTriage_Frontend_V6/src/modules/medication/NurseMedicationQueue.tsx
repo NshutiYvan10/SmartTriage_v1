@@ -146,8 +146,8 @@ export function NurseMedicationQueue({ embedded = false }: { embedded?: boolean 
     setActionErr(null);
     try {
       if (action === 'administer') {
+        // id travels in the path param; the backend ignores any body id.
         await medicationApi.administer(medId, {
-          medicationId: medId,
           administeredByName: user?.fullName ?? 'Nurse',
         });
       } else if (action === 'hold') {
