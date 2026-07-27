@@ -551,19 +551,23 @@ export function VitalMonitoring() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         {/* Left ⅔: vitals + charts */}
         <div className="xl:col-span-2 space-y-4">
-          {/* Vital tiles — live values with arrival-since deltas */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <VitalTile icon={HeartPulse} label="Heart rate" unit="bpm" value={latest?.heartRate} k="heartRate" data={liveChartData} dataKey="hr" delta={deltaFor(latest?.heartRate, baseline?.hr, 10)} glassInner={glassInner} text={text} />
-            <VitalTile icon={Activity} label="SpO₂" unit="%" value={latest?.spo2} k="spo2" data={liveChartData} dataKey="spo2" delta={deltaFor(latest?.spo2, baseline?.spo2, 3)} glassInner={glassInner} text={text} />
-            <VitalTile icon={Wind} label="Resp. rate" unit="/min" value={latest?.respiratoryRate} k="respiratoryRate" data={liveChartData} dataKey="rr" delta={deltaFor(latest?.respiratoryRate, baseline?.rr, 4)} glassInner={glassInner} text={text} />
-            <VitalTile icon={Gauge} label="Blood pressure" unit="mmHg" value={latest?.systolicBp}
+          {/* Vital tiles — live values with arrival-since deltas.
+              Six-column grid with each tile spanning two: the first row
+              holds three tiles; the second row's pair starts at column 2
+              so Blood pressure + Temperature sit CENTERED under the row
+              above instead of leaving a hole on the right. */}
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+            <VitalTile className="md:col-span-2" icon={HeartPulse} label="Heart rate" unit="bpm" value={latest?.heartRate} k="heartRate" data={liveChartData} dataKey="hr" delta={deltaFor(latest?.heartRate, baseline?.hr, 10)} glassInner={glassInner} text={text} />
+            <VitalTile className="md:col-span-2" icon={Activity} label="SpO₂" unit="%" value={latest?.spo2} k="spo2" data={liveChartData} dataKey="spo2" delta={deltaFor(latest?.spo2, baseline?.spo2, 3)} glassInner={glassInner} text={text} />
+            <VitalTile className="md:col-span-2" icon={Wind} label="Resp. rate" unit="/min" value={latest?.respiratoryRate} k="respiratoryRate" data={liveChartData} dataKey="rr" delta={deltaFor(latest?.respiratoryRate, baseline?.rr, 4)} glassInner={glassInner} text={text} />
+            <VitalTile className="md:col-span-2 md:col-start-2" icon={Gauge} label="Blood pressure" unit="mmHg" value={latest?.systolicBp}
               secondary={latest?.diastolicBp != null ? `/${latest.diastolicBp}${map != null ? ` (${map})` : ''}` : undefined}
               k="systolicBp" data={liveChartData} dataKey="sbp"
               delta={deltaFor(latest?.systolicBp, baseline?.sbp, 15)}
               statusOverride={bpStatus}
               footnote={map != null ? `MAP ${map} mmHg` : undefined}
               glassInner={glassInner} text={text} />
-            <VitalTile icon={Thermometer} label="Temperature" unit="°C" value={latest?.temperature} k="temperature" data={liveChartData} dataKey="temp" delta={deltaFor(latest?.temperature, baseline?.temp, 0.8)} glassInner={glassInner} text={text} />
+            <VitalTile className="md:col-span-2" icon={Thermometer} label="Temperature" unit="°C" value={latest?.temperature} k="temperature" data={liveChartData} dataKey="temp" delta={deltaFor(latest?.temperature, baseline?.temp, 0.8)} glassInner={glassInner} text={text} />
           </div>
 
           {/* Patient journey — trend band + clinical event markers */}
@@ -850,7 +854,7 @@ function TewsChart({
 /* ─── VitalTile — big number + status colour + sparkline + delta ── */
 function VitalTile({
   icon: Icon, label, unit, value, secondary, k, data, dataKey, delta,
-  statusOverride, footnote, glassInner, text,
+  statusOverride, footnote, className, glassInner, text,
 }: {
   icon: any; label: string; unit: string;
   value: number | null | undefined; secondary?: string;
@@ -858,13 +862,14 @@ function VitalTile({
   delta?: number | null;
   statusOverride?: 'critical' | 'warning' | 'normal' | 'none';
   footnote?: string;
+  className?: string;
   glassInner: any; text: any;
 }) {
   const status = statusOverride ?? vitalStatus(k, value ?? null);
   const spark = data.slice(-30);
   const sparkColor = status === 'critical' ? '#ef4444' : status === 'warning' ? '#f59e0b' : '#10b981';
   return (
-    <div className="rounded-2xl p-3.5" style={glassInner}>
+    <div className={`rounded-2xl p-3.5 ${className ?? ''}`} style={glassInner}>
       <div className="flex items-center justify-between">
         <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>
           <Icon className={`w-3.5 h-3.5 ${STATUS_CLS[status]}`} />
