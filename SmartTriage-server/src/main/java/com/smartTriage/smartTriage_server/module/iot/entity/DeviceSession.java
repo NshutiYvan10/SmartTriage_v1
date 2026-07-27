@@ -164,6 +164,21 @@ public class DeviceSession extends BaseEntity {
     @Builder.Default
     private SessionType sessionType = SessionType.CONTINUOUS;
 
+    /**
+     * Live detection annotation: name of the DeteriorationPattern the
+     * engine currently sees on this stream (e.g. SEPSIS_PATTERN), or
+     * null when the patient is clean/recovered. Set on detection,
+     * cleared when analysis is clean and the committed trend is no
+     * longer WORSENING. The durable record lives in ClinicalAlerts /
+     * retriage rows — this field only powers the live monitor badge.
+     */
+    @Column(name = "last_detected_pattern", length = 40)
+    private String lastDetectedPattern;
+
+    /** When the current pattern was first detected. */
+    @Column(name = "last_detected_at")
+    private Instant lastDetectedAt;
+
     public void incrementReadings() {
         this.totalReadings++;
     }

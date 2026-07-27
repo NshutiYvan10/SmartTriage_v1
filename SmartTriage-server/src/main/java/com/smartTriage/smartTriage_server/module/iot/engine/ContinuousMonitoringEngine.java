@@ -76,6 +76,7 @@ public class ContinuousMonitoringEngine {
     private final AlertEscalationService alertEscalationService;
     private final ZoneRoutingService zoneRoutingService;
     private final ZoneTransferService zoneTransferService;
+    private final com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository sepsisScreeningRepository;
 
     // ====================================================================
     // CRITICAL THRESHOLDS (from Rwanda National Triage Protocol)
@@ -245,10 +246,35 @@ public class ContinuousMonitoringEngine {
             }
         }
 
+        // --- Check 6: Sepsis-pattern constellation (SIRS from the stream) ---
+        // Runs INDEPENDENTLY of the cascade above and, when it matches,
+        // RELABELS the detection: a septic patient usually also trips the
+        // generic checks first (SpO2 override, multi-vital), and the generic
+        // label buried the clinically actionable one — the monitoring page
+        // showed "deterioration" but never "sepsis". The specific pattern
+        // wins because it changes what the clinician does next (sepsis
+        // screening + bundle, not just a bedside review).
+        String sepsisConstellation = checkSepsisPattern(recentReadings);
+        if (sepsisConstellation != null) {
+            detectedPattern = DeteriorationPattern.SEPSIS_PATTERN;
+            findings.add(0, sepsisConstellation);
+            critical = true;
+        }
+
         if (!critical) {
             // Still classify trend so the dashboard reflects gradual drift
             // (e.g. "worsening" long before a RED threshold is crossed).
             updateTrendClassification(session, recentReadings, false);
+            // Clear the live detection annotation once the patient is no
+            // longer worsening — "no active pattern" is the honest monitor
+            // state. The clinical record (alerts, retriage, screenings)
+            // remains untouched; only the live badge clears.
+            if (session.getLastDetectedPattern() != null
+                    && session.getTrendStatus() != TrendStatus.WORSENING) {
+                session.setLastDetectedPattern(null);
+                session.setLastDetectedAt(null);
+                publishDetectionState(session);
+            }
             sessionRepository.save(session);
             return new MonitoringResult(false, DeteriorationPattern.NONE,
                     "All vitals within acceptable range", false, null, 0);
@@ -308,10 +334,146 @@ public class ContinuousMonitoringEngine {
         // a worsening label is still the correct answer in that case).
         updateTrendClassification(session, recentReadings, critical);
 
+        // Persist the live detection annotation on the session so the
+        // monitoring pages can show WHAT was detected (e.g. "SEPSIS
+        // PATTERN"), not just that the trend is worsening. Keep the
+        // first-detected timestamp while the same pattern persists.
+        if (!detectedPattern.name().equals(session.getLastDetectedPattern())) {
+            session.setLastDetectedPattern(detectedPattern.name());
+            session.setLastDetectedAt(Instant.now());
+            publishDetectionState(session);
+        }
+
+        // Sepsis pattern → nag the clinician to run the formal sepsis
+        // screening (the monitor can suspect sepsis; only a clinician can
+        // screen and start the bundle).
+        if (detectedPattern == DeteriorationPattern.SEPSIS_PATTERN) {
+            maybeRaiseSepsisScreeningNag(visit, description);
+        }
+
         sessionRepository.save(session);
 
         return new MonitoringResult(true, detectedPattern, description,
                 retriageTriggered, suggestedCategory, alertCount);
+    }
+
+    // ====================================================================
+    // SEPSIS PATTERN
+    // ====================================================================
+
+    /**
+     * SIRS-style sepsis constellation from the stream, confirmed across
+     * the two most recent validated readings (single-reading artefacts
+     * never fire it). Requires the TEMPERATURE criterion (fever &gt; 38.3 °C
+     * or hypothermia &lt; 36.0 °C) plus at least one of tachycardia
+     * (HR &gt; 90) or tachypnoea (RR &gt; 20); concurrent hypotension
+     * (SBP &lt; 100) is appended as septic-shock physiology. Returns the
+     * finding description, or null when the constellation is absent.
+     */
+    private String checkSepsisPattern(List<VitalStream> readings) {
+        if (readings.size() < 2) return null;
+        VitalStream latest = readings.getLast();
+        VitalStream prev = readings.get(readings.size() - 2);
+        String now = sirsFindings(latest);
+        if (now == null || sirsFindings(prev) == null) return null;
+        return "Sepsis-pattern constellation: " + now;
+    }
+
+    private String sirsFindings(VitalStream r) {
+        boolean fever = r.getTemperature() != null && r.getTemperature() > 38.3;
+        boolean hypothermia = r.getTemperature() != null && r.getTemperature() < 36.0;
+        if (!fever && !hypothermia) return null;
+
+        List<String> parts = new ArrayList<>();
+        parts.add(fever
+                ? "fever " + r.getTemperature() + "°C"
+                : "hypothermia " + r.getTemperature() + "°C");
+        if (r.getHeartRate() != null && r.getHeartRate() > 90) {
+            parts.add("tachycardia " + r.getHeartRate() + " bpm");
+        }
+        if (r.getRespiratoryRate() != null && r.getRespiratoryRate() > 20) {
+            parts.add("tachypnoea RR " + r.getRespiratoryRate());
+        }
+        if (parts.size() < 2) return null; // temperature alone is not a constellation
+
+        if (r.getSystolicBp() != null && r.getSystolicBp() < 100) {
+            parts.add("hypotension SBP " + r.getSystolicBp() + " (septic-shock physiology)");
+        }
+        return String.join(" + ", parts);
+    }
+
+    /**
+     * Raise the "run a sepsis screening" nag for a monitor-detected sepsis
+     * pattern. Deduped against (a) an unacknowledged SEPSIS_SCREENING alert
+     * and (b) a screening filed within the last 12 hours — if the team
+     * already screened this episode, the monitor has nothing to add.
+     */
+    private void maybeRaiseSepsisScreeningNag(Visit visit, String description) {
+        try {
+            if (clinicalAlertRepository.existsByVisitIdAndAlertTypeAndIsAcknowledgedFalseAndIsActiveTrue(
+                    visit.getId(), AlertType.SEPSIS_SCREENING)) {
+                return;
+            }
+            boolean recentlyScreened = sepsisScreeningRepository
+                    .findFirstByVisitIdAndIsActiveTrueOrderByScreenedAtDesc(visit.getId())
+                    .map(s -> s.getScreenedAt() != null
+                            && s.getScreenedAt().isAfter(Instant.now().minus(12, ChronoUnit.HOURS)))
+                    .orElse(false);
+            if (recentlyScreened) return;
+
+            ClinicalAlert alert = ClinicalAlert.builder()
+                    .visit(visit)
+                    .alertType(AlertType.SEPSIS_SCREENING)
+                    .severity(AlertSeverity.HIGH)
+                    .title("SEPSIS PATTERN on monitor — screening required")
+                    .message(String.format(
+                            "Continuous monitoring detected a sepsis-consistent pattern for "
+                                    + "patient %s %s (Visit: %s): %s. Run a formal sepsis "
+                                    + "screening from the patient's Sepsis tab and start the "
+                                    + "bundle if confirmed.",
+                            visit.getPatient().getFirstName(),
+                            visit.getPatient().getLastName(),
+                            visit.getVisitNumber(),
+                            description))
+                    .autoGenerated(true)
+                    .build();
+            alert = clinicalAlertRepository.save(alert);
+
+            UUID hospitalId = visit.getPatient().getHospital().getId();
+            ClinicalAlertResponse response = ClinicalAlertMapper.toResponse(alert);
+            eventPublisher.publishHospitalAlert(hospitalId, response);
+            eventPublisher.publishZoneAlert(hospitalId,
+                    EdZone.fromTriageCategory(visit.getCurrentTriageCategory() != null
+                            ? visit.getCurrentTriageCategory() : TriageCategory.ORANGE), response);
+            log.warn("SEPSIS SCREENING NAG raised for visit {}", visit.getVisitNumber());
+        } catch (Exception e) {
+            log.warn("Failed to raise sepsis screening nag for visit {}: {}",
+                    visit.getVisitNumber(), e.getMessage());
+        }
+    }
+
+    /**
+     * Push the session's live detection annotation (pattern or its
+     * clearing) to the per-visit trend topic. The payload always carries
+     * the current trendStatus too, so subscribers can treat it as a full
+     * monitor-state update.
+     */
+    private void publishDetectionState(DeviceSession session) {
+        try {
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("visitId", session.getVisit().getId().toString());
+            payload.put("sessionId", session.getId().toString());
+            payload.put("trendStatus", session.getTrendStatus() != null
+                    ? session.getTrendStatus().name() : TrendStatus.UNKNOWN.name());
+            payload.put("detectedPattern", session.getLastDetectedPattern());
+            payload.put("detectedAt", session.getLastDetectedAt() != null
+                    ? session.getLastDetectedAt().toString() : null);
+            payload.put("timestamp", Instant.now().toString());
+            eventPublisher.publishTrendChange(session.getVisit().getId(), payload);
+        } catch (Exception e) {
+            log.warn("Failed to publish detection state for session {}: {}",
+                    session.getId(), e.getMessage());
+        }
     }
 
     // ====================================================================
@@ -477,13 +639,17 @@ public class ContinuousMonitoringEngine {
             session.setTrendStatus(raw);
             session.setTrendCandidate(null);
             try {
-                eventPublisher.publishTrendChange(session.getVisit().getId(),
-                        java.util.Map.of(
-                                "visitId", session.getVisit().getId().toString(),
-                                "sessionId", session.getId().toString(),
-                                "trendStatus", raw.name(),
-                                "previousTrendStatus", current.name(),
-                                "timestamp", Instant.now().toString()));
+                // HashMap, not Map.of — the detection fields are nullable.
+                java.util.Map<String, Object> payload = new java.util.HashMap<>();
+                payload.put("visitId", session.getVisit().getId().toString());
+                payload.put("sessionId", session.getId().toString());
+                payload.put("trendStatus", raw.name());
+                payload.put("previousTrendStatus", current.name());
+                payload.put("detectedPattern", session.getLastDetectedPattern());
+                payload.put("detectedAt", session.getLastDetectedAt() != null
+                        ? session.getLastDetectedAt().toString() : null);
+                payload.put("timestamp", Instant.now().toString());
+                eventPublisher.publishTrendChange(session.getVisit().getId(), payload);
             } catch (Exception e) {
                 log.warn("Failed to publish trend change for visit {}: {}",
                         session.getVisit().getVisitNumber(), e.getMessage());
@@ -536,32 +702,41 @@ public class ContinuousMonitoringEngine {
         boolean anyWorseningSlope = false;
         boolean anyImprovingSlope = false;
 
-        // Heart rate: >15 bpm rise over window = worsening; >15 fall from an
-        // elevated baseline back toward normal = improving.
+        // Slope rules are destination-aware (same principle as
+        // checkRapidDecline): a steep slope is "worsening" only when it
+        // is heading INTO abnormal territory. A heart rate climbing out
+        // of bradycardia, or a blood pressure descending from a
+        // hypertensive crisis, is recovery — the direction-blind
+        // versions of these rules labelled recovering patients WORSENING.
+
+        // Heart rate: >15 bpm rise landing above 90 = worsening;
+        // >15 fall from an elevated baseline back toward normal = improving.
         if (latest.getHeartRate() != null && earliest.getHeartRate() != null) {
             int hrDelta = latest.getHeartRate() - earliest.getHeartRate();
-            if (hrDelta > 15) anyWorseningSlope = true;
-            else if (hrDelta < -15 && earliest.getHeartRate() > 100) anyImprovingSlope = true;
+            if (hrDelta > 15 && latest.getHeartRate() > 90) anyWorseningSlope = true;
+            else if (hrDelta < -15 && earliest.getHeartRate() > 100
+                    && latest.getHeartRate() >= 55) anyImprovingSlope = true;
         }
 
-        // Respiratory rate: +4 = worsening, -4 from elevated = improving.
+        // Respiratory rate: +4 landing above 18 = worsening, -4 from elevated = improving.
         if (latest.getRespiratoryRate() != null && earliest.getRespiratoryRate() != null) {
             int rrDelta = latest.getRespiratoryRate() - earliest.getRespiratoryRate();
-            if (rrDelta > 4) anyWorseningSlope = true;
+            if (rrDelta > 4 && latest.getRespiratoryRate() > 18) anyWorseningSlope = true;
             else if (rrDelta < -4 && earliest.getRespiratoryRate() > 20) anyImprovingSlope = true;
         }
 
-        // SpO2: -3% = worsening (even while still above 92%), +3 from low = improving.
+        // SpO2: -3% landing below 96 = worsening, +3 from low = improving.
         if (latest.getSpo2() != null && earliest.getSpo2() != null) {
             int sp = latest.getSpo2() - earliest.getSpo2();
-            if (sp < -3) anyWorseningSlope = true;
+            if (sp < -3 && latest.getSpo2() < 96) anyWorseningSlope = true;
             else if (sp > 3 && earliest.getSpo2() < 94) anyImprovingSlope = true;
         }
 
-        // Systolic BP: -15 = worsening (shock drift), +15 from low = improving.
+        // Systolic BP: -15 landing below 120 = worsening (shock drift),
+        // +15 from low = improving.
         if (latest.getSystolicBp() != null && earliest.getSystolicBp() != null) {
             int sbp = latest.getSystolicBp() - earliest.getSystolicBp();
-            if (sbp < -15) anyWorseningSlope = true;
+            if (sbp < -15 && latest.getSystolicBp() < 120) anyWorseningSlope = true;
             else if (sbp > 15 && earliest.getSystolicBp() < 100) anyImprovingSlope = true;
         }
 
@@ -635,41 +810,57 @@ public class ContinuousMonitoringEngine {
      * Detect rapid decline: a vital dropping/rising significantly over the analysis window.
      * Compares earliest to latest reading in the window.
      */
+    /**
+     * Rapid-change detection, DESTINATION-AWARE. A large delta alone is
+     * not decline: a heart rate falling 130 → 76 after treatment is
+     * RECOVERY, and the previous direction-blind version of this check
+     * classified exactly that as "Rapid HR decline" — re-flagging every
+     * recovering patient as deteriorating (trend snapped back to
+     * WORSENING the moment their vitals normalised quickly). Each rule
+     * therefore requires BOTH a steep slope AND a worrying destination:
+     * the value must be heading INTO (or already inside) an abnormal
+     * band, not returning to a normal one.
+     */
     private String checkRapidDecline(List<VitalStream> readings) {
         VitalStream earliest = readings.getFirst();
         VitalStream latest = readings.getLast();
 
-        // HR dropping > 30 bpm or rising > 40 bpm in 5 minutes
+        // HR dropping > 30 bpm — alarming only when landing low
+        // (impending bradycardia / collapse), not when returning from
+        // tachycardia to normal. Rising > 40 bpm — alarming only when
+        // landing tachycardic, not when recovering from bradycardia.
         if (earliest.getHeartRate() != null && latest.getHeartRate() != null) {
             int hrDelta = latest.getHeartRate() - earliest.getHeartRate();
-            if (hrDelta < -30) {
+            if (hrDelta < -30 && latest.getHeartRate() < 60) {
                 return "Rapid HR decline: " + earliest.getHeartRate() + " → " + latest.getHeartRate() + " bpm";
             }
-            if (hrDelta > 40) {
+            if (hrDelta > 40 && latest.getHeartRate() > 110) {
                 return "Rapid HR rise: " + earliest.getHeartRate() + " → " + latest.getHeartRate() + " bpm";
             }
         }
 
-        // SpO2 dropping > 5% in 5 minutes
+        // SpO2 dropping > 5% — alarming only when landing below the
+        // near-normal floor (a 100 → 96 dip is probe repositioning).
         if (earliest.getSpo2() != null && latest.getSpo2() != null) {
             int spo2Delta = latest.getSpo2() - earliest.getSpo2();
-            if (spo2Delta < -5) {
+            if (spo2Delta < -5 && latest.getSpo2() < 95) {
                 return "Rapid SpO2 decline: " + earliest.getSpo2() + "% → " + latest.getSpo2() + "%";
             }
         }
 
-        // RR rising > 10 in 5 minutes
+        // RR rising > 10 — alarming only when landing tachypnoeic.
         if (earliest.getRespiratoryRate() != null && latest.getRespiratoryRate() != null) {
             int rrDelta = latest.getRespiratoryRate() - earliest.getRespiratoryRate();
-            if (rrDelta > 10) {
+            if (rrDelta > 10 && latest.getRespiratoryRate() > 20) {
                 return "Rapid RR increase: " + earliest.getRespiratoryRate() + " → " + latest.getRespiratoryRate();
             }
         }
 
-        // SBP dropping > 30 mmHg in 5 minutes
+        // SBP dropping > 30 mmHg — alarming only when heading toward
+        // hypotension, not when a hypertensive crisis is resolving.
         if (earliest.getSystolicBp() != null && latest.getSystolicBp() != null) {
             int sbpDelta = latest.getSystolicBp() - earliest.getSystolicBp();
-            if (sbpDelta < -30) {
+            if (sbpDelta < -30 && latest.getSystolicBp() < 110) {
                 return "Rapid BP decline: " + earliest.getSystolicBp() + " → " + latest.getSystolicBp() + " mmHg";
             }
         }

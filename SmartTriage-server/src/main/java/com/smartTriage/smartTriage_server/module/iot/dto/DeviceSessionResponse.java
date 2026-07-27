@@ -61,5 +61,8 @@ public class DeviceSessionResponse {
     private UUID continuityGroupId;
     /** CONTINUOUS (bed monitor) or SPOT_CHECK (roaming obs-round). */
     private com.smartTriage.smartTriage_server.common.enums.SessionType sessionType;
+    /** Live detection annotation (DeteriorationPattern name, e.g. SEPSIS_PATTERN); null when clean. */
+    private String lastDetectedPattern;
+    private Instant lastDetectedAt;
     private Instant createdAt;
 }

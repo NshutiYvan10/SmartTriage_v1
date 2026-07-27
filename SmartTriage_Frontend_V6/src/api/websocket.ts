@@ -62,18 +62,47 @@ interface PendingSubscription {
 }
 const pendingSubscriptions: PendingSubscription[] = [];
 
+/**
+ * RECONNECT-DURABLE subscription registry.
+ *
+ * STOMP subscriptions live on the CONNECTION: when the client's
+ * auto-reconnect kicks in (heartbeat blip, backend restart, WiFi drop),
+ * every server-side subscription is gone. The previous implementation
+ * only flushed the pre-connect queue on (re)connect — subscriptions that
+ * had been established while live were left pointing at the dead
+ * connection and silently received nothing forever. That is exactly the
+ * "monitoring page freezes until I switch pages and come back" bug:
+ * remounting the page re-subscribed by accident.
+ *
+ * Every subscribeToTopic call now registers here for the lifetime of its
+ * unsubscribe function, and onConnect re-subscribes EVERY active record —
+ * queued or previously live — so a reconnect is invisible to features.
+ */
+const durableSubs: PendingSubscription[] = [];
+
 function flushPendingSubscriptions() {
   if (!stompClient?.connected) return;
-  // Drain the queue. Take a snapshot first so a synchronous re-subscribe
-  // (extremely unlikely but defensive) doesn't mutate the list under us.
+  // Adopt anything still queued into the durable registry, then
+  // (re)subscribe every active record against the fresh connection.
   const pending = pendingSubscriptions.splice(0);
   for (const p of pending) {
-    if (p.cancelled) continue;
+    if (!p.cancelled) durableSubs.push(p);
+  }
+  // Drop cancelled records so the registry can't grow unbounded.
+  for (let i = durableSubs.length - 1; i >= 0; i--) {
+    if (durableSubs[i].cancelled) durableSubs.splice(i, 1);
+  }
+  for (const p of durableSubs) {
     try {
+      const stale = subscriptions.get(p.topic);
+      if (stale) {
+        try { stale.unsubscribe(); } catch { /* dead connection — expected */ }
+        subscriptions.delete(p.topic);
+      }
       const sub = stompClient.subscribe(p.topic, p.rawCallback);
       subscriptions.set(p.topic, sub);
     } catch (err) {
-      console.warn('[WS] Failed to flush pending subscription to', p.topic, err);
+      console.warn('[WS] Failed to (re)subscribe to', p.topic, err);
     }
   }
 }
@@ -120,9 +149,13 @@ export function disconnectWebSocket() {
   subscriptions.forEach((sub) => sub.unsubscribe());
   subscriptions.clear();
   // Cancel any still-queued subscribes so a late connect doesn't
-  // resurrect them against the new client.
+  // resurrect them against the new client — and clear the durable
+  // registry (feature hooks re-establish via the generation listener
+  // after the app-level hook rebuilds the client).
   for (const p of pendingSubscriptions) p.cancelled = true;
   pendingSubscriptions.length = 0;
+  for (const p of durableSubs) p.cancelled = true;
+  durableSubs.length = 0;
   if (stompClient?.active) {
     stompClient.deactivate();
   }
@@ -144,54 +177,51 @@ export function subscribeToTopic<T>(
     }
   };
 
-  // Drop any prior subscription to this topic — same de-duplication as
-  // before, applied across both the live-sub map and the pending queue.
+  // Drop any prior subscription to this topic — de-duplication across
+  // the live-sub map, the pending queue, and the durable registry.
   if (subscriptions.has(topic)) {
-    subscriptions.get(topic)!.unsubscribe();
+    try { subscriptions.get(topic)!.unsubscribe(); } catch { /* dead connection */ }
     subscriptions.delete(topic);
   }
   for (const p of pendingSubscriptions) {
     if (p.topic === topic) p.cancelled = true;
   }
-
-  // Not connected yet — queue and return an unsubscribe that works
-  // whether or not the subscribe has flushed when it's called.
-  if (!stompClient?.connected) {
-    const pending: PendingSubscription = { topic, rawCallback, cancelled: false };
-    pendingSubscriptions.push(pending);
-    return () => {
-      pending.cancelled = true;
-      const live = subscriptions.get(topic);
-      if (live) {
-        try { live.unsubscribe(); } catch { /* client may already be torn down */ }
-        subscriptions.delete(topic);
-      }
-    };
+  for (const p of durableSubs) {
+    if (p.topic === topic) p.cancelled = true;
   }
 
-  // Live path. Wrap in try/catch as a last-resort guard — STOMP can
-  // throw if the connection drops between the `connected` check and
-  // the subscribe call. Better a missed live channel than a blank UI.
+  // One record per subscription, registered for reconnect durability.
+  // Its unsubscribe works whether the subscribe has flushed yet or not,
+  // and cancelling it removes the record from every future reconnect.
+  const record: PendingSubscription = { topic, rawCallback, cancelled: false };
+  const unsubscribe = () => {
+    record.cancelled = true;
+    const live = subscriptions.get(topic);
+    if (live) {
+      try { live.unsubscribe(); } catch { /* client may already be torn down */ }
+      subscriptions.delete(topic);
+    }
+  };
+
+  // Not connected yet — queue; the connect handler adopts the record
+  // into the durable registry and subscribes it.
+  if (!stompClient?.connected) {
+    pendingSubscriptions.push(record);
+    return unsubscribe;
+  }
+
+  // Live path: register durably AND subscribe now. Wrap in try/catch —
+  // STOMP can throw if the connection drops between the `connected`
+  // check and the subscribe call; the durable registry picks the
+  // record up on the next reconnect either way.
+  durableSubs.push(record);
   try {
     const subscription = stompClient.subscribe(topic, rawCallback);
     subscriptions.set(topic, subscription);
-    return () => {
-      try { subscription.unsubscribe(); } catch { /* client may already be torn down */ }
-      subscriptions.delete(topic);
-    };
   } catch (err) {
-    console.warn('[WS] subscribe threw for', topic, '— deferring until reconnect:', err);
-    const pending: PendingSubscription = { topic, rawCallback, cancelled: false };
-    pendingSubscriptions.push(pending);
-    return () => {
-      pending.cancelled = true;
-      const live = subscriptions.get(topic);
-      if (live) {
-        try { live.unsubscribe(); } catch { /* client may already be torn down */ }
-        subscriptions.delete(topic);
-      }
-    };
+    console.warn('[WS] subscribe threw for', topic, '— will retry on reconnect:', err);
   }
+  return unsubscribe;
 }
 
 // ── Typed subscription helpers ──
@@ -472,7 +502,10 @@ export interface TrendChangeEvent {
   visitId: string;
   sessionId: string;
   trendStatus: 'WORSENING' | 'STABLE' | 'IMPROVING' | 'UNKNOWN';
-  previousTrendStatus: string;
+  previousTrendStatus?: string;
+  /** Live detection annotation (DeteriorationPattern name, e.g. SEPSIS_PATTERN); null when clean/cleared. */
+  detectedPattern?: string | null;
+  detectedAt?: string | null;
   timestamp: string;
 }
 

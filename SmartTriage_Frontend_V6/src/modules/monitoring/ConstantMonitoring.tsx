@@ -27,6 +27,7 @@ import {
 import { useTheme } from '@/hooks/useTheme';
 import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
 import { useMyShift } from '@/hooks/useMyShift';
+import { useWebSocketGeneration } from '@/hooks/useWebSocket';
 import MonitoringStatePill from './MonitoringStatePill';
 import StartMonitoringConfirmModal from './StartMonitoringConfirmModal';
 import EndMonitoringConfirmModal from './EndMonitoringConfirmModal';
@@ -613,6 +614,13 @@ export function ConstantMonitoring() {
   // streaming device. This gives true real-time updates every ~5s.
   const wsUnsubs = useRef<Map<string, () => void>>(new Map());
   const trendUnsubs = useRef<Map<string, () => void>>(new Map());
+  // Connection generation — when the app-level hook tears down and
+  // rebuilds the shared STOMP client (covered-zone change), every handle
+  // in the maps above is stale. The sync effects below detect the bump
+  // and rebuild their subscriptions from scratch.
+  const wsGeneration = useWebSocketGeneration();
+  const vitalsGenRef = useRef(wsGeneration);
+  const trendGenRef = useRef(wsGeneration);
 
   // ── Incremental sync: WebSocket vital subscriptions track the
   //    session state, not the device store ──
@@ -632,6 +640,14 @@ export function ConstantMonitoring() {
   // down and rebuild every WebSocket sub every 500 ms.
   useEffect(() => {
     const currentSubs = wsUnsubs.current;
+
+    // Client replaced since last sync → every handle is stale; drop them
+    // all so the loop below re-subscribes against the fresh connection.
+    if (vitalsGenRef.current !== wsGeneration) {
+      vitalsGenRef.current = wsGeneration;
+      currentSubs.forEach((unsub) => unsub());
+      currentSubs.clear();
+    }
 
     // States that should receive live vital readings. PAUSED is
     // intentionally excluded — paused sessions stop streaming on the
@@ -679,7 +695,7 @@ export function ConstantMonitoring() {
     });
     // No cleanup on dep change — unmount cleanup is handled by the
     // dedicated effect below.
-  }, [sessionsByVisitId]);
+  }, [sessionsByVisitId, wsGeneration]);
 
   // Unmount-only cleanup — close every still-open WebSocket sub when
   // the page is left. Empty dep array → the cleanup only fires on
@@ -729,6 +745,13 @@ export function ConstantMonitoring() {
   useEffect(() => {
     const currentSubs = trendUnsubs.current;
 
+    // Client replaced → stale handles; rebuild from scratch.
+    if (trendGenRef.current !== wsGeneration) {
+      trendGenRef.current = wsGeneration;
+      currentSubs.forEach((unsub) => unsub());
+      currentSubs.clear();
+    }
+
     const desired = new Set<string>();
     sessionsByVisitId.forEach((session, visitId) => {
       if (!session) return;
@@ -746,6 +769,23 @@ export function ConstantMonitoring() {
             next.set(visitId, ev.trendStatus);
             return next;
           });
+          // The same topic now carries the live detection annotation
+          // (e.g. SEPSIS_PATTERN) — patch it onto the cached session so
+          // the card chip appears/clears instantly instead of waiting
+          // for the 30s session refetch.
+          if ('detectedPattern' in ev) {
+            setSessionsByVisitId((prev) => {
+              const existing = prev.get(visitId);
+              if (!existing) return prev;
+              const next = new Map(prev);
+              next.set(visitId, {
+                ...existing,
+                lastDetectedPattern: ev.detectedPattern ?? null,
+                lastDetectedAt: ev.detectedAt ?? null,
+              });
+              return next;
+            });
+          }
         });
         currentSubs.set(visitId, unsub);
       }
@@ -758,7 +798,7 @@ export function ConstantMonitoring() {
       }
     });
     // No cleanup on dep change — unmount cleanup below.
-  }, [sessionsByVisitId]);
+  }, [sessionsByVisitId, wsGeneration]);
 
   // Unmount cleanup for trend subscriptions.
   useEffect(() => {
@@ -1104,8 +1144,25 @@ export function ConstantMonitoring() {
                           {(() => {
                             const session = sessionsByVisitId.get(patient.id);
                             const state = session ? session.monitoringState : 'NOT_STARTED';
+                            const pattern = session?.lastDetectedPattern ?? null;
                             return (
                               <>
+                                {/* Live detection annotation from the engine —
+                                    the WHAT behind a worsening trend (e.g.
+                                    SEPSIS PATTERN), previously buried in alert
+                                    text only. */}
+                                {pattern && (
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black border animate-pulse ${
+                                    pattern === 'SEPSIS_PATTERN'
+                                      ? 'bg-purple-500/15 text-purple-600 border-purple-500/40'
+                                      : 'bg-red-500/15 text-red-600 border-red-500/40'
+                                  }`}
+                                    title="Detected by continuous monitoring — open the full view for details"
+                                  >
+                                    <AlertTriangle className="w-3 h-3" />
+                                    {pattern === 'SEPSIS_PATTERN' ? 'SEPSIS PATTERN' : pattern.replace(/_/g, ' ')}
+                                  </span>
+                                )}
                                 <MonitoringStatePill state={state} />
                                 {state === 'NOT_STARTED' && (
                                   <button

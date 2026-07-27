@@ -1540,6 +1540,11 @@ export interface DeviceSessionResponse {
   pausedByName: string | null;
   resumedAt: string | null;
   resumedByName: string | null;
+  /** CONTINUOUS (bed monitor) or SPOT_CHECK (roaming obs-round). */
+  sessionType?: 'CONTINUOUS' | 'SPOT_CHECK';
+  /** Live detection annotation (DeteriorationPattern name, e.g. SEPSIS_PATTERN); null when clean. */
+  lastDetectedPattern?: string | null;
+  lastDetectedAt?: string | null;
   continuityGroupId: string | null;
   createdAt: string;
 }
