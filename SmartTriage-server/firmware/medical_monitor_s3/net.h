@@ -26,6 +26,7 @@
  */
 #pragma once
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <time.h>
@@ -93,7 +94,11 @@ private:
   // ---------------- WiFi state machine (non-blocking) ----------------
   void manageWifi() {
     bool up = WiFi.status() == WL_CONNECTED;
-    if (up) { reconnectBackoffMs_ = 2000; lastReconnectMs_ = millis(); return; }
+    if (up) {
+      reconnectBackoffMs_ = 2000; lastReconnectMs_ = millis();
+      manageServerResolution();
+      return;
+    }
     uint32_t now = millis();
     if (now - lastReconnectMs_ >= reconnectBackoffMs_) {
       lastReconnectMs_ = now;
@@ -101,6 +106,34 @@ private:
       WiFi.disconnect();
       WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     }
+  }
+
+  // ---------------- server discovery (mDNS, name over IP) ----------------
+  // The gateway is found by NAME (SERVER_MDNS_HOST) so DHCP reshuffles on
+  // a shared/hotspot network never strand the monitor. Resolution happens
+  // once after WiFi connects, and again (rate-limited) after consecutive
+  // send failures — the address may simply have moved. SERVER_BASE is the
+  // fallback (and the whole story when SERVER_MDNS_HOST is "").
+  void manageServerResolution() {
+    if (SERVER_MDNS_HOST[0] == '\0') return;         // name lookup disabled
+    if (!mdnsUp_) {
+      mdnsUp_ = MDNS.begin(("st-mon-" + String((uint32_t)(ESP.getEfuseMac() & 0xFFFF), HEX)).c_str());
+      if (!mdnsUp_) return;                          // retry next pass
+    }
+    bool wantResolve = !serverResolved_ ||
+                       (txFailStreak_ >= 3 && millis() - lastResolveMs_ > 30000);
+    if (!wantResolve) return;
+    lastResolveMs_ = millis();
+    IPAddress ip = MDNS.queryHost(SERVER_MDNS_HOST, 2500);
+    if (ip != IPAddress()) {
+      serverBase_ = "http://" + ip.toString() + ":" + String(SERVER_MDNS_PORT);
+      if (!serverResolved_ || txFailStreak_ >= 3) {
+        Serial.printf("[net] %s.local -> %s\n", SERVER_MDNS_HOST, serverBase_.c_str());
+      }
+      serverResolved_ = true;
+      txFailStreak_ = 0;
+    }
+    // unresolved → keep using serverBase_ (starts as SERVER_BASE fallback)
   }
 
   void manageClock() {
@@ -160,7 +193,7 @@ private:
 
     HTTPClient http;
     http.setTimeout(HTTP_TIMEOUT_MS);
-    http.begin(String(SERVER_BASE) + INGEST_PATH);
+    http.begin(serverBase_ + INGEST_PATH);
     http.addHeader("Content-Type", "application/json");
     http.addHeader("X-Device-API-Key", DEVICE_API_KEY);
     int code = http.POST(body);
@@ -175,8 +208,10 @@ private:
       lastAckMillis_ = millis();
       lastAckEpoch_ = clockSynced() ? time(nullptr) : 0;
       txOk_++;
+      txFailStreak_ = 0;
     } else {
       txFail_++;
+      txFailStreak_++;              // 3 in a row → re-resolve the gateway name
     }
     return accepted;
   }
@@ -184,7 +219,7 @@ private:
   void sendHeartbeat() {
     HTTPClient http;
     http.setTimeout(HTTP_TIMEOUT_MS);
-    http.begin(String(SERVER_BASE) + HEARTBEAT_PATH);
+    http.begin(serverBase_ + HEARTBEAT_PATH);
     http.addHeader("Content-Type", "application/json");
     http.addHeader("X-Device-API-Key", DEVICE_API_KEY);
     String body = String("{\"serialNumber\":\"") + DEVICE_SERIAL + "\"}";
@@ -240,6 +275,10 @@ private:
   time_t   lastAckEpoch_ = 0;
   uint32_t lastReconnectMs_ = 0, reconnectBackoffMs_ = 2000;
   bool clockRequested_ = false;
+  // server discovery (mDNS): current base URL + resolution bookkeeping
+  String serverBase_ = SERVER_BASE;
+  bool mdnsUp_ = false, serverResolved_ = false;
+  uint32_t txFailStreak_ = 0, lastResolveMs_ = 0;
   OfflineReading ring_[OFFLINE_BUFFER_SIZE];
   int ringHead_ = 0, ringCount_ = 0;
 };

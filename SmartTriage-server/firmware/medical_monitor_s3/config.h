@@ -22,7 +22,18 @@
 
 #define WIFI_SSID          "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD      "YOUR_WIFI_PASSWORD"
-#define SERVER_BASE        "http://192.168.1.100:8080"   // SmartTriage backend origin
+
+// Where readings go. TWO ways to say it — prefer the NAME:
+//  - SERVER_MDNS_HOST: the gateway Pi's hostname (without ".local").
+//    Resolved via mDNS after WiFi connects and re-resolved automatically
+//    if posts start failing, so DHCP reshuffles never strand the monitor.
+//    Set to "" to disable and use SERVER_BASE verbatim.
+//  - SERVER_BASE: fixed-address fallback (also used while mDNS hasn't
+//    resolved yet). On the Pi's own access point the gateway is always
+//    http://10.42.0.1:8090 — set that here when running AP mode.
+#define SERVER_MDNS_HOST   "smart-triage"
+#define SERVER_MDNS_PORT   8090
+#define SERVER_BASE        "http://10.42.0.1:8090"       // gateway fallback origin
 #define DEVICE_SERIAL      "ESP32S3-MON-001"             // must match the registered device
 #define DEVICE_API_KEY     "PASTE_DEVICE_API_KEY_HERE"   // from device registration
 

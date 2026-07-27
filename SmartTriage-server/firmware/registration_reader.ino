@@ -71,6 +71,7 @@
  * ==========================================================================*/
 
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <SPI.h>
@@ -82,7 +83,15 @@ const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 
 // ======================== Server Configuration ======================
 // Base host of the SmartTriage backend (no trailing slash).
-const char* SERVER_HOST     = "http://YOUR_BACKEND_IP:8080";
+// The reader now talks to the GATEWAY (Pi), which proxies /iot/rfid/tap to
+// the backend with this device's own key — so the address below never needs
+// to chase the backend laptop's IP again. Prefer the NAME: SERVER_MDNS_HOST
+// is resolved via mDNS after WiFi connects (and re-resolved automatically
+// after 3 consecutive failures); SERVER_HOST is the fixed fallback, which
+// on the Pi's own access point is always http://10.42.0.1:8090.
+const char* SERVER_MDNS_HOST = "smart-triage";   // "" disables name lookup
+const int   SERVER_MDNS_PORT = 8090;
+const char* SERVER_HOST     = "http://10.42.0.1:8090";
 // Pre-shared device API key — see PROVISIONING above. Sent as X-Device-API-Key.
 const char* DEVICE_API_KEY  = "PASTE_RFID_READER_API_KEY_HERE";
 const char* DEVICE_LABEL    = "Registration Desk";
@@ -160,6 +169,29 @@ MFRC522 rfid(RC522_SS_PIN, RC522_RST_PIN);
 String lastCardUid = "";
 unsigned long lastTapMs = 0;
 unsigned long lastWifiTryMs = 0;
+// Server discovery: current base URL (starts at the fixed fallback) +
+// mDNS bookkeeping. See SERVER_MDNS_HOST above.
+String serverHost = SERVER_HOST;
+bool mdnsUp = false;
+bool serverResolved = false;
+int tapFailStreak = 0;
+unsigned long lastResolveMs = 0;
+
+void resolveServer() {
+  if (SERVER_MDNS_HOST[0] == '\0' || WiFi.status() != WL_CONNECTED) return;
+  if (!mdnsUp) {
+    mdnsUp = MDNS.begin("st-rfid-desk");
+    if (!mdnsUp) return;                       // retry on a later call
+  }
+  lastResolveMs = millis();
+  IPAddress ip = MDNS.queryHost(SERVER_MDNS_HOST, 2500);
+  if (ip != IPAddress()) {
+    serverHost = "http://" + ip.toString() + ":" + String(SERVER_MDNS_PORT);
+    serverResolved = true;
+    tapFailStreak = 0;
+    Serial.printf("[net] %s.local -> %s\n", SERVER_MDNS_HOST, serverHost.c_str());
+  }
+}
 // True once the reader field is clear (no card). A held card must be lifted before the
 // SAME UID is accepted again — stops a card left on the reader from firing duplicate taps.
 bool fieldClear = true;
@@ -325,8 +357,14 @@ void handleTap(const String& uid) {
     return;
   }
 
+  // Re-resolve the gateway name if taps keep failing — the address may
+  // simply have moved (DHCP reshuffle on a shared/hotspot network).
+  if (!serverResolved || (tapFailStreak >= 3 && millis() - lastResolveMs > 30000)) {
+    resolveServer();
+  }
+
   HTTPClient http;
-  String url = String(SERVER_HOST) + "/api/v1/iot/rfid/tap";
+  String url = serverHost + "/api/v1/iot/rfid/tap";
   http.begin(url);
   http.setTimeout(HTTP_TIMEOUT_MS);
   http.setConnectTimeout(HTTP_TIMEOUT_MS);   // bound the TCP connect too — a stuck/unroutable
@@ -355,9 +393,11 @@ void handleTap(const String& uid) {
   // Otherwise a transient outage or server error reads as "new patient" and the
   // registrar re-registers someone who already exists (duplicate record).
   if (code <= 0) {                       // network / backend unreachable
+    tapFailStreak++;                     // 3 in a row → re-resolve the gateway name
     result(false, "BACKEND DOWN", "Use manual search", "", beepError);
     return;
   }
+  tapFailStreak = 0;
   if (code == 401) {                     // bad / unknown API key
     result(false, "NOT AUTHORISED", "Check device key", "", beepError);
     return;
@@ -407,6 +447,7 @@ void connectWiFi() {
   if (ok) {
     Serial.printf("WiFi connected: %s\n", WiFi.localIP().toString().c_str());
     oledBanner("SmartTriage", "WiFi connected", WiFi.localIP().toString().c_str());
+    resolveServer();                     // find the gateway by name right away
   } else {
     Serial.println("WiFi FAILED — manual search only");
     oledBanner("SmartTriage", "WiFi FAILED", "Manual search only");
