@@ -41,4 +41,10 @@ export const swapApi = {
     get<ShiftSwapResponse[]>(
       `/shifts/swaps/hospital/${hospitalId}/charge-queue`,
     ),
+
+  /** CN decision history at a hospital — swaps approved or rejected, newest first. */
+  chargeHistory: (hospitalId: string) =>
+    get<ShiftSwapResponse[]>(
+      `/shifts/swaps/hospital/${hospitalId}/charge-history`,
+    ),
 };

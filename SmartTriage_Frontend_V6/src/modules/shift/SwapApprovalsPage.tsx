@@ -56,6 +56,7 @@ export function SwapApprovalsPage() {
     && user?.designation !== 'CHARGE_NURSE';
 
   const [queue, setQueue] = useState<ShiftSwapResponse[]>([]);
+  const [history, setHistory] = useState<ShiftSwapResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -64,12 +65,18 @@ export function SwapApprovalsPage() {
     setLoading(true);
     setErr(null);
     try {
-      const rows = await swapApi.chargeQueue(hospitalId);
+      // Pending queue + the decision history run together so one Refresh
+      // updates both. History is newest-decision-first from the backend.
+      const [rows, decided] = await Promise.all([
+        swapApi.chargeQueue(hospitalId),
+        swapApi.chargeHistory(hospitalId).catch(() => [] as ShiftSwapResponse[]),
+      ]);
       // Backend returns the full PENDING_CHARGE_APPROVAL set; sort
       // oldest-first so the staff that's been waiting longest are at
       // the top — that's the queue discipline we want.
       rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       setQueue(rows);
+      setHistory(decided);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Failed to load swap queue');
     } finally {
@@ -144,8 +151,82 @@ export function SwapApprovalsPage() {
             <SwapApprovalRow key={s.id} swap={s} onChange={refresh} readOnly={isReadOnly} />
           ))}
         </ul>
+
+        {/* ── Decision history — every swap approved or rejected here ── */}
+        <div className="pt-2">
+          <div className="flex items-center gap-2 px-1 mb-2">
+            <ShieldCheck className={`w-4 h-4 ${text.muted}`} />
+            <h2 className={`text-sm font-bold ${text.heading}`}>Decision history</h2>
+            <span className={`text-[11px] ${text.muted}`}>({history.length})</span>
+          </div>
+
+          {history.length === 0 ? (
+            <div className="rounded-2xl p-6 text-center" style={glassCard}>
+              <div className={`text-xs ${text.muted}`}>
+                No swaps have been approved or rejected yet.
+              </div>
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {history.map((s) => (
+                <SwapHistoryRow key={s.id} swap={s} />
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+/* ─── Single decided-swap row (read-only) ─── */
+
+function SwapHistoryRow({ swap }: { swap: ShiftSwapResponse }) {
+  const { glassCard, text } = useTheme();
+  const approved = swap.status === 'APPROVED';
+  const decidedAt = swap.chargeRespondedAt ?? swap.createdAt;
+
+  return (
+    <li className="rounded-2xl p-4" style={glassCard}>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className={`text-[11px] ${text.muted}`}>
+          Decided {formatRel(decidedAt)}
+          {swap.chargeResponderName && (
+            <>
+              <span className="mx-1.5">·</span>
+              by <span className="font-semibold">{swap.chargeResponderName}</span>
+            </>
+          )}
+        </div>
+        <span
+          className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-lg uppercase tracking-wider ${
+            approved ? 'text-emerald-600' : 'text-rose-600'
+          }`}
+          style={{
+            background: approved ? 'rgba(16,185,129,0.08)' : 'rgba(244,63,94,0.08)',
+            border: approved ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(244,63,94,0.2)',
+          }}
+        >
+          {approved ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+          {approved ? 'Approved' : 'Rejected'}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3 items-stretch">
+        <SidePanel side="Requester" snap={swap.requesterSide} />
+        <div className={`flex items-center justify-center ${text.muted}`}>
+          <ArrowRightLeft className="w-5 h-5" />
+        </div>
+        <SidePanel side="Partner" snap={swap.partnerSide} />
+      </div>
+
+      {!approved && swap.rejectionReason && (
+        <div className={`mt-3 text-[12px] ${text.body}`}>
+          <span className={`text-[10px] font-bold uppercase mr-1.5 ${text.muted}`}>Reason</span>
+          <span className="italic">“{swap.rejectionReason}”</span>
+        </div>
+      )}
+    </li>
   );
 }
 

@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.shift.service;
 
+import com.smartTriage.smartTriage_server.common.enums.ShiftPeriod;
 import com.smartTriage.smartTriage_server.common.enums.SwapStatus;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
@@ -16,6 +17,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -93,6 +98,10 @@ public class ShiftSwapService {
                 .ifPresent(s -> { throw new ClinicalBusinessException(
                         "The partner's assignment is already in an open swap request"); });
 
+        // Eligibility: shifts not yet started + no resulting double-booking.
+        // Re-checked again at partner-accept and CN-approve (state can drift).
+        validateSwapEligibility(requesterAssignment, partnerAssignment);
+
         ShiftSwapRequest row = ShiftSwapRequest.builder()
                 .hospital(requesterAssignment.getHospital())
                 .requesterAssignment(requesterAssignment)
@@ -121,6 +130,8 @@ public class ShiftSwapService {
             throw new ClinicalBusinessException(
                     "Swap is not awaiting partner acceptance (current: " + row.getStatus() + ")");
         }
+        // Re-validate: the roster may have changed since the proposal.
+        validateSwapEligibility(row.getRequesterAssignment(), row.getPartnerAssignment());
         row.setStatus(SwapStatus.PENDING_CHARGE_APPROVAL);
         row.setPartnerRespondedAt(Instant.now());
         row.setPartnerResponseNote(req != null ? req.getNote() : null);
@@ -198,6 +209,14 @@ public class ShiftSwapService {
                     "Swap is not awaiting Charge Nurse approval (current: " + row.getStatus() + ")");
         }
 
+        // Separation of duties: the approver cannot be a party to the swap.
+        if (actor.getId().equals(row.getRequesterUser().getId())
+                || actor.getId().equals(row.getPartnerUser().getId())) {
+            throw new ClinicalBusinessException(
+                    "You can't approve a swap you're part of. Ask another charge nurse "
+                            + "or the shift lead to review it.");
+        }
+
         ShiftAssignment a = row.getRequesterAssignment();
         ShiftAssignment b = row.getPartnerAssignment();
 
@@ -215,7 +234,34 @@ public class ShiftSwapService {
             return ShiftSwapMapper.toResponse(saved);
         }
 
-        // Atomic user exchange.
+        // Re-validate eligibility (shift may have started, or a new
+        // assignment may have double-booked someone since acceptance).
+        // If it no longer holds, auto-reject with the reason rather than
+        // leaving the swap stuck in the queue forever.
+        try {
+            validateSwapEligibility(a, b);
+        } catch (ClinicalBusinessException e) {
+            row.setStatus(SwapStatus.REJECTED);
+            row.setRejectionReason(e.getMessage());
+            row.setChargeRespondedAt(Instant.now());
+            row.setChargeResponder(actor);
+            row.setChargeResponseNote(req != null ? req.getNote() : null);
+            ShiftSwapRequest saved = swapRepository.save(row);
+            log.warn("Swap {} auto-rejected on approve: {}", swapId, e.getMessage());
+            return ShiftSwapMapper.toResponse(saved);
+        }
+
+        // Collision-safe user exchange.
+        //
+        // When both slots fall on the SAME (date, period) — e.g. two nurses
+        // trading zones on the same night — a naive row-by-row reassignment
+        // (a.setUser(B); b.setUser(A)) transiently puts one nurse on two
+        // active rows for that shift and trips the (user, date, period)
+        // partial unique index. We drop one row out of the active set while
+        // the users are exchanged, then restore it. The whole thing is one
+        // transaction, so the intermediate soft-deleted state is never
+        // visible outside it. Final state has exactly one active row per
+        // (user, date, period), as required.
         User userA = a.getUser();
         User userB = b.getUser();
 
@@ -223,11 +269,13 @@ public class ShiftSwapService {
         // bound to the original named CN. If the partner ends up on the
         // CN slot they're acting as ZONE_NURSE (or whatever the slot
         // function is); the badge remains where it was.
+        b.softDelete();
+        assignmentRepository.saveAndFlush(b);   // b leaves the partial unique index
         a.setUser(userB);
+        assignmentRepository.saveAndFlush(a);   // a → userB, sole active row for its shift
         b.setUser(userA);
-
-        assignmentRepository.save(a);
-        assignmentRepository.save(b);
+        b.restore();
+        assignmentRepository.saveAndFlush(b);   // b → userA, reactivated
 
         row.setStatus(SwapStatus.APPROVED);
         row.setChargeRespondedAt(Instant.now());
@@ -275,6 +323,65 @@ public class ShiftSwapService {
     public List<ShiftSwapDtos.Response> listChargeQueue(UUID hospitalId) {
         return swapRepository.findPendingChargeApprovalAtHospital(hospitalId).stream()
                 .map(ShiftSwapMapper::toResponse).toList();
+    }
+
+    /** Charge-Nurse decision history at a hospital — approved/rejected, newest first. */
+    public List<ShiftSwapDtos.Response> listChargeHistory(UUID hospitalId) {
+        return swapRepository.findChargeDecidedAtHospital(hospitalId).stream()
+                .map(ShiftSwapMapper::toResponse).toList();
+    }
+
+    /* ─── validation ─── */
+
+    /** Clinic-local timezone for the shift-start cutoff. */
+    private static final ZoneId CLINIC_ZONE = ZoneId.of("Africa/Kigali");
+
+    /**
+     * Eligibility rules, re-checked at propose, partner-accept, and
+     * CN-approve because the roster can drift between stages:
+     *
+     * <ol>
+     *   <li><b>Cutoff</b> — neither shift may have started. You can only
+     *       trade a shift that hasn't begun yet.</li>
+     *   <li><b>No double-booking</b> — after the swap, the partner lands on
+     *       the requester's slot and vice-versa; neither may already hold
+     *       another active assignment on that (date, period). The two rows
+     *       being swapped are excluded, so a same-shift zone trade (both on
+     *       the same night) is allowed rather than falsely flagged.</li>
+     * </ol>
+     */
+    private void validateSwapEligibility(ShiftAssignment a, ShiftAssignment b) {
+        if (hasStarted(a)) throw new ClinicalBusinessException(shiftStartedMessage(a));
+        if (hasStarted(b)) throw new ClinicalBusinessException(shiftStartedMessage(b));
+
+        User userA = a.getUser();
+        User userB = b.getUser();
+        // userB is moving onto a's slot; userA onto b's slot.
+        assertNoDoubleBooking(userB, a.getShiftDate(), a.getShiftPeriod(), a.getId(), b.getId());
+        assertNoDoubleBooking(userA, b.getShiftDate(), b.getShiftPeriod(), a.getId(), b.getId());
+    }
+
+    private void assertNoDoubleBooking(
+            User user, LocalDate date, ShiftPeriod period, UUID rowA, UUID rowB) {
+        assignmentRepository
+                .findByUserIdAndShiftDateAndShiftPeriodAndIsActiveTrue(user.getId(), date, period)
+                .filter(existing -> !existing.getId().equals(rowA) && !existing.getId().equals(rowB))
+                .ifPresent(existing -> { throw new ClinicalBusinessException(
+                        user.getFirstName() + " " + user.getLastName() + " already has a "
+                                + period + " assignment on " + date
+                                + " — that swap would double-book them."); });
+    }
+
+    private static boolean hasStarted(ShiftAssignment a) {
+        LocalTime start = a.getShiftPeriod() == ShiftPeriod.DAY
+                ? LocalTime.of(7, 0) : LocalTime.of(19, 0);
+        ZonedDateTime shiftStart = a.getShiftDate().atTime(start).atZone(CLINIC_ZONE);
+        return !ZonedDateTime.now(CLINIC_ZONE).isBefore(shiftStart);
+    }
+
+    private static String shiftStartedMessage(ShiftAssignment a) {
+        return "The " + a.getShiftDate() + " " + a.getShiftPeriod()
+                + " shift has already started — you can only swap shifts that haven't begun yet.";
     }
 
     /* ─── helpers ─── */

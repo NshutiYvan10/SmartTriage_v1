@@ -106,6 +106,15 @@ public class ShiftSwapController {
                 swapService.listChargeQueue(hospitalId)));
     }
 
+    /** CN decision history at this hospital — every swap approved or rejected, newest first. */
+    @GetMapping("/hospital/{hospitalId}/charge-history")
+    @PreAuthorize("@shiftAssignmentAuthz.canViewShift(authentication, #hospitalId)")
+    public ResponseEntity<ApiResponse<List<ShiftSwapDtos.Response>>> chargeHistory(
+            @PathVariable UUID hospitalId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                swapService.listChargeHistory(hospitalId)));
+    }
+
     private User currentUser() {
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         return principal instanceof User u ? u : null;

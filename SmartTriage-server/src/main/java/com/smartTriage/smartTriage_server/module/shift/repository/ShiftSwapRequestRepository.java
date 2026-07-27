@@ -42,6 +42,22 @@ public interface ShiftSwapRequestRepository extends JpaRepository<ShiftSwapReque
     List<ShiftSwapRequest> findPendingChargeApprovalAtHospital(@Param("hospitalId") UUID hospitalId);
 
     /**
+     * Charge-Nurse decision history at this hospital — every swap a CN has
+     * actually approved or rejected (chargeResponder is set), newest
+     * decision first. Excludes partner-rejections and cancellations, which
+     * are not CN decisions.
+     */
+    @Query("""
+            SELECT s FROM ShiftSwapRequest s
+             WHERE s.hospital.id = :hospitalId
+               AND s.chargeResponder IS NOT NULL
+               AND s.status IN ('APPROVED', 'REJECTED')
+               AND s.isActive = true
+             ORDER BY s.chargeRespondedAt DESC
+            """)
+    List<ShiftSwapRequest> findChargeDecidedAtHospital(@Param("hospitalId") UUID hospitalId);
+
+    /**
      * Is there an open swap on the given assignment, on either side?
      * The unique indices already prevent inserting a second one — this is
      * the read counterpart used by the service before persisting a new
