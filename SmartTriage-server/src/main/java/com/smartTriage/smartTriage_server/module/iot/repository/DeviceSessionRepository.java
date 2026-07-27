@@ -24,6 +24,11 @@ public interface DeviceSessionRepository extends JpaRepository<DeviceSession, UU
     /** Get the current active session for a visit */
     Optional<DeviceSession> findByVisitIdAndSessionActiveTrueAndIsActiveTrue(UUID visitId);
 
+    /** Timeout sweep — live spot-check sessions older than the hard limit. */
+    java.util.List<DeviceSession> findBySessionTypeAndSessionActiveTrueAndIsActiveTrueAndStartedAtBefore(
+            com.smartTriage.smartTriage_server.common.enums.SessionType sessionType,
+            java.time.Instant startedBefore);
+
     /** All active monitoring sessions (for dashboard) */
     List<DeviceSession> findBySessionActiveTrueAndIsActiveTrue();
 

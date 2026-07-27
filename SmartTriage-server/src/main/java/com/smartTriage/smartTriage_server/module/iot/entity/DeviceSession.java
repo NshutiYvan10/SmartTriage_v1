@@ -2,6 +2,7 @@ package com.smartTriage.smartTriage_server.module.iot.entity;
 
 import com.smartTriage.smartTriage_server.common.entity.BaseEntity;
 import com.smartTriage.smartTriage_server.common.enums.MonitoringState;
+import com.smartTriage.smartTriage_server.common.enums.SessionType;
 import com.smartTriage.smartTriage_server.common.enums.TrendStatus;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import jakarta.persistence.*;
@@ -152,6 +153,16 @@ public class DeviceSession extends BaseEntity {
      */
     @Column(name = "continuity_group_id")
     private UUID continuityGroupId;
+
+    /**
+     * Kind of session — CONTINUOUS bed monitoring (default) or a
+     * self-completing SPOT_CHECK from the roaming obs-round monitor.
+     * See {@link SessionType}.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "session_type", nullable = false, length = 16)
+    @Builder.Default
+    private SessionType sessionType = SessionType.CONTINUOUS;
 
     public void incrementReadings() {
         this.totalReadings++;

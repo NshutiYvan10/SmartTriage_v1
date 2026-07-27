@@ -1484,6 +1484,13 @@ export interface StartMonitoringRequest {
   deviceId: string;
   visitId: string;
   startedByName?: string;
+  /**
+   * True opens a SPOT_CHECK session (roaming obs-round): self-completes
+   * once one validated full vitals set is captured — creating the
+   * clinical snapshot that resets the patient's reassessment clock —
+   * and hard-times-out after 10 minutes. Omit/false = continuous.
+   */
+  spotCheck?: boolean;
 }
 
 /**

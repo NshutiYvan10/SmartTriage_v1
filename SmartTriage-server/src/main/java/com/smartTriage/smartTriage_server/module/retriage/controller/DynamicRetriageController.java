@@ -39,6 +39,25 @@ public class DynamicRetriageController {
     private final TriageRecordRepository triageRecordRepository;
 
     /**
+     * The vitals-round worklist: every clocked patient (not on a
+     * continuous monitor) with due/overdue state, soonest-due first.
+     * Optional zone filter for the zone nurse's view — zone-scoped
+     * access is enough for a zone-filtered request; the unfiltered
+     * hospital-wide list needs all-zones visibility.
+     */
+    @GetMapping("/recheck-worklist/{hospitalId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') and "
+            + "(#zone == null "
+            + " ? @clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId) "
+            + " : @clinicalAuthz.canReceiveZoneAlerts(authentication, #hospitalId, #zone))")
+    public ResponseEntity<ApiResponse<List<com.smartTriage.smartTriage_server.module.retriage.dto.RecheckWorklistItem>>> getRecheckWorklist(
+            @PathVariable UUID hospitalId,
+            @RequestParam(required = false) com.smartTriage.smartTriage_server.common.enums.EdZone zone) {
+        return ResponseEntity.ok(ApiResponse.success(
+                reassessmentSchedulerService.getRecheckWorklist(hospitalId, zone)));
+    }
+
+    /**
      * Get all patients overdue for reassessment at a specific hospital.
      */
     @GetMapping("/overdue/{hospitalId}")

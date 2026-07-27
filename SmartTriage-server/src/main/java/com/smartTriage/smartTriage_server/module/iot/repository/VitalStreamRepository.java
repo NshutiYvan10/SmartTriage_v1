@@ -42,6 +42,15 @@ public interface VitalStreamRepository extends JpaRepository<VitalStream, UUID> 
     /** Count readings for a session */
     long countBySessionIdAndIsActiveTrue(UUID sessionId);
 
+    /**
+     * Spot-check completeness gate — all validated readings captured
+     * during one (short) spot-check session, oldest first. The session
+     * is complete once ≥2 validated readings exist and HR, SpO2 and
+     * systolic BP have each been seen at least once across them.
+     */
+    List<VitalStream> findBySessionIdAndIsValidatedTrueAndIsActiveTrueOrderByCapturedAtAsc(
+            UUID sessionId);
+
     /** Count readings in a time range for a visit */
     long countByVisitIdAndIsActiveTrueAndCapturedAtBetween(
             UUID visitId, Instant from, Instant to);

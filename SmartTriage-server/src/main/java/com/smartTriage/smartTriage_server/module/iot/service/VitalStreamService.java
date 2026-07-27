@@ -211,11 +211,32 @@ public class VitalStreamService {
                         }
                     });
 
+            // Spot-check sessions self-complete once one validated full
+            // vitals set has been captured: ≥2 validated readings (so the
+            // deterioration engine's multi-reading artefact guards can
+            // apply) with HR, SpO2 and systolic BP each seen at least
+            // once. Completion = clinical snapshot + session close +
+            // device released back to ONLINE for the next patient on the
+            // round. The reassessment clock derives from the snapshot's
+            // VitalSigns row, so completing the check resets it with no
+            // extra bookkeeping. The deterioration engine still runs on
+            // this (final) reading — the controller invokes it after this
+            // method returns, and its analysis is visit-scoped.
+            if (session.getSessionType() == com.smartTriage.smartTriage_server.common.enums.SessionType.SPOT_CHECK
+                    && session.isSessionActive()) {
+                try {
+                    maybeCompleteSpotCheck(session, device, visit);
+                } catch (Exception e) {
+                    log.warn("Spot-check completion check failed for session {}: {}",
+                            session.getId(), e.getMessage());
+                }
+            }
+
             // Periodically bridge IoT stream → clinical VitalSigns table
             // Every 12 validated readings (~60s at 5s intervals) so the Doctor's
             // VisitDetailPage always shows reasonably fresh IoT-sourced vitals.
             long readings = session.getTotalReadings();
-            if (readings > 0 && readings % 12 == 0) {
+            if (session.isSessionActive() && readings > 0 && readings % 12 == 0) {
                 try {
                     createVitalSnapshot(visit.getId(), device.getSerialNumber());
                     log.debug("Periodic vital snapshot created at reading #{} for visit {}",
@@ -227,6 +248,53 @@ public class VitalStreamService {
         }
 
         return ack;
+    }
+
+    /**
+     * Evaluate the spot-check completeness gate and, when satisfied,
+     * complete the check: snapshot → close session → device back to
+     * ONLINE. Runs inside the ingest transaction so the completing
+     * reading and the completion commit together.
+     */
+    private void maybeCompleteSpotCheck(DeviceSession session, IoTDevice device, Visit visit) {
+        List<VitalStream> validated = streamRepository
+                .findBySessionIdAndIsValidatedTrueAndIsActiveTrueOrderByCapturedAtAsc(session.getId());
+        if (validated.size() < 2) return;
+
+        boolean hasHr = validated.stream().anyMatch(r -> r.getHeartRate() != null);
+        boolean hasSpo2 = validated.stream().anyMatch(r -> r.getSpo2() != null);
+        boolean hasSbp = validated.stream().anyMatch(r -> r.getSystolicBp() != null);
+        if (!hasHr || !hasSpo2 || !hasSbp) return;
+
+        // Full set captured — snapshot first (it reads the stream rows we
+        // just committed to the persistence context), then close.
+        //
+        // The `session` parameter is DETACHED — the controller loaded it
+        // in its own (already-closed) transaction, so merging it (or
+        // touching its lazy visit proxy) throws LazyInitializationException.
+        // Re-fetch the managed row inside THIS transaction and mutate that.
+        createVitalSnapshot(visit.getId(), device.getSerialNumber());
+        DeviceSession managed = sessionRepository.findById(session.getId()).orElse(null);
+        if (managed == null || !managed.isSessionActive()) return;
+        managed.endSession("System", "Spot check complete — vitals captured");
+        sessionRepository.save(managed);
+
+        // Release the shared roaming monitor for the next patient. Uses a
+        // fresh fetch + best-effort save: the device row is also touched
+        // by heartbeat telemetry, but those writes are @Modifying UPDATEs
+        // that don't bump @Version, so a plain save here is safe enough —
+        // and on the rare conflict the status self-heals at next heartbeat.
+        try {
+            IoTDevice fresh = deviceRepository.findByIdAndIsActiveTrue(device.getId()).orElse(device);
+            fresh.setStatus(com.smartTriage.smartTriage_server.common.enums.DeviceStatus.ONLINE);
+            deviceRepository.save(fresh);
+        } catch (org.springframework.dao.OptimisticLockingFailureException e) {
+            log.debug("Device {} status release after spot-check lost a race — will self-heal",
+                    device.getSerialNumber());
+        }
+
+        log.info("Spot check COMPLETE for visit {} on device {} ({} validated readings)",
+                visit.getId(), device.getSerialNumber(), validated.size());
     }
 
     // ====================================================================
@@ -277,8 +345,16 @@ public class VitalStreamService {
 
         snapshot = vitalSignsRepository.save(snapshot);
 
+        // Log by id, NOT visit.getVisitNumber(): `latest` may be the stream
+        // row saved earlier in this same transaction, whose `visit` field
+        // holds the caller's DETACHED proxy (the controller loaded the
+        // session in its own closed transaction). Dereferencing it throws
+        // LazyInitializationException AFTER the snapshot save — which
+        // silently aborted the caller's remaining work (this was breaking
+        // both the periodic every-12-readings snapshot and the spot-check
+        // completion).
         log.info("Vital snapshot created for visit {} from IoT stream (HR:{} RR:{} SpO2:{} T:{} BP:{}/{})",
-                visit.getVisitNumber(),
+                visitId,
                 snapshot.getHeartRate(), snapshot.getRespiratoryRate(),
                 snapshot.getSpo2(), snapshot.getTemperature(),
                 snapshot.getSystolicBp(), snapshot.getDiastolicBp());

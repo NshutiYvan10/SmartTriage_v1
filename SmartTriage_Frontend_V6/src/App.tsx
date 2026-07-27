@@ -12,6 +12,7 @@ import { AdultTriageForm } from './modules/triage/AdultTriageForm';
 import { TriageQueue } from './modules/triage/TriageQueue';
 import { VitalMonitoring } from './modules/vitals/VitalMonitoring';
 import { ConstantMonitoring } from './modules/monitoring/ConstantMonitoring';
+import { VitalsRoundsPage } from './modules/monitoring/VitalsRoundsPage';
 import { AlertsView } from './modules/alerts/AlertsView';
 import { ReportsView } from './modules/reports/ReportsView';
 import { RegistrarReportsView } from './modules/registrar-reports/RegistrarReportsView';
@@ -202,6 +203,7 @@ function AppContent() {
             <Route path="/doctor-workspace" element={<RoleGuard page="triage"><DoctorWorkspace /></RoleGuard>} />
             <Route path="/vitals/:patientId" element={<RoleGuard page="monitoring"><VitalMonitoring /></RoleGuard>} />
             <Route path="/monitoring" element={<RoleGuard page="monitoring"><ConstantMonitoring /></RoleGuard>} />
+            <Route path="/vitals-rounds" element={<RoleGuard page="monitoring"><VitalsRoundsPage /></RoleGuard>} />
             <Route path="/monitoring/:patientId" element={<RoleGuard page="monitoring"><VitalMonitoring /></RoleGuard>} />
             <Route path="/alerts" element={<RoleGuard page="alerts"><AlertsView /></RoleGuard>} />
             {/* Legacy route — the stale REST-only "Alert Center" page was removed; the live

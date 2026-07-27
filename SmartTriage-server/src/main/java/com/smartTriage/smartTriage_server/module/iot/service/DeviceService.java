@@ -662,6 +662,14 @@ public class DeviceService {
                 .startedByName(request.getStartedByName())
                 .monitoringState(com.smartTriage.smartTriage_server.common.enums.MonitoringState.STARTING)
                 .monitoringStateAt(Instant.now())
+                // Spot-checks self-complete on a full validated vitals set
+                // (VitalStreamService) and are timed out by the sweep in
+                // VitalsRecheckService — otherwise identical to a normal
+                // session, so the whole ingest/validation/deterioration
+                // pipeline applies unchanged.
+                .sessionType(request.isSpotCheck()
+                        ? com.smartTriage.smartTriage_server.common.enums.SessionType.SPOT_CHECK
+                        : com.smartTriage.smartTriage_server.common.enums.SessionType.CONTINUOUS)
                 .build();
 
         session = sessionRepository.save(session);

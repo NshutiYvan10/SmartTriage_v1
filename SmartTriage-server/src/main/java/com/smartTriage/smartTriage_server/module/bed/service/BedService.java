@@ -317,6 +317,15 @@ public class BedService {
                     "Visit " + visit.getVisitNumber() + " has already ended (" + visit.getStatus() + ").");
         }
 
+        // Close any leftover unbedded session (a roaming spot-check from
+        // the vitals round, or a triage-station monitor that was never
+        // stopped). Placement means the patient physically left that
+        // device; leaving the session open would both mis-attribute the
+        // next patient's readings AND block "Start Monitoring" at this
+        // bed via the one-session-per-visit gate.
+        closeActiveSessionForVisit(visit,
+                "Patient placed in bed " + bed.getCode());
+
         // Link both sides
         bed.setCurrentVisit(visit);
         bed.setStatus(BedStatus.OCCUPIED);

@@ -106,6 +106,7 @@ public final class IoTMapper {
                 .resumedAt(session.getResumedAt())
                 .resumedByName(session.getResumedByName())
                 .continuityGroupId(session.getContinuityGroupId())
+                .sessionType(session.getSessionType())
                 .createdAt(session.getCreatedAt())
                 .build();
     }
