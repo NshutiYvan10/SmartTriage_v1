@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -24,6 +25,10 @@ public interface TriageRecordRepository extends JpaRepository<TriageRecord, UUID
      * Get the most recent triage record for a visit.
      */
     Optional<TriageRecord> findFirstByVisitIdAndIsActiveTrueOrderByTriageTimeDesc(UUID visitId);
+
+    /** Monitoring-insights timeline — re-triage markers within a window, oldest first. */
+    List<TriageRecord> findByVisitIdAndIsActiveTrueAndTriageTimeAfterOrderByTriageTimeAsc(
+            UUID visitId, java.time.Instant after);
 
     long countByVisitIdAndIsActiveTrue(UUID visitId);
 

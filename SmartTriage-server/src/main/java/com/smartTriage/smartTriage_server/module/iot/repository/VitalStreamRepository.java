@@ -51,6 +51,40 @@ public interface VitalStreamRepository extends JpaRepository<VitalStream, UUID> 
     List<VitalStream> findBySessionIdAndIsValidatedTrueAndIsActiveTrueOrderByCapturedAtAsc(
             UUID sessionId);
 
+    /**
+     * Time-bucketed aggregation for the monitoring-insights timeline —
+     * hours of 5-second readings collapse to one averaged row per
+     * bucket so the Full Monitoring View can chart a 12-hour window
+     * without shipping thousands of rows.
+     */
+    interface VitalBucket {
+        Long getBucketEpoch();
+        Integer getHr();
+        Integer getSpo2();
+        Integer getRr();
+        Integer getSbp();
+        Integer getDbp();
+        Double getTemp();
+        Long getN();
+    }
+
+    @Query(value = "SELECT (floor(extract(epoch from captured_at) / :bucketSec) * :bucketSec)::bigint AS bucketEpoch, "
+            + "round(avg(heart_rate))::int AS hr, "
+            + "round(avg(spo2))::int AS spo2, "
+            + "round(avg(respiratory_rate))::int AS rr, "
+            + "round(avg(systolic_bp))::int AS sbp, "
+            + "round(avg(diastolic_bp))::int AS dbp, "
+            + "round(avg(temperature)::numeric, 1)::float8 AS temp, "
+            + "count(*) AS n "
+            + "FROM vital_streams "
+            + "WHERE visit_id = :visitId AND is_active = true AND is_validated = true "
+            + "AND captured_at >= :fromTime "
+            + "GROUP BY 1 ORDER BY 1", nativeQuery = true)
+    List<VitalBucket> aggregateBuckets(
+            @Param("visitId") UUID visitId,
+            @Param("fromTime") Instant fromTime,
+            @Param("bucketSec") long bucketSec);
+
     /** Count readings in a time range for a visit */
     long countByVisitIdAndIsActiveTrueAndCapturedAtBetween(
             UUID visitId, Instant from, Instant to);

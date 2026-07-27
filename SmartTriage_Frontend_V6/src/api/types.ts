@@ -1549,6 +1549,43 @@ export interface DeviceSessionResponse {
   createdAt: string;
 }
 
+/** Clinical-insights bundle for the Full Monitoring View (journey timeline,
+ *  TEWS trend, long-range charts, arrival-delta chips). */
+export interface MonitoringInsightsResponse {
+  bucketMinutes: number;
+  fromTime: string;
+  toTime: string;
+  buckets: Array<{
+    start: string;
+    hr: number | null;
+    spo2: number | null;
+    rr: number | null;
+    sbp: number | null;
+    dbp: number | null;
+    temp: number | null;
+    /** Approximate TEWS from the bucket's averaged vitals. */
+    tews: number | null;
+    /** WORSENING | STABLE | IMPROVING — display-layer reconstruction. */
+    trend: 'WORSENING' | 'STABLE' | 'IMPROVING';
+    readings: number;
+  }>;
+  events: Array<{
+    at: string;
+    kind: 'ALERT' | 'RETRIAGE';
+    label: string;
+    severity: string | null;
+  }>;
+  baseline: {
+    recordedAt: string;
+    hr: number | null;
+    spo2: number | null;
+    rr: number | null;
+    sbp: number | null;
+    dbp: number | null;
+    temp: number | null;
+  } | null;
+}
+
 export interface VitalStreamResponse {
   id: string;
   visitId: string;

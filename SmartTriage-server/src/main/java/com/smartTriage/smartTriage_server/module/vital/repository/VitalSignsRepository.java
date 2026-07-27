@@ -25,6 +25,9 @@ public interface VitalSignsRepository extends JpaRepository<VitalSigns, UUID> {
      */
     Optional<VitalSigns> findFirstByVisitIdAndIsActiveTrueOrderByRecordedAtDesc(UUID visitId);
 
+    /** Arrival baseline for the monitoring-insights view — the visit's earliest recorded vitals. */
+    Optional<VitalSigns> findFirstByVisitIdAndIsActiveTrueOrderByRecordedAtAsc(UUID visitId);
+
     /**
      * Get vitals within a time range — for trend analysis and deterioration detection.
      */

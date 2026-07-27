@@ -4,6 +4,7 @@ import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.module.iot.dto.*;
 import com.smartTriage.smartTriage_server.module.iot.service.DeviceService;
+import com.smartTriage.smartTriage_server.module.iot.service.MonitoringInsightsService;
 import com.smartTriage.smartTriage_server.module.iot.service.VitalStreamService;
 import com.smartTriage.smartTriage_server.security.ClinicalAuthz;
 import jakarta.validation.Valid;
@@ -49,6 +50,7 @@ public class IoTDeviceController {
 
     private final DeviceService deviceService;
     private final VitalStreamService vitalStreamService;
+    private final MonitoringInsightsService monitoringInsightsService;
     /** B8 — used to zone-scope the Constant Monitoring sessions list server-side. */
     private final ClinicalAuthz clinicalAuthz;
 
@@ -224,6 +226,21 @@ public class IoTDeviceController {
     // ====================================================================
     // MONITORING SESSION MANAGEMENT
     // ====================================================================
+
+    /**
+     * Clinical-insights bundle for the Full Monitoring View: time-bucketed
+     * vitals with per-bucket TEWS + trend labels (the journey timeline),
+     * clinical event markers, and the arrival baseline for delta chips.
+     */
+    @GetMapping("/monitoring/insights/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
+    public ResponseEntity<ApiResponse<com.smartTriage.smartTriage_server.module.iot.dto.MonitoringInsightsResponse>> getMonitoringInsights(
+            @PathVariable UUID visitId,
+            @RequestParam(defaultValue = "6") int hours,
+            @RequestParam(defaultValue = "5") int bucketMinutes) {
+        return ResponseEntity.ok(ApiResponse.success(
+                monitoringInsightsService.getInsights(visitId, hours, bucketMinutes)));
+    }
 
     @PostMapping("/monitoring/start")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")

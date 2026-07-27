@@ -7,6 +7,7 @@ import type {
   StartMonitoringRequest,
   DeviceSessionResponse,
   VitalStreamResponse,
+  MonitoringInsightsResponse,
   Page,
 } from './types';
 
@@ -128,6 +129,15 @@ export const iotApi = {
   // Vital stream
   getLatestStream: (visitId: string) =>
     get<VitalStreamResponse>(`/iot/stream/latest/${visitId}`),
+
+  /**
+   * Clinical-insights bundle for the Full Monitoring View: time-bucketed
+   * vitals with per-bucket TEWS + trend labels (the journey timeline),
+   * clinical event markers, and the arrival baseline for delta chips.
+   */
+  getMonitoringInsights: (visitId: string, hours = 6, bucketMinutes = 5) =>
+    get<MonitoringInsightsResponse>(
+      `/iot/monitoring/insights/${visitId}?hours=${hours}&bucketMinutes=${bucketMinutes}`),
 
   getRecentStream: (visitId: string, count = 60) =>
     get<VitalStreamResponse[]>(`/iot/stream/recent/${visitId}?count=${count}`),

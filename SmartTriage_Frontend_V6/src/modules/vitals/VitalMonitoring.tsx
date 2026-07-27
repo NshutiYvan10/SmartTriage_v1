@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip,
-  CartesianGrid, Legend,
+  CartesianGrid, Legend, ReferenceLine,
 } from 'recharts';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
@@ -45,7 +45,8 @@ import { iotApi } from '@/api/iot';
 import { alertApi } from '@/api/alerts';
 import { visitApi } from '@/api/visits';
 import type {
-  ClinicalAlertResponse, DeviceSessionResponse, VitalStreamResponse,
+  ClinicalAlertResponse, DeviceSessionResponse, MonitoringInsightsResponse,
+  VitalStreamResponse,
 } from '@/api/types';
 import {
   subscribeToVitals, subscribeToTrendChanges, subscribeToAlerts,
@@ -166,6 +167,11 @@ export function VitalMonitoring() {
   const [showStart, setShowStart] = useState(false);
   const [showEnd, setShowEnd] = useState(false);
   const [nowTick, setNowTick] = useState(Date.now()); // freshness indicator
+  // Clinical insights: journey timeline + TEWS trend + long-range charts +
+  // arrival baseline. 'LIVE' charts the WS ring buffer (~20 min); hour
+  // ranges chart server-side bucketed aggregates.
+  const [range, setRange] = useState<'LIVE' | 2 | 6 | 12>('LIVE');
+  const [insights, setInsights] = useState<MonitoringInsightsResponse | null>(null);
 
   // ── Patient context: store first, fetch on miss (deep links) ──
   useEffect(() => {
@@ -273,6 +279,22 @@ export function VitalMonitoring() {
     return () => clearInterval(iv);
   }, []);
 
+  // ── Clinical insights: fetch on mount/range change + refresh every 60 s ──
+  useEffect(() => {
+    if (!visitId) return;
+    const hours = range === 'LIVE' ? 6 : range;
+    const bucketMinutes = hours <= 2 ? 2 : hours <= 6 ? 5 : 10;
+    let cancelled = false;
+    const load = () => {
+      iotApi.getMonitoringInsights(visitId, hours, bucketMinutes)
+        .then((res) => { if (!cancelled && res) setInsights(res); })
+        .catch(() => {});
+    };
+    load();
+    const iv = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [visitId, range]);
+
   // ── Session controls ──
   const handleStart = useCallback(async () => {
     if (!visitId) return;
@@ -315,7 +337,7 @@ export function VitalMonitoring() {
     ? Math.max(0, Math.round((nowTick - new Date(latest.capturedAt).getTime()) / 1000))
     : null;
 
-  const chartData = useMemo(() => readings.map((r) => ({
+  const liveChartData = useMemo(() => readings.map((r) => ({
     t: fmtTime(r.capturedAt),
     hr: r.heartRate,
     spo2: r.spo2,
@@ -324,6 +346,39 @@ export function VitalMonitoring() {
     dbp: r.diastolicBp,
     temp: r.temperature,
   })), [readings]);
+
+  const bucketChartData = useMemo(() => (insights?.buckets ?? []).map((b) => ({
+    t: new Date(b.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    hr: b.hr, spo2: b.spo2, rr: b.rr, sbp: b.sbp, dbp: b.dbp, temp: b.temp,
+    tews: b.tews,
+  })), [insights]);
+
+  // LIVE charts the WS ring buffer; hour ranges chart bucketed history.
+  const chartData = range === 'LIVE' ? liveChartData : bucketChartData;
+
+  // Arrival-baseline deltas — the "how have they changed since triage"
+  // chips on the tiles. Only significant changes render (noise floor per
+  // vital) so the tiles stay calm on a stable patient.
+  const baseline = insights?.baseline ?? null;
+  const deltaFor = (cur: number | null | undefined, base: number | null | undefined, floor: number): number | null => {
+    if (cur == null || base == null) return null;
+    const d = cur - base;
+    return Math.abs(d) >= floor ? d : null;
+  };
+
+  // Mean arterial pressure — what clinicians track for perfusion.
+  const map = latest?.systolicBp != null && latest?.diastolicBp != null
+    ? Math.round((latest.systolicBp + 2 * latest.diastolicBp) / 3)
+    : null;
+  // BP status considers BOTH components (a diastolic of 125 or 38 must
+  // not render green just because systolic is fine).
+  const dbpStatus: 'critical' | 'warning' | 'normal' | 'none' =
+    latest?.diastolicBp == null ? 'none'
+      : latest.diastolicBp < 40 || latest.diastolicBp > 120 ? 'critical'
+      : latest.diastolicBp < 50 || latest.diastolicBp > 100 ? 'warning'
+      : 'normal';
+  const bpStatus = (['critical', 'warning', 'normal', 'none'] as const)
+    .find((s) => s === vitalStatus('systolicBp', latest?.systolicBp) || s === dbpStatus)!;
 
   const sortedAlerts = useMemo(() => {
     return [...alerts].sort((a, b) => {
@@ -496,14 +551,47 @@ export function VitalMonitoring() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         {/* Left ⅔: vitals + charts */}
         <div className="xl:col-span-2 space-y-4">
-          {/* Vital tiles */}
+          {/* Vital tiles — live values with arrival-since deltas */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <VitalTile icon={HeartPulse} label="Heart rate" unit="bpm" value={latest?.heartRate} k="heartRate" data={chartData} dataKey="hr" glassInner={glassInner} text={text} />
-            <VitalTile icon={Activity} label="SpO₂" unit="%" value={latest?.spo2} k="spo2" data={chartData} dataKey="spo2" glassInner={glassInner} text={text} />
-            <VitalTile icon={Wind} label="Resp. rate" unit="/min" value={latest?.respiratoryRate} k="respiratoryRate" data={chartData} dataKey="rr" glassInner={glassInner} text={text} />
-            <VitalTile icon={Gauge} label="Blood pressure" unit="mmHg" value={latest?.systolicBp} secondary={latest?.diastolicBp != null ? `/${latest.diastolicBp}` : undefined} k="systolicBp" data={chartData} dataKey="sbp" glassInner={glassInner} text={text} />
-            <VitalTile icon={Thermometer} label="Temperature" unit="°C" value={latest?.temperature} k="temperature" data={chartData} dataKey="temp" glassInner={glassInner} text={text} />
+            <VitalTile icon={HeartPulse} label="Heart rate" unit="bpm" value={latest?.heartRate} k="heartRate" data={liveChartData} dataKey="hr" delta={deltaFor(latest?.heartRate, baseline?.hr, 10)} glassInner={glassInner} text={text} />
+            <VitalTile icon={Activity} label="SpO₂" unit="%" value={latest?.spo2} k="spo2" data={liveChartData} dataKey="spo2" delta={deltaFor(latest?.spo2, baseline?.spo2, 3)} glassInner={glassInner} text={text} />
+            <VitalTile icon={Wind} label="Resp. rate" unit="/min" value={latest?.respiratoryRate} k="respiratoryRate" data={liveChartData} dataKey="rr" delta={deltaFor(latest?.respiratoryRate, baseline?.rr, 4)} glassInner={glassInner} text={text} />
+            <VitalTile icon={Gauge} label="Blood pressure" unit="mmHg" value={latest?.systolicBp}
+              secondary={latest?.diastolicBp != null ? `/${latest.diastolicBp}${map != null ? ` (${map})` : ''}` : undefined}
+              k="systolicBp" data={liveChartData} dataKey="sbp"
+              delta={deltaFor(latest?.systolicBp, baseline?.sbp, 15)}
+              statusOverride={bpStatus}
+              footnote={map != null ? `MAP ${map} mmHg` : undefined}
+              glassInner={glassInner} text={text} />
+            <VitalTile icon={Thermometer} label="Temperature" unit="°C" value={latest?.temperature} k="temperature" data={liveChartData} dataKey="temp" delta={deltaFor(latest?.temperature, baseline?.temp, 0.8)} glassInner={glassInner} text={text} />
           </div>
+
+          {/* Patient journey — trend band + clinical event markers */}
+          <JourneyTimeline insights={insights} glassCard={glassCard} isDark={isDark} text={text} />
+
+          {/* Range selector for the history charts */}
+          <div className="flex items-center gap-2">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${text.muted}`}>Charts:</span>
+            {(['LIVE', 2, 6, 12] as const).map((r) => (
+              <button
+                key={String(r)}
+                type="button"
+                onClick={() => setRange(r)}
+                className={`px-3 py-1 text-xs font-bold rounded-xl transition-colors ${
+                  range === r
+                    ? 'bg-cyan-600 text-white'
+                    : (isDark ? 'bg-white/10 text-slate-300 hover:bg-white/20' : 'bg-slate-200/70 text-slate-600 hover:bg-slate-300/70')
+                }`}
+              >
+                {r === 'LIVE' ? 'Live' : `${r} h`}
+              </button>
+            ))}
+          </div>
+
+          {/* TEWS trend — the deterioration story in one score */}
+          {range !== 'LIVE' && bucketChartData.length >= 2 && (
+            <TewsChart data={bucketChartData} glassCard={glassCard} isDark={isDark} text={text} />
+          )}
 
           {/* Trend charts */}
           <TrendChart
@@ -525,6 +613,18 @@ export function VitalMonitoring() {
             ]}
             glassCard={glassCard} isDark={isDark} text={text}
           />
+
+          {/* Session accountability */}
+          {session && (
+            <div className={`rounded-2xl px-4 py-2.5 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] ${text.muted}`} style={glassInner}>
+              <span><span className={`font-bold ${text.heading}`}>{session.totalReadings}</span> readings</span>
+              <span><span className={`font-bold ${text.heading}`}>{session.rejectedReadings}</span> rejected</span>
+              <span><span className={`font-bold ${text.heading}`}>{session.alertsGenerated}</span> alerts</span>
+              <span><span className={`font-bold ${text.heading}`}>{session.retriagesTriggered}</span> auto-retriages</span>
+              <span>since {session.startedAt ? new Date(session.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+              {session.startedByName && <span>started by {session.startedByName}</span>}
+            </div>
+          )}
         </div>
 
         {/* Right ⅓: alerts + notes */}
@@ -601,16 +701,166 @@ export function VitalMonitoring() {
   );
 }
 
-/* ─── VitalTile — big number + status colour + sparkline ─────────── */
+/* ─── JourneyTimeline — how the patient has been doing over hours ──
+   A horizontal band coloured by the per-bucket trend (red worsening /
+   emerald stable / cyan improving) with clinical event markers pinned
+   at their timestamps. This is the "story of the last N hours" a
+   doctor asks for before anything else.                              */
+const TREND_BAND_COLOR: Record<string, string> = {
+  WORSENING: '#ef4444',
+  STABLE: '#10b981',
+  IMPROVING: '#06b6d4',
+};
+
+function JourneyTimeline({
+  insights, glassCard, isDark, text,
+}: {
+  insights: MonitoringInsightsResponse | null;
+  glassCard: any; isDark: boolean; text: any;
+}) {
+  if (!insights || insights.buckets.length === 0) {
+    return (
+      <div className="rounded-2xl p-4" style={glassCard}>
+        <p className={`text-sm font-bold ${text.heading}`}>Patient journey</p>
+        <p className={`text-xs mt-2 ${text.muted}`}>
+          No monitoring history in this window yet — the journey band fills
+          in as readings accumulate.
+        </p>
+      </div>
+    );
+  }
+
+  const from = new Date(insights.fromTime).getTime();
+  const to = new Date(insights.toTime).getTime();
+  const span = Math.max(1, to - from);
+  const pct = (iso: string) =>
+    Math.min(100, Math.max(0, ((new Date(iso).getTime() - from) / span) * 100));
+  const bucketWidthPct = (insights.bucketMinutes * 60_000 / span) * 100;
+
+  const hoursLabel = Math.round(span / 3_600_000);
+
+  return (
+    <div className="rounded-2xl p-4" style={glassCard}>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className={`text-sm font-bold ${text.heading}`}>
+          Patient journey
+          <span className={`ml-2 text-[10px] font-semibold ${text.muted}`}>last {hoursLabel} h</span>
+        </p>
+        <div className={`flex items-center gap-3 text-[10px] font-semibold ${text.muted}`}>
+          <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: TREND_BAND_COLOR.WORSENING }} /> Worsening</span>
+          <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: TREND_BAND_COLOR.STABLE }} /> Stable</span>
+          <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: TREND_BAND_COLOR.IMPROVING }} /> Improving</span>
+          <span className="inline-flex items-center gap-1"><span className={`w-2 h-2 rounded-full border-2 ${isDark ? 'border-white bg-slate-900' : 'border-slate-800 bg-white'}`} /> Event</span>
+        </div>
+      </div>
+
+      {/* Band + markers */}
+      <div className="relative mt-6 mb-2">
+        <div className={`relative h-6 rounded-lg overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-slate-200/70'}`}>
+          {insights.buckets.map((b) => (
+            <div
+              key={b.start}
+              className="absolute top-0 h-full"
+              style={{
+                left: `${pct(b.start)}%`,
+                width: `${Math.max(bucketWidthPct, 0.5)}%`,
+                background: TREND_BAND_COLOR[b.trend] ?? '#94a3b8',
+                opacity: 0.9,
+              }}
+              title={`${new Date(b.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${b.trend.toLowerCase()}${b.tews != null ? ` · TEWS ${b.tews}` : ''} · HR ${b.hr ?? '—'} · SpO₂ ${b.spo2 ?? '—'}`}
+            />
+          ))}
+        </div>
+        {/* Event markers */}
+        {insights.events.map((e, i) => (
+          <div
+            key={`${e.at}-${i}`}
+            className="absolute -top-3.5 flex flex-col items-center"
+            style={{ left: `calc(${pct(e.at)}% - 5px)` }}
+            title={`${new Date(e.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${e.label}`}
+          >
+            <span className={`w-2.5 h-2.5 rounded-full border-2 ${isDark ? 'border-white' : 'border-slate-800'} ${
+              e.severity === 'CRITICAL' || e.severity === 'RED' ? 'bg-red-500'
+              : e.severity === 'HIGH' || e.severity === 'ORANGE' ? 'bg-orange-500'
+              : 'bg-amber-400'
+            }`} />
+            <span className={`w-px h-2 ${isDark ? 'bg-white/50' : 'bg-slate-500/60'}`} />
+          </div>
+        ))}
+      </div>
+      <div className={`flex justify-between text-[10px] ${text.muted}`}>
+        <span>{new Date(insights.fromTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        <span>now</span>
+      </div>
+
+      {/* Event list — the markers, readable */}
+      {insights.events.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {insights.events.slice(-6).map((e, i) => (
+            <span
+              key={`${e.at}-chip-${i}`}
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[10px] font-semibold border ${
+                e.severity === 'CRITICAL' || e.severity === 'RED'
+                  ? 'border-red-500/40 bg-red-500/10 text-red-500'
+                  : e.severity === 'HIGH' || e.severity === 'ORANGE'
+                    ? 'border-orange-500/40 bg-orange-500/10 text-orange-500'
+                    : (isDark ? 'border-slate-600 text-slate-300' : 'border-slate-300 text-slate-600')
+              }`}
+            >
+              {new Date(e.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              <span className="font-bold">{e.label}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── TewsChart — the deterioration story as one score over time ── */
+function TewsChart({
+  data, glassCard, isDark, text,
+}: {
+  data: any[]; glassCard: any; isDark: boolean; text: any;
+}) {
+  return (
+    <div className="rounded-2xl p-4" style={glassCard}>
+      <p className={`text-sm font-bold mb-1 ${text.heading}`}>
+        TEWS score trend
+        <span className={`ml-2 text-[10px] font-semibold ${text.muted}`}>≥3 urgent · ≥5 very urgent · ≥7 critical</span>
+      </p>
+      <div className="h-40">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: -24 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={isDark ? 'rgba(148,163,184,0.12)' : 'rgba(100,116,139,0.15)'} />
+            <XAxis dataKey="t" tick={{ fontSize: 10 }} minTickGap={40} stroke={isDark ? '#64748b' : '#94a3b8'} />
+            <YAxis tick={{ fontSize: 10 }} stroke={isDark ? '#64748b' : '#94a3b8'} domain={[0, 'dataMax + 1']} allowDecimals={false} />
+            <Tooltip contentStyle={{ background: isDark ? '#0f172a' : '#ffffff', border: '1px solid rgba(100,116,139,0.25)', borderRadius: 12, fontSize: 11 }} />
+            <ReferenceLine y={3} stroke="#f59e0b" strokeDasharray="4 4" />
+            <ReferenceLine y={5} stroke="#f97316" strokeDasharray="4 4" />
+            <ReferenceLine y={7} stroke="#ef4444" strokeDasharray="4 4" />
+            <Line type="stepAfter" dataKey="tews" name="TEWS" stroke="#8b5cf6" strokeWidth={2.5} dot={false} isAnimationActive={false} connectNulls />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+/* ─── VitalTile — big number + status colour + sparkline + delta ── */
 function VitalTile({
-  icon: Icon, label, unit, value, secondary, k, data, dataKey, glassInner, text,
+  icon: Icon, label, unit, value, secondary, k, data, dataKey, delta,
+  statusOverride, footnote, glassInner, text,
 }: {
   icon: any; label: string; unit: string;
   value: number | null | undefined; secondary?: string;
   k: VitalKey; data: any[]; dataKey: string;
+  delta?: number | null;
+  statusOverride?: 'critical' | 'warning' | 'normal' | 'none';
+  footnote?: string;
   glassInner: any; text: any;
 }) {
-  const status = vitalStatus(k, value ?? null);
+  const status = statusOverride ?? vitalStatus(k, value ?? null);
   const spark = data.slice(-30);
   const sparkColor = status === 'critical' ? '#ef4444' : status === 'warning' ? '#f59e0b' : '#10b981';
   return (
@@ -627,6 +877,17 @@ function VitalTile({
         {secondary && <span className="text-base font-bold">{secondary}</span>}
         <span className={`ml-1 text-[10px] font-semibold ${text.muted}`}>{unit}</span>
       </p>
+      {(delta != null || footnote) && (
+        <p className={`mt-1 text-[10px] font-semibold ${text.muted}`}>
+          {delta != null && (
+            <span className="inline-flex items-center gap-0.5 mr-2">
+              {delta > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+              {delta > 0 ? '+' : ''}{Number.isInteger(delta) ? delta : delta.toFixed(1)} vs arrival
+            </span>
+          )}
+          {footnote}
+        </p>
+      )}
       <div className="h-8 mt-1.5 -mx-1">
         {spark.length >= 2 && (
           <ResponsiveContainer width="100%" height="100%">
