@@ -48,9 +48,22 @@ export interface ZoneTransferResponse {
 }
 
 export const zoneTransferApi = {
-  accept: (transferId: string, handoverNote?: string) =>
-    post<ZoneTransferResponse>(`/zone-transfers/${transferId}/accept`,
-      handoverNote ? { handoverNote } : {}),
+  /**
+   * Accept a pending transfer. When `destinationBedId` is provided,
+   * the backend performs the physical bed move in the SAME transaction:
+   * source bed → CLEANING, destination bed OCCUPIED, monitoring session
+   * hops to the destination bed's monitor with chart continuity intact.
+   * Without it, only the logical zone + owning clinician change
+   * ("accept now, move when the bay is ready").
+   */
+  accept: (
+    transferId: string,
+    opts?: { handoverNote?: string; destinationBedId?: string },
+  ) =>
+    post<ZoneTransferResponse>(`/zone-transfers/${transferId}/accept`, {
+      ...(opts?.handoverNote ? { handoverNote: opts.handoverNote } : {}),
+      ...(opts?.destinationBedId ? { destinationBedId: opts.destinationBedId } : {}),
+    }),
 
   decline: (transferId: string, reason: string) =>
     post<ZoneTransferResponse>(`/zone-transfers/${transferId}/decline`, { reason }),

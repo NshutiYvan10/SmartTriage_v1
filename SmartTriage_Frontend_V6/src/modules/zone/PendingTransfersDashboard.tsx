@@ -37,6 +37,7 @@ import { zoneTransferApi, type ZoneTransferResponse } from '@/api/zoneTransfers'
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
 import { dialog } from '@/components/dialog';
+import AcceptTransferDialog from './AcceptTransferDialog';
 
 /**
  * SATS acceptance windows in minutes — the slowest the charge nurse
@@ -81,6 +82,8 @@ export function PendingTransfersDashboard() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0); // forces overdue recompute
+  // Transfer currently in the Accept flow — opens the bed-picker dialog.
+  const [accepting, setAccepting] = useState<ZoneTransferResponse | null>(null);
 
   const hospitalId = user?.hospitalId ?? '';
 
@@ -134,14 +137,13 @@ export function PendingTransfersDashboard() {
 
   const onAct = async (
     transferId: string,
-    action: 'accept' | 'decline' | 'resus' | 'cancel',
+    action: 'decline' | 'resus' | 'cancel',
     reason?: string,
   ) => {
     setBusyId(transferId);
     setError(null);
     try {
-      if (action === 'accept') await zoneTransferApi.accept(transferId);
-      else if (action === 'decline') await zoneTransferApi.decline(transferId, reason ?? 'Charge-nurse decline');
+      if (action === 'decline') await zoneTransferApi.decline(transferId, reason ?? 'Charge-nurse decline');
       else if (action === 'resus') await zoneTransferApi.markResusInPlace(transferId);
       else await zoneTransferApi.cancel(transferId, reason ?? 'Charge-nurse cancel');
       await loadTransfers();
@@ -340,12 +342,12 @@ export function PendingTransfersDashboard() {
                       <button
                         type="button"
                         disabled={acting}
-                        onClick={() => onAct(t.id, 'accept')}
+                        onClick={() => setAccepting(t)}
                         className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50"
-                        title="Charge nurse acknowledges and takes the patient"
+                        title="Accept the patient and pick the destination bed"
                       >
                         <CheckCircle2 className="w-3 h-3" />
-                        Accept
+                        Accept…
                       </button>
                       <button
                         type="button"
@@ -378,6 +380,14 @@ export function PendingTransfersDashboard() {
               );
             })}
           </div>
+        )}
+
+        {accepting && (
+          <AcceptTransferDialog
+            transfer={accepting}
+            onAccepted={loadTransfers}
+            onClose={() => setAccepting(null)}
+          />
         )}
     </div>
   );

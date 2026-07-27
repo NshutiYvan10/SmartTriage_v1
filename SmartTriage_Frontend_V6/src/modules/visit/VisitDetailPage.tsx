@@ -34,6 +34,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useCanPerformTriage } from '@/hooks/useCanPerformTriage';
 import { useCanConfirmFieldTriage } from '@/hooks/useCanConfirmFieldTriage';
 import { useAuthStore } from '@/store/authStore';
+import AcceptTransferDialog from '@/modules/zone/AcceptTransferDialog';
 import { UnidentifiedBadge } from '@/modules/admission/UnidentifiedBadge';
 import { IdentityResolutionModal } from '@/modules/admission/IdentityResolutionModal';
 import { LabTestDetailModal } from '@/modules/lab/LabTestDetailModal';
@@ -3111,17 +3112,10 @@ function PendingTransferBanner({
   const [handover, setHandover] = useState('');
   const [showDecline, setShowDecline] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
-
-  const handleAccept = async () => {
-    setBusy(true); setError(null);
-    try {
-      const { zoneTransferApi } = await import('@/api/zoneTransfers');
-      await zoneTransferApi.accept(transfer.id, handover.trim() || undefined);
-      await reload();
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to accept transfer');
-    } finally { setBusy(false); }
-  };
+  // Accept goes through the bed-picker dialog (accept + physical move +
+  // monitor-session hop in one transaction). The inline handover field
+  // below now serves only the Treat-in-place path.
+  const [showAcceptDialog, setShowAcceptDialog] = useState(false);
 
   const handleResusInPlace = async () => {
     setBusy(true); setError(null);
@@ -3201,14 +3195,12 @@ function PendingTransferBanner({
           <button
             type="button"
             disabled={busy}
-            onClick={async () => {
-              if (!showHandover) { setShowHandover(true); return; }
-              await handleAccept();
-            }}
+            onClick={() => setShowAcceptDialog(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+            title="Accept the patient and pick the destination bed"
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
-            {showHandover ? 'Accept transfer' : 'Accept'}
+            Accept…
           </button>
         )}
         {!showDecline && (
@@ -3251,6 +3243,14 @@ function PendingTransferBanner({
           </button>
         )}
       </div>
+
+      {showAcceptDialog && (
+        <AcceptTransferDialog
+          transfer={transfer}
+          onAccepted={reload}
+          onClose={() => setShowAcceptDialog(false)}
+        />
+      )}
     </div>
   );
 }

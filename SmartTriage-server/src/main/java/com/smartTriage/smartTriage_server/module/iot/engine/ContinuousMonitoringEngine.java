@@ -19,7 +19,9 @@ import com.smartTriage.smartTriage_server.module.triage.entity.TriageRecord;
 import com.smartTriage.smartTriage_server.module.triage.repository.TriageRecordRepository;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
 import com.smartTriage.smartTriage_server.module.visit.repository.VisitRepository;
+import com.smartTriage.smartTriage_server.module.visit.service.ZoneRoutingService;
 import com.smartTriage.smartTriage_server.module.vital.entity.VitalSigns;
+import com.smartTriage.smartTriage_server.module.zonetransfer.service.ZoneTransferService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -72,6 +74,8 @@ public class ContinuousMonitoringEngine {
     private final PediatricTewsCalculator pediatricTewsCalculator;
     private final RealTimeEventPublisher eventPublisher;
     private final AlertEscalationService alertEscalationService;
+    private final ZoneRoutingService zoneRoutingService;
+    private final ZoneTransferService zoneTransferService;
 
     // ====================================================================
     // CRITICAL THRESHOLDS (from Rwanda National Triage Protocol)
@@ -781,10 +785,23 @@ public class ContinuousMonitoringEngine {
 
         triageRecordRepository.save(record);
 
-        // Update visit
+        // Update visit. The category change is immediate — that's the
+        // safety guarantee. The ZONE change is NOT: it goes through the
+        // ZoneTransfer state machine below, and only the receiving
+        // doctor's explicit acceptance moves the patient (same
+        // invariant as the clinical-signs re-triage path in
+        // TriageService).
+        EdZone fromZone = visit.getCurrentEdZone();
+        EdZone targetZone = zoneRoutingService.routeFor(visit, newCategory);
+
         visit.setCurrentTriageCategory(newCategory);
         visit.setCurrentTewsScore(tews);
         visit.setRetriageCount(visit.getRetriageCount() + 1);
+        // Pre-placement patients (no zone yet) have nothing to
+        // "transfer from" — assign directly, as TriageService does.
+        if (fromZone == null) {
+            visit.setCurrentEdZone(targetZone);
+        }
         visitRepository.save(visit);
 
         // Generate escalation alert
@@ -811,6 +828,29 @@ public class ContinuousMonitoringEngine {
                 .build();
 
         escalationAlert = clinicalAlertRepository.save(escalationAlert);
+
+        // Initiate the inter-zone transfer when the new category maps to a
+        // different zone (e.g. ACUTE → RESUS on ORANGE → RED). System-
+        // initiated (initiatedBy null), anchored to the escalation alert.
+        // ZoneTransferService.initiate is idempotent: an already-pending
+        // transfer is bumped to the higher target rather than duplicated,
+        // so repeated deterioration cycles produce one pending row. The
+        // receiving doctor accepts / declines / treats-in-place from the
+        // Pending Transfers dashboard — the patient's zone, bed and
+        // monitor session only move on explicit acceptance.
+        if (fromZone != null && fromZone != targetZone) {
+            try {
+                zoneTransferService.initiate(
+                        visit, fromZone, targetZone,
+                        "IoT auto-retriage: " + pattern.name() + " — " + description,
+                        null,
+                        escalationAlert.getId(),
+                        null);
+            } catch (Exception e) {
+                log.warn("Failed to initiate zone transfer for visit {}: {}",
+                        visit.getVisitNumber(), e.getMessage());
+            }
+        }
 
         // Route through the tiered escalation service so the zone doctor and
         // charge nurse receive targeted WebSocket notifications, and Tier 2/3

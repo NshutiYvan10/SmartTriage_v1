@@ -2,6 +2,7 @@ package com.smartTriage.smartTriage_server.module.zonetransfer.controller;
 
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
+import com.smartTriage.smartTriage_server.module.zonetransfer.dto.AcceptTransferRequest;
 import com.smartTriage.smartTriage_server.module.zonetransfer.dto.ZoneTransferResponse;
 import com.smartTriage.smartTriage_server.module.zonetransfer.service.ZoneTransferService;
 import lombok.RequiredArgsConstructor;
@@ -26,16 +27,22 @@ public class ZoneTransferController {
 
     /**
      * Receiving doctor accepts the transfer — visit's zone +
-     * primary clinician change atomically.
+     * primary clinician change atomically. When the body carries a
+     * {@code destinationBedId}, the physical bed move (and the
+     * monitoring-session hop to the destination bed's monitor) rides
+     * the same transaction; a bed conflict aborts the acceptance.
      */
     @PostMapping("/{transferId}/accept")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessZoneTransfer(authentication, #transferId)")
     public ResponseEntity<ApiResponse<ZoneTransferResponse>> accept(
             @PathVariable UUID transferId,
-            @RequestBody(required = false) Map<String, String> body) {
-        String handover = body == null ? null : body.get("handoverNote");
+            @RequestBody(required = false) AcceptTransferRequest body) {
+        String handover = body == null ? null : body.getHandoverNote();
+        UUID destinationBedId = body == null ? null : body.getDestinationBedId();
         return ResponseEntity.ok(ApiResponse.success(
-                "Transfer accepted", zoneTransferService.accept(transferId, handover)));
+                "Transfer accepted",
+                zoneTransferService.accept(transferId, handover, destinationBedId)));
     }
 
     /**
@@ -43,7 +50,8 @@ public class ZoneTransferController {
      * original zone; declined_reason explains why.
      */
     @PostMapping("/{transferId}/decline")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessZoneTransfer(authentication, #transferId)")
     public ResponseEntity<ApiResponse<ZoneTransferResponse>> decline(
             @PathVariable UUID transferId,
             @RequestBody Map<String, String> body) {
@@ -58,7 +66,8 @@ public class ZoneTransferController {
      * responsibility and brings equipment + escalation.
      */
     @PostMapping("/{transferId}/resus-in-place")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessZoneTransfer(authentication, #transferId)")
     public ResponseEntity<ApiResponse<ZoneTransferResponse>> resusInPlace(
             @PathVariable UUID transferId,
             @RequestBody(required = false) Map<String, String> body) {
@@ -72,7 +81,8 @@ public class ZoneTransferController {
      * bump is immediately undone (false-positive sign correction).
      */
     @PostMapping("/{transferId}/cancel")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canAccessZoneTransfer(authentication, #transferId)")
     public ResponseEntity<ApiResponse<ZoneTransferResponse>> cancel(
             @PathVariable UUID transferId,
             @RequestBody(required = false) Map<String, String> body) {

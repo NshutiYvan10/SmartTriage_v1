@@ -3,6 +3,11 @@ package com.smartTriage.smartTriage_server.module.zonetransfer.service;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
+import com.smartTriage.smartTriage_server.module.bed.dto.PlacePatientRequest;
+import com.smartTriage.smartTriage_server.module.bed.dto.TransferPatientRequest;
+import com.smartTriage.smartTriage_server.module.bed.entity.Bed;
+import com.smartTriage.smartTriage_server.module.bed.repository.BedRepository;
+import com.smartTriage.smartTriage_server.module.bed.service.BedService;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import com.smartTriage.smartTriage_server.module.user.repository.UserRepository;
 import com.smartTriage.smartTriage_server.module.visit.entity.Visit;
@@ -53,6 +58,8 @@ public class ZoneTransferService {
     private final ZoneTransferRepository repository;
     private final VisitRepository visitRepository;
     private final UserRepository userRepository;
+    private final BedRepository bedRepository;
+    private final BedService bedService;
 
     /**
      * Initiate a new zone transfer (or update an existing pending one
@@ -141,12 +148,52 @@ public class ZoneTransferService {
      * Accept a pending transfer. Updates the visit's current_ed_zone
      * and primary_clinician_id atomically, marks the transfer as
      * ACCEPTED. The receiving doctor is the authenticated user.
+     *
+     * <p>When {@code destinationBedId} is provided, the physical move
+     * rides the same transaction: the patient is transferred out of
+     * their current bed (source → CLEANING, monitoring session hops
+     * to the destination bed's monitor with the continuity group
+     * preserved) or, if they had no bed, placed directly into the
+     * destination. The bed must belong to the transfer's target zone
+     * — accepting a RESUS transfer into an ACUTE bed would silently
+     * defeat the escalation. Any bed failure (occupied race, wrong
+     * hospital) aborts the acceptance as a whole: there is no state
+     * where the transfer is ACCEPTED but the move half-happened.
      */
     @Transactional
-    public ZoneTransferResponse accept(UUID transferId, String handoverNote) {
+    public ZoneTransferResponse accept(UUID transferId, String handoverNote,
+                                       UUID destinationBedId) {
         ZoneTransfer t = mustBePending(transferId);
         User accepter = currentUserOrThrow();
         Visit visit = t.getVisit();
+
+        if (destinationBedId != null) {
+            Bed dest = bedRepository.findByIdAndIsActiveTrue(destinationBedId)
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Bed", "id", destinationBedId));
+            if (dest.getZone() != t.getToZone()) {
+                throw new ClinicalBusinessException(
+                        "Bed " + dest.getCode() + " is in " + dest.getZone()
+                                + " — this transfer's destination is " + t.getToZone() + ".");
+            }
+            String moveReason = "Zone transfer " + t.getFromZone() + " → "
+                    + t.getToZone() + " accepted";
+            if (visit.getCurrentBed() != null) {
+                bedService.transferPatient(
+                        visit.getCurrentBed().getId(),
+                        TransferPatientRequest.builder()
+                                .destinationBedId(destinationBedId)
+                                .reason(moveReason)
+                                .build(),
+                        composeName(accepter));
+            } else {
+                bedService.placePatient(
+                        destinationBedId,
+                        PlacePatientRequest.builder().visitId(visit.getId()).build(),
+                        composeName(accepter));
+            }
+        }
+
         visit.setCurrentEdZone(t.getToZone());
         visit.setPrimaryClinician(accepter);
         visitRepository.save(visit);
@@ -156,8 +203,9 @@ public class ZoneTransferService {
         t.setAcceptedBy(accepter);
         t.setHandoverNote(handoverNote);
         t = repository.save(t);
-        log.info("[zone-transfer] ACCEPTED: visit {} → {} by {}",
-                visit.getVisitNumber(), t.getToZone(), composeName(accepter));
+        log.info("[zone-transfer] ACCEPTED: visit {} → {} by {}{}",
+                visit.getVisitNumber(), t.getToZone(), composeName(accepter),
+                destinationBedId != null ? " (with bed move)" : " (zone only)");
         return ZoneTransferMapper.toResponse(t);
     }
 

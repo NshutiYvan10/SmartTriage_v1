@@ -126,6 +126,7 @@ public class ClinicalAuthz {
     private final com.smartTriage.smartTriage_server.module.medication.repository.MedicationAdministrationRepository medicationAdministrationRepository;
     private final com.smartTriage.smartTriage_server.module.medication.repository.MedicationDoseRepository medicationDoseRepository;
     private final com.smartTriage.smartTriage_server.module.icu.repository.IcuEscalationRepository icuEscalationRepository;
+    private final com.smartTriage.smartTriage_server.module.zonetransfer.repository.ZoneTransferRepository zoneTransferRepository;
     private final IoTDeviceRepository ioTDeviceRepository;
     private final com.smartTriage.smartTriage_server.module.safety.repository.SafetyIncidentRepository safetyIncidentRepository;
     private final ClinicalPolicyRepository clinicalPolicyRepository;
@@ -1113,6 +1114,23 @@ public class ClinicalAuthz {
                     .orElse(false);
         } catch (Exception e) {
             log.error("canAccessIcuEscalation error for escalation {}: {}", escalationId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** Scopes the zone-transfer lifecycle endpoints (accept / decline /
+     *  resus-in-place / cancel) to the transfer's own hospital — the role
+     *  gate alone would let a doctor act on another hospital's transfer
+     *  by guessing its id. */
+    @Transactional(readOnly = true)
+    public boolean canAccessZoneTransfer(Authentication authentication, UUID transferId) {
+        try {
+            if (transferId == null) return false;
+            return zoneTransferRepository.findVisitIdById(transferId)
+                    .map(visitId -> canAccessVisit(authentication, visitId))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAccessZoneTransfer error for transfer {}: {}", transferId, e.getMessage(), e);
             return false;
         }
     }
