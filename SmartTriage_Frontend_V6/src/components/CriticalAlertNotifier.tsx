@@ -192,10 +192,12 @@ export function CriticalAlertNotifier() {
         />
       )}
 
-      {/* Toast stack — top right, below sidebar header. Each entry is a
-          design-system glass card with explicit action buttons: dismissing
-          and opening the chart are SEPARATE targets, so a nurse trying to
-          clear the popup can't accidentally navigate away mid-task. */}
+      {/* Top-right stack. Personal notices keep their own small cyan cards;
+          the critical alerts are ENVELOPED in a single red card with a
+          header + scrollable list, so a pile of criticals no longer sprawls
+          down the whole screen. Each row keeps two SEPARATE targets — an
+          "open chart" button and a dismiss X — so clearing one can't
+          accidentally navigate away mid-task. */}
       <div className="fixed top-4 right-4 z-[9998] flex flex-col gap-2 w-[min(92vw,400px)]">
         {notices.map((n) => (
           <div key={n.id} style={glassCard} className="rounded-xl shadow-2xl overflow-hidden animate-fade-down border-l-4 border-cyan-500">
@@ -216,53 +218,79 @@ export function CriticalAlertNotifier() {
             </div>
           </div>
         ))}
-        {toasts.map((t) => (
-          <div key={t.alertId} style={glassCard} className="rounded-xl shadow-2xl overflow-hidden animate-fade-down border-l-4 border-rose-500">
-            <div className="flex items-start gap-3 p-3.5">
-              <span className="w-8 h-8 rounded-lg bg-rose-500/15 flex items-center justify-center flex-shrink-0">
-                <AlertTriangle className="w-4 h-4 text-rose-500 animate-pulse" />
-              </span>
-              <div className="flex-1 min-w-0">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-rose-500">
-                  Critical alert
-                </div>
-                <div className={`text-sm font-bold truncate ${text.heading}`}>
-                  {t.patientName ?? 'Patient'}
-                </div>
-                <div className={`text-xs line-clamp-2 ${text.body}`}>
-                  {t.message}
+
+        {toasts.length > 0 && (
+          <div style={glassCard} className="rounded-2xl shadow-2xl overflow-hidden animate-fade-down border-l-4 border-rose-500">
+            {/* Header — count + dismiss-all */}
+            <div
+              className="flex items-center justify-between px-4 py-3"
+              style={{ borderBottom: isDark ? '1px solid rgba(244,63,94,0.2)' : '1px solid rgba(244,63,94,0.15)' }}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="w-8 h-8 rounded-lg bg-rose-500/15 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-4 h-4 text-rose-500 animate-pulse" />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-rose-500">
+                    Critical alert{toasts.length > 1 ? 's' : ''}
+                  </div>
+                  <div className={`text-xs font-semibold ${text.heading}`}>{toasts.length} active</div>
                 </div>
               </div>
-              <button
-                onClick={() => dismiss(t.alertId)}
-                className={`p-1.5 -m-1 rounded-lg ${text.muted} hover:opacity-70 ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}
-                aria-label="Dismiss"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div
-              className="flex items-center justify-end gap-2 px-3.5 py-2"
-              style={{ borderTop: isDark ? '1px solid rgba(244,63,94,0.2)' : '1px solid rgba(244,63,94,0.15)' }}
-            >
-              <button
-                onClick={() => dismiss(t.alertId)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold ${text.body} ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}
-              >
-                Dismiss
-              </button>
-              {t.visitId && (
+              {toasts.length > 1 && (
                 <button
-                  onClick={() => { navigate(`/visit/${t.visitId}`); dismiss(t.alertId); }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-rose-600 hover:bg-rose-500"
+                  onClick={() => setToasts([])}
+                  className={`text-[11px] font-bold px-2.5 py-1 rounded-lg flex-shrink-0 ${text.body} ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}
                 >
-                  <ExternalLink className="w-3 h-3" />
-                  Open chart
+                  Dismiss all
                 </button>
               )}
             </div>
+
+            {/* Scrollable list — capped height so it never takes over the
+                screen. Each entry is its own RED-filled card (as before),
+                just stacked inside the one envelope. */}
+            <div className="max-h-[60vh] overflow-y-auto p-2 space-y-2">
+              {toasts.map((t) => (
+                <div
+                  key={t.alertId}
+                  className={`flex items-center gap-3 p-3 rounded-xl border ${
+                    isDark ? 'bg-rose-500/10 border-rose-500/25' : 'bg-rose-50 border-rose-200'
+                  }`}
+                >
+                  <span className="w-8 h-8 rounded-lg bg-rose-500/20 flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle className="w-4 h-4 text-rose-500 animate-pulse" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-sm font-bold truncate ${text.heading}`}>
+                      {t.patientName ?? 'Patient'}
+                    </div>
+                    <div className={`text-xs line-clamp-2 ${text.body}`}>
+                      {t.message}
+                    </div>
+                  </div>
+                  {t.visitId && (
+                    <button
+                      onClick={() => { navigate(`/visit/${t.visitId}`); dismiss(t.alertId); }}
+                      title="Open chart"
+                      aria-label="Open chart"
+                      className="p-1.5 rounded-lg flex-shrink-0 text-white bg-rose-600 hover:bg-rose-500 transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => dismiss(t.alertId)}
+                    className={`p-1.5 rounded-lg flex-shrink-0 text-rose-500 hover:opacity-70 ${isDark ? 'hover:bg-white/10' : 'hover:bg-rose-100'}`}
+                    aria-label="Dismiss"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
-        ))}
+        )}
       </div>
     </>
   );
