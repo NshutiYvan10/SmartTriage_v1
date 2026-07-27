@@ -169,6 +169,34 @@ public class DrugFormulary extends BaseEntity {
     private boolean isOnReml = false;
 
     // ====================================================================
+    // DOSE SUGGESTIONS (V118)
+    // The min/max ranges above POLICE doses; these fields SUGGEST them —
+    // the typical starting dose, interval and route the prescribe form
+    // pre-fills for the doctor to confirm or edit. The safety engine
+    // still validates whatever is finally submitted.
+    // ====================================================================
+
+    /** Typical adult starting dose (mg) for the common ED indication. */
+    @Column(name = "typical_adult_dose_mg")
+    private Double typicalAdultDoseMg;
+
+    /** Typical paediatric per-dose mg/kg for the common ED indication. */
+    @Column(name = "typical_pediatric_dose_mg_per_kg")
+    private Double typicalPediatricDoseMgPerKg;
+
+    /** Standard dosing interval in hours (e.g. 6 = q6h). */
+    @Column(name = "default_interval_hours")
+    private Double defaultIntervalHours;
+
+    /** Default route name (MedicationRoute enum value, e.g. "PO"). */
+    @Column(name = "default_route", length = 20)
+    private String defaultRoute;
+
+    /** One-line prescriber note shown with the suggestion. */
+    @Column(name = "suggestion_note", length = 300)
+    private String suggestionNote;
+
+    // ====================================================================
     // SCOPING
     // ====================================================================
 

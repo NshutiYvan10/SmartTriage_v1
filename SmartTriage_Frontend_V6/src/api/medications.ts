@@ -12,7 +12,45 @@ import type {
   Page,
 } from './types';
 
+/**
+ * A pre-computed, EDITABLE prescription suggestion (server-side, from the
+ * same formulary the safety engine polices with). `rationale` carries the
+ * arithmetic ("15 mg/kg × 14 kg = 210 mg"); `weightSource` flags
+ * estimated weights loudly.
+ */
+export interface DoseSuggestionResponse {
+  suggested: boolean;
+  drugName: string;
+  doseValue: number | null;
+  doseUnit: string | null;
+  route: string | null;
+  intervalHours: number | null;
+  prescriptionType: 'SCHEDULED' | 'ONE_TIME' | 'CONTINUOUS' | null;
+  fluidName: string | null;
+  volumeMl: number | null;
+  rateMlPerHour: number | null;
+  durationHours: number | null;
+  weightUsedKg: number | null;
+  weightSource: 'MEASURED' | 'ESTIMATED_BY_AGE' | 'NONE';
+  rationale: string[];
+  warnings: string[];
+  note: string | null;
+}
+
 export const medicationApi = {
+  /**
+   * Editable dose suggestion for a formulary drug + this patient
+   * (weight/age-aware, with the arithmetic in `rationale`). Pre-fill
+   * only — the doctor confirms or edits; the safety engine still
+   * validates the final submission.
+   */
+  suggest: (visitId: string, formularyId: string) =>
+    get<DoseSuggestionResponse>(`/medications/suggest?visitId=${visitId}&formularyId=${formularyId}`),
+
+  /** IV-fluid calculator: Holliday–Segar maintenance or weight-based bolus. */
+  suggestFluid: (visitId: string, purpose: 'MAINTENANCE' | 'BOLUS') =>
+    get<DoseSuggestionResponse>(`/medications/suggest-fluid?visitId=${visitId}&purpose=${purpose}`),
+
   prescribe: (data: PrescribeMedicationRequest) =>
     post<MedicationResponse>('/medications', data),
 

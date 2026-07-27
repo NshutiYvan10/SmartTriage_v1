@@ -31,6 +31,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Search, X, Pill, Send, Loader2, CheckCircle2, AlertTriangle, Sparkles, Calculator, ShieldAlert, Repeat, Droplet, Zap } from 'lucide-react';
 import { medsafetyApi, type DrugFormulary } from '@/api/medsafety';
+import { medicationApi, type DoseSuggestionResponse } from '@/api/medications';
 import type {
   PrescribeMedicationRequest, MedicationRoute, MedicationPriority,
   PatientResponse, VisitResponse, TriageRecordResponse,
@@ -160,11 +161,16 @@ export function MedicationPanel({
 
   // Patient weight resolution: latest triage's childWeightKg is the
   // most recently confirmed value (pediatric registration captures it,
-  // and re-triage updates it); fall back to nothing if absent.
+  // and re-triage updates it); fall back to the patient-record weight —
+  // same order the server-side dose-suggestion engine uses, so the
+  // panel's hints and the suggestion never disagree about whether a
+  // weight exists.
   const weightKg: number | null = useMemo(() => {
     const w = latestTriage?.childWeightKg;
-    return typeof w === 'number' && w > 0 ? w : null;
-  }, [latestTriage]);
+    if (typeof w === 'number' && w > 0) return w;
+    const pw = patient?.weightKg;
+    return typeof pw === 'number' && pw > 0 ? pw : null;
+  }, [latestTriage, patient]);
 
   // Search-as-you-type with 250ms debounce + sequence guard so a
   // slow earlier response can't overwrite a faster later one.
@@ -195,19 +201,78 @@ export function MedicationPanel({
     return () => clearTimeout(timer);
   }, [query, selected]);
 
+  // ── Server-computed dose suggestion ──
+  // On drug selection the backend computes a clinically standard starting
+  // prescription for THIS patient (weight/age-aware, with the arithmetic
+  // spelled out) and the form pre-fills from it. Everything remains
+  // editable; the safety engine still validates the final submission.
+  const [suggestion, setSuggestion] = useState<DoseSuggestionResponse | null>(null);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const suggestSeq = useRef(0);
+
+  const applySuggestion = useCallback((s: DoseSuggestionResponse) => {
+    if (!s.suggested) return;
+    if (s.doseValue != null) setDose(`${s.doseValue} ${s.doseUnit ?? 'mg'}`);
+    if (s.route) setRoute(s.route as MedicationRoute);
+    if (s.prescriptionType) setRxType(s.prescriptionType as PrescriptionType);
+    if (s.intervalHours != null) {
+      setIntervalHours(String(s.intervalHours));
+      setFrequency(`q${s.intervalHours % 1 === 0 ? s.intervalHours : s.intervalHours.toFixed(1)}h`);
+    }
+    if (s.rateMlPerHour != null) {
+      setRateValue(String(s.rateMlPerHour));
+      setRateUnit('mL/hr');
+    }
+  }, []);
+
   // When a formulary entry is picked, pre-fill route from its first
-  // available route. Doctor can still change it via the chip row.
+  // available route, then fetch + apply the patient-specific suggestion.
   const handleSelect = useCallback((entry: DrugFormulary) => {
     setSelected(entry);
     setQuery(entry.genericName);
     const parsed = parseAvailableRoutes(entry.availableRoutes);
     if (parsed.length > 0) setRoute(parsed[0]);
-  }, []);
+
+    setSuggestion(null);
+    const seq = ++suggestSeq.current;
+    setSuggestLoading(true);
+    medicationApi.suggest(visit.id, entry.id)
+      .then((s) => {
+        if (seq !== suggestSeq.current || !s) return;
+        setSuggestion(s);
+        applySuggestion(s);
+      })
+      .catch(() => { /* suggestion is best-effort — form stays manual */ })
+      .finally(() => { if (seq === suggestSeq.current) setSuggestLoading(false); });
+  }, [visit.id, applySuggestion]);
+
+  // IV-fluid calculator — the doctor picks the purpose; the backend
+  // computes volume + rate (Holliday–Segar maintenance / weight-based
+  // bolus) and the form pre-fills, fully editable.
+  const handleFluidSuggest = useCallback((purpose: 'MAINTENANCE' | 'BOLUS') => {
+    const seq = ++suggestSeq.current;
+    setSuggestLoading(true);
+    medicationApi.suggestFluid(visit.id, purpose)
+      .then((s) => {
+        if (seq !== suggestSeq.current || !s) return;
+        setSuggestion(s);
+        if (s.fluidName) {
+          setProductDetail(s.fluidName);
+          setQuery(s.fluidName);
+        }
+        if (s.volumeMl != null) setDose(`${s.volumeMl} ml`);
+        applySuggestion(s);
+      })
+      .catch(() => {})
+      .finally(() => { if (seq === suggestSeq.current) setSuggestLoading(false); });
+  }, [visit.id, applySuggestion]);
 
   const handleClear = useCallback(() => {
     setSelected(null);
     setQuery('');
     setResults([]);
+    setSuggestion(null);
+    suggestSeq.current++;
   }, []);
 
   // Pediatric recommended-dose calculator — weight × max mg/kg.
@@ -399,6 +464,59 @@ export function MedicationPanel({
           </div>
         )}
       </div>
+
+      {/* ── Suggested prescription (server-computed, editable) ── */}
+      {(suggestLoading || suggestion) && (
+        <div className="rounded-xl p-3 border" style={{ ...glassInner, borderColor: 'rgba(6,182,212,0.35)' }}>
+          <div className="flex items-center gap-2 mb-1.5">
+            {suggestLoading
+              ? <Loader2 className="w-3.5 h-3.5 text-cyan-500 animate-spin" />
+              : <Sparkles className="w-3.5 h-3.5 text-cyan-500" />}
+            <span className={`text-[11px] font-bold uppercase tracking-wider ${text.label}`}>
+              Suggested prescription
+            </span>
+            {suggestion?.weightSource === 'MEASURED' && suggestion.weightUsedKg != null && (
+              <span className={`text-[10px] font-semibold ${text.muted}`}>
+                weight {suggestion.weightUsedKg} kg
+              </span>
+            )}
+          </div>
+          {suggestion && suggestion.suggested && (
+            <>
+              <p className={`text-sm font-bold ${text.heading}`}>
+                {suggestion.doseValue != null && `${suggestion.doseValue} ${suggestion.doseUnit ?? 'mg'}`}
+                {suggestion.route && ` · ${ROUTE_LABELS[suggestion.route] ?? suggestion.route}`}
+                {suggestion.intervalHours != null && ` · q${suggestion.intervalHours}h`}
+                {suggestion.rateMlPerHour != null && ` · ${suggestion.rateMlPerHour} mL/hr`}
+                {suggestion.durationHours != null && suggestion.prescriptionType === 'ONE_TIME'
+                  && ` over ${suggestion.durationHours * 60} min`}
+              </p>
+              {suggestion.rationale.map((r, i) => (
+                <p key={i} className={`text-[11px] mt-0.5 ${text.body}`}>{r}</p>
+              ))}
+              {suggestion.note && (
+                <p className={`text-[11px] mt-1 italic ${text.muted}`}>{suggestion.note}</p>
+              )}
+              {suggestion.warnings.map((w, i) => (
+                <p key={`w-${i}`} className={`text-[11px] mt-1 font-semibold flex items-start gap-1 ${
+                  w.includes('ESTIMATED') ? 'text-red-500' : (isDark ? 'text-amber-300' : 'text-amber-700')
+                }`}>
+                  <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />{w}
+                </p>
+              ))}
+              <p className={`text-[10px] mt-1.5 ${text.muted}`}>
+                Pre-filled below — you decide: edit any field before prescribing.
+              </p>
+            </>
+          )}
+          {suggestion && !suggestion.suggested && (
+            <p className={`text-[11px] ${text.muted}`}>
+              No suggestion data for this entry — enter the prescription manually.
+              {suggestion.warnings.map((w, i) => <span key={i} className="block mt-0.5 text-amber-600">{w}</span>)}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Dose-range hint + pediatric calculator */}
       {selected && (
@@ -661,6 +779,24 @@ export function MedicationPanel({
           <p className="mt-1 text-[10px] text-rose-500 font-semibold">
             Blood products always require a second-clinician witness at administration.
           </p>
+        )}
+        {/* IV-fluid calculator — pick the purpose; the backend computes
+            volume + rate for THIS patient (Holliday–Segar maintenance /
+            weight-based bolus) and pre-fills the form, fully editable. */}
+        {productType === 'IV_FLUID' && (
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${text.label}`}>
+              <Droplet className="w-3 h-3 inline mr-1" />Calculate for this patient:
+            </span>
+            <button type="button" onClick={() => handleFluidSuggest('MAINTENANCE')}
+              className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-cyan-600 text-white hover:bg-cyan-700">
+              Maintenance
+            </button>
+            <button type="button" onClick={() => handleFluidSuggest('BOLUS')}
+              className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-cyan-600 text-white hover:bg-cyan-700">
+              Bolus
+            </button>
+          </div>
         )}
       </div>
 

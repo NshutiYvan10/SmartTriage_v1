@@ -17,6 +17,7 @@ import com.smartTriage.smartTriage_server.module.medication.dto.PrescribeMedicat
 import com.smartTriage.smartTriage_server.module.medication.dto.RecordPrnDoseRequest;
 import com.smartTriage.smartTriage_server.module.medication.dto.RefuseDoseRequest;
 import com.smartTriage.smartTriage_server.module.medication.dto.ZoneMedicationBoardResponse;
+import com.smartTriage.smartTriage_server.module.medication.service.DoseSuggestionService;
 import com.smartTriage.smartTriage_server.module.medication.service.MedicationScheduleService;
 import com.smartTriage.smartTriage_server.module.medication.service.MedicationService;
 import jakarta.validation.Valid;
@@ -53,6 +54,34 @@ public class MedicationController {
 
     private final MedicationService medicationService;
     private final MedicationScheduleService medicationScheduleService;
+    private final DoseSuggestionService doseSuggestionService;
+
+    // ====================================================================
+    // DOSE SUGGESTIONS (pre-fill only — the doctor confirms or edits;
+    // the safety engine still validates the final submission)
+    // ====================================================================
+
+    /** Suggested starting dose/route/interval for a formulary drug and this patient. */
+    @GetMapping("/suggest")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
+    public ResponseEntity<ApiResponse<com.smartTriage.smartTriage_server.module.medication.dto.DoseSuggestionResponse>> suggest(
+            @RequestParam UUID visitId,
+            @RequestParam UUID formularyId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                doseSuggestionService.suggestForDrug(visitId, formularyId)));
+    }
+
+    /** IV-fluid calculator: MAINTENANCE (Holliday–Segar / 30 ml/kg/day) or BOLUS (20 ml/kg / adult 500–1000 ml). */
+    @GetMapping("/suggest-fluid")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DOCTOR') "
+            + "and @clinicalAuthz.canAccessVisit(authentication, #visitId)")
+    public ResponseEntity<ApiResponse<com.smartTriage.smartTriage_server.module.medication.dto.DoseSuggestionResponse>> suggestFluid(
+            @RequestParam UUID visitId,
+            @RequestParam DoseSuggestionService.FluidPurpose purpose) {
+        return ResponseEntity.ok(ApiResponse.success(
+                doseSuggestionService.suggestForFluid(visitId, purpose)));
+    }
 
     // ====================================================================
     // PRESCRIBE
