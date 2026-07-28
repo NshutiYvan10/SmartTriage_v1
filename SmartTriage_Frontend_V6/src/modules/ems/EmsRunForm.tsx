@@ -21,6 +21,7 @@ import {
   Check, Plus, Siren, Activity, Calculator, MapPin, Radio,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import { emsApi } from '@/api/ems';
 import { iotApi } from '@/api/iot';
 import type { DeviceResponse } from '@/api/types';
@@ -404,6 +405,7 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
   }
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
       <div className="rounded-2xl p-4 sm:p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-2xl animate-scale-in" style={glassCard}>
         {/* Header */}
@@ -486,6 +488,7 @@ export function EmsRunForm({ run, hospitalId, onClose, onSaved }: Props) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import { useScopedView } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
 import { icuApi } from '@/api/icu';
@@ -578,6 +579,7 @@ export function IcuEscalationView() {
 
         {/* ── Record Response Dialog ── */}
         {responseDialogId && (
+          <ModalPortal>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4">
@@ -653,10 +655,12 @@ export function IcuEscalationView() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
 
         {/* ── Assign Bed Dialog ── */}
         {bedDialogId && (
+          <ModalPortal>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4">
@@ -697,10 +701,12 @@ export function IcuEscalationView() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
 
         {/* ── Cancel Dialog ── */}
         {cancelDialogId && (
+          <ModalPortal>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4">
@@ -741,6 +747,7 @@ export function IcuEscalationView() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
 
       </div>

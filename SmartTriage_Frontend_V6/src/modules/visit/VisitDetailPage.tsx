@@ -984,6 +984,7 @@ export function VisitDetailPage() {
 
       {/* ── Report-a-safety-incident modal (visit-linked, any staff role) ── */}
       {showIncidentForm && (
+        <ModalPortal>
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowIncidentForm(false)}>
           <div className="rounded-2xl p-5 w-full max-w-xl max-h-[90vh] overflow-y-auto" style={glassCard} onClick={(e) => e.stopPropagation()}>
             <h3 className={`text-sm font-extrabold tracking-tight mb-3 ${text.heading}`}>
@@ -997,6 +998,7 @@ export function VisitDetailPage() {
             />
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ── Combined prescribe-time safety hard-stop modal ── */}

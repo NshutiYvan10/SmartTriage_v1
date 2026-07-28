@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Beaker, Loader2, X, AlertOctagon, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import { labApi } from '@/api/lab';
 import type { LabOrder, RecordLabResultRequest, LabPanelComponent } from '@/api/lab';
 import { labCatalogApi, type LabTestCatalogResponse } from '@/api/labCatalog';
@@ -201,6 +202,7 @@ export function ResultEntryModal({ order, enteredByName, onClose, onSaved }: Pro
     : !!form.resultValue.trim();
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
       <div className="rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-scale-in" style={glassCard}>
         <div className="flex items-start justify-between mb-4">
@@ -445,5 +447,6 @@ export function ResultEntryModal({ order, enteredByName, onClose, onSaved }: Pro
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

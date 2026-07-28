@@ -30,6 +30,7 @@ import type {
   HospitalResponse,
   UpdateBedRequest,
 } from '@/api/types';
+import { ModalPortal } from '@/components/ModalPortal';
 
 const ZONES: EdZone[] = ['RESUS', 'ACUTE', 'GENERAL', 'TRIAGE', 'OBSERVATION', 'ISOLATION', 'PEDIATRIC', 'NEONATAL', 'AMBULATORY'];
 
@@ -583,6 +584,7 @@ function BedFormModal({
   const labelClass = `block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${text.label}`;
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }} onClick={onClose}>
       <div
         className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
@@ -724,6 +726,7 @@ function BedFormModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -753,6 +756,7 @@ function BedDeviceAssignmentModal({
   }, [devices]);
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }} onClick={onClose}>
       <div
         className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
@@ -820,5 +824,6 @@ function BedDeviceAssignmentModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

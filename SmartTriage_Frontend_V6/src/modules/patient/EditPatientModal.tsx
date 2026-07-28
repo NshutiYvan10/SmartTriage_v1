@@ -16,6 +16,7 @@ import { ApiError } from '@/api/client';
 import type { Gender, UpdatePatientRequest } from '@/api/types';
 import type { Patient } from '@/types';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 
 interface Props {
   patient: Patient & Record<string, any>;
@@ -95,6 +96,7 @@ export function EditPatientModal({ patient, realPatientId, onClose }: Props) {
   const inputCls = `w-full px-3 py-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-cyan-500/40 ${text.body}`;
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -185,5 +187,6 @@ export function EditPatientModal({ patient, realPatientId, onClose }: Props) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

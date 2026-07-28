@@ -10,6 +10,7 @@ import {
   Search, History, User, AlertTriangle, ArrowRight, Filter, X,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { dialog } from '@/components/dialog';
 import { useAuthStore } from '@/store/authStore';
@@ -862,6 +863,7 @@ export function GovernanceAdmin() {
 
         {/* -- Approve Modal ---------------------------------------- */}
         {approveTarget && (
+          <ModalPortal>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-md" style={glassCard}>
               <div className="flex items-center justify-between mb-4">
@@ -910,10 +912,12 @@ export function GovernanceAdmin() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
 
         {/* -- Suspend Modal ---------------------------------------- */}
         {suspendTarget && (
+          <ModalPortal>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-md" style={glassCard}>
               <div className="flex items-center justify-between mb-4">
@@ -959,10 +963,12 @@ export function GovernanceAdmin() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
 
         {/* -- Version History Modal -------------------------------- */}
         {historyTarget && (
+          <ModalPortal>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" style={glassCard}>
               <div className="flex items-center justify-between mb-4">
@@ -1018,6 +1024,7 @@ export function GovernanceAdmin() {
               )}
             </div>
           </div>
+          </ModalPortal>
         )}
 
         <ConfirmDialog

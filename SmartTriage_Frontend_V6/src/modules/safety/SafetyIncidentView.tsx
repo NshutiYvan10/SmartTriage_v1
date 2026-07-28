@@ -31,6 +31,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
 import { ReportIncidentForm } from './ReportIncidentForm';
 import { PdfPreviewModal, usePdfPreview } from '@/components/PdfPreviewModal';
+import { ModalPortal } from '@/components/ModalPortal';
 
 // ── Severity styling — keys MUST match the backend IncidentSeverity enum
 //    (harm scale). Unknown value falls back to the SEVERE look (never
@@ -594,6 +595,7 @@ export function SafetyIncidentView() {
 
         {/* ── Workflow action dialog ── */}
         {actionDialog && (
+          <ModalPortal>
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !actionSubmitting && setActionDialog(null)}>
             <div className="rounded-2xl p-5 w-full max-w-lg" style={glassCard} onClick={(e) => e.stopPropagation()}>
               <h3 className={`text-sm font-extrabold tracking-tight mb-1 ${text.heading}`}>
@@ -687,6 +689,7 @@ export function SafetyIncidentView() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
       </div>
       <PdfPreviewModal {...previewProps} />

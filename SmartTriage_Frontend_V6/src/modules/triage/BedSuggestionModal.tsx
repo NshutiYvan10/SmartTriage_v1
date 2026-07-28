@@ -9,6 +9,7 @@
 import { AlertTriangle, BedDouble, Loader2, Monitor, X } from 'lucide-react';
 import type { EdZone } from '@/api/types';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 
 export interface BedSuggestion {
   id: string;
@@ -36,6 +37,7 @@ export function BedSuggestionModal({ bed, category, placing, error, onConfirm, o
     'bg-slate-500/20 text-slate-300 border border-slate-500/30';
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -125,5 +127,6 @@ export function BedSuggestionModal({ bed, category, placing, error, onConfirm, o
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

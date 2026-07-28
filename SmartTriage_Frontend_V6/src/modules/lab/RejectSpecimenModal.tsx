@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { XCircle, Loader2, X } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import { labApi } from '@/api/lab';
 import type { LabOrder, SpecimenRejectionReason } from '@/api/lab';
 
@@ -56,6 +57,7 @@ export function RejectSpecimenModal({ order, rejectedByName, onClose, onSaved }:
   }
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
       <div className="rounded-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-scale-in" style={glassCard}>
         <div className="flex items-start justify-between mb-4">
@@ -132,5 +134,6 @@ export function RejectSpecimenModal({ order, rejectedByName, onClose, onSaved }:
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

@@ -43,6 +43,7 @@ import type { MedicationPriority, MedicationResponse } from '@/api/types';
 import { MEDICATION_PRIORITIES } from '@/api/types';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import { formatDistanceToNow } from 'date-fns';
 
 interface SlaInfo {
@@ -316,6 +317,7 @@ export function NurseMedicationQueue({ embedded = false }: { embedded?: boolean 
 
         {/* Reason capture — in-app modal, replaces window.prompt for hold/refuse */}
         {reasonModal && (
+          <ModalPortal>
           <div
             className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
             style={{ background: 'var(--modal-backdrop)' }}
@@ -368,6 +370,7 @@ export function NurseMedicationQueue({ embedded = false }: { embedded?: boolean 
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
       </div>
     </div>

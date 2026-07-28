@@ -22,6 +22,7 @@ import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
 import { format } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
 import { CrossZoneRestrictedPanel } from '@/components/CrossZoneRestrictedPanel';
 import { PdfPreviewModal, usePdfPreview } from '@/components/PdfPreviewModal';
@@ -570,6 +571,7 @@ export function HandoverView() {
          Generate Handover Dialog
          ═══════════════════════════════════════════════════════════════ */}
       {showGenerateForm && (
+        <ModalPortal>
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
           <div className="absolute inset-0" onClick={() => !generating && setShowGenerateForm(false)} />
           <div className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in overflow-hidden" style={glassCard}>
@@ -673,12 +675,14 @@ export function HandoverView() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
          Acknowledge Dialog
          ═══════════════════════════════════════════════════════════════ */}
       {ackDialog && (
+        <ModalPortal>
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
           <div className="absolute inset-0" onClick={() => !ackSubmitting && setAckDialog(null)} />
           <div className="relative w-full max-w-md mx-4 rounded-2xl p-6 shadow-2xl animate-scale-in overflow-hidden" style={glassCard}>
@@ -760,6 +764,7 @@ export function HandoverView() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
       <PdfPreviewModal {...previewProps} />
     </div>

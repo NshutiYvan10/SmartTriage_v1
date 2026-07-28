@@ -25,6 +25,7 @@ import { iotApi } from '@/api/iot';
 import { subscribeToVitals } from '@/api/websocket';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import {
   evaluateStability,
   formatVital,
@@ -220,6 +221,7 @@ export default function StabilizeAndPullModal({ visitId, device, onClose, onUse,
 
   // ── Render ───────────────────────────────────────────────────────
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -370,6 +372,7 @@ export default function StabilizeAndPullModal({ visitId, device, onClose, onUse,
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

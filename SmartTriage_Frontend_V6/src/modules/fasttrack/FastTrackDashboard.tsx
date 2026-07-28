@@ -10,6 +10,7 @@ import {
   CircleDot, FileCheck, XCircle, UserCheck, X,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import { useScopedView, fetchForScope } from '@/hooks/useScopedView';
 import { useAuthStore } from '@/store/authStore';
 import { fasttrackApi } from '@/api/fasttrack';
@@ -597,6 +598,7 @@ export function FastTrackDashboard() {
 
         {/* ── ECG Dialog ── */}
         {ecgDialog && (
+          <ModalPortal>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-center justify-between">
@@ -637,10 +639,12 @@ export function FastTrackDashboard() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
 
         {/* ── CT Dialog ── */}
         {ctDialog && (
+          <ModalPortal>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-center justify-between">
@@ -681,6 +685,7 @@ export function FastTrackDashboard() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
       </div>
     </div>

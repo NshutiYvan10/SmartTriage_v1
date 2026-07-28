@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, FileText, Loader2, Printer, X } from 'lucide-react';
 import { saveBlob } from '@/api/client';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 
 interface Props {
   open: boolean;
@@ -59,6 +60,7 @@ export function PdfPreviewModal({ open, blob, filename, onClose, printOnLoad }: 
   };
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[10000] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop, rgba(0,0,0,0.5))' }}
@@ -131,6 +133,7 @@ export function PdfPreviewModal({ open, blob, filename, onClose, printOnLoad }: 
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

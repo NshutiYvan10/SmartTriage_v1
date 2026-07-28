@@ -29,6 +29,7 @@ import { investigationApi } from '@/api/investigations';
 import type { InvestigationResponse } from '@/api/types';
 import { subscribeToDiagnostics } from '@/api/websocket';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPathForRole } from '@/lib/chartNav';
 import { LabDocuments, type LabDocumentsHandle } from '@/modules/lab/LabDocuments';
@@ -341,6 +342,7 @@ function ReportModal({
   };
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(2,6,23,0.65)', backdropFilter: 'blur(4px)' }}
@@ -420,6 +422,7 @@ function ReportModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

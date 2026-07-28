@@ -13,6 +13,7 @@ import {
 import MonitoringStatePill from '@/modules/monitoring/MonitoringStatePill';
 import type { EdZone } from '@/api/types';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import { useAuthStore } from '@/store/authStore';
 import { usePatientStore } from '@/store/patientStore';
 import { useDeviceStore } from '@/store/deviceStore';
@@ -949,6 +950,7 @@ export function IoTDeviceManagement() {
 
         {/* ── Patient Selection Dialog (modal overlay) ── */}
         {assignDevice && (
+          <ModalPortal>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }} onClick={() => { setAssignDevice(null); setAssignError(''); }}>
             <div
               className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
@@ -1112,6 +1114,7 @@ export function IoTDeviceManagement() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
 
         {/* ── Bed-Assignment Dialog (Assign device to bed) ── */}
@@ -1126,6 +1129,7 @@ export function IoTDeviceManagement() {
             );
           });
           return (
+            <ModalPortal>
             <div
               className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
               style={{ background: 'var(--modal-backdrop)' }}
@@ -1253,11 +1257,13 @@ export function IoTDeviceManagement() {
                 </div>
               </div>
             </div>
+            </ModalPortal>
           );
         })()}
 
         {/* ─── API Key Modal (shown once after registration) ─── */}
         {registeredDevice && (
+          <ModalPortal>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="w-full max-w-md rounded-2xl p-6 overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
               <div className="flex items-center gap-3 mb-4">
@@ -1309,10 +1315,12 @@ export function IoTDeviceManagement() {
               </button>
             </div>
           </div>
+          </ModalPortal>
         )}
 
         {/* V53 — In-app "Take Out of Service" confirmation modal (replaces window.confirm) */}
         {outOfServiceTarget && (
+          <ModalPortal>
           <div
             className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
             style={{ background: 'var(--modal-backdrop)' }}
@@ -1400,6 +1408,7 @@ export function IoTDeviceManagement() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
 
       </div>

@@ -17,6 +17,7 @@ import { useBedStore } from '@/store/bedStore';
 import { bedsApi } from '@/api/beds';
 import type { BedResponse, EdZone } from '@/api/types';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 
 interface TransferPatientDialogProps {
   open: boolean;
@@ -101,6 +102,7 @@ export function TransferPatientDialog({
   if (!open) return null;
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -243,5 +245,6 @@ export function TransferPatientDialog({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

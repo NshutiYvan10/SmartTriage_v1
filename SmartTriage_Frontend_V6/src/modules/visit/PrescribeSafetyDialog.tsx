@@ -22,6 +22,7 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, X, ShieldAlert, Pill, Copy, Scale, Droplet, Baby, UserMinus } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import type { AllergyMatch } from '@/utils/allergyCheck';
 import type { InteractionMatch, DuplicateMatch } from '@/utils/interactionCheck';
 import type { DoseMatch } from '@/utils/pediatricDoseCheck';
@@ -237,6 +238,7 @@ export function PrescribeSafetyDialog({
     );
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -986,6 +988,7 @@ export function PrescribeSafetyDialog({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

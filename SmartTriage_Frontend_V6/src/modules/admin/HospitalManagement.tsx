@@ -11,6 +11,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { hospitalApi } from '@/api/hospitals';
 import type { HospitalResponse } from '@/api/types';
 import { RwandaLocationPicker } from '@/components/RwandaLocationPicker';
+import { ModalPortal } from '@/components/ModalPortal';
 
 export function HospitalManagement() {
   const { glassCard, glassInner, isDark, text } = useTheme();
@@ -438,6 +439,7 @@ export function HospitalManagement() {
 
       {/* Confirm activation / deactivation modal */}
       {confirmTarget && (
+        <ModalPortal>
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
           <div className="rounded-2xl overflow-hidden shadow-2xl p-6 max-w-md w-full animate-scale-in" style={glassCard}>
             <div className="flex items-start gap-4">
@@ -488,6 +490,7 @@ export function HospitalManagement() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

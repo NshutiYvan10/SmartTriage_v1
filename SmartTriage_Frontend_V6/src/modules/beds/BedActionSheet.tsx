@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/Badge';
 import { PlacePatientDialog } from './PlacePatientDialog';
 import { TransferPatientDialog } from './TransferPatientDialog';
 import { dialog } from '@/components/dialog';
+import { ModalPortal } from '@/components/ModalPortal';
 
 interface BedActionSheetProps {
   bed: BedResponse;
@@ -56,6 +57,7 @@ export function BedActionSheet({ bed, onClose, onActionComplete }: BedActionShee
   }
 
   return (
+    <ModalPortal>
     <>
       <div
         className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
@@ -245,6 +247,7 @@ export function BedActionSheet({ bed, onClose, onActionComplete }: BedActionShee
         />
       )}
     </>
+    </ModalPortal>
   );
 }
 

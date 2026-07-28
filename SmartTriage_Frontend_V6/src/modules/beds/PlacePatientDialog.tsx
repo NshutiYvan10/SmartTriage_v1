@@ -22,6 +22,7 @@ import type {
 import { Badge } from '@/components/ui/Badge';
 import { useTheme } from '@/hooks/useTheme';
 import { X } from 'lucide-react';
+import { ModalPortal } from '@/components/ModalPortal';
 
 type Mode =
   | { kind: 'bed-first'; bed: BedResponse }
@@ -333,6 +334,7 @@ function DialogShell({
 }) {
   const { glassCard } = useTheme();
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -361,6 +363,7 @@ function DialogShell({
         <div className="px-5 py-4">{children}</div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

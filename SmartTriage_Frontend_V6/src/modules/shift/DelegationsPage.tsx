@@ -45,6 +45,7 @@ import type {
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
 import { dialog } from '@/components/dialog';
+import { ModalPortal } from '@/components/ModalPortal';
 
 export function DelegationsPage() {
   const { glassCard, text } = useTheme();
@@ -489,6 +490,7 @@ function IssueDelegationModal({
   const selected = users.find((u) => u.id === delegateUserId);
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -662,6 +664,7 @@ function IssueDelegationModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

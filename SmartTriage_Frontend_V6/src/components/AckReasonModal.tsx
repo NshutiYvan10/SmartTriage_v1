@@ -8,6 +8,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { ModalPortal } from '@/components/ModalPortal';
 
 interface Props {
   open: boolean;
@@ -32,6 +33,7 @@ export function AckReasonModal({
   const canConfirm = reason.trim().length > 0 && !submitting;
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4"
       role="dialog"
@@ -84,5 +86,6 @@ export function AckReasonModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

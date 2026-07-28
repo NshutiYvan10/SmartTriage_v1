@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { AlertTriangle, Square, X } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 
 interface Props {
   patientName: string;
@@ -42,6 +43,7 @@ export default function EndMonitoringConfirmModal({
   };
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -126,5 +128,6 @@ export default function EndMonitoringConfirmModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

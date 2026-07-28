@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { shiftApi, swapApi } from '@/api';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import type {
   ShiftAssignmentResponse,
 } from '@/api/types';
@@ -145,6 +146,7 @@ export function ProposeSwapModal({
   };
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -355,6 +357,7 @@ export function ProposeSwapModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

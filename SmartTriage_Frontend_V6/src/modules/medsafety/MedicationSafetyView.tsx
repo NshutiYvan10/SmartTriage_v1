@@ -15,6 +15,7 @@ import { medsafetyApi } from '@/api/medsafety';
 import type { MedicationSafetyCheck, DrugFormulary, ValidatePrescriptionRequest } from '@/api/medsafety';
 import { format } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
 
@@ -1041,6 +1042,7 @@ export function MedicationSafetyView() {
 
         {/* ── Override Dialog ── */}
         {overrideDialogOpen && (
+          <ModalPortal>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="absolute inset-0" onClick={() => setOverrideDialogOpen(false)} />
             <div className="relative w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
@@ -1100,6 +1102,7 @@ export function MedicationSafetyView() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
       </div>
     </div>

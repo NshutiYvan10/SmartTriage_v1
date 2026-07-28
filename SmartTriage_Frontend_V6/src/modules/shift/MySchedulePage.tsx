@@ -42,6 +42,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
 import { ProposeSwapModal } from './ProposeSwapModal';
 import { dialog } from '@/components/dialog';
+import { ModalPortal } from '@/components/ModalPortal';
 
 const LEAVE_TYPES: LeaveType[] = [
   'ANNUAL', 'SICK', 'MATERNITY', 'BEREAVEMENT', 'COMPASSIONATE', 'STUDY', 'OTHER',
@@ -821,6 +822,7 @@ function RequestLeaveModal({
   };
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
       <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in w-full max-w-md p-5 space-y-4" style={glassCard}>
         <div className="flex items-center gap-2">
@@ -898,6 +900,7 @@ function RequestLeaveModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

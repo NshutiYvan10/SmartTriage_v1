@@ -50,6 +50,7 @@ import type {
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/hooks/useTheme';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { ModalPortal } from '@/components/ModalPortal';
 
 const ALL_ZONES: EdZone[] = [
   'RESUS', 'ACUTE', 'GENERAL', 'AMBULATORY', 'TRIAGE',
@@ -922,6 +923,7 @@ function QuickAssignDrawer({
   };
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
       <div className="w-full sm:max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-5 space-y-4" style={glassCard}>
         <div className="flex items-center justify-between">
@@ -1016,6 +1018,7 @@ function QuickAssignDrawer({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -1073,6 +1076,7 @@ function EditAssignmentDrawer({
   };
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
       <div className="w-full sm:max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-5 space-y-4" style={glassCard}>
         <div className="flex items-center justify-between">
@@ -1145,6 +1149,7 @@ function EditAssignmentDrawer({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -1422,6 +1427,7 @@ function ModalShell({
 }: { title: string; subtitle?: string; children: React.ReactNode; onClose: () => void }) {
   const { glassCard, text } = useTheme();
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
       <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-5 space-y-4" style={glassCard}>
         <div className="flex items-start justify-between">
@@ -1436,6 +1442,7 @@ function ModalShell({
         {children}
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

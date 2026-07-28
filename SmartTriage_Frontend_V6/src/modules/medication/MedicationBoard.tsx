@@ -35,6 +35,7 @@ import { subscribeToMedications, subscribeToZoneMedications } from '@/api/websoc
 import { useScopedView } from '@/hooks/useScopedView';
 import { NurseMedicationQueue } from './NurseMedicationQueue';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import type {
   EdZone, MedicationDoseResponse, MedicationOrderAudit,
   MedicationResponse, ZoneMedicationBoard,
@@ -685,6 +686,7 @@ export function MedicationBoard() {
 
       {/* ── Action modal ── */}
       {modal && (
+        <ModalPortal>
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }} role="dialog" aria-modal="true">
           <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in max-h-[90vh] flex flex-col" style={glassCard}>
             <div className="px-5 py-4 bg-gradient-to-r from-slate-800 to-slate-700 flex items-center justify-between">
@@ -842,6 +844,7 @@ export function MedicationBoard() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
       </div>
     </div>

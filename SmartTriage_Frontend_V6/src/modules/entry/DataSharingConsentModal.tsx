@@ -15,6 +15,7 @@ import {
 } from '@/api/crossHospital';
 import { ApiError } from '@/api/client';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 
 const GRANTORS: { value: ConsentGrantor; label: string }[] = [
   { value: 'PATIENT', label: 'Patient' },
@@ -92,6 +93,7 @@ export function DataSharingConsentModal({ nationalId, patientName, onClose }: Pr
   };
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -211,5 +213,6 @@ export function DataSharingConsentModal({ nationalId, patientName, onClose }: Pr
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

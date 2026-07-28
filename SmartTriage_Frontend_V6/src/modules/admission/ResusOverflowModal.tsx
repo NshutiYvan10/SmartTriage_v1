@@ -22,6 +22,7 @@ import {
 import { bedsApi } from '@/api/beds';
 import { useTheme } from '@/hooks/useTheme';
 import type { TransferCandidateInfo } from '@/api/types';
+import { ModalPortal } from '@/components/ModalPortal';
 
 interface Props {
   /** The new admission's visit ID — the patient who needs a bed. */
@@ -80,6 +81,7 @@ export function ResusOverflowModal({
   };
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -243,5 +245,6 @@ export function ResusOverflowModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

@@ -12,6 +12,7 @@ import { useAuthStore } from '@/store/authStore';
 import { userApi } from '@/api/users';
 import { hospitalApi } from '@/api/hospitals';
 import type { UserResponse, HospitalResponse, Role, Designation, AccountStatus } from '@/api/types';
+import { ModalPortal } from '@/components/ModalPortal';
 
 // Badge styling follows the Pathways standard: translucent bg/border
 // (rgba COLOR @ 0.08 / 0.2) + semantic text-COLOR-600, preserving each
@@ -721,6 +722,7 @@ export function UserManagement() {
 
       {/* In-app confirmation dialog for destructive row actions (replaces window.confirm) */}
       {confirmDialog && (
+        <ModalPortal>
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
           style={{ background: 'var(--modal-backdrop)' }}
@@ -767,6 +769,7 @@ export function UserManagement() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

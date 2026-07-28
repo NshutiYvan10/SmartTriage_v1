@@ -30,6 +30,7 @@ import { iotApi } from '@/api/iot';
 import type { DeviceResponse, EdZone } from '@/api/types';
 import { bedsApi } from '@/api/beds';
 import { chartPath } from '@/lib/chartNav';
+import { ModalPortal } from '@/components/ModalPortal';
 
 const ZONE_FILTERS: { key: EdZone | 'ALL'; label: string }[] = [
   { key: 'GENERAL', label: 'General' },
@@ -351,6 +352,7 @@ function StartCheckDialog({
   };
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -471,6 +473,7 @@ function StartCheckDialog({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

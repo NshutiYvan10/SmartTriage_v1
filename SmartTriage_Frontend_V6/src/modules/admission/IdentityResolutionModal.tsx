@@ -26,6 +26,7 @@ import { subscribeToRfidEvents } from '@/api/websocket';
 import type { Gender, PatientResponse, ResolveIdentityRequest } from '@/api/types';
 import { useTheme } from '@/hooks/useTheme';
 import { formatPatientDisplayName } from './displayName';
+import { ModalPortal } from '@/components/ModalPortal';
 
 interface Props {
   patient: PatientResponse;
@@ -155,6 +156,7 @@ export function IdentityResolutionModal({ patient, hospitalId, onClose, onResolv
   };
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -280,6 +282,7 @@ export function IdentityResolutionModal({ patient, hospitalId, onClose, onResolv
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

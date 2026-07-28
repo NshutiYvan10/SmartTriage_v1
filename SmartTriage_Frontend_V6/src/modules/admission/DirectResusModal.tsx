@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { directResusApi } from '@/api/directResus';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import type {
   ArrivalMode,
   DirectResusAdmissionRequest,
@@ -87,6 +88,7 @@ export function DirectResusModal({
   };
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -290,5 +292,6 @@ export function DirectResusModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

@@ -22,6 +22,7 @@ import type {
 import { ApiError } from '@/api/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 
 // Live per-step countdown from activation start + the step's protocol timeframe. Only
 // MANDATORY steps flip "overdue" (red) once past their timeframe — mirroring the backend
@@ -967,6 +968,7 @@ export function ClinicalPathwaysView() {
          Activate Pathway Dialog
          ═══════════════════════════════════════════════════════════════ */}
       {activateDialogOpen && (
+        <ModalPortal>
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
           style={{ background: 'var(--modal-backdrop)' }}
@@ -1033,12 +1035,14 @@ export function ClinicalPathwaysView() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
          Skip Step Dialog
          ═══════════════════════════════════════════════════════════════ */}
       {skipDialogOpen && (
+        <ModalPortal>
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
           style={{ background: 'var(--modal-backdrop)' }}
@@ -1105,12 +1109,14 @@ export function ClinicalPathwaysView() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
          Abandon Pathway Dialog
          ═══════════════════════════════════════════════════════════════ */}
       {abandonDialogOpen && (
+        <ModalPortal>
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
           style={{ background: 'var(--modal-backdrop)' }}
@@ -1177,6 +1183,7 @@ export function ClinicalPathwaysView() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

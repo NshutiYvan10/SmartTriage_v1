@@ -11,6 +11,7 @@ import { useAuthStore } from '@/store/authStore';
 import { rfidApi, type RfidDevice, type RfidEvent } from '@/api/rfid';
 import { subscribeToRfidEvents } from '@/api/websocket';
 import { ApiError } from '@/api/client';
+import { ModalPortal } from '@/components/ModalPortal';
 
 interface Props {
   patientId: string;
@@ -69,6 +70,7 @@ export function ReplaceCardModal({ patientId, patientName, currentCardId, onClos
   };
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
       <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
         <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-center justify-between">
@@ -133,5 +135,6 @@ export function ReplaceCardModal({ patientId, patientName, currentCardId, onClos
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

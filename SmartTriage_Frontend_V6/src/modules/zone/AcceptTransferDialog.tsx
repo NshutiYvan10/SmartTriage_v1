@@ -23,6 +23,7 @@ import { useAuthStore } from '@/store/authStore';
 import { bedsApi } from '@/api/beds';
 import type { BedResponse } from '@/api/types';
 import { zoneTransferApi, type ZoneTransferResponse } from '@/api/zoneTransfers';
+import { ModalPortal } from '@/components/ModalPortal';
 
 interface Props {
   transfer: ZoneTransferResponse;
@@ -93,6 +94,7 @@ export default function AcceptTransferDialog({ transfer, onAccepted, onClose }: 
     : { chip: 'bg-cyan-500/20', icon: 'text-cyan-400', ring: 'ring-cyan-500', border: 'border-cyan-500' };
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ background: 'var(--modal-backdrop)' }}
@@ -274,5 +276,6 @@ export default function AcceptTransferDialog({ transfer, onAccepted, onClose }: 
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

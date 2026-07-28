@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { Phone, Loader2, X, AlertOctagon } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 import { labApi } from '@/api/lab';
 import type { LabOrder, CriticalContactMethod } from '@/api/lab';
 
@@ -72,6 +73,7 @@ export function AcknowledgeCriticalModal({ order, acknowledgedByName, onClose, o
   }
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
       <div className="rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto overflow-hidden shadow-2xl animate-scale-in" style={glassCard}>
         <div className="flex items-start justify-between mb-4">
@@ -172,5 +174,6 @@ export function AcknowledgeCriticalModal({ order, acknowledgedByName, onClose, o
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

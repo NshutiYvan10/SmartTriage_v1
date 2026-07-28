@@ -19,6 +19,7 @@ import { PatientContextLine } from '@/components/PatientContextLine';
 import type { ClinicalAlertResponse } from '@/api/types';
 import { formatDistanceToNow } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
+import { ModalPortal } from '@/components/ModalPortal';
 
 // ── Severity config ──
 const SEVERITY_STYLE: Record<string, {
@@ -665,6 +666,7 @@ export function AlertsView() {
          Comment Dialog — replaces native prompt()
          ═══════════════════════════════════════════════════════════════ */}
       {dialogOpen && (
+        <ModalPortal>
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
           style={{ background: 'var(--modal-backdrop)' }}
@@ -770,6 +772,7 @@ export function AlertsView() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

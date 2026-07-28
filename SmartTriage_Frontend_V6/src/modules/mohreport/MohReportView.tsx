@@ -19,6 +19,7 @@ import type { HospitalResponse } from '@/api/types';
 import { format } from 'date-fns';
 import { PdfPreviewModal, usePdfPreview } from '@/components/PdfPreviewModal';
 import { dialog } from '@/components/dialog';
+import { ModalPortal } from '@/components/ModalPortal';
 
 /** Sentinel scope value for the national (cross-hospital) rollup. */
 const NATIONAL = 'NATIONAL';
@@ -676,6 +677,7 @@ export function MohReportView() {
 
         {/* -- Reject Modal ----------------------------------------- */}
         {rejectTarget && (
+          <ModalPortal>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" style={{ background: 'var(--modal-backdrop)' }}>
             <div className="rounded-2xl overflow-hidden shadow-2xl animate-scale-in p-6 w-full max-w-md" style={glassCard}>
               <div className="flex items-center gap-3 mb-4">
@@ -713,6 +715,7 @@ export function MohReportView() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
 
       </div>
