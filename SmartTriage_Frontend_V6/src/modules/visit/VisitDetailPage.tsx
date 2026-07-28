@@ -12,7 +12,7 @@ import {
   Wind, Droplets, Brain, Clock, User, AlertTriangle, ChevronRight,
   Plus, Send, CheckCircle2, XCircle, Eye, Loader2, RefreshCw, LogOut,
   TrendingUp, Sparkles, Siren, UserCheck, ShieldAlert, Zap, Route, Globe,
-  MapPin, Pencil, History,
+  MapPin, Pencil, History, X,
 } from 'lucide-react';
 import { ClinicalSignsTab } from './ClinicalSignsTab';
 import { SepsisPanel } from './SepsisPanel';
@@ -43,6 +43,7 @@ import { visitApi } from '@/api/visits';
 import type { DispositionRequest } from '@/api/visits';
 import { documentationApi } from '@/api/documentation';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { ModalPortal } from '@/components/ModalPortal';
 import { vitalApi } from '@/api/vitals';
 import { triageApi } from '@/api/triage';
 import { usePatientStore, visitResponseToPatient } from '@/store/patientStore';
@@ -2134,16 +2135,37 @@ function DiagnosesTab({ diagnoses, isDoctor, showForm, setShowForm, onSubmit, on
               </button>
             </div>
 
-            {/* Version history — original + every amendment, oldest first. */}
+            {/* Version history — opens as a centred preview modal (portaled so
+                the chart's glass cards can't trap the fixed overlay). */}
             {historyFor === d.id && (
-              <div className="mt-3 pl-3 border-l-2 border-slate-400/30 space-y-2">
+              <ModalPortal>
+                <div
+                  className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+                  style={{ background: 'var(--modal-backdrop)' }}
+                  onClick={() => setHistoryFor(null)}
+                >
+                  <div
+                    className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl animate-scale-in"
+                    style={glassCard}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="sticky top-0 z-10 bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-white">Diagnosis history</p>
+                        <p className="text-[11px] text-white/50 mt-0.5 truncate">{d.description}</p>
+                      </div>
+                      <button onClick={() => setHistoryFor(null)} className="text-white/70 hover:text-white flex-shrink-0" aria-label="Close">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="p-5 space-y-2">
                 {historyLoading ? (
                   <p className={`text-xs flex items-center gap-1.5 ${text.muted}`}><Loader2 className="w-3 h-3 animate-spin" /> Loading history…</p>
                 ) : history.length <= 1 ? (
                   <p className={`text-xs ${text.muted}`}>No prior versions — this diagnosis hasn't been edited.</p>
                 ) : (
                   history.map((v, i) => (
-                    <div key={v.id} className="text-xs">
+                    <div key={v.id} className="text-xs pl-3 border-l-2 border-slate-400/30">
                       <div className="flex items-center gap-2">
                         <span className={`font-bold ${text.body}`}>v{i + 1}</span>
                         <span className={`px-1.5 py-0.5 rounded ${typeColors[v.diagnosisType] || 'text-slate-500 bg-slate-500/10'} text-[9px] font-bold uppercase`}>{v.diagnosisType}</span>
@@ -2155,7 +2177,10 @@ function DiagnosesTab({ diagnoses, isDoctor, showForm, setShowForm, onSubmit, on
                     </div>
                   ))
                 )}
-              </div>
+                    </div>
+                  </div>
+                </div>
+              </ModalPortal>
             )}
           </div>
         ))}

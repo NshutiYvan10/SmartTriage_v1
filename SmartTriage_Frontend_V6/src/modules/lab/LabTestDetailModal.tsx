@@ -16,6 +16,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import {
   FlaskConical, X, Loader2, AlertOctagon, AlertTriangle, CheckCircle2,
@@ -106,7 +107,11 @@ export function LabTestDetailModal({ visitId, investigationId, testName, onClose
   const components = order?.components ?? [];
   const hasPanel = components.length > 0;
 
-  return (
+  // Portal to <body>: this modal is rendered deep inside the visit chart,
+  // whose glass-shell ancestors carry backdrop-filter/transform — that makes
+  // position:fixed resolve to that box, clipping the modal into the content
+  // column instead of overlaying the viewport (same fix as ConfirmDialog).
+  return createPortal(
     <>
     <div
       className="fixed inset-0 z-[9998] flex items-center justify-center p-4 backdrop-blur-sm"
@@ -340,7 +345,8 @@ export function LabTestDetailModal({ visitId, investigationId, testName, onClose
           onSaved={() => { setAckOpen(false); void load(); onChanged?.(); }}
         />
       )}
-    </>
+    </>,
+    document.body,
   );
 }
 

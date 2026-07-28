@@ -15,6 +15,7 @@ import type { ClinicalDocument, CreateDocumentRequest } from '@/api/documentatio
 import { visitApi } from '@/api/visits';
 import type { VisitResponse } from '@/api/types';
 import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
+import { ModalPortal } from '@/components/ModalPortal';
 import { ApiError } from '@/api/client';
 import { format } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
@@ -735,9 +736,34 @@ export function ClinicalDocumentation() {
                     </div>
                   </button>
 
-                  {/* Expanded detail */}
+                  {/* Detail — opens as a centred preview modal (portaled to
+                      <body> so the card's backdrop-filter can't trap the
+                      fixed overlay and clip it into a scroll strip). */}
                   {isExpanded && (
-                    <div className="px-5 pb-5 border-t border-white/10">
+                    <ModalPortal>
+                      <div
+                        className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm"
+                        style={{ background: 'var(--modal-backdrop)' }}
+                        onClick={() => setExpandedDocId(null)}
+                      >
+                        <div
+                          className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl animate-scale-in"
+                          style={glassCard}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="sticky top-0 z-10 bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-white leading-snug">{doc.title}</p>
+                              <p className="text-[11px] text-white/50 mt-0.5">
+                                {DOC_TYPE_LABELS[doc.documentType] || doc.documentType.replace(/_/g, ' ')}
+                                {doc.authorName ? ` · ${doc.authorName}` : ''}
+                              </p>
+                            </div>
+                            <button onClick={() => setExpandedDocId(null)} className="text-white/70 hover:text-white flex-shrink-0" aria-label="Close">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <div className="px-5 py-5">
                       {/* Document content */}
                       <div className="mt-4 rounded-xl p-4" style={glassInner}>
                         <label className={`text-[10px] font-bold uppercase tracking-wider block mb-2 ${text.muted}`}>Document Content</label>
@@ -844,7 +870,10 @@ export function ClinicalDocumentation() {
                           </button>
                         )}
                       </div>
-                    </div>
+                          </div>
+                        </div>
+                      </div>
+                    </ModalPortal>
                   )}
                 </div>
               );
