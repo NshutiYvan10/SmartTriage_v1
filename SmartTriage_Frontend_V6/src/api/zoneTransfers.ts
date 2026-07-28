@@ -49,6 +49,20 @@ export interface ZoneTransferResponse {
 
 export const zoneTransferApi = {
   /**
+   * Manually initiate a zone transfer for a visit — a charge nurse
+   * coordinating flow (operational move) or a treating clinician
+   * stepping a stabilised patient down to a lower-acuity zone. The
+   * target zone is taken literally (no auto-upgrade); a step-down that
+   * would override a pending clinical escalation is rejected by the
+   * backend with a clear message.
+   */
+  initiate: (visitId: string, toZone: EdZone, reason?: string) =>
+    post<ZoneTransferResponse>(`/zone-transfers/visit/${visitId}/initiate`, {
+      toZone,
+      ...(reason ? { reason } : {}),
+    }),
+
+  /**
    * Accept a pending transfer. When `destinationBedId` is provided,
    * the backend performs the physical bed move in the SAME transaction:
    * source bed → CLEANING, destination bed OCCUPIED, monitoring session

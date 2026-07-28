@@ -28,7 +28,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   RefreshCw, AlertTriangle, ArrowRight, Stethoscope, CheckCircle2,
-  XCircle, Loader2, Clock, ShieldAlert, Users,
+  XCircle, Loader2, Clock, ShieldAlert, Users, Plus,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
@@ -38,6 +38,7 @@ import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
 import { dialog } from '@/components/dialog';
 import AcceptTransferDialog from './AcceptTransferDialog';
+import InitiateTransferDialog from './InitiateTransferDialog';
 
 /**
  * SATS acceptance windows in minutes — the slowest the charge nurse
@@ -84,6 +85,8 @@ export function PendingTransfersDashboard() {
   const [tick, setTick] = useState(0); // forces overdue recompute
   // Transfer currently in the Accept flow — opens the bed-picker dialog.
   const [accepting, setAccepting] = useState<ZoneTransferResponse | null>(null);
+  // Manual "open a transfer by hand" flow (operational move / step-down).
+  const [initiating, setInitiating] = useState(false);
 
   const hospitalId = user?.hospitalId ?? '';
 
@@ -224,14 +227,25 @@ export function PendingTransfersDashboard() {
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={loadTransfers}
-              className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl bg-white/10 text-white hover:bg-white/20"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setInitiating(true)}
+                className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl bg-cyan-600 text-white hover:bg-cyan-700"
+                title="Open a zone transfer by hand — operational move or step-down"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Initiate transfer
+              </button>
+              <button
+                type="button"
+                onClick={loadTransfers}
+                className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl bg-white/10 text-white hover:bg-white/20"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
           </div>
         </div>
 
@@ -387,6 +401,14 @@ export function PendingTransfersDashboard() {
             transfer={accepting}
             onAccepted={loadTransfers}
             onClose={() => setAccepting(null)}
+          />
+        )}
+
+        {initiating && (
+          <InitiateTransferDialog
+            hospitalId={hospitalId}
+            onCreated={loadTransfers}
+            onClose={() => setInitiating(false)}
           />
         )}
     </div>
