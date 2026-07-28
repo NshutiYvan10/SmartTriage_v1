@@ -76,7 +76,8 @@ class ContinuousMonitoringEngineTest {
             eventPublisher, alertEscalationService,
             mock(com.smartTriage.smartTriage_server.module.visit.service.ZoneRoutingService.class),
             mock(com.smartTriage.smartTriage_server.module.zonetransfer.service.ZoneTransferService.class),
-            mock(com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository.class));
+            mock(com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository.class),
+            mock(com.smartTriage.smartTriage_server.module.iot.service.MonitoringEventRecorder.class));
 
     private final UUID HOSPITAL = UUID.randomUUID();
     private final UUID VISIT = UUID.randomUUID();

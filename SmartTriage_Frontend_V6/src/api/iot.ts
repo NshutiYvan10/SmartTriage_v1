@@ -8,6 +8,7 @@ import type {
   DeviceSessionResponse,
   VitalStreamResponse,
   MonitoringInsightsResponse,
+  MonitoringEventResponse,
   Page,
 } from './types';
 
@@ -138,6 +139,15 @@ export const iotApi = {
   getMonitoringInsights: (visitId: string, hours = 6, bucketMinutes = 5) =>
     get<MonitoringInsightsResponse>(
       `/iot/monitoring/insights/${visitId}?hours=${hours}&bucketMinutes=${bucketMinutes}`),
+
+  /**
+   * The monitoring event log (V119): every engine transition for the
+   * visit in the window, ascending — including detections whose alerts
+   * were dedup-suppressed. Drives the Event history panel.
+   */
+  getMonitoringEvents: (visitId: string, hours = 24) =>
+    get<MonitoringEventResponse[]>(
+      `/iot/monitoring/events/${visitId}?hours=${hours}`),
 
   getRecentStream: (visitId: string, count = 60) =>
     get<VitalStreamResponse[]>(`/iot/stream/recent/${visitId}?count=${count}`),

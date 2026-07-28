@@ -242,6 +242,21 @@ public class IoTDeviceController {
                 monitoringInsightsService.getInsights(visitId, hours, bucketMinutes)));
     }
 
+    /**
+     * The monitoring event log (V119) — every engine transition for the
+     * visit in the window (pattern detected/cleared, trend changes,
+     * auto-retriage, session lifecycle), ascending. Recorded even when
+     * the matching alert was dedup-suppressed.
+     */
+    @GetMapping("/monitoring/events/{visitId}")
+    @PreAuthorize("@clinicalAuthz.canAccessVisit(authentication, #visitId)")
+    public ResponseEntity<ApiResponse<java.util.List<com.smartTriage.smartTriage_server.module.iot.dto.MonitoringEventResponse>>> getMonitoringEvents(
+            @PathVariable UUID visitId,
+            @RequestParam(defaultValue = "24") int hours) {
+        return ResponseEntity.ok(ApiResponse.success(
+                monitoringInsightsService.getEventHistory(visitId, hours)));
+    }
+
     @PostMapping("/monitoring/start")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE')")
     public ResponseEntity<ApiResponse<DeviceSessionResponse>> startMonitoring(

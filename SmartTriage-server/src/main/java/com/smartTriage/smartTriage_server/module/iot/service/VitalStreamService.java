@@ -54,6 +54,7 @@ public class VitalStreamService {
     private final com.smartTriage.smartTriage_server.module.iot.repository.DeviceSessionRepository sessionRepository;
     private final VitalValidationEngine validationEngine;
     private final RealTimeEventPublisher eventPublisher;
+    private final MonitoringEventRecorder monitoringEventRecorder;
     /** Hypoglycemia auto-detection on a validated IoT glucose reading. Best-effort
      *  (never throws), and HypoglycemiaService does not depend back on this
      *  service, so there is no circular wiring. */
@@ -278,6 +279,11 @@ public class VitalStreamService {
         if (managed == null || !managed.isSessionActive()) return;
         managed.endSession("System", "Spot check complete — vitals captured");
         sessionRepository.save(managed);
+        monitoringEventRecorder.record(visit, managed.getId(),
+                com.smartTriage.smartTriage_server.common.enums.MonitoringEventType.SESSION_ENDED,
+                "Spot check complete on " + device.getSerialNumber(),
+                validated.size() + " validated readings captured",
+                validated.getLast());
 
         // Release the shared roaming monitor for the next patient. Uses a
         // fresh fetch + best-effort save: the device row is also touched

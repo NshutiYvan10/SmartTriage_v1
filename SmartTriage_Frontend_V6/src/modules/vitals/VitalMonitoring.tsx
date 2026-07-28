@@ -29,7 +29,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Activity, AlertTriangle, ArrowLeft, BatteryMedium, CheckCircle2,
-  Gauge, HeartPulse, Loader2, MonitorSpeaker, Pause, Play,
+  Gauge, HeartPulse, History, Loader2, MonitorSpeaker, Pause, Play,
   ShieldAlert, Square, Stethoscope, Thermometer, TrendingDown,
   TrendingUp, Minus, Wifi, Wind,
 } from 'lucide-react';
@@ -45,8 +45,8 @@ import { iotApi } from '@/api/iot';
 import { alertApi } from '@/api/alerts';
 import { visitApi } from '@/api/visits';
 import type {
-  ClinicalAlertResponse, DeviceSessionResponse, MonitoringInsightsResponse,
-  VitalStreamResponse,
+  ClinicalAlertResponse, DeviceSessionResponse, MonitoringEventResponse,
+  MonitoringInsightsResponse, VitalStreamResponse,
 } from '@/api/types';
 import {
   subscribeToVitals, subscribeToTrendChanges, subscribeToAlerts,
@@ -172,6 +172,10 @@ export function VitalMonitoring() {
   // ranges chart server-side bucketed aggregates.
   const [range, setRange] = useState<'LIVE' | 2 | 6 | 12>('LIVE');
   const [insights, setInsights] = useState<MonitoringInsightsResponse | null>(null);
+  // Monitoring event log (V119): the chronological record of engine
+  // transitions. eventsBump forces a refetch when a WS nudge arrives.
+  const [events, setEvents] = useState<MonitoringEventResponse[]>([]);
+  const [eventsBump, setEventsBump] = useState(0);
 
   // ── Patient context: store first, fetch on miss (deep links) ──
   useEffect(() => {
@@ -234,6 +238,9 @@ export function VitalMonitoring() {
         setPattern(ev.detectedPattern ?? null);
         setPatternAt(ev.detectedAt ?? null);
       }
+      // Event-log nudge (V119): a new monitoring_events row was written —
+      // refetch the history panel immediately instead of waiting for the poll.
+      if ((ev as any).type === 'MONITORING_EVENT') setEventsBump((b) => b + 1);
     });
     return () => unsub();
   }, [visitId, wsGeneration]);
@@ -294,6 +301,20 @@ export function VitalMonitoring() {
     const iv = setInterval(load, 60_000);
     return () => { cancelled = true; clearInterval(iv); };
   }, [visitId, range]);
+
+  // ── Monitoring event log: fetch on mount + WS nudge + every 60 s ──
+  useEffect(() => {
+    if (!visitId) return;
+    let cancelled = false;
+    const load = () => {
+      iotApi.getMonitoringEvents(visitId, 24)
+        .then((list) => { if (!cancelled && Array.isArray(list)) setEvents(list); })
+        .catch(() => {});
+    };
+    load();
+    const iv = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [visitId, eventsBump]);
 
   // ── Session controls ──
   const handleStart = useCallback(async () => {
@@ -470,7 +491,7 @@ export function VitalMonitoring() {
                     : 'bg-amber-500/20 text-amber-300'
                 }`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${lastReadingAgeSec != null && lastReadingAgeSec <= 15 ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-                  {lastReadingAgeSec == null ? 'no data' : lastReadingAgeSec <= 15 ? `LIVE · ${lastReadingAgeSec}s` : `last ${lastReadingAgeSec}s ago`}
+                  {lastReadingAgeSec == null ? 'no data' : lastReadingAgeSec <= 15 ? `data · ${lastReadingAgeSec}s` : `stalled · ${lastReadingAgeSec}s`}
                 </span>
               )}
               {!session || session.monitoringState === 'ENDED' || session.monitoringState === 'NOT_STARTED' ? (
@@ -572,6 +593,9 @@ export function VitalMonitoring() {
 
           {/* Patient journey — trend band + clinical event markers */}
           <JourneyTimeline insights={insights} glassCard={glassCard} isDark={isDark} text={text} />
+
+          {/* Event history — the sequence of engine detections (V119) */}
+          <EventHistory events={events} glassCard={glassCard} isDark={isDark} text={text} />
 
           {/* Range selector for the history charts */}
           <div className="flex items-center gap-2">
@@ -815,6 +839,81 @@ function JourneyTimeline({
               <span className="font-bold">{e.label}</span>
             </span>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── EventHistory — the sequence of engine detections (V119) ──
+   "What happened, in what order?" — the handover question. Every row is
+   a recorded transition (pattern detected/changed/cleared, trend change,
+   auto-retriage, session lifecycle), newest first, with the vitals that
+   triggered it. Written even when the matching ALERT was dedup-
+   suppressed, so this is the complete story, not just the paged one.  */
+const EVENT_META: Record<string, { dot: string; textCls: string }> = {
+  PATTERN_DETECTED: { dot: 'bg-red-500', textCls: 'text-red-500' },
+  AUTO_RETRIAGE: { dot: 'bg-red-500', textCls: 'text-red-500' },
+  TREND_CHANGED: { dot: 'bg-amber-500', textCls: 'text-amber-500' },
+  PATTERN_CLEARED: { dot: 'bg-emerald-500', textCls: 'text-emerald-500' },
+  SESSION_STARTED: { dot: 'bg-cyan-500', textCls: '' },
+  SESSION_RESUMED: { dot: 'bg-cyan-500', textCls: '' },
+  SESSION_PAUSED: { dot: 'bg-slate-400', textCls: '' },
+  SESSION_ENDED: { dot: 'bg-slate-400', textCls: '' },
+};
+
+function EventHistory({
+  events, glassCard, isDark, text,
+}: {
+  events: MonitoringEventResponse[]; glassCard: any; isDark: boolean; text: any;
+}) {
+  const newestFirst = [...events].reverse();
+  return (
+    <div className="rounded-2xl p-4" style={glassCard}>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className={`text-sm font-bold ${text.heading}`}>
+          <History className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+          Event history
+          <span className={`ml-2 text-[10px] font-semibold ${text.muted}`}>last 24 h · every detection, even when the alert was already open</span>
+        </p>
+        <span className={`text-[10px] font-semibold ${text.muted}`}>{newestFirst.length} events</span>
+      </div>
+      {newestFirst.length === 0 ? (
+        <p className={`text-xs mt-2 ${text.muted}`}>
+          Nothing recorded yet — entries appear the moment the monitoring
+          engine detects, clears, or escalates anything.
+        </p>
+      ) : (
+        <div className="mt-3 max-h-72 overflow-y-auto pr-1">
+          <ol className={`relative border-l-2 ml-1.5 space-y-3 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
+            {newestFirst.map((e) => {
+              const meta = EVENT_META[e.eventType] ?? { dot: 'bg-slate-400', textCls: '' };
+              const vitals = [
+                e.heartRate != null ? `HR ${e.heartRate}` : null,
+                e.spo2 != null ? `SpO₂ ${e.spo2}%` : null,
+                e.respiratoryRate != null ? `RR ${e.respiratoryRate}` : null,
+                e.systolicBp != null ? `SBP ${e.systolicBp}` : null,
+                e.temperature != null ? `${e.temperature}°C` : null,
+              ].filter(Boolean).join(' · ');
+              return (
+                <li key={e.id} className="ml-4 relative">
+                  <span className={`absolute -left-[23px] top-1 w-3 h-3 rounded-full border-2 ${isDark ? 'border-slate-900' : 'border-white'} ${meta.dot}`} />
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className={`text-[10px] font-bold tabular-nums ${text.muted}`}>
+                      {new Date(e.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                    <span className={`text-xs font-bold ${meta.textCls || text.heading}`}>{e.label}</span>
+                  </div>
+                  {e.detail && (
+                    <p className={`text-[11px] mt-0.5 leading-snug ${text.muted}`}>{e.detail}</p>
+                  )}
+                  {vitals && (
+                    <p className={`text-[10px] mt-0.5 font-semibold tabular-nums ${text.muted}`}>{vitals}</p>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
         </div>
       )}
     </div>

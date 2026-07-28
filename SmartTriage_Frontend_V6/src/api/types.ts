@@ -1571,7 +1571,7 @@ export interface MonitoringInsightsResponse {
   }>;
   events: Array<{
     at: string;
-    kind: 'ALERT' | 'RETRIAGE';
+    kind: 'ALERT' | 'RETRIAGE' | 'DETECTION';
     label: string;
     severity: string | null;
   }>;
@@ -1584,6 +1584,28 @@ export interface MonitoringInsightsResponse {
     dbp: number | null;
     temp: number | null;
   } | null;
+}
+
+/**
+ * One monitoring event-log entry (V119) — a transition the monitoring
+ * engine recorded (pattern detected/cleared, trend change, auto-retriage,
+ * session lifecycle), with the vitals context that triggered it. Recorded
+ * even when the matching alert was dedup-suppressed.
+ */
+export interface MonitoringEventResponse {
+  id: string;
+  sessionId: string | null;
+  eventType:
+    | 'PATTERN_DETECTED' | 'PATTERN_CLEARED' | 'TREND_CHANGED' | 'AUTO_RETRIAGE'
+    | 'SESSION_STARTED' | 'SESSION_PAUSED' | 'SESSION_RESUMED' | 'SESSION_ENDED';
+  label: string;
+  detail: string | null;
+  occurredAt: string;
+  heartRate: number | null;
+  spo2: number | null;
+  respiratoryRate: number | null;
+  systolicBp: number | null;
+  temperature: number | null;
 }
 
 export interface VitalStreamResponse {

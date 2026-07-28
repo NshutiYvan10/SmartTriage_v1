@@ -77,6 +77,7 @@ public class ContinuousMonitoringEngine {
     private final ZoneRoutingService zoneRoutingService;
     private final ZoneTransferService zoneTransferService;
     private final com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository sepsisScreeningRepository;
+    private final com.smartTriage.smartTriage_server.module.iot.service.MonitoringEventRecorder monitoringEventRecorder;
 
     // ====================================================================
     // CRITICAL THRESHOLDS (from Rwanda National Triage Protocol)
@@ -271,9 +272,17 @@ public class ContinuousMonitoringEngine {
             // remains untouched; only the live badge clears.
             if (session.getLastDetectedPattern() != null
                     && session.getTrendStatus() != TrendStatus.WORSENING) {
+                String clearedPattern = session.getLastDetectedPattern();
                 session.setLastDetectedPattern(null);
                 session.setLastDetectedAt(null);
                 publishDetectionState(session);
+                monitoringEventRecorder.record(visit, session.getId(),
+                        com.smartTriage.smartTriage_server.common.enums.MonitoringEventType.PATTERN_CLEARED,
+                        prettyPattern(clearedPattern) + " resolved",
+                        "Vitals back within acceptable range; trend "
+                                + (session.getTrendStatus() != null
+                                        ? session.getTrendStatus().name().toLowerCase() : "unknown"),
+                        latest);
             }
             sessionRepository.save(session);
             return new MonitoringResult(false, DeteriorationPattern.NONE,
@@ -323,6 +332,12 @@ public class ContinuousMonitoringEngine {
                     performAutoRetriage(visit, snapshot, suggestedCategory, detectedPattern, description);
                     retriageTriggered = true;
                     session.incrementRetriages();
+                    monitoringEventRecorder.record(visit, session.getId(),
+                            com.smartTriage.smartTriage_server.common.enums.MonitoringEventType.AUTO_RETRIAGE,
+                            "Auto-retriage "
+                                    + (currentCategory != null ? currentCategory.name() : "—")
+                                    + " → " + suggestedCategory.name(),
+                            description, latest);
 
                     log.warn("AUTO-RETRIAGE: Visit {} | {} → {} | {}",
                             visit.getVisitNumber(), currentCategory, suggestedCategory, description);
@@ -339,9 +354,19 @@ public class ContinuousMonitoringEngine {
         // PATTERN"), not just that the trend is worsening. Keep the
         // first-detected timestamp while the same pattern persists.
         if (!detectedPattern.name().equals(session.getLastDetectedPattern())) {
+            String previousPattern = session.getLastDetectedPattern();
             session.setLastDetectedPattern(detectedPattern.name());
             session.setLastDetectedAt(Instant.now());
             publishDetectionState(session);
+            // Event-log the transition — including when the ALERT above was
+            // dedup-suppressed. Alerts page humans; the log records history.
+            monitoringEventRecorder.record(visit, session.getId(),
+                    com.smartTriage.smartTriage_server.common.enums.MonitoringEventType.PATTERN_DETECTED,
+                    previousPattern == null
+                            ? prettyPattern(detectedPattern.name()) + " detected"
+                            : prettyPattern(previousPattern) + " → " + prettyPattern(detectedPattern.name()),
+                    description,
+                    latest);
         }
 
         // Sepsis pattern → nag the clinician to run the formal sepsis
@@ -638,6 +663,12 @@ public class ContinuousMonitoringEngine {
                     session.getVisit().getVisitNumber(), current, raw);
             session.setTrendStatus(raw);
             session.setTrendCandidate(null);
+            monitoringEventRecorder.record(session.getVisit(), session.getId(),
+                    com.smartTriage.smartTriage_server.common.enums.MonitoringEventType.TREND_CHANGED,
+                    "Trend " + current.name().toLowerCase() + " → " + raw.name().toLowerCase(),
+                    null,
+                    recentReadings != null && !recentReadings.isEmpty()
+                            ? recentReadings.getLast() : null);
             try {
                 // HashMap, not Map.of — the detection fields are nullable.
                 java.util.Map<String, Object> payload = new java.util.HashMap<>();
@@ -743,6 +774,11 @@ public class ContinuousMonitoringEngine {
         if (anyWorseningSlope) return TrendStatus.WORSENING;
         if (anyImprovingSlope) return TrendStatus.IMPROVING;
         return TrendStatus.STABLE;
+    }
+
+    /** "SEPSIS_PATTERN" → "SEPSIS PATTERN" for event-log labels. */
+    private static String prettyPattern(String pattern) {
+        return pattern == null ? "PATTERN" : pattern.replace('_', ' ');
     }
 
     /** True if any single vital in this reading is in the RED critical band. */

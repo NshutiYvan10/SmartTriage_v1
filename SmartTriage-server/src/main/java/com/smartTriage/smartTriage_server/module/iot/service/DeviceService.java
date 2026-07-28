@@ -63,6 +63,7 @@ public class DeviceService {
      * actual last live reading they observed before the transition.
      */
     private final VitalStreamService vitalStreamService;
+    private final MonitoringEventRecorder monitoringEventRecorder;
     private final com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService shiftAssignmentService;
     /** Resolves a self-registering paramedic's own hospital (V98). */
     private final com.smartTriage.smartTriage_server.module.user.repository.UserRepository userRepository;
@@ -713,6 +714,13 @@ public class DeviceService {
         log.info("Monitoring started: Device {} -> Visit {} (Session: {})",
                 freshDevice.getSerialNumber(), visit.getVisitNumber(), session.getId());
 
+        monitoringEventRecorder.record(visit, session.getId(),
+                com.smartTriage.smartTriage_server.common.enums.MonitoringEventType.SESSION_STARTED,
+                (request.isSpotCheck() ? "Spot check started on " : "Monitoring started on ")
+                        + freshDevice.getSerialNumber(),
+                request.getStartedByName() != null ? "Started by " + request.getStartedByName() : null,
+                null);
+
         // Notify frontend of device status change
         publishDeviceStatus(freshDevice);
 
@@ -830,6 +838,13 @@ public class DeviceService {
 
         session.endSession(endedByName, reason != null ? reason : "Manual stop");
         session = sessionRepository.save(session);
+
+        monitoringEventRecorder.record(session.getVisit(), session.getId(),
+                com.smartTriage.smartTriage_server.common.enums.MonitoringEventType.SESSION_ENDED,
+                "Monitoring ended on " + session.getDevice().getSerialNumber(),
+                (reason != null ? reason : "Manual stop")
+                        + (endedByName != null ? " — by " + endedByName : ""),
+                null);
 
         // Re-fetch device to avoid version conflict with concurrent heartbeats,
         // then return device to ONLINE
@@ -1284,6 +1299,11 @@ public class DeviceService {
         session.setPausedByName(pausedByName);
         session.transitionState(com.smartTriage.smartTriage_server.common.enums.MonitoringState.PAUSED);
         sessionRepository.save(session);
+        monitoringEventRecorder.record(session.getVisit(), session.getId(),
+                com.smartTriage.smartTriage_server.common.enums.MonitoringEventType.SESSION_PAUSED,
+                "Monitoring paused",
+                pausedByName != null ? "Paused by " + pausedByName : null,
+                null);
         log.info("Monitoring paused on session {} by {}", sessionId, pausedByName);
         return IoTMapper.toResponse(session);
     }
@@ -1306,6 +1326,11 @@ public class DeviceService {
         session.setResumedByName(resumedByName);
         session.transitionState(com.smartTriage.smartTriage_server.common.enums.MonitoringState.STARTING);
         sessionRepository.save(session);
+        monitoringEventRecorder.record(session.getVisit(), session.getId(),
+                com.smartTriage.smartTriage_server.common.enums.MonitoringEventType.SESSION_RESUMED,
+                "Monitoring resumed",
+                resumedByName != null ? "Resumed by " + resumedByName : null,
+                null);
         log.info("Monitoring resumed on session {} by {}", sessionId, resumedByName);
         // Same kickstart as start — Resume should look instant too.
         kickstartSimulatorAfterCommit(sessionId);

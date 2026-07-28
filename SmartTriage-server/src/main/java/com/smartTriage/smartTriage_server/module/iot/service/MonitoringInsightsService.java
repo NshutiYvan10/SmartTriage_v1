@@ -6,10 +6,13 @@ import com.smartTriage.smartTriage_server.common.enums.TraumaStatus;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
+import com.smartTriage.smartTriage_server.module.iot.dto.MonitoringEventResponse;
 import com.smartTriage.smartTriage_server.module.iot.dto.MonitoringInsightsResponse;
 import com.smartTriage.smartTriage_server.module.iot.dto.MonitoringInsightsResponse.Baseline;
 import com.smartTriage.smartTriage_server.module.iot.dto.MonitoringInsightsResponse.Bucket;
 import com.smartTriage.smartTriage_server.module.iot.dto.MonitoringInsightsResponse.Event;
+import com.smartTriage.smartTriage_server.module.iot.entity.MonitoringEvent;
+import com.smartTriage.smartTriage_server.module.iot.repository.MonitoringEventRepository;
 import com.smartTriage.smartTriage_server.module.iot.repository.VitalStreamRepository;
 import com.smartTriage.smartTriage_server.module.iot.repository.VitalStreamRepository.VitalBucket;
 import com.smartTriage.smartTriage_server.module.triage.engine.PediatricTewsCalculator;
@@ -55,6 +58,7 @@ public class MonitoringInsightsService {
     private final VitalSignsRepository vitalSignsRepository;
     private final ClinicalAlertRepository alertRepository;
     private final TriageRecordRepository triageRecordRepository;
+    private final MonitoringEventRepository monitoringEventRepository;
     private final VisitRepository visitRepository;
     private final TewsCalculator tewsCalculator;
     private final PediatricTewsCalculator pediatricTewsCalculator;
@@ -117,6 +121,23 @@ public class MonitoringInsightsService {
                     .severity(t.getTriageCategory().name())
                     .build());
         }
+        // Monitoring-engine detections (V119). Only PATTERN transitions go on
+        // the journey bar: alerts/retriage above already mark the paged
+        // moments, and pattern events add the dedup-suppressed detections the
+        // alert layer deliberately swallows. TREND_CHANGED is excluded (the
+        // band itself IS the trend) and SESSION_* stays in the history panel.
+        for (MonitoringEvent me : monitoringEventRepository
+                .findByVisitIdAndIsActiveTrueAndOccurredAtAfterOrderByOccurredAtAsc(visitId, from)) {
+            String type = me.getEventType() != null ? me.getEventType().name() : "";
+            if (!type.equals("PATTERN_DETECTED") && !type.equals("PATTERN_CLEARED")) continue;
+            events.add(Event.builder()
+                    .at(me.getOccurredAt())
+                    .kind("DETECTION")
+                    .label(me.getLabel())
+                    .severity(type.equals("PATTERN_DETECTED") ? "HIGH" : "LOW")
+                    .build());
+        }
+
         events.sort((x, y) -> x.getAt().compareTo(y.getAt()));
         if (events.size() > MAX_EVENTS) {
             log.debug("Insights events for visit {} truncated {} → {}", visitId, events.size(), MAX_EVENTS);
@@ -137,6 +158,21 @@ public class MonitoringInsightsService {
                 .events(events)
                 .baseline(baseline)
                 .build();
+    }
+
+    /**
+     * The full monitoring event log for a visit (V119) — every recorded
+     * transition in the window, ascending. The Full Monitoring View's
+     * "Event history" panel; the answer to "what happened, in what order?".
+     */
+    public List<MonitoringEventResponse> getEventHistory(UUID visitId, int hours) {
+        int clampedHours = Math.max(1, Math.min(hours, 72));
+        Instant from = Instant.now().minus(clampedHours, ChronoUnit.HOURS);
+        return monitoringEventRepository
+                .findByVisitIdAndIsActiveTrueAndOccurredAtAfterOrderByOccurredAtAsc(visitId, from)
+                .stream()
+                .map(MonitoringEventResponse::from)
+                .toList();
     }
 
     private static Baseline toBaseline(VitalSigns v) {
