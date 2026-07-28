@@ -2160,24 +2160,51 @@ function DiagnosesTab({ diagnoses, isDoctor, showForm, setShowForm, onSubmit, on
                         <X className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="p-5 space-y-2">
+                    <div className="p-5">
                 {historyLoading ? (
                   <p className={`text-xs flex items-center gap-1.5 ${text.muted}`}><Loader2 className="w-3 h-3 animate-spin" /> Loading history…</p>
-                ) : history.length <= 1 ? (
-                  <p className={`text-xs ${text.muted}`}>No prior versions — this diagnosis hasn't been edited.</p>
+                ) : history.length === 0 ? (
+                  <p className={`text-xs ${text.muted}`}>No history available for this diagnosis.</p>
                 ) : (
-                  history.map((v, i) => (
-                    <div key={v.id} className="text-xs pl-3 border-l-2 border-slate-400/30">
-                      <div className="flex items-center gap-2">
-                        <span className={`font-bold ${text.body}`}>v{i + 1}</span>
-                        <span className={`px-1.5 py-0.5 rounded ${typeColors[v.diagnosisType] || 'text-slate-500 bg-slate-500/10'} text-[9px] font-bold uppercase`}>{v.diagnosisType}</span>
-                        {i === history.length - 1 && <span className="text-[9px] font-bold uppercase text-emerald-500">current</span>}
-                        <span className={`text-[10px] ${text.muted}`}>{v.amendedAt ? format(new Date(v.amendedAt), 'dd MMM HH:mm') : (v.createdAt ? format(new Date(v.createdAt), 'dd MMM HH:mm') : '')}</span>
-                      </div>
-                      <p className={`${text.body} mt-0.5`}>{v.description}{v.icdCode ? ` (${v.icdCode})` : ''}</p>
-                      {v.amendmentReason && <p className={`text-[10px] italic mt-0.5 ${text.muted}`}>Reason: {v.amendmentReason}</p>}
-                    </div>
-                  ))
+                  <>
+                    {history.map((v, i) => {
+                      const isCurrent = i === history.length - 1;
+                      const when = v.amendedAt ?? v.createdAt;
+                      return (
+                        <div
+                          key={v.id}
+                          className={`relative pl-5 pb-4 last:pb-0 border-l-2 ${isDark ? 'border-slate-600/40' : 'border-slate-300'}`}
+                        >
+                          {/* timeline dot */}
+                          <span className={`absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ring-2 ${isDark ? 'ring-[#0c1929]' : 'ring-white'} ${isCurrent ? 'bg-emerald-500' : (isDark ? 'bg-slate-500' : 'bg-slate-400')}`} />
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-xs font-bold ${text.heading}`}>v{i + 1}</span>
+                            <span className={`px-1.5 py-0.5 rounded ${typeColors[v.diagnosisType] || 'text-slate-500 bg-slate-500/10'} text-[9px] font-bold uppercase`}>{v.diagnosisType}</span>
+                            {v.isPrimary && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase text-indigo-500 bg-indigo-500/10">Primary</span>}
+                            {i === 0 && <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${text.muted} ${isDark ? 'bg-white/5' : 'bg-slate-500/10'}`}>Original</span>}
+                            {isCurrent && history.length > 1 && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase text-emerald-600 bg-emerald-500/10">Current</span>}
+                            <span className={`ml-auto text-[10px] tabular-nums ${text.muted}`}>{when ? format(new Date(when), 'dd MMM yyyy · HH:mm') : ''}</span>
+                          </div>
+                          <p className={`text-sm font-medium mt-1 ${text.heading}`}>{v.description}</p>
+                          {v.icdCode && <p className={`text-[10px] font-mono mt-0.5 ${text.muted}`}>ICD-10: {v.icdCode}</p>}
+                          {v.notes && <p className={`text-[11px] mt-1 ${text.body}`}>{v.notes}</p>}
+                          {v.amendmentReason && (
+                            <p className={`text-[11px] italic mt-1 ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>
+                              Amendment reason: {v.amendmentReason}
+                            </p>
+                          )}
+                          <p className={`text-[10px] mt-1 ${text.muted}`}>
+                            {i === 0 ? 'Diagnosed by' : 'Amended by'} {v.diagnosedByName || 'Unknown clinician'}
+                          </p>
+                        </div>
+                      );
+                    })}
+                    {history.length === 1 && (
+                      <p className={`text-[11px] mt-3 pt-3 border-t ${isDark ? 'border-white/10 text-slate-400' : 'border-slate-200 text-slate-500'}`}>
+                        No amendments — this is the original diagnosis, never edited.
+                      </p>
+                    )}
+                  </>
                 )}
                     </div>
                   </div>

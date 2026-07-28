@@ -75,6 +75,69 @@ function getDocTypeStyle(type: string) {
   return DOC_TYPE_COLORS[type] || { bg: 'rgba(148,163,184,0.1)', text: 'text-slate-500', border: '1px solid rgba(148,163,184,0.2)' };
 }
 
+/**
+ * DocumentPaper — renders a generated clinical document's plain-text
+ * content as a printed-document "page" instead of a raw text dump.
+ *
+ * The generator emits a simple, stable structure we can style:
+ *   `=== TITLE ===`      → the document's banner title (centred)
+ *   `--- SECTION ---`    → a section heading (uppercase, ruled)
+ *   `Label: value`       → a labelled field (label muted, value bold)
+ *   `- item` / `• item`  → a bullet
+ *   blank line           → paragraph spacing
+ *   anything else        → a body line
+ * The page itself is always white with dark serif text (a document
+ * reads as a document regardless of the app theme).
+ */
+function DocumentPaper({ content }: { content: string | null | undefined }) {
+  const lines = (content ?? '').replace(/\r\n/g, '\n').split('\n');
+  return (
+    <div
+      className="rounded-xl border border-slate-200 shadow-sm bg-white text-slate-800 px-6 py-6 md:px-9 md:py-8"
+      style={{ fontFamily: '"Iowan Old Style", "Palatino Linotype", Georgia, serif' }}
+    >
+      {lines.map((raw, i) => {
+        const t = raw.trim();
+        if (t === '') return <div key={i} className="h-3" aria-hidden />;
+        let m = t.match(/^={2,}\s*(.*?)\s*={2,}$/);
+        if (m) {
+          return (
+            <h2 key={i} className="text-center text-[13px] font-extrabold uppercase tracking-[0.15em] text-slate-900 mt-1 mb-4">
+              {m[1]}
+            </h2>
+          );
+        }
+        m = t.match(/^-{2,}\s*(.*?)\s*-{2,}$/);
+        if (m) {
+          return (
+            <h3 key={i} className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 border-b border-slate-200 pb-1 mt-5 mb-2">
+              {m[1]}
+            </h3>
+          );
+        }
+        // Label: value  (label starts with a letter/number, no leading bullet)
+        m = raw.match(/^\s*([A-Za-z][A-Za-z0-9 /()#.&_-]{0,44}):\s+(.*\S)\s*$/);
+        if (m) {
+          return (
+            <p key={i} className="text-[13px] leading-relaxed">
+              <span className="font-semibold text-slate-500">{m[1]}: </span>
+              <span className="text-slate-900">{m[2]}</span>
+            </p>
+          );
+        }
+        if (/^[•*-]\s+/.test(t)) {
+          return (
+            <p key={i} className="text-[13px] leading-relaxed text-slate-800 pl-4 -indent-3">
+              • {t.replace(/^[•*-]\s+/, '')}
+            </p>
+          );
+        }
+        return <p key={i} className="text-[13px] leading-relaxed text-slate-800">{t}</p>;
+      })}
+    </div>
+  );
+}
+
 type ActiveTab = typeof DOC_TYPES[number];
 
 export function ClinicalDocumentation() {
@@ -764,12 +827,10 @@ export function ClinicalDocumentation() {
                             </button>
                           </div>
                           <div className="px-5 py-5">
-                      {/* Document content */}
-                      <div className="mt-4 rounded-xl p-4" style={glassInner}>
-                        <label className={`text-[10px] font-bold uppercase tracking-wider block mb-2 ${text.muted}`}>Document Content</label>
-                        <div className={`text-sm leading-relaxed whitespace-pre-wrap ${text.body}`}>
-                          {doc.content}
-                        </div>
+                      {/* Document content — rendered as a professional
+                          document "page" rather than a raw text dump. */}
+                      <div className="mt-4">
+                        <DocumentPaper content={doc.content} />
                       </div>
 
                       {/* Type-specific structured details */}
