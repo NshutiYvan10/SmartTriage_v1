@@ -3,6 +3,7 @@ package com.smartTriage.smartTriage_server.module.zonetransfer.controller;
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.module.zonetransfer.dto.AcceptTransferRequest;
+import com.smartTriage.smartTriage_server.module.zonetransfer.dto.InitiateZoneTransferRequest;
 import com.smartTriage.smartTriage_server.module.zonetransfer.dto.ZoneTransferResponse;
 import com.smartTriage.smartTriage_server.module.zonetransfer.service.ZoneTransferService;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,28 @@ public class ZoneTransferController {
     private final ZoneTransferService zoneTransferService;
 
     /**
+     * Manually initiate a zone transfer for a visit — a charge nurse
+     * coordinating flow (operational move) or a treating clinician
+     * stepping a stabilised patient down to a lower-acuity zone. The
+     * automatic re-triage / deterioration path opens transfers on its
+     * own; this is the human-initiated entry point.
+     *
+     * <p>Gated to a clinician covering the patient's CURRENT zone, or a
+     * charge nurse / shift lead / admin with hospital-wide oversight.
+     */
+    @PostMapping("/visit/{visitId}/initiate")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
+            + "and @clinicalAuthz.canInitiateZoneTransfer(authentication, #visitId)")
+    public ResponseEntity<ApiResponse<ZoneTransferResponse>> initiate(
+            @PathVariable UUID visitId,
+            @org.springframework.web.bind.annotation.RequestBody
+            @jakarta.validation.Valid InitiateZoneTransferRequest body) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Zone transfer initiated",
+                zoneTransferService.initiateManual(visitId, body.getToZone(), body.getReason())));
+    }
+
+    /**
      * Receiving doctor accepts the transfer — visit's zone +
      * primary clinician change atomically. When the body carries a
      * {@code destinationBedId}, the physical bed move (and the
@@ -34,7 +57,7 @@ public class ZoneTransferController {
      */
     @PostMapping("/{transferId}/accept")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
-            + "and @clinicalAuthz.canAccessZoneTransfer(authentication, #transferId)")
+            + "and @clinicalAuthz.canAcceptZoneTransfer(authentication, #transferId)")
     public ResponseEntity<ApiResponse<ZoneTransferResponse>> accept(
             @PathVariable UUID transferId,
             @RequestBody(required = false) AcceptTransferRequest body) {
@@ -51,7 +74,7 @@ public class ZoneTransferController {
      */
     @PostMapping("/{transferId}/decline")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
-            + "and @clinicalAuthz.canAccessZoneTransfer(authentication, #transferId)")
+            + "and @clinicalAuthz.canAcceptZoneTransfer(authentication, #transferId)")
     public ResponseEntity<ApiResponse<ZoneTransferResponse>> decline(
             @PathVariable UUID transferId,
             @RequestBody Map<String, String> body) {
@@ -67,7 +90,7 @@ public class ZoneTransferController {
      */
     @PostMapping("/{transferId}/resus-in-place")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE') "
-            + "and @clinicalAuthz.canAccessZoneTransfer(authentication, #transferId)")
+            + "and @clinicalAuthz.canAcceptZoneTransfer(authentication, #transferId)")
     public ResponseEntity<ApiResponse<ZoneTransferResponse>> resusInPlace(
             @PathVariable UUID transferId,
             @RequestBody(required = false) Map<String, String> body) {

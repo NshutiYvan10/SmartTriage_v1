@@ -145,6 +145,78 @@ public class ZoneTransferService {
     }
 
     /**
+     * Manually initiate a zone transfer — a charge nurse coordinating
+     * flow (overcrowding, isolation) or a treating clinician stepping a
+     * stabilised patient DOWN to a lower-acuity zone.
+     *
+     * <p>Unlike {@link #initiate}, the requested {@code toZone} is taken
+     * literally: a manual step-down is never silently upgraded to a
+     * higher-severity zone. The single guard is a safety one — a manual
+     * step-down may not quietly override a still-pending clinical
+     * ESCALATION (one the system auto-opened from a re-triage or
+     * deterioration alert, i.e. carrying a triggering alert/sign id);
+     * that must be resolved or cancelled first, so a deteriorating
+     * patient's escalation can't be buried by an operational move.
+     *
+     * <p>The authenticated user becomes {@code initiatedBy}; any existing
+     * pending row is re-pointed to the manual target and stripped of its
+     * auto-trigger linkage so the audit trail reads as human-initiated.
+     */
+    @Transactional
+    public ZoneTransferResponse initiateManual(UUID visitId, EdZone toZone, String reason) {
+        if (toZone == null) {
+            throw new ClinicalBusinessException("A target zone is required.");
+        }
+        User actor = currentUserOrThrow();
+        Visit visit = visitRepository.findByIdAndIsActiveTrue(visitId)
+                .orElseThrow(() -> new ResourceNotFoundException("Visit", "id", visitId));
+        EdZone fromZone = visit.getCurrentEdZone();
+        if (toZone == fromZone) {
+            throw new ClinicalBusinessException("Patient is already in " + toZone + ".");
+        }
+
+        Optional<ZoneTransfer> existing = repository
+                .findFirstByVisitIdAndStatusAndIsActiveTrueOrderByInitiatedAtDesc(
+                        visitId, ZoneTransferStatus.PENDING_ACCEPT);
+        if (existing.isPresent()) {
+            ZoneTransfer cur = existing.get();
+            boolean autoEscalation = cur.getTriggeringAlertId() != null
+                    || cur.getTriggeringSignEventId() != null;
+            if (autoEscalation && severity(toZone) < severity(cur.getToZone())) {
+                throw new ClinicalBusinessException(
+                        "A clinical escalation to " + cur.getToZone() + " is pending for this "
+                                + "patient. Resolve or cancel it before initiating a step-down.");
+            }
+            // Manual intent is authoritative: set the requested target exactly,
+            // reassign the initiator, and drop the auto-trigger linkage.
+            cur.setToZone(toZone);
+            cur.setReason(reason);
+            cur.setInitiatedBy(actor);
+            cur.setInitiatedAt(Instant.now());
+            cur.setTriggeringAlertId(null);
+            cur.setTriggeringSignEventId(null);
+            cur = repository.save(cur);
+            log.info("[zone-transfer] Manual (updated pending): visit {} {} → {} by {}",
+                    visit.getVisitNumber(), fromZone, toZone, composeName(actor));
+            return ZoneTransferMapper.toResponse(cur);
+        }
+
+        ZoneTransfer t = ZoneTransfer.builder()
+                .visit(visit)
+                .fromZone(fromZone)
+                .toZone(toZone)
+                .status(ZoneTransferStatus.PENDING_ACCEPT)
+                .reason(reason)
+                .initiatedAt(Instant.now())
+                .initiatedBy(actor)
+                .build();
+        t = repository.save(t);
+        log.info("[zone-transfer] Manual initiated: visit {} {} → {} by {} ({})",
+                visit.getVisitNumber(), fromZone, toZone, composeName(actor), reason);
+        return ZoneTransferMapper.toResponse(t);
+    }
+
+    /**
      * Accept a pending transfer. Updates the visit's current_ed_zone
      * and primary_clinician_id atomically, marks the transfer as
      * ACCEPTED. The receiving doctor is the authenticated user.

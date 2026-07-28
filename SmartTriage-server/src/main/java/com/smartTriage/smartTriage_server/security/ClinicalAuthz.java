@@ -1135,6 +1135,48 @@ public class ClinicalAuthz {
         }
     }
 
+    /** Receiving-side gate for a zone transfer's accept / decline / treat-in-place
+     *  actions. Unlike {@link #canAccessZoneTransfer} (hospital-wide read scope),
+     *  taking or resolving a transfer REASSIGNS primary clinical responsibility, so
+     *  it is restricted to a clinician who actually covers the TARGET zone on their
+     *  current shift — or a charge nurse / shift lead / admin with hospital-wide
+     *  oversight ({@link #canReceiveZoneAlerts} folds in both). Denies an unknown or
+     *  inactive transfer (no existence leak). */
+    @Transactional(readOnly = true)
+    public boolean canAcceptZoneTransfer(Authentication authentication, UUID transferId) {
+        try {
+            if (transferId == null) return false;
+            return zoneTransferRepository.findAcceptTargetById(transferId)
+                    .map(t -> canReceiveZoneAlerts(authentication, t.getHospitalId(), t.getToZone()))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.error("canAcceptZoneTransfer error for transfer {}: {}", transferId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /** Gate for MANUAL zone-transfer initiation (an operational move or a
+     *  clinical step-down) on a visit. Allowed for a clinician whose current
+     *  shift covers the patient's CURRENT zone, or a charge nurse / shift lead /
+     *  admin with hospital-wide oversight ({@link #canReceiveZoneAlerts} folds in
+     *  both). A pre-triage visit has no zone yet, so only hospital-wide oversight
+     *  may initiate one. Denies an unknown visit (no existence leak). */
+    @Transactional(readOnly = true)
+    public boolean canInitiateZoneTransfer(Authentication authentication, UUID visitId) {
+        try {
+            if (visitId == null) return false;
+            UUID hospitalId = visitRepository.findHospitalIdByVisitId(visitId).orElse(null);
+            if (hospitalId == null) return false; // unknown / inactive visit
+            EdZone currentZone = visitRepository.findCurrentEdZoneByVisitId(visitId).orElse(null);
+            return currentZone != null
+                    ? canReceiveZoneAlerts(authentication, hospitalId, currentZone)
+                    : canSeeAllZonesAtHospital(authentication, hospitalId);
+        } catch (Exception e) {
+            log.error("canInitiateZoneTransfer error for visit {}: {}", visitId, e.getMessage(), e);
+            return false;
+        }
+    }
+
     /** Scopes the medication-safety OVERRIDE endpoint to the check's own hospital, so a doctor
      *  at hospital B cannot clear a safety block (allergy / interaction / dose) belonging to
      *  hospital A's patient by enumerating a checkId. Resolves checkId → visit → hospital and

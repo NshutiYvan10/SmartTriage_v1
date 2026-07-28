@@ -26,6 +26,24 @@ public interface ZoneTransferRepository extends JpaRepository<ZoneTransfer, UUID
     Optional<UUID> findVisitIdById(@Param("id") UUID id);
 
     /**
+     * Target zone + owning hospital for a transfer — drives the
+     * receiving-side authz check (ClinicalAuthz.canAcceptZoneTransfer).
+     * Accepting / declining / treating-in-place reassigns clinical
+     * responsibility, so it is scoped to a clinician who covers the
+     * TARGET zone (or a charge nurse / shift lead with hospital-wide
+     * oversight). Projection avoids loading the whole aggregate.
+     */
+    @Query("SELECT t.toZone AS toZone, t.visit.hospital.id AS hospitalId "
+            + "FROM ZoneTransfer t WHERE t.id = :id AND t.isActive = true")
+    Optional<ZoneTransferTarget> findAcceptTargetById(@Param("id") UUID id);
+
+    /** Projection for {@link #findAcceptTargetById}. */
+    interface ZoneTransferTarget {
+        EdZone getToZone();
+        UUID getHospitalId();
+    }
+
+    /**
      * Existing pending transfer for a visit, if any. There can be at
      * most one PENDING_ACCEPT at a time per visit — used by the
      * auto re-triage path to either update the existing pending row
