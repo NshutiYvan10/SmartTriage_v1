@@ -40,6 +40,7 @@
 #include "config.h"
 #include "state.h"
 #include "filters.h"
+#include "cal.h"
 #include "sensors.h"
 #include "bp.h"
 #include "alarms.h"
@@ -157,6 +158,104 @@ static void trendTick() {
 }
 
 // =====================================================================
+//  Calibration console (cal.h) — serial-driven, used on the bench with
+//  a reference instrument at hand. Non-"cal" input is ignored so a
+//  stray paste into the serial monitor cannot change anything.
+// =====================================================================
+static void calConsolePoll() {
+  static char buf[48];
+  static uint8_t len = 0;
+  while (Serial.available()) {
+    char c = (char)Serial.read();
+    if (c == '\r') continue;
+    if (c != '\n') {
+      if (len < sizeof(buf) - 1) buf[len++] = c;
+      continue;
+    }
+    buf[len] = '\0';
+    len = 0;
+
+    if (strncmp(buf, "cal", 3) != 0) continue;   // not for us
+    char arg1[16] = {0}, arg2[16] = {0};
+    sscanf(buf, "cal %15s %15s", arg1, arg2);
+    MonitorState s = snapshotState();
+
+    if (strcmp(arg1, "show") == 0 || arg1[0] == '\0') {
+      Serial.printf("[cal] temp: offset %+.2f C (%s) -> reading %s%.1f C\n",
+                    g_cal.tempOffset(),
+                    g_cal.tempCalibrated() ? "device-calibrated" : "default",
+                    s.chTemp == Chan::OK ? "" : "n/a, raw ", s.temp);
+      Serial.printf("[cal] spo2: trim %+.1f pt (%s) -> reading %s%.0f %%\n",
+                    g_cal.spo2Trim(),
+                    g_cal.spo2Calibrated() ? "device-calibrated" : "default",
+                    s.chSpo2 == Chan::OK ? "" : "n/a, last ", s.spo2);
+      Serial.println("[cal] usage: cal temp <ref C> | cal spo2 <ref %> | cal temp reset | cal spo2 reset");
+      continue;
+    }
+
+    bool isTemp = strcmp(arg1, "temp") == 0;
+    bool isSpo2 = strcmp(arg1, "spo2") == 0;
+    if (!isTemp && !isSpo2) {
+      Serial.printf("[cal] unknown target '%s' — cal show for usage\n", arg1);
+      continue;
+    }
+
+    if (strcmp(arg2, "reset") == 0) {
+      if (isTemp) { g_cal.resetTemp(); temp.resetSmoothing(); }
+      else        { g_cal.resetSpo2(); spo2.resetSmoothing(); }
+      Serial.printf("[cal] %s calibration cleared — back to default\n", arg1);
+      continue;
+    }
+
+    float ref = atof(arg2);
+    if (isTemp) {
+      // Anchor on the CURRENT smoothed reading: the sensor must be attached
+      // exactly as it will be used and the value plateaued, or the offset
+      // bakes in a transient.
+      if (s.chTemp != Chan::OK) {
+        Serial.println("[cal] temp has no live reading — attach the sensor, wait for a value, retry");
+        continue;
+      }
+      if (ref < 30.0f || ref > 43.0f) {
+        Serial.printf("[cal] reference %.1f C outside 30-43 — typo?\n", ref);
+        continue;
+      }
+      float newOfs = g_cal.tempOffset() + (ref - s.temp);
+      if (!g_cal.setTempOffset(newOfs)) {
+        Serial.printf("[cal] refused: offset %+.2f C exceeds +/-%.0f rail — that gap is a "
+                      "coupling problem (loose strap / sensor in air), not calibration\n",
+                      newOfs, CAL_TEMP_OFFSET_MAX);
+        continue;
+      }
+      temp.resetSmoothing();
+      Serial.printf("[cal] temp: reading %.1f C, reference %.1f C -> site offset %+.2f C stored "
+                    "(was %+.2f). Re-check in ~1 min.\n",
+                    s.temp, ref, newOfs, newOfs - (ref - s.temp));
+    } else {
+      if (s.chSpo2 != Chan::OK) {
+        Serial.println("[cal] spo2 has no live reading — finger on sensor, wait for a value, retry");
+        continue;
+      }
+      if (ref < 80.0f || ref > 100.0f) {
+        Serial.printf("[cal] reference %.0f %% outside 80-100 — typo?\n", ref);
+        continue;
+      }
+      float newTrim = g_cal.spo2Trim() + (ref - s.spo2);
+      if (!g_cal.setSpo2Trim(newTrim)) {
+        Serial.printf("[cal] refused: trim %+.1f pt exceeds +/-%.0f rail — a gap that large is "
+                      "signal quality (perfusion / finger placement), not calibration\n",
+                      newTrim, CAL_SPO2_TRIM_MAX);
+        continue;
+      }
+      spo2.resetSmoothing();
+      Serial.printf("[cal] spo2: reading %.0f %%, reference %.0f %% -> trim %+.1f pt stored "
+                    "(was %+.1f). Re-check in ~1 min.\n",
+                    s.spo2, ref, newTrim, newTrim - (ref - s.spo2));
+    }
+  }
+}
+
+// =====================================================================
 //  Setup / loop
 // =====================================================================
 void setup() {
@@ -169,6 +268,10 @@ void setup() {
 
   g_stateMutex = xSemaphoreCreateMutex();
   g_spiBusMutex = xSemaphoreCreateMutex();
+
+  // Load device calibration (temp site offset + SpO2 trim) from NVS —
+  // before the sampler tasks start so their first readings use it.
+  g_cal.begin();
 
   // Core 0 runs the display task, whose long SPI bursts (a full-screen
   // fill on ILI9488 is ~0.4 s of continuous, non-yielding writes) can
@@ -267,6 +370,7 @@ void setup() {
 
 void loop() {
   trendTick();
+  calConsolePoll();
 
   // Sensor-health recap every 30 s: the boot banner keeps getting lost
   // to late-attaching serial monitors, so the verdict lines repeat.
@@ -282,8 +386,9 @@ void loop() {
         default: return "absent";
       }
     };
-    Serial.printf("[recap] fw=%s spo2:%s temp:%s ecg:%s cuff-adc:%s%s\n",
+    Serial.printf("[recap] fw=%s spo2:%s temp:%s ecg:%s cuff-adc:%s cal[t%+.1f s%+.1f]%s\n",
                   FIRMWARE_VERSION, chan(s.chSpo2), chan(s.chTemp), chan(s.chEcg), chan(s.chBp),
+                  g_cal.tempOffset(), g_cal.spo2Trim(),
                   s.simulation ? " (SIMULATION)" : "");
   }
 

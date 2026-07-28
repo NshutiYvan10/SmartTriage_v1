@@ -18,7 +18,7 @@
 #pragma once
 
 // ======================== IDENTITY / NETWORK =========================
-#define FIRMWARE_VERSION   "s3-3.5.2"
+#define FIRMWARE_VERSION   "s3-3.6.0"
 
 #define WIFI_SSID          "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD      "YOUR_WIFI_PASSWORD"
@@ -243,9 +243,12 @@
 #define RESP_CALC_INTERVAL_MS 3000
 
 // ======================== TEMPERATURE (MAX30205) =====================
-// MAX30205 is a ±0.1°C CONTACT sensor — unlike the old IR sensor it needs
-// no big surface-to-core offset. A small site offset remains tunable
-// (axillary placement typically reads ~0.2-0.5°C below core).
+// MAX30205 is a ±0.1°C CONTACT sensor: it reports the true temperature of
+// the surface it touches. A snug axillary site reads ~0.2-0.5°C below
+// core; a wrist/strap site can read 3-6°C below core. This constant is
+// only the DEFAULT — the real per-device value is calibrated against a
+// clinical thermometer ("cal temp <ref>" on the serial console, cal.h)
+// and persisted in NVS.
 #define TEMP_SITE_OFFSET_C  0.2f
 #define TEMP_RAW_MIN       25.0f   // below → sensor not on skin
 #define TEMP_RAW_MAX       45.0f

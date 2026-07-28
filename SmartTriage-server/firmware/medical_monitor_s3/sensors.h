@@ -134,6 +134,11 @@ public:
   }
   uint8_t ledLevel() const { return ledLevel_; }
 
+  // Recalibration ("cal spo2 <ref>") shifts the reading by up to the trim
+  // rail, which the outlier gate could fight against the old smoothed
+  // value — drop the EMA so the next window re-primes at the new trim.
+  void resetSmoothing() { ema_.reset(); }
+
 private:
   // One FIFO sample, either chip (MAX30100 samples arrive pre-scaled x4
   // into the 18-bit-ish range these thresholds were tuned for).
@@ -208,7 +213,10 @@ private:
     // windows are rejected without biasing the ratio.
     rHist_.push(R);
     float rMed = rHist_.median();
-    float raw = constrain(110.0f - 25.0f * rMed, SPO2_MIN, SPO2_MAX);
+    // The 110−25R curve is a population fit; the device-calibrated trim
+    // (cal.h, "cal spo2 <ref>" vs a reference oximeter) absorbs this
+    // sensor/LED pair's individual bias. Zero until calibrated.
+    float raw = constrain(110.0f - 25.0f * rMed + g_cal.spo2Trim(), SPO2_MIN, SPO2_MAX);
 
     if (ema_.primed && outlierAbsolute(raw, ema_.value, SPO2_OUTLIER_ABS)) return;
     ema_.update(raw, EMA_ALPHA_SPO2);
@@ -305,12 +313,19 @@ public:
     noContactSince_ = 0;
     if (raw > TEMP_RAW_MAX) return;           // implausible — reject
 
-    float calibrated = raw + TEMP_SITE_OFFSET_C;
+    // Site offset is DEVICE-CALIBRATED (cal.h, NVS "vitalcal"), defaulting
+    // to the old compile-time constant until "cal temp <ref>" is run.
+    float calibrated = raw + g_cal.tempOffset();
     calibrated = constrain(calibrated, TEMP_MIN, TEMP_MAX);
     if (ema_.primed && outlierAbsolute(calibrated, ema_.value, TEMP_OUTLIER_ABS)) return;
     ema_.update(calibrated, EMA_ALPHA_TEMP);
     publish(Chan::OK, ema_.value);
   }
+
+  // Recalibration changes the offset by more than TEMP_OUTLIER_ABS, which
+  // the outlier gate would reject forever against the old smoothed value —
+  // drop the EMA so the next reading re-primes at the new calibration.
+  void resetSmoothing() { ema_.reset(); }
 
 private:
   float readRaw() {
