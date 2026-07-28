@@ -846,7 +846,41 @@ private:
     tft_.drawString("(use a fingernail or stylus for precision)", W / 2, H / 2 + 26, 2);
     tft_.setTextDatum(TL_DATUM);
 
+    uint16_t prevCal[5];
+    memcpy(prevCal, cal_, sizeof(cal_));
     tft_.calibrateTouch(cal_, UI_ACCENT, UI_BG, 18);
+
+    // ---- plausibility gate (v3.6.x) ----
+    // A working XPT2046 spans hundreds-to-thousands of ADC counts corner
+    // to corner. When the touch data line is broken the controller
+    // answers ~0 for every tap, calibrateTouch happily "succeeds", and a
+    // garbage cal (observed live: X span of 13 counts) gets persisted —
+    // masking a WIRING fault as a calibration fault forever after.
+    // Refuse to store a span under 500 counts on either axis and say
+    // what it really means.
+    uint16_t spanX = cal_[0] > cal_[1] ? cal_[0] - cal_[1] : cal_[1] - cal_[0];
+    uint16_t spanY = cal_[2] > cal_[3] ? cal_[2] - cal_[3] : cal_[3] - cal_[2];
+    if (spanX < 500 || spanY < 500) {
+      memcpy(cal_, prevCal, sizeof(cal_));   // keep whatever we had
+      tft_.setTouch(cal_);
+      Serial.printf("[touch] CALIBRATION REJECTED: raw span x=%u y=%u (need >=500) - "
+                    "touch controller returning implausible values; check touch wiring "
+                    "(T_DO/GPIO13, T_CS/GPIO5), not calibration\n", spanX, spanY);
+      tft_.fillScreen(UI_BG);
+      tft_.setTextColor(UI_CRIT, UI_BG);
+      tft_.setTextDatum(MC_DATUM);
+      tft_.drawString("CALIBRATION REJECTED", W / 2, H / 2 - 20, 4);
+      tft_.setTextColor(UI_MUTED, UI_BG);
+      tft_.drawString("Touch readings implausible - check", W / 2, H / 2 + 10, 2);
+      tft_.drawString("touch wiring (T_DO / T_CS), then retry", W / 2, H / 2 + 30, 2);
+      tft_.setTextDatum(TL_DATUM);
+      tone(PIN_BUZZER, 400, 200);
+      delay(2500);
+      pageDirty_ = true;
+      esp_task_wdt_add(NULL);
+      return;
+    }
+
     tft_.setTouch(cal_);
     prefs_.putBytes("cal", cal_, sizeof(cal_));
     calFromNvs_ = true;
