@@ -8,13 +8,18 @@ import com.smartTriage.smartTriage_server.module.governance.entity.ClinicalPolic
 import com.smartTriage.smartTriage_server.module.governance.mapper.ClinicalPolicyMapper;
 import com.smartTriage.smartTriage_server.module.governance.mapper.PolicyAuditLogMapper;
 import com.smartTriage.smartTriage_server.module.governance.service.ClinicalGovernanceService;
+import com.smartTriage.smartTriage_server.module.governance.service.GovernancePolicyReportService;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -42,6 +47,7 @@ public class ClinicalGovernanceController {
     private static final String ROLE_READ = "hasAnyRole('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR')";
 
     private final ClinicalGovernanceService governanceService;
+    private final GovernancePolicyReportService reportService;
 
     /**
      * Create a new draft policy. A hospital-scoped policy requires access to that hospital;
@@ -200,6 +206,53 @@ public class ClinicalGovernanceController {
     public ResponseEntity<ApiResponse<ClinicalPolicyResponse>> getPolicy(@PathVariable UUID id) {
         ClinicalPolicy policy = governanceService.getPolicy(id);
         return ResponseEntity.ok(ApiResponse.success(ClinicalPolicyMapper.toResponse(policy)));
+    }
+
+    // ====================================================================
+    // REPORTS / EXPORTS — the clinical governance report (register PDF/CSV +
+    // single-policy document). Same read gate as the register listing.
+    // ====================================================================
+
+    /** The whole policy register as a professional, printable PDF (governance KPIs + register table). */
+    @GetMapping("/hospital/{hospitalId}/report/pdf")
+    @PreAuthorize(ROLE_READ + " and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    public ResponseEntity<byte[]> downloadRegisterPdf(@PathVariable UUID hospitalId, Authentication authentication) {
+        GovernancePolicyReportService.RenderedPdf pdf = reportService.renderRegister(hospitalId, actorName(authentication));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + pdf.filename() + "\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf.bytes());
+    }
+
+    /** The policy register as CSV — one row per policy (feeds the in-app table preview / spreadsheet). */
+    @GetMapping("/hospital/{hospitalId}/report/csv")
+    @PreAuthorize(ROLE_READ + " and @clinicalAuthz.canAccessHospital(authentication, #hospitalId)")
+    public ResponseEntity<String> downloadRegisterCsv(@PathVariable UUID hospitalId) {
+        GovernancePolicyReportService.RenderedCsv csv = reportService.renderRegisterCsv(hospitalId);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + csv.filename() + "\"")
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .body(csv.csv());
+    }
+
+    /** A single policy as its own branded, printable document (full content + approval attestation). */
+    @GetMapping("/{id}/pdf")
+    @PreAuthorize(ROLE_READ + " and @clinicalAuthz.canAccessPolicy(authentication, #id)")
+    public ResponseEntity<byte[]> downloadPolicyPdf(@PathVariable UUID id, Authentication authentication) {
+        GovernancePolicyReportService.RenderedPdf pdf = reportService.renderPolicy(id, actorName(authentication));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + pdf.filename() + "\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf.bytes());
+    }
+
+    private static String actorName(Authentication authentication) {
+        if (authentication != null && authentication.getPrincipal() instanceof User u) {
+            String name = ((u.getFirstName() == null ? "" : u.getFirstName()) + " "
+                    + (u.getLastName() == null ? "" : u.getLastName())).trim();
+            return name.isBlank() ? u.getEmail() : name;
+        }
+        return "SmartTriage user";
     }
 
     @GetMapping("/{id}/history")

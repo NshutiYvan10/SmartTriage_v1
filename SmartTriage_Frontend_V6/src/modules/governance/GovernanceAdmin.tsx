@@ -7,10 +7,12 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Scale, Plus, CheckCircle2, ShieldCheck, Archive, ArchiveRestore, PauseCircle,
   ChevronDown, ChevronRight, Loader2, RefreshCw, Clock, FileText,
-  Search, History, User, AlertTriangle, ArrowRight, Filter, X,
+  Search, History, User, AlertTriangle, ArrowRight, Filter, X, FileDown, Table2,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { ModalPortal } from '@/components/ModalPortal';
+import { PdfPreviewModal, usePdfPreview } from '@/components/PdfPreviewModal';
+import { CsvPreviewModal, useCsvPreview } from '@/components/CsvPreviewModal';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { dialog } from '@/components/dialog';
 import { useAuthStore } from '@/store/authStore';
@@ -97,6 +99,12 @@ export function GovernanceAdmin() {
   const [activeTab, setActiveTab] = useState<TabId>('policies');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // Clinical-governance report exports — preview then download (PDF register,
+  // CSV register, single-policy document).
+  const { showPdf, previewProps } = usePdfPreview();
+  const { showCsv, previewProps: csvPreviewProps } = useCsvPreview();
+  const [reportBusy, setReportBusy] = useState<string | null>(null);
 
   /* -- Policies state --------------------------------------------- */
   const [policies, setPolicies] = useState<ClinicalPolicy[]>([]);
@@ -252,6 +260,36 @@ export function GovernanceAdmin() {
     catch { /* */ } finally { setActionLoading(null); setArchiveTarget(null); }
   }, [loadPolicies]);
 
+  // ── Clinical governance report exports ──
+  const openRegisterPdf = useCallback(async () => {
+    if (!hospitalId) return;
+    setReportBusy('pdf');
+    try {
+      const { blob, filename } = await governanceApi.downloadRegisterPdf(hospitalId);
+      showPdf(blob, filename);
+    } catch (e) { console.error('[Governance] register PDF failed', e); }
+    finally { setReportBusy(null); }
+  }, [hospitalId, showPdf]);
+
+  const openRegisterCsv = useCallback(async () => {
+    if (!hospitalId) return;
+    setReportBusy('csv');
+    try {
+      const { blob, filename } = await governanceApi.downloadRegisterCsv(hospitalId);
+      showCsv(blob, filename);
+    } catch (e) { console.error('[Governance] register CSV failed', e); }
+    finally { setReportBusy(null); }
+  }, [hospitalId, showCsv]);
+
+  const openPolicyPdf = useCallback(async (id: string) => {
+    setReportBusy(id);
+    try {
+      const { blob, filename } = await governanceApi.downloadPolicyPdf(id);
+      showPdf(blob, filename);
+    } catch (e) { console.error('[Governance] policy PDF failed', e); }
+    finally { setReportBusy(null); }
+  }, [showPdf]);
+
   // Restore an archived policy → DRAFT (must re-pass approval before it is
   // active again — the backend enforces the same rule).
   const handleUnarchive = useCallback(async (id: string) => {
@@ -306,6 +344,24 @@ export function GovernanceAdmin() {
                     {hospitals.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
                   </select>
                 )}
+                <button
+                  onClick={openRegisterPdf}
+                  disabled={!hospitalId || reportBusy === 'pdf'}
+                  title="Clinical Governance Report — the whole policy register as a printable PDF"
+                  className="flex items-center gap-2 px-3.5 py-2 bg-white/10 hover:bg-white/20 backdrop-blur rounded-xl text-white text-xs font-semibold transition-all duration-300 border border-white/10 disabled:opacity-50"
+                >
+                  {reportBusy === 'pdf' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                  Report
+                </button>
+                <button
+                  onClick={openRegisterCsv}
+                  disabled={!hospitalId || reportBusy === 'csv'}
+                  title="Policy register as CSV — preview as a table, then download"
+                  className="flex items-center gap-2 px-3.5 py-2 bg-white/10 hover:bg-white/20 backdrop-blur rounded-xl text-white text-xs font-semibold transition-all duration-300 border border-white/10 disabled:opacity-50"
+                >
+                  {reportBusy === 'csv' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Table2 className="w-3.5 h-3.5" />}
+                  CSV
+                </button>
                 <button
                   onClick={() => { setShowCreateForm(!showCreateForm); setActiveTab('policies'); }}
                   className="flex items-center gap-2 px-4 py-2 bg-white/15 hover:bg-white/25 backdrop-blur rounded-xl text-white text-xs font-semibold transition-all duration-300 border border-white/10"
@@ -699,6 +755,18 @@ export function GovernanceAdmin() {
                                 Version History
                               </button>
 
+                              {/* Download this policy as its own branded document */}
+                              <button
+                                onClick={() => openPolicyPdf(policy.id)}
+                                disabled={reportBusy === policy.id}
+                                title="Download this policy as a printable document"
+                                className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold ${text.body} hover:opacity-80 transition-all duration-300 rounded-xl disabled:opacity-50`}
+                                style={glassInner}
+                              >
+                                {reportBusy === policy.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                                PDF
+                              </button>
+
                               {/* Audit log link */}
                               <button
                                 onClick={() => { setAuditPolicyId(policy.id); setAuditPage(0); setActiveTab('audit'); loadAuditLog(policy.id, 0); }}
@@ -1036,6 +1104,10 @@ export function GovernanceAdmin() {
           onConfirm={() => archiveTarget && handleArchive(archiveTarget)}
           onClose={() => setArchiveTarget(null)}
         />
+
+        {/* In-app governance report previews → Download */}
+        <PdfPreviewModal {...previewProps} />
+        <CsvPreviewModal {...csvPreviewProps} />
       </div>
     </div>
   );

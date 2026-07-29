@@ -1,4 +1,4 @@
-import { get, post, put } from './client';
+import { get, post, put, downloadBlob } from './client';
 
 export interface ClinicalPolicy {
   id: string;
@@ -50,4 +50,13 @@ export const governanceApi = {
   get: (id: string) => get<ClinicalPolicy>(`/governance/policies/${id}`),
   getHistory: (id: string) => get<ClinicalPolicy[]>(`/governance/policies/${id}/history`),
   getAuditLog: (id: string, page = 0) => get<{ content: PolicyAuditLog[]; totalElements: number }>(`/governance/policies/${id}/audit?page=${page}&size=20`),
+  /** The whole policy register as a branded, printable PDF (governance KPIs + register table). */
+  downloadRegisterPdf: (hospitalId: string) =>
+    downloadBlob(`/governance/policies/hospital/${hospitalId}/report/pdf`, 'clinical-governance-report.pdf'),
+  /** The policy register as CSV — one row per policy (feeds the in-app table preview). */
+  downloadRegisterCsv: (hospitalId: string) =>
+    downloadBlob(`/governance/policies/hospital/${hospitalId}/report/csv`, 'clinical-governance-register.csv'),
+  /** A single policy as its own branded, printable document. */
+  downloadPolicyPdf: (id: string) =>
+    downloadBlob(`/governance/policies/${id}/pdf`, 'clinical-policy.pdf'),
 };
