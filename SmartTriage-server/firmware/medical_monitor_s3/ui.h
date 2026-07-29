@@ -77,10 +77,33 @@ public:
     memcpy(cal_, defCal, sizeof(cal_));
     prefs_.begin("touch", false);
     if (prefs_.getBytesLength("cal") == sizeof(cal_)) {
-      prefs_.getBytes("cal", cal_, sizeof(cal_));
-      calFromNvs_ = true;
-      Serial.printf("[touch] using stored calibration { %u, %u, %u, %u, %u }\n",
-                    cal_[0], cal_[1], cal_[2], cal_[3], cal_[4]);
+      uint16_t stored[5];
+      prefs_.getBytes("cal", stored, sizeof(stored));
+      // Boot-time plausibility gate (v3.6.2) — the field failure this
+      // guards against actually happened: a calibration run with bad
+      // taps stored a 13-count X span, and because the overshoot
+      // rejection discards any touch mapping far off-screen, EVERY
+      // genuine press was silently dropped — a fully dead panel from a
+      // bad NVS entry that survived reflashes. A working panel spans
+      // hundreds-to-thousands of counts per axis; anything narrower is
+      // garbage: discard it, fall back to the compiled default, and say
+      // so loudly. (v3.6.1 blocks STORING such a cal; this heals
+      // devices poisoned before that guard existed.)
+      uint16_t sx = stored[0] > stored[1] ? stored[0] - stored[1] : stored[1] - stored[0];
+      uint16_t sy = stored[2] > stored[3] ? stored[2] - stored[3] : stored[3] - stored[2];
+      if (sx < 500 || sy < 500) {
+        prefs_.remove("cal");
+        prefs_.remove("trim");
+        Serial.printf("[touch] stored calibration { %u, %u, %u, %u, %u } is IMPLAUSIBLE "
+                      "(span x=%u y=%u, need >=500) — DISCARDED, using config.h default. "
+                      "Re-run CALIBRATE TOUCH (Device page, or serial 'cal touch run').\n",
+                      stored[0], stored[1], stored[2], stored[3], stored[4], sx, sy);
+      } else {
+        memcpy(cal_, stored, sizeof(cal_));
+        calFromNvs_ = true;
+        Serial.printf("[touch] using stored calibration { %u, %u, %u, %u, %u }\n",
+                      cal_[0], cal_[1], cal_[2], cal_[3], cal_[4]);
+      }
     } else {
       Serial.println("[touch] no stored calibration — using config.h default. "
                      "Run CALIBRATE TOUCH on the Device page.");
@@ -152,6 +175,23 @@ public:
     xSemaphoreGive(g_spiBusMutex);
     stage = 7;
     frameCount = frameCount + 1;
+  }
+
+  // Serial escape hatch (v3.6.2): with a broken/garbage calibration the
+  // touchscreen can't navigate to the Device page's CALIBRATE button —
+  // the only path to fixing touch required working touch. The cal
+  // console can now trigger calibration ('cal touch run') or wipe the
+  // stored values back to the compiled default ('cal touch reset').
+  void requestTouchCalibration() { calRequested_ = true; }
+  void resetTouchCalibration() {
+    prefs_.remove("cal");
+    prefs_.remove("trim");
+    uint16_t defCal[5] = TOUCH_CAL;
+    memcpy(cal_, defCal, sizeof(cal_));
+    trim_[0] = trim_[1] = 0;
+    tft_.setTouch(cal_);
+    calFromNvs_ = false;
+    Serial.println("[touch] stored calibration cleared — using config.h default");
   }
 
   // Liveness telemetry for the serial heartbeat:

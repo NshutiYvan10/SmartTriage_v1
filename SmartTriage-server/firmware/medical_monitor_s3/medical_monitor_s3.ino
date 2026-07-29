@@ -189,7 +189,21 @@ static void calConsolePoll() {
                     g_cal.spo2Trim(),
                     g_cal.spo2Calibrated() ? "device-calibrated" : "default",
                     s.chSpo2 == Chan::OK ? "" : "n/a, last ", s.spo2);
-      Serial.println("[cal] usage: cal temp <ref C> | cal spo2 <ref %> | cal temp reset | cal spo2 reset");
+      Serial.println("[cal] usage: cal temp <ref C> | cal spo2 <ref %> | cal temp reset | cal spo2 reset | cal touch run | cal touch reset");
+      continue;
+    }
+
+    // Touch calibration escape hatch — reachable even when the panel is
+    // unresponsive (garbage stored cal), which is exactly when it's needed.
+    if (strcmp(arg1, "touch") == 0) {
+      if (strcmp(arg2, "run") == 0) {
+        ui.requestTouchCalibration();
+        Serial.println("[cal] touch calibration starting on the display — tap the corner arrows");
+      } else if (strcmp(arg2, "reset") == 0) {
+        ui.resetTouchCalibration();
+      } else {
+        Serial.println("[cal] usage: cal touch run | cal touch reset");
+      }
       continue;
     }
 
