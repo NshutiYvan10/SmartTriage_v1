@@ -544,6 +544,8 @@ private:
         rIdx_ = (rIdx_ + 1) % RR_BUFFER_SIZE;
         if (rCount_ < RR_BUFFER_SIZE) rCount_++;
 
+        pushAmp(peakVal_);
+        checkTwaveOversensing();
         refreshDisplayedHr(now);
       }
     }
@@ -555,7 +557,23 @@ private:
     if (rr <= 0) return true;                               // first anchor beat
     if (rr < 300 || rr > 2000) { pendingCnt_ = 0; return false; }
 
-    if (rrCnt_ < 4) { pushRr(rr); pendingCnt_ = 0; return true; }   // bootstrap
+    if (rrCnt_ < 4) {
+      // Bootstrap, but PLAUSIBILITY-GATED. Accepting any 300-2000 ms
+      // interval as the founding rhythm let a noisy start (or a T-wave
+      // train) lock the detector at ~180 bpm, and the guards below then
+      // could not escape it (see the note in detectRPeak). Intervals
+      // implying >150 bpm must prove themselves by agreement first, so a
+      // genuine paediatric tachycardia still gets there.
+      if (rr >= 400) { pushRr(rr); pendingCnt_ = 0; return true; }
+      pendingRr_[pendingCnt_ % ECG_RHYTHM_N] = (float)rr;
+      pendingCnt_++;
+      if (pendingCnt_ >= ECG_RHYTHM_N && pendingIntervalsAgree()) {
+        for (int i = 0; i < ECG_RHYTHM_N; i++) pushRr((long)pendingRr_[i]);
+        pendingCnt_ = 0;
+        return true;
+      }
+      return false;
+    }
 
     float med = rrMedian();
     if (fabsf((float)rr - med) <= ECG_RR_TOL_FRAC * med) {
@@ -569,19 +587,29 @@ private:
     if ((float)rr < 0.6f * med && amp < ECG_TWAVE_AMP_FRAC * ampEma_) {
       return false;
     }
+    // THE LOCK-IN FIX. The rule above is UNREACHABLE once the rhythm
+    // median drops below ~500 ms: it needs rr < 0.6*med (<300 ms) while
+    // the refractory floor already forbids any interval under 300 ms. So
+    // every rate above ~120 bpm silently lost its T-wave guard — which is
+    // exactly how a doubled (R + T counted) rate sustains itself, and why
+    // a resting adult displayed 174-192 bpm in the field. In that regime,
+    // judge on AMPLITUDE alone: a genuine QRS is not small.
+    if (med < 500.0f && ampEma_ > 0 && amp < ECG_TWAVE_AMP_FRAC * ampEma_) {
+      return false;
+    }
+    // Re-lock window opened by the oversensing detector: drop the small
+    // peaks so the rhythm re-forms on true R waves only.
+    if (halveGuard_ > 0 && ampEma_ > 0 && amp < 0.75f * ampEma_) {
+      halveGuard_--;
+      return false;
+    }
     // Rhythm-change gate: N consecutive off-rhythm intervals that agree
     // WITH EACH OTHER become the new rhythm (a real HR change tracks
     // within ~2-3 beats; scattered artifacts never agree).
     pendingRr_[pendingCnt_ % ECG_RHYTHM_N] = (float)rr;
     pendingCnt_++;
     if (pendingCnt_ >= ECG_RHYTHM_N) {
-      float mean = 0;
-      for (int i = 0; i < ECG_RHYTHM_N; i++) mean += pendingRr_[i];
-      mean /= ECG_RHYTHM_N;
-      bool agree = true;
-      for (int i = 0; i < ECG_RHYTHM_N; i++) {
-        if (fabsf(pendingRr_[i] - mean) > ECG_RHYTHM_TOL_FRAC * mean) { agree = false; break; }
-      }
+      bool agree = pendingIntervalsAgree();
       if (agree) {
         rrCnt_ = 0; rrIdx_ = 0;                             // adopt the new rhythm
         for (int i = 0; i < ECG_RHYTHM_N; i++) pushRr((long)pendingRr_[i]);
@@ -591,6 +619,51 @@ private:
       pendingCnt_ = 0;                                      // disagreeing noise
     }
     return false;
+  }
+
+  // Do the parked candidate intervals agree with each other? (A real rate
+  // change tracks within 2-3 beats; scattered artifacts never agree.)
+  bool pendingIntervalsAgree() {
+    float mean = 0;
+    for (int i = 0; i < ECG_RHYTHM_N; i++) mean += pendingRr_[i];
+    mean /= ECG_RHYTHM_N;
+    if (mean <= 0) return false;
+    for (int i = 0; i < ECG_RHYTHM_N; i++) {
+      if (fabsf(pendingRr_[i] - mean) > ECG_RHYTHM_TOL_FRAC * mean) return false;
+    }
+    return true;
+  }
+
+  // ---- T-WAVE OVERSENSING (double-counting) DETECTOR ----
+  // The textbook signature of counting both R and T as beats: accepted
+  // amplitudes ALTERNATE large/small while the implied rate is
+  // implausibly high. Field evidence: a resting adult reading 174-192 bpm
+  // (≈2x true) with a visibly alternating trace. When detected we drop
+  // the small peaks for a re-lock window, clear the rhythm, and let the
+  // detector re-form on true R waves — halving back to the real rate.
+  // Deliberately gated to >120 bpm so a genuine pulsus-alternans-like
+  // pattern at a plausible rate is never "corrected" away.
+  void checkTwaveOversensing() {
+    if (ampCnt_ < 8 || rrCnt_ < 4 || halveGuard_ > 0) return;
+    float med = rrMedian();
+    if (med <= 0 || 60000.0f / med <= 120.0f) return;
+    float a = 0, b = 0;
+    for (int i = 0; i < 8; i += 2) a += ampHist_[(ampIdx_ + i) % 8];
+    for (int i = 1; i < 8; i += 2) b += ampHist_[(ampIdx_ + i) % 8];
+    a /= 4; b /= 4;
+    float hi = max(a, b), lo = min(a, b);
+    if (hi <= 0 || lo / hi > 0.65f) return;        // no consistent alternation
+    Serial.printf("[ecg] T-wave oversensing: alternating amplitudes %.0f/%.0f at %.0f bpm "
+                  "- rejecting small peaks and re-locking\n", hi, lo, 60000.0f / med);
+    halveGuard_ = 12;
+    rrCnt_ = 0; rrIdx_ = 0; ampCnt_ = 0; ampIdx_ = 0;
+    displayedHr_ = 0;
+  }
+
+  void pushAmp(float amp) {
+    ampHist_[ampIdx_] = amp;
+    ampIdx_ = (ampIdx_ + 1) % 8;
+    if (ampCnt_ < 8) ampCnt_++;
   }
 
   void pushRr(long rr) {
@@ -712,7 +785,11 @@ private:
     g_state.hr = displayedHr_;
     g_state.hrFromEcg = hrFromEcg_;
     g_state.ecgQuality = quality_;
-    g_state.rr = rrEma_.primed ? rrEma_.value : 0.0f;
+    // RR is derived from R-peak amplitude modulation, so it is only as
+    // good as the beat train. Publishing it from a noisy/artefact trace
+    // produced values like "RESP 7" on a normally-breathing subject —
+    // worse than showing nothing. Require a good-quality ECG.
+    g_state.rr = (rrEma_.primed && quality_ >= 2) ? rrEma_.value : 0.0f;
     stateUnlock();
   }
 
@@ -733,6 +810,9 @@ private:
   float pendingRr_[ECG_RHYTHM_N] = {0};
   int   pendingCnt_ = 0;
   float ampEma_ = 0, displayedHr_ = 0;
+  float ampHist_[8] = {0};      // accepted peak amplitudes (oversensing test)
+  int   ampIdx_ = 0, ampCnt_ = 0;
+  int   halveGuard_ = 0;        // beats left in the "reject small peaks" re-lock
   uint8_t quality_ = 0;
   int   qualOk_ = 0, qualTotal_ = 0;
   uint32_t qualWindowStart_ = 0, lastCandidateMs_ = 0;

@@ -37,6 +37,7 @@
  */
 #include <Wire.h>
 #include "esp_task_wdt.h"
+#include "esp_log.h"
 #include "config.h"
 #include "state.h"
 #include "filters.h"
@@ -279,6 +280,13 @@ void setup() {
   // late attach. (The 30 s [recap] line below is the belt to this brace.)
   delay(1200);
   Serial.println("\n=== SmartTriage Medical Monitor " FIRMWARE_VERSION " (ESP32-S3) ===");
+
+  // Silence the IDF WiFi driver's association-retry chatter. It logs
+  // "Set status to INIT" at ERROR level several times per SECOND while
+  // associating — hundreds of lines that bury every diagnostic we
+  // actually print (it made a captured field log unusable). Our own
+  // wifi=up/down heartbeat + [net] lines report link state.
+  esp_log_level_set("wifi", ESP_LOG_NONE);
 
   g_stateMutex = xSemaphoreCreateMutex();
   g_spiBusMutex = xSemaphoreCreateMutex();
