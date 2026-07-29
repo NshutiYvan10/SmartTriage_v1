@@ -13,7 +13,7 @@ import {
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
 import { qualityApi } from '@/api/quality';
-import { saveBlob } from '@/api/client';
+import { CsvPreviewModal, useCsvPreview } from '@/components/CsvPreviewModal';
 import type { QualityMetricSnapshot } from '@/api/quality';
 import { format } from 'date-fns';
 
@@ -140,6 +140,7 @@ export function QualityDashboard() {
 
   /* ── Export the last 90 days of snapshots as CSV ── */
   const [exporting, setExporting] = useState(false);
+  const { showCsv, previewProps } = useCsvPreview();
   const handleExportCsv = async () => {
     if (!hospitalId) return;
     setExporting(true);
@@ -147,7 +148,7 @@ export function QualityDashboard() {
       const to = format(new Date(), 'yyyy-MM-dd');
       const from = format(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
       const { blob, filename } = await qualityApi.exportCsv(hospitalId, from, to);
-      saveBlob(blob, filename);
+      showCsv(blob, filename);
     } catch (err) {
       console.error('Failed to export quality CSV:', err);
     } finally {
@@ -530,6 +531,9 @@ export function QualityDashboard() {
         )}
 
       </div>
+
+      {/* In-app CSV table preview → Download */}
+      <CsvPreviewModal {...previewProps} />
     </div>
   );
 }

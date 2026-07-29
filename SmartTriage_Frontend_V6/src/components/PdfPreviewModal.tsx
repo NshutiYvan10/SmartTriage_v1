@@ -1,9 +1,8 @@
 /**
- * PdfPreviewModal — in-app PDF preview before printing/saving.
+ * PdfPreviewModal — in-app PDF preview before saving.
  *
- * Every report/document generation used to trigger an immediate file download;
- * now the PDF opens INSIDE the app first, with explicit Print / Download actions.
- * Pair with {@link usePdfPreview}:
+ * Report/document generation opens the PDF INSIDE the app first, with a single
+ * explicit Download action. Pair with {@link usePdfPreview}:
  *
  *   const { showPdf, previewProps } = usePdfPreview();
  *   ...
@@ -15,11 +14,10 @@
  * Rendering: the page canvases are painted with PDF.js rather than an
  * `<iframe src="blob:…pdf">`. Native-plugin PDF embedding renders blank inside
  * many webviews / embedded Chromium builds (no PDFium), so we rasterise each
- * page ourselves — this works everywhere. A hidden iframe is kept purely for the
- * browser's native Print (vector-perfect) and Download always saves the real PDF.
+ * page ourselves — this works everywhere. Download saves the real PDF.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Download, FileText, Loader2, Printer, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, Download, FileText, Loader2, X } from 'lucide-react';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { saveBlob } from '@/api/client';
 import { useTheme } from '@/hooks/useTheme';
@@ -30,8 +28,6 @@ interface Props {
   blob: Blob | null;
   filename: string;
   onClose: () => void;
-  /** Open the browser's print dialog as soon as the document renders (a "Print" action). */
-  printOnLoad?: boolean;
 }
 
 /** Lazy-load PDF.js once (keeps it out of the main bundle) and wire its worker. */
@@ -46,21 +42,11 @@ function loadPdfjs() {
   return pdfjsPromise;
 }
 
-export function PdfPreviewModal({ open, blob, filename, onClose, printOnLoad }: Props) {
+export function PdfPreviewModal({ open, blob, filename, onClose }: Props) {
   const { isDark, text } = useTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
-  const printFrameRef = useRef<HTMLIFrameElement>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-
-  // One object URL per blob (used only by the hidden print iframe); revoked on change/unmount.
-  const url = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob]);
-  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
-
-  const handlePrint = () => {
-    const w = printFrameRef.current?.contentWindow;
-    if (w) { w.focus(); w.print(); }
-  };
 
   // Escape closes — standard dialog behaviour.
   useEffect(() => {
@@ -117,10 +103,7 @@ export function PdfPreviewModal({ open, blob, filename, onClose, printOnLoad }: 
           if (cancelled) return;
         }
 
-        if (!cancelled) {
-          setStatus('ready');
-          if (printOnLoad) setTimeout(handlePrint, 350);
-        }
+        if (!cancelled) setStatus('ready');
       } catch (err) {
         console.error('[PdfPreview] PDF.js render failed', err);
         if (!cancelled) setStatus('error');
@@ -131,9 +114,9 @@ export function PdfPreviewModal({ open, blob, filename, onClose, printOnLoad }: 
       cancelled = true;
       try { doc?.destroy(); } catch { /* ignore */ }
     };
-  }, [open, blob, printOnLoad]);
+  }, [open, blob]);
 
-  if (!open || !blob || !url) return null;
+  if (!open || !blob) return null;
 
   return (
     <ModalPortal>
@@ -150,7 +133,7 @@ export function PdfPreviewModal({ open, blob, filename, onClose, printOnLoad }: 
             isDark ? 'bg-slate-900 border border-white/10' : 'bg-white border border-slate-200'
           }`}
         >
-          {/* Header: filename + actions */}
+          {/* Header: filename + Download */}
           <div className={`flex items-center justify-between gap-3 px-5 py-3.5 border-b ${
             isDark ? 'border-white/10' : 'border-slate-200'
           }`}>
@@ -160,22 +143,13 @@ export function PdfPreviewModal({ open, blob, filename, onClose, printOnLoad }: 
               </div>
               <div className="min-w-0">
                 <h3 className={`text-sm font-bold truncate ${text.heading}`}>{filename}</h3>
-                <p className={`text-[11px] ${text.muted}`}>Review the report, then print or download</p>
+                <p className={`text-[11px] ${text.muted}`}>Review the document, then download</p>
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               <button
-                onClick={handlePrint}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl transition-colors ${
-                  isDark ? 'text-slate-200 bg-white/10 hover:bg-white/15' : 'text-slate-700 bg-slate-100 hover:bg-slate-200'
-                }`}
-              >
-                <Printer className="w-3.5 h-3.5" />
-                Print
-              </button>
-              <button
                 onClick={() => saveBlob(blob, filename)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-cyan-600 text-white hover:bg-cyan-700 transition-colors shadow-md"
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-cyan-600 text-white hover:bg-cyan-700 transition-colors shadow-md"
               >
                 <Download className="w-3.5 h-3.5" />
                 Download
@@ -208,7 +182,7 @@ export function PdfPreviewModal({ open, blob, filename, onClose, printOnLoad }: 
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
                 <AlertTriangle className="w-7 h-7 text-amber-400" />
                 <p className="text-sm font-semibold text-white/90">Preview couldn’t be rendered</p>
-                <p className="text-xs text-white/60 max-w-sm">The document is still valid — you can download or print it directly.</p>
+                <p className="text-xs text-white/60 max-w-sm">The document is still valid — you can download it directly.</p>
                 <button
                   onClick={() => saveBlob(blob, filename)}
                   className="mt-1 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-cyan-600 text-white hover:bg-cyan-700"
@@ -220,16 +194,6 @@ export function PdfPreviewModal({ open, blob, filename, onClose, printOnLoad }: 
             )}
             <div ref={hostRef} className="mx-auto max-w-4xl px-6 py-6" />
           </div>
-
-          {/* Hidden iframe kept only for the browser's native (vector) Print. */}
-          <iframe
-            ref={printFrameRef}
-            title={`print ${filename}`}
-            src={url}
-            aria-hidden="true"
-            tabIndex={-1}
-            style={{ position: 'absolute', width: 0, height: 0, border: 0, opacity: 0, pointerEvents: 'none' }}
-          />
         </div>
       </div>
     </ModalPortal>
@@ -238,17 +202,14 @@ export function PdfPreviewModal({ open, blob, filename, onClose, printOnLoad }: 
 
 /** Local state + props wiring for PdfPreviewModal (one preview at a time per view). */
 export function usePdfPreview() {
-  const [preview, setPreview] = useState<{ blob: Blob; filename: string; print?: boolean } | null>(null);
+  const [preview, setPreview] = useState<{ blob: Blob; filename: string } | null>(null);
   return {
-    /** Open the in-app preview for a fetched PDF (use instead of saveBlob).
-     *  Pass { print: true } to also pop the print dialog once it renders. */
-    showPdf: (blob: Blob, filename: string, opts?: { print?: boolean }) =>
-      setPreview({ blob, filename, print: opts?.print }),
+    /** Open the in-app preview for a fetched PDF (use instead of saveBlob). */
+    showPdf: (blob: Blob, filename: string) => setPreview({ blob, filename }),
     previewProps: {
       open: preview !== null,
       blob: preview?.blob ?? null,
       filename: preview?.filename ?? '',
-      printOnLoad: preview?.print ?? false,
       onClose: () => setPreview(null),
     },
   };

@@ -5,7 +5,7 @@ import {
   User, History, X, Eye, EyeOff,
 } from 'lucide-react';
 import { auditApi, AuditLogEntry } from '@/api/audit';
-import { saveBlob } from '@/api/client';
+import { CsvPreviewModal, useCsvPreview } from '@/components/CsvPreviewModal';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
 import { useHospitalScope } from '@/hooks/useHospitalScope';
@@ -38,6 +38,7 @@ export function AuditTrail() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const { showCsv, previewProps } = useCsvPreview();
 
   // Filters — ALL server-side, so they cover the whole log, not the loaded page.
   const [searchInput, setSearchInput] = useState('');
@@ -105,11 +106,10 @@ export function AuditTrail() {
     if (!hospitalId) return;
     setDownloading(true);
     try {
-      // WYSIWYG — honours on-screen filters. exportCsv only FETCHES the
-      // blob; without saveBlob the bytes were discarded and the button
-      // appeared to do nothing.
+      // WYSIWYG — honours on-screen filters. Opens the table preview; the
+      // user downloads from there.
       const { blob, filename } = await auditApi.exportCsv(hospitalId, filterOpts());
-      saveBlob(blob, filename);
+      showCsv(blob, filename);
     } catch {
       setError('Failed to export the audit CSV.');
     } finally {
@@ -376,6 +376,9 @@ export function AuditTrail() {
           </div>
         </>
       )}
+
+      {/* In-app CSV table preview → Download */}
+      <CsvPreviewModal {...previewProps} />
     </div>
   );
 }

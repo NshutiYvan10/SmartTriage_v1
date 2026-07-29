@@ -19,7 +19,7 @@ import {
   ChevronLeft, ChevronRight, Download, FileText, ExternalLink, X,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
-import { saveBlob } from '@/api/client';
+import { CsvPreviewModal, useCsvPreview } from '@/components/CsvPreviewModal';
 import { labApi } from '@/api/lab';
 import type { LabOrder, LabOrderStatus, LabPriority } from '@/api/lab';
 import { subscribeToLabOrders } from '@/api/websocket';
@@ -92,6 +92,7 @@ export function LabOrdersView() {
   const navigate = useNavigate();
   const { glassCard, glassInner, isDark, text } = useTheme();
   const { showPdf, previewProps } = usePdfPreview();
+  const { showCsv, previewProps: csvPreviewProps } = useCsvPreview();
   const borderStyle = isDark ? '1px solid rgba(2,132,199,0.12)' : '1px solid rgba(203,213,225,0.3)';
   const user = useAuthStore((s) => s.user);
   const hospitalId = user?.hospitalId || '';
@@ -150,7 +151,7 @@ export function LabOrdersView() {
     try {
       const { from, to } = reportRange();
       const { blob, filename } = await labApi.downloadReportCsv(hospitalId, from, to);
-      saveBlob(blob, filename);
+      showCsv(blob, filename);
     } catch { setToast({ type: 'err', text: 'CSV download failed' }); }
     finally { setReportBusy(false); }
   };
@@ -566,6 +567,7 @@ export function LabOrdersView() {
         />
       )}
       <PdfPreviewModal {...previewProps} />
+      <CsvPreviewModal {...csvPreviewProps} />
     </div>
   );
 }

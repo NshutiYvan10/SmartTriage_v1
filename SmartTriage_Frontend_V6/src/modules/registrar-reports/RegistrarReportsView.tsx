@@ -17,7 +17,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
 import { registrarApi } from '@/api/registrar';
 import type { IntakeLogRow, UnidentifiedPatientRow, CensusResponse } from '@/api/registrar';
-import { saveBlob } from '@/api/client';
+import { CsvPreviewModal, useCsvPreview } from '@/components/CsvPreviewModal';
 import { format } from 'date-fns';
 
 type Tab = 'intake' | 'unidentified' | 'census';
@@ -116,12 +116,13 @@ export function RegistrarReportsView() {
 
   /* ── CSV exports ── */
   const [exporting, setExporting] = useState(false);
+  const { showCsv, previewProps } = useCsvPreview();
   const exportIntakeCsv = async () => {
     if (!hospitalId) return;
     setExporting(true);
     try {
       const { blob, filename } = await registrarApi.exportIntakeLogCsv(hospitalId, from, to);
-      saveBlob(blob, filename);
+      showCsv(blob, filename);
     } catch (e) {
       console.error('Failed to export intake CSV:', e);
     } finally {
@@ -133,7 +134,7 @@ export function RegistrarReportsView() {
     setExporting(true);
     try {
       const { blob, filename } = await registrarApi.exportUnidentifiedCsv(hospitalId);
-      saveBlob(blob, filename);
+      showCsv(blob, filename);
     } catch (e) {
       console.error('Failed to export unidentified CSV:', e);
     } finally {
@@ -462,6 +463,9 @@ export function RegistrarReportsView() {
         )}
 
       </div>
+
+      {/* In-app CSV table preview → Download */}
+      <CsvPreviewModal {...previewProps} />
     </div>
   );
 }

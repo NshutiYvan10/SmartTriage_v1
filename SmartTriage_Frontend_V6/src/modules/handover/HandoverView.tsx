@@ -199,20 +199,7 @@ export function HandoverView() {
     }
   };
 
-  // Print the branded PDF for one report (opens the preview and pops the print dialog).
-  const handlePrintPdf = async (reportId: string) => {
-    setDownloadingId(reportId);
-    try {
-      const { blob, filename } = await handoverApi.downloadPdf(reportId);
-      showPdf(blob, filename, { print: true });
-    } catch (e) {
-      console.error('[Handover] PDF print failed', e);
-    } finally {
-      setDownloadingId(null);
-    }
-  };
-
-  // Download the professional, letterheaded PDF for this report.
+  // Preview / download the professional, letterheaded PDF for this report.
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const handleDownloadPdf = async (reportId: string) => {
     setDownloadingId(reportId);
@@ -467,14 +454,6 @@ export function HandoverView() {
                             ? <Loader2 className="w-3 h-3 animate-spin" />
                             : <Download className="w-3 h-3" />} PDF
                         </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handlePrintPdf(report.id); }}
-                          disabled={downloadingId === report.id}
-                          title="Print the branded handover document"
-                          className="print:hidden inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold text-cyan-700 bg-cyan-500/10 hover:bg-cyan-500/20 rounded-xl transition-all disabled:opacity-50"
-                        >
-                          <Printer className="w-3 h-3" /> Print
-                        </button>
                         {!report.isAcknowledged && (
                           <button
                             onClick={(e) => { e.stopPropagation(); setAckDialog({ reportId: report.id }); setAckName(''); }}
@@ -560,8 +539,8 @@ export function HandoverView() {
           <div className="flex items-center gap-2.5">
             <Printer className={`w-4 h-4 ${text.muted}`} />
             <p className={`text-[11px] font-medium ${text.muted}`}>
-              Use a report's Print or PDF action \u2014 every printout is the branded SmartTriage handover
-              document, generated fresh from the clinical record.
+              Use a report's PDF action to preview, then download \u2014 every handover is the branded
+              SmartTriage document, generated fresh from the clinical record, ready to print.
             </p>
           </div>
         </div>
