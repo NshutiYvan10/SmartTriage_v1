@@ -1,6 +1,7 @@
 package com.smartTriage.smartTriage_server.module.reporting.controller;
 
 import com.smartTriage.smartTriage_server.module.reporting.service.OperationalReportService;
+import com.smartTriage.smartTriage_server.module.reporting.service.OperationalReportService.RenderedCsv;
 import com.smartTriage.smartTriage_server.module.reporting.service.OperationalReportService.RenderedPdf;
 import com.smartTriage.smartTriage_server.module.user.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -72,6 +73,16 @@ public class OperationalReportController {
         return pdf(reportService.periodActivity(hospitalId, from, to, actor(authentication)));
     }
 
+    @GetMapping("/period/csv")
+    @PreAuthorize("@clinicalAuthz.canViewHospitalReports(authentication, #hospitalId) "
+            + "or @clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
+    public ResponseEntity<String> periodActivityCsv(
+            @RequestParam UUID hospitalId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return csv(reportService.periodActivityCsv(hospitalId, from, to));
+    }
+
     @GetMapping("/my-activity")
     @PreAuthorize("hasAnyRole('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<byte[]> myActivity(
@@ -94,6 +105,16 @@ public class OperationalReportController {
         return pdf(reportService.qualityMetrics(hospitalId, from, to, actor(authentication)));
     }
 
+    @GetMapping("/quality/csv")
+    @PreAuthorize("@clinicalAuthz.canViewHospitalReports(authentication, #hospitalId) "
+            + "or @clinicalAuthz.canSeeAllZonesAtHospital(authentication, #hospitalId)")
+    public ResponseEntity<String> qualityMetricsCsv(
+            @RequestParam UUID hospitalId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return csv(reportService.qualityMetricsCsv(hospitalId, from, to));
+    }
+
     private static String actor(Authentication authentication) {
         if (authentication != null && authentication.getPrincipal() instanceof User u) {
             String name = (u.getFirstName() + " " + u.getLastName()).trim();
@@ -107,5 +128,12 @@ public class OperationalReportController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + pdf.filename() + "\"")
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf.bytes());
+    }
+
+    private static ResponseEntity<String> csv(RenderedCsv csv) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + csv.filename() + "\"")
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .body(csv.csv());
     }
 }

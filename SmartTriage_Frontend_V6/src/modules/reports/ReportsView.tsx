@@ -15,7 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   FileText, BarChart3, ChevronRight, FlaskConical, Siren, ShieldAlert,
   ClipboardList, Pill, UserX, CalendarDays, Users2, Download, Loader2,
-  ClipboardCheck, Stethoscope, AlertTriangle,
+  ClipboardCheck, Stethoscope, AlertTriangle, Table2,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/store/authStore';
@@ -27,6 +27,7 @@ import { hospitalApi } from '@/api/hospitals';
 import type { HospitalResponse } from '@/api/types';
 import { ApiError } from '@/api/client';
 import { PdfPreviewModal, usePdfPreview } from '@/components/PdfPreviewModal';
+import { CsvPreviewModal, useCsvPreview } from '@/components/CsvPreviewModal';
 
 /* ── The real report surfaces this hub launches into ── */
 interface ReportLink {
@@ -57,6 +58,7 @@ type ReportKey = 'daily' | 'shift' | 'period' | 'quality' | 'mine';
 export function ReportsView() {
   const { glassCard, glassInner, isDark, text } = useTheme();
   const { showPdf, previewProps } = usePdfPreview();
+  const { showCsv, previewProps: csvPreviewProps } = useCsvPreview();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const role = user?.role;
@@ -89,15 +91,20 @@ export function ReportsView() {
   const [mineFrom, setMineFrom] = useState(daysAgo(30));
   const [mineTo, setMineTo] = useState(today());
 
-  const [busy, setBusy] = useState<ReportKey | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const run = async (key: ReportKey, fn: () => Promise<{ blob: Blob; filename: string }>) => {
-    setBusy(key);
+  const run = async (
+    key: ReportKey,
+    fn: () => Promise<{ blob: Blob; filename: string }>,
+    kind: 'pdf' | 'csv' = 'pdf',
+  ) => {
+    setBusy(kind === 'csv' ? `${key}:csv` : key);
     setError(null);
     try {
       const { blob, filename } = await fn();
-      showPdf(blob, filename);
+      if (kind === 'csv') showCsv(blob, filename);
+      else showPdf(blob, filename);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Report generation failed');
       console.error('[Reports] generation failed:', err);
@@ -121,6 +128,8 @@ export function ReportsView() {
     description: string;
     params: React.ReactNode;
     generate: () => void;
+    /** Optional CSV export (tabular reports only) — same params, table preview. */
+    generateCsv?: () => void;
   }
 
   const dateInput = (value: string, onChange: (v: string) => void, title: string) => (
@@ -167,6 +176,7 @@ export function ReportsView() {
         </div>
       ),
       generate: () => run('period', () => operationalReportApi.periodActivity(hospitalId, periodFrom, periodTo)),
+      generateCsv: () => run('period', () => operationalReportApi.periodActivityCsv(hospitalId, periodFrom, periodTo), 'csv'),
     },
     {
       key: 'quality', show: governance, icon: Users2,
@@ -181,6 +191,7 @@ export function ReportsView() {
         </div>
       ),
       generate: () => run('quality', () => operationalReportApi.qualityMetrics(hospitalId, qualityFrom, qualityTo)),
+      generateCsv: () => run('quality', () => operationalReportApi.qualityMetricsCsv(hospitalId, qualityFrom, qualityTo), 'csv'),
     },
     {
       key: 'mine', show: clinician, icon: Stethoscope,
@@ -278,11 +289,23 @@ export function ReportsView() {
                       <button
                         onClick={c.generate}
                         disabled={busy !== null}
+                        title="Preview the branded PDF, then download"
                         className="inline-flex items-center gap-1.5 px-4 py-2 text-[11px] font-bold rounded-xl bg-cyan-600 text-white hover:bg-cyan-700 transition-colors disabled:opacity-50 shadow-md"
                       >
                         {busy === c.key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                         PDF
                       </button>
+                      {c.generateCsv && (
+                        <button
+                          onClick={c.generateCsv}
+                          disabled={busy !== null}
+                          title="Preview the data as a table, then download CSV"
+                          className="inline-flex items-center gap-1.5 px-4 py-2 text-[11px] font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-50 shadow-md"
+                        >
+                          {busy === `${c.key}:csv` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Table2 className="w-3.5 h-3.5" />}
+                          CSV
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -338,6 +361,7 @@ export function ReportsView() {
 
       </div>
       <PdfPreviewModal {...previewProps} />
+      <CsvPreviewModal {...csvPreviewProps} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 package com.smartTriage.smartTriage_server.module.reporting.service;
 
+import com.smartTriage.smartTriage_server.common.enums.MetricPeriod;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.common.report.PdfReport;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
@@ -66,6 +67,7 @@ public class OperationalReportService {
     private final QualityMetricSnapshotRepository qualitySnapshotRepository;
 
     public record RenderedPdf(byte[] bytes, String filename) {}
+    public record RenderedCsv(String csv, String filename) {}
 
     // ─────────────────────────────────────────────────────────────────
     // 1. DAILY ED ACTIVITY
@@ -276,6 +278,30 @@ public class OperationalReportService {
         return new RenderedPdf(r.finish(), "period-activity-" + from + "-to-" + to + ".pdf");
     }
 
+    /** Period activity as CSV — the per-day breakdown, one row per day (same data as the PDF table). */
+    public RenderedCsv periodActivityCsv(UUID hospitalId, LocalDate from, LocalDate to) {
+        validateRange(from, to);
+        hospital(hospitalId); // 404 if the hospital does not exist
+        Instant f = from.atStartOfDay(KIGALI).toInstant();
+        Instant t = to.plusDays(1).atStartOfDay(KIGALI).toInstant();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Date,Arrivals,Red,Orange,Yellow,Green,Admitted,LWBS,Avg Wait (min)\n");
+        for (Object[] d : queries.dailyTrend(hospitalId, f, t)) {
+            csvRow(sb,
+                    String.valueOf(d[0]),
+                    Long.toString(asLong(d[1])),
+                    Long.toString(asLong(d[2])),
+                    Long.toString(asLong(d[3])),
+                    Long.toString(asLong(d[4])),
+                    Long.toString(asLong(d[5])),
+                    Long.toString(asLong(d[6])),
+                    Long.toString(asLong(d[7])),
+                    csvDec(asDouble(d[8])));
+        }
+        return new RenderedCsv(sb.toString(), "period-activity-" + from + "-to-" + to + ".csv");
+    }
+
     // ─────────────────────────────────────────────────────────────────
     // 4. MY CLINICAL ACTIVITY (self-scoped)
     // ─────────────────────────────────────────────────────────────────
@@ -377,6 +403,41 @@ public class OperationalReportService {
 
         footerNote(r);
         return new RenderedPdf(r.finish(), "quality-metrics-" + from + "-to-" + to + ".pdf");
+    }
+
+    /** Quality metrics as CSV — one row per captured daily snapshot (richer column set than the PDF). */
+    public RenderedCsv qualityMetricsCsv(UUID hospitalId, LocalDate from, LocalDate to) {
+        validateRange(from, to);
+        hospital(hospitalId); // 404 if the hospital does not exist
+        List<QualityMetricSnapshot> snaps = qualitySnapshotRepository
+                .findByHospitalAndDateRange(hospitalId, from, to).stream()
+                .filter(s -> s.getSnapshotPeriod() == MetricPeriod.DAILY)
+                .toList();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Date,Total Patients,Red,Orange,Yellow,Green,Admissions,Discharges,Deaths,LWBS,")
+                .append("Avg Wait (min),Median Wait (min),Door to Triage (min),Avg TEWS,")
+                .append("Seen Within Target (%),Re-triages\n");
+        for (QualityMetricSnapshot s : snaps) {
+            csvRow(sb,
+                    String.valueOf(s.getSnapshotDate()),
+                    csvNum(s.getTotalPatients()),
+                    csvNum(s.getRedPatients()),
+                    csvNum(s.getOrangePatients()),
+                    csvNum(s.getYellowPatients()),
+                    csvNum(s.getGreenPatients()),
+                    csvNum(s.getTotalAdmissions()),
+                    csvNum(s.getTotalDischarges()),
+                    csvNum(s.getTotalDeaths()),
+                    csvNum(s.getTotalLeftWithoutBeingSeen()),
+                    csvDec(s.getAverageWaitTimeMinutes()),
+                    csvDec(s.getMedianWaitTimeMinutes()),
+                    csvDec(s.getAverageDoorToTriageMinutes()),
+                    csvDec(s.getAverageTewsScore()),
+                    csvDec(s.getPercentSeenWithinTarget()),
+                    csvNum(s.getRetriageCount()));
+        }
+        return new RenderedCsv(sb.toString(), "quality-metrics-" + from + "-to-" + to + ".csv");
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -549,6 +610,26 @@ public class OperationalReportService {
     private static String n(Integer v) { return v != null ? String.valueOf(v) : "0"; }
     private static String dec(Double v) { return v != null ? String.format("%.1f", v) : "—"; }
     private static String grp(long v) { return String.format("%,d", v); }
+
+    // ── CSV cell formatting: blank (not em-dash / thousands-separators) so cells stay spreadsheet-clean ──
+    private static String csvNum(Integer v) { return v != null ? String.valueOf(v) : ""; }
+    private static String csvDec(Double v) { return v != null ? String.format("%.1f", v) : ""; }
+
+    private static void csvRow(StringBuilder sb, String... cells) {
+        for (int i = 0; i < cells.length; i++) {
+            if (i > 0) sb.append(',');
+            sb.append(csvCell(cells[i]));
+        }
+        sb.append('\n');
+    }
+
+    /** CSV-escape a cell: quote when it contains a comma, quote, or newline; "" escapes a quote. */
+    private static String csvCell(String v) {
+        if (v == null) return "";
+        boolean q = v.contains(",") || v.contains("\"") || v.contains("\n") || v.contains("\r");
+        String out = v.replace("\"", "\"\"");
+        return q ? "\"" + out + "\"" : out;
+    }
     private static String pct(long v, long total) {
         return total > 0 ? String.format("%.1f%%", 100.0 * v / total) : "";
     }

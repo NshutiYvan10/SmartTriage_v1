@@ -20,6 +20,11 @@ export const operationalReportApi = {
     downloadBlob(`/reports/operational/period?hospitalId=${hospitalId}&from=${from}&to=${to}`,
       `period-activity-${from}-to-${to}.pdf`),
 
+  /** Period activity per-day breakdown as CSV (one row per day). */
+  periodActivityCsv: (hospitalId: string, from: string, to: string) =>
+    downloadBlob(`/reports/operational/period/csv?hospitalId=${hospitalId}&from=${from}&to=${to}`,
+      `period-activity-${from}-to-${to}.csv`),
+
   /** The authenticated clinician's own workload — self-scoped server-side. */
   myActivity: (from: string, to: string) =>
     downloadBlob(`/reports/operational/my-activity?from=${from}&to=${to}`,
@@ -29,4 +34,9 @@ export const operationalReportApi = {
   qualityMetrics: (hospitalId: string, from: string, to: string) =>
     downloadBlob(`/reports/operational/quality?hospitalId=${hospitalId}&from=${from}&to=${to}`,
       `quality-metrics-${from}-to-${to}.pdf`),
+
+  /** Daily quality KPI snapshots as CSV (one row per captured day). */
+  qualityMetricsCsv: (hospitalId: string, from: string, to: string) =>
+    downloadBlob(`/reports/operational/quality/csv?hospitalId=${hospitalId}&from=${from}&to=${to}`,
+      `quality-metrics-${from}-to-${to}.csv`),
 };
