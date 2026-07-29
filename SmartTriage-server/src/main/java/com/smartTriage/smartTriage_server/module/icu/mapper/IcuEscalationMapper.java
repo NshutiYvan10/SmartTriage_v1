@@ -39,20 +39,27 @@ public final class IcuEscalationMapper {
                 .notes(escalation.getNotes())
                 .createdAt(escalation.getCreatedAt());
 
-        // Visit info
-        if (escalation.getVisit() != null) {
-            builder.visitId(escalation.getVisit().getId());
-            builder.visitNumber(escalation.getVisit().getVisitNumber());
-            builder.triageCategory(escalation.getVisit().getCurrentTriageCategory());
+        // Visit info. isInitialized guards are defense-in-depth against the
+        // lazy-mapping 500 (service returns a detached entity, this mapper
+        // runs after the tx closed): the service hydrates every return path,
+        // but a future call site that forgets must degrade to null fields —
+        // never take down a mutation response whose write already committed.
+        var visit = escalation.getVisit();
+        if (visit != null && org.hibernate.Hibernate.isInitialized(visit)) {
+            builder.visitId(visit.getId());
+            builder.visitNumber(visit.getVisitNumber());
+            builder.triageCategory(visit.getCurrentTriageCategory());
             // Patient CURRENT physical location (distinct from ICU destination bed).
-            builder.currentEdZone(escalation.getVisit().getCurrentEdZone());
-            builder.currentBed(escalation.getVisit().getCurrentBed() != null
-                    ? escalation.getVisit().getCurrentBed().getCode()
-                    : null);
-            if (escalation.getVisit().getPatient() != null) {
+            builder.currentEdZone(visit.getCurrentEdZone());
+            if (visit.getCurrentBed() != null
+                    && org.hibernate.Hibernate.isInitialized(visit.getCurrentBed())) {
+                builder.currentBed(visit.getCurrentBed().getCode());
+            }
+            if (visit.getPatient() != null
+                    && org.hibernate.Hibernate.isInitialized(visit.getPatient())) {
                 builder.patientName(
-                        escalation.getVisit().getPatient().getFirstName() + " " +
-                                escalation.getVisit().getPatient().getLastName());
+                        visit.getPatient().getFirstName() + " " +
+                                visit.getPatient().getLastName());
             }
         }
 

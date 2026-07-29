@@ -78,6 +78,9 @@ export function IcuEscalationView() {
   const [capacity, setCapacity] = useState<IcuCapacity | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  // Action failures were console.error-only — a failed (or seemingly failed)
+  // click looked identical to a dead button. Surface every action error.
+  const [actionError, setActionError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
 
   /* ── Response dialog state ── */
@@ -138,11 +141,13 @@ export function IcuEscalationView() {
   /* ── Action handlers ── */
   const handleNotifyTeam = async (id: string) => {
     setActionLoading(id);
+    setActionError(null);
     try {
       await icuApi.notifyTeam(id);
       await refreshAll();
     } catch (err) {
       console.error('Failed to notify ICU team:', err);
+      setActionError((err as any)?.message ? `Failed to notify ICU team: ` + (err as any).message : 'Failed to notify ICU team — please retry.');
     } finally {
       setActionLoading(null);
     }
@@ -151,6 +156,7 @@ export function IcuEscalationView() {
   const handleRecordResponse = async () => {
     if (!responseDialogId) return;
     setActionLoading(responseDialogId);
+    setActionError(null);
     try {
       await icuApi.recordResponse(responseDialogId, {
         accepted: responseAccepted,
@@ -164,6 +170,7 @@ export function IcuEscalationView() {
       await refreshAll();
     } catch (err) {
       console.error('Failed to record ICU response:', err);
+      setActionError((err as any)?.message ? `Failed to record ICU response: ` + (err as any).message : 'Failed to record ICU response — please retry.');
     } finally {
       setActionLoading(null);
     }
@@ -172,6 +179,7 @@ export function IcuEscalationView() {
   const handleAssignBed = async () => {
     if (!bedDialogId || !bedNumber.trim()) return;
     setActionLoading(bedDialogId);
+    setActionError(null);
     try {
       await icuApi.assignBed(bedDialogId, bedNumber.trim());
       setBedDialogId(null);
@@ -179,6 +187,7 @@ export function IcuEscalationView() {
       await refreshAll();
     } catch (err) {
       console.error('Failed to assign bed:', err);
+      setActionError((err as any)?.message ? `Failed to assign bed: ` + (err as any).message : 'Failed to assign bed — please retry.');
     } finally {
       setActionLoading(null);
     }
@@ -186,11 +195,13 @@ export function IcuEscalationView() {
 
   const handleTransfer = async (id: string) => {
     setActionLoading(id);
+    setActionError(null);
     try {
       await icuApi.transfer(id);
       await refreshAll();
     } catch (err) {
       console.error('Failed to transfer patient:', err);
+      setActionError((err as any)?.message ? `Failed to transfer patient: ` + (err as any).message : 'Failed to transfer patient — please retry.');
     } finally {
       setActionLoading(null);
     }
@@ -199,6 +210,7 @@ export function IcuEscalationView() {
   const handleCancel = async () => {
     if (!cancelDialogId || !cancelReason.trim()) return;
     setActionLoading(cancelDialogId);
+    setActionError(null);
     try {
       await icuApi.cancel(cancelDialogId, cancelReason.trim());
       setCancelDialogId(null);
@@ -206,6 +218,7 @@ export function IcuEscalationView() {
       await refreshAll();
     } catch (err) {
       console.error('Failed to cancel escalation:', err);
+      setActionError((err as any)?.message ? `Failed to cancel escalation: ` + (err as any).message : 'Failed to cancel escalation — please retry.');
     } finally {
       setActionLoading(null);
     }
@@ -271,8 +284,43 @@ export function IcuEscalationView() {
           </div>
         </div>
 
-        {/* ── ICU Capacity Card ── */}
-        {capacity && occ && (
+        {/* ── Action error banner ── */}
+        {actionError && (
+          <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 flex items-center justify-between gap-3 animate-fade-up">
+            <span className="text-sm font-semibold text-red-400">{actionError}</span>
+            <button
+              onClick={() => setActionError(null)}
+              className="text-xs font-bold text-red-400/70 hover:text-red-400 shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* ── ICU Capacity Card ──
+            Capacity is a HOSPITAL CONFIG number (hospital.icuCapacity — the
+            ICU itself is outside this system's scope; no ICU beds are
+            modelled). When it isn't configured, showing "0 total / N
+            occupied / 0.0%" reads as broken — show the honest config state
+            instead. */}
+        {capacity && occ && capacity.totalBeds === 0 ? (
+          <div className="rounded-2xl overflow-hidden animate-fade-up" style={glassCard}>
+            <div className="px-5 py-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Activity className="w-4 h-4 text-purple-400" />
+                <span className={`text-xs font-bold uppercase tracking-wider ${text.heading}`}>ICU Bed Capacity</span>
+              </div>
+              <p className={`text-sm ${text.muted}`}>
+                ICU capacity is not configured for this hospital
+                {capacity.occupiedBeds > 0
+                  ? ` (${capacity.occupiedBeds} patient${capacity.occupiedBeds === 1 ? '' : 's'} currently recorded as ICU-admitted)`
+                  : ''}.
+                A hospital administrator can set the ICU bed count in hospital settings; escalation
+                tracking below works either way — capacity only feeds this summary.
+              </p>
+            </div>
+          </div>
+        ) : capacity && occ && (
           <div className="rounded-2xl overflow-hidden animate-fade-up" style={glassCard}>
             <div className="px-5 py-4">
               <div className="flex items-center gap-2 mb-4">

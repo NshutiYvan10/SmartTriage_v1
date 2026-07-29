@@ -83,7 +83,7 @@ public class IcuEscalationService {
         log.info("ICU escalation requested: Visit {} | Trigger: {} | Reason: {}",
                 visit.getVisitNumber(), escalation.getTriggerType(), request.getEscalationReason());
 
-        return escalation;
+        return hydrateForResponse(escalation);
     }
 
     /**
@@ -137,23 +137,30 @@ public class IcuEscalationService {
         log.warn("AUTO ICU ESCALATION: Visit {} | Trigger: {} | Reasoning: {}",
                 visit.getVisitNumber(), recommendation.triggerType(), recommendation.reasoning());
 
-        return Optional.of(escalation);
+        return Optional.of(hydrateForResponse(escalation));
     }
 
     /**
-     * Record that the ICU team has been notified.
+     * Record that the ICU team has been notified. Idempotent: a repeat call
+     * (double-click, stale UI) returns the escalation unchanged instead of
+     * silently overwriting the original notified-at timestamp — that time
+     * feeds the response-time metric and is part of the record.
      */
     @Transactional
     public IcuEscalation notifyIcuTeam(UUID escalationId) {
         IcuEscalation escalation = findActiveEscalation(escalationId);
 
-        escalation.setIcuTeamNotifiedAt(Instant.now());
-        escalation.setStatus(IcuEscalationStatus.ICU_NOTIFIED);
+        if (escalation.getIcuTeamNotifiedAt() == null) {
+            escalation.setIcuTeamNotifiedAt(Instant.now());
+            escalation.setStatus(IcuEscalationStatus.ICU_NOTIFIED);
+            escalation = icuEscalationRepository.save(escalation);
+            log.info("ICU team notified for escalation: {} | Visit: {}",
+                    escalationId, escalation.getVisit().getVisitNumber());
+        } else {
+            log.debug("ICU team already notified for escalation {} — idempotent no-op", escalationId);
+        }
 
-        log.info("ICU team notified for escalation: {} | Visit: {}",
-                escalationId, escalation.getVisit().getVisitNumber());
-
-        return icuEscalationRepository.save(escalation);
+        return hydrateForResponse(escalation);
     }
 
     /**
@@ -195,7 +202,7 @@ public class IcuEscalationService {
                     escalationId, escalation.getVisit().getVisitNumber(), request.getDeclineReason());
         }
 
-        return icuEscalationRepository.save(escalation);
+        return hydrateForResponse(icuEscalationRepository.save(escalation));
     }
 
     /**
@@ -217,7 +224,7 @@ public class IcuEscalationService {
         log.info("ICU bed assigned: {} | Escalation: {} | Visit: {}",
                 bedNumber, escalationId, escalation.getVisit().getVisitNumber());
 
-        return icuEscalationRepository.save(escalation);
+        return hydrateForResponse(icuEscalationRepository.save(escalation));
     }
 
     /**
@@ -238,7 +245,7 @@ public class IcuEscalationService {
         log.info("Patient transferred to ICU: Visit {} | Bed: {}",
                 visit.getVisitNumber(), escalation.getIcuBedNumber());
 
-        return icuEscalationRepository.save(escalation);
+        return hydrateForResponse(icuEscalationRepository.save(escalation));
     }
 
     /**
@@ -254,7 +261,7 @@ public class IcuEscalationService {
         log.info("ICU escalation cancelled: {} | Visit: {} | Reason: {}",
                 escalationId, escalation.getVisit().getVisitNumber(), reason);
 
-        return icuEscalationRepository.save(escalation);
+        return hydrateForResponse(icuEscalationRepository.save(escalation));
     }
 
     /**
@@ -283,7 +290,8 @@ public class IcuEscalationService {
      * Get the active escalation for a specific visit.
      */
     public Optional<IcuEscalation> getEscalationForVisit(UUID visitId) {
-        return icuEscalationRepository.findByVisitIdAndIsActiveTrue(visitId);
+        return icuEscalationRepository.findByVisitIdAndIsActiveTrue(visitId)
+                .map(this::hydrateForResponse);
     }
 
     /**
@@ -313,6 +321,25 @@ public class IcuEscalationService {
     }
 
     // --- Private helpers ---
+
+    /**
+     * Initialise every lazy association the response mapper walks
+     * (visit → patient, visit → currentBed) while the transaction is still
+     * open. Without this, every MUTATION endpoint committed its write and
+     * then 500'd in the controller's mapping — the classic lazy-visit
+     * pattern (sepsis/fast-track/glucose/isolation all had it): the user
+     * sees "nothing happened", navigates away, and finds the state changed.
+     */
+    private IcuEscalation hydrateForResponse(IcuEscalation escalation) {
+        if (escalation == null) return null;
+        Visit visit = escalation.getVisit();
+        if (visit != null) {
+            org.hibernate.Hibernate.initialize(visit);
+            org.hibernate.Hibernate.initialize(visit.getPatient());
+            org.hibernate.Hibernate.initialize(visit.getCurrentBed());
+        }
+        return escalation;
+    }
 
     private IcuEscalation findActiveEscalation(UUID escalationId) {
         return icuEscalationRepository.findByIdAndIsActiveTrue(escalationId)
