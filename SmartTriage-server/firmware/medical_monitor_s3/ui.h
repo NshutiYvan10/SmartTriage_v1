@@ -383,7 +383,7 @@ private:
 
   // ---------- value cell: sprite-rendered, redrawn only on change ----------
   struct Cell { char last[28] = ""; };
-  Cell cells_[24];   // 0-13 pages · 14-21 BP-history rows
+  Cell cells_[28];   // 0-13 pages · 14-21 BP-history rows · 22-25 status tags
 
   // Only fonts 2 and 4 are used for data (the fonts the previously working
   // build proved are enabled in this project's User_Setup.h); `size` scales
@@ -461,10 +461,15 @@ private:
     snprintf(t, sizeof(t), s.hr > 0 ? "%.0f" : "--", s.hr);
     cell(0, 6 + 8, top + 22, tileW - 16, tileH - 42, t, hrC, 4, 2, UI_CARD);
     accent(0, hrC);
-    cell(10, 6 + 8, top + tileH - 20, tileW - 16, 16,
-         s.hr <= 0 ? "" : !s.hrFromEcg ? "PULSE-OX"
-                        : hrWeak ? "ECG - WEAK SIGNAL, CHECK ELECTRODES" : "ECG",
-         hrWeak ? UI_WARN : UI_MUTED, 1, 1, UI_CARD);
+    // A bare "--" with no reason is a support call. When HR is blanked,
+    // SAY WHY in the tag line (this branch previously rendered "" for
+    // exactly the case that most needs an explanation).
+    const char *hrTag = s.hr > 0 ? (!s.hrFromEcg ? "PULSE-OX"
+                                   : hrWeak ? "ECG - WEAK SIGNAL, CHECK ELECTRODES" : "ECG")
+                      : s.chEcg == Chan::NO_CONTACT ? "LEADS OFF"
+                      : "SIGNAL POOR - CHECK ELECTRODES";
+    cell(10, 6 + 8, top + tileH - 20, tileW - 16, 16, hrTag,
+         (s.hr <= 0 || hrWeak) ? UI_WARN : UI_MUTED, 1, 1, UI_CARD);
 
     uint16_t spC = bandColor(s.spo2, ALM_SPO2_WARN, 101, ALM_SPO2_CRIT, 101);
     snprintf(t, sizeof(t), s.spo2 > 0 ? "%.0f" : "--", s.spo2);
@@ -484,14 +489,17 @@ private:
          (s.temp > 0 && !tempCal) ? "SKIN TEMP - RUN cal temp" : "",
          UI_WARN, 1, 1, UI_CARD);
 
-    uint16_t rrC = bandColor(s.rr, ALM_RR_WARN_LOW, ALM_RR_WARN_HIGH, 1, 99);
-    snprintf(t, sizeof(t), s.rr > 0 ? "%.0f" : "--", s.rr);
-    cell(3, 12 + tileW + 8, top + tileH + 6 + 22, tileW - 16, tileH - 42, t, rrC, 4, 2, UI_CARD);
-    accent(3, rrC);
+    // RESP: not reported by this hardware (see sensors.h publish()). The
+    // tile stays so the layout is unchanged, and says so plainly rather
+    // than showing a number nobody should act on.
+    cell(3, 12 + tileW + 8, top + tileH + 6 + 22, tileW - 16, tileH - 42, "--", UI_MUTED, 4, 2, UI_CARD);
+    accent(3, UI_FAINT);
+    cell(24, 12 + tileW + 8, top + 2 * tileH + 6 - 20, tileW - 16, 16,
+         "not measured on this device", UI_MUTED, 1, 1, UI_CARD);
 
     // BP strip
     int by = top + 2 * (tileH + 6);
-    if (s.bpLast.valid) {
+    if (s.bpLast.valid && s.bpCalibrated) {
       char when[28] = "time unsynced";
       if (s.bpLast.at > 0) {
         struct tm tmv; localtime_r(&s.bpLast.at, &tmv);
@@ -501,8 +509,15 @@ private:
       uint16_t c = (s.bpLast.sys > ALM_SYS_CRIT_HIGH || s.bpLast.sys < ALM_SYS_CRIT_LOW) ? UI_CRIT : UI_GOOD;
       cell(4, 16, by + 20, 150, 28, t, c, 4, 1, UI_CARD);
       char meta[56];
-      snprintf(meta, sizeof(meta), "MAP %d   at %s%s", s.bpLast.map, when, s.bpCalibrated ? "" : "  UNCAL");
+      snprintf(meta, sizeof(meta), "MAP %d   at %s", s.bpLast.map, when);
       cell(5, 176, by + 24, W - 196, 18, meta, UI_MUTED, 2, 1, UI_CARD);
+    } else if (s.bpLast.valid) {
+      // A reading EXISTS but the pressure front-end is not validated. The
+      // dashboard is the at-a-glance clinical view — the number a nurse
+      // transcribes — so it shows nothing here. The BP page still displays
+      // the raw result for engineering/validation work, clearly marked.
+      cell(4, 16, by + 20, 150, 28, "--/--", UI_MUTED, 4, 1, UI_CARD);
+      cell(5, 176, by + 24, W - 196, 18, "uncalibrated - not clinical, see BP page", UI_WARN, 2, 1, UI_CARD);
     } else {
       cell(4, 16, by + 20, 150, 28, "--/--", UI_MUTED, 4, 1, UI_CARD);
       cell(5, 176, by + 24, W - 196, 18, "no reading - use BP page", UI_MUTED, 2, 1, UI_CARD);
@@ -846,7 +861,9 @@ private:
       if (s.bpLast.at > 0) { struct tm tmv; localtime_r(&s.bpLast.at, &tmv); snprintf(when, sizeof(when), "%02d:%02d", tmv.tm_hour, tmv.tm_min); }
       snprintf(meta, sizeof(meta), "MAP %d mmHg   measured %s", s.bpLast.map, when);
       cell(12, W / 2 - 200, top + 86, 400, 18, meta, UI_MUTED, 2);
-      cell(13, W / 2 - 200, top + 108, 400, 20, "", UI_MUTED, 2);
+      cell(13, W / 2 - 200, top + 108, 400, 20,
+           s.bpCalibrated ? "" : "UNCALIBRATED - engineering value, NOT for clinical use",
+           UI_CRIT, 2);
     } else {
       cell(11, W / 2 - 150, top + 30, 300, 52, "no reading yet", UI_MUTED, 4, 1);
       cell(12, W / 2 - 200, top + 86, 400, 18, "wrap cuff snugly, then press START BP", UI_MUTED, 2);

@@ -61,6 +61,13 @@ struct MonitorState {
   // ECG signal quality (0 none · 1 poor/holding stale · 2 fair · 3 good) —
   // drives the "weak signal" presentation instead of a flickering number.
   uint8_t  ecgQuality = 0;
+  // HR admissibility (v3.8.0). The quality ladder alone cannot be trusted
+  // as a gate: it grades expected-vs-accepted beats against the detector's
+  // OWN median, so a detector free-running on noise at its 300 ms
+  // refractory floor scores full marks. This flag is set false whenever
+  // the beat train carries the signature of a noise/T-wave lock, and it
+  // gates display, alarms and transmission alike.
+  bool     hrAdmissible = false;
 
   bool     bpRequested = false;     // UI → bpTask trigger
   bool     bpCancelRequested = false; // UI → bpTask: abort the running cycle NOW

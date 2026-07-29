@@ -34,8 +34,13 @@ public:
     MonitorState s = snapshotState();
     AlarmFlags a;
 
-    if (s.spo2 > 0)  a.spo2Low  = s.spo2 < ALM_SPO2_CRIT;
-    if (s.hr > 0)   { a.hrLow    = s.hr < ALM_HR_CRIT_LOW;
+    // Every clinical alarm below is gated on the SAME admissibility rule
+    // as display and transmission. An alarm is a claim about the patient;
+    // firing one from an uncalibrated or noise-locked channel trains staff
+    // to ignore the buzzer, which is how alarm fatigue kills people.
+    if (s.spo2 > 0 && g_cal.spo2Calibrated()) a.spo2Low = s.spo2 < ALM_SPO2_CRIT;
+    if (s.hr > 0 && s.hrAdmissible) {
+                      a.hrLow    = s.hr < ALM_HR_CRIT_LOW;
                       a.hrHigh   = s.hr > ALM_HR_CRIT_HIGH; }
     // Temperature alarms only from a DEVICE-CALIBRATED sensor: an
     // uncalibrated contact probe reads skin temp (3-6 C below core), so
@@ -44,14 +49,25 @@ public:
     if (s.temp > 0 && g_cal.tempCalibrated()) {
                       a.tempHigh = s.temp > ALM_TEMP_CRIT_HIGH;
                       a.tempLow  = s.temp < ALM_TEMP_CRIT_LOW; }
-    if (s.bpLast.valid) {
+    // BP alarms: gated with transmission (net.h). Note that with the
+    // present front-end the systolic saturates near 124 mmHg, so
+    // bpSysHigh (>180) is UNREACHABLE and bpSysLow (<80) nearly so — the
+    // BP alarm channel is inert in both directions and must not be
+    // presented as a safety net.
+    if (s.bpLast.valid && s.bpCalibrated) {
       a.bpSysHigh = s.bpLast.sys > ALM_SYS_CRIT_HIGH;
       a.bpSysLow  = s.bpLast.sys < ALM_SYS_CRIT_LOW;
     }
     // Leads-off only alarms once a patient is plausibly connected —
     // an idle monitor on a shelf shouldn't scream. "Connected" = any
     // other channel is producing data.
-    bool patientPresent = s.spo2 > 0 || s.temp > 0 || s.hr > 0;
+    // Presence must NOT be defined by the channels we may have blanked:
+    // with HR gated off, an off-skin temp probe and no finger on the
+    // pulse-ox, the old test suppressed even LEADS OFF — no number and no
+    // sound. A live temperature reading (any value, calibrated or not)
+    // and raw ECG contact both count as a patient being present.
+    bool patientPresent = s.spo2 > 0 || s.temp > 0 || s.hr > 0
+                       || s.chTemp == Chan::OK || s.chSpo2 == Chan::OK;
     a.ecgLeadsOff = !s.simulation && patientPresent && s.chEcg == Chan::NO_CONTACT;
 
     // Backend lost: only after we've been reachable once (or 90 s grace

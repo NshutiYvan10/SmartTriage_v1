@@ -621,6 +621,43 @@ private:
     return false;
   }
 
+  // ---- HR ADMISSIBILITY: the noise/T-wave lock signature ----
+  // A detector free-running on EMG or mains re-arms at its own refractory
+  // floor, which makes the MOST REGULAR interval train the device can
+  // produce: median pinned within a few ms of the refractory and a
+  // coefficient of variation far below anything physiological (real sinus
+  // rhythm always carries respiratory variation). Field values 174-192 bpm
+  // = 313-345 ms, i.e. 4-15 % above the 300 ms floor.
+  //
+  // BOTH conditions are required. A bare "median near refractory" test
+  // would blank a genuine paediatric SVT at 220 bpm — HR_MAX is 250 and
+  // this monitor is used on children.
+  bool hrAdmissible() {
+    if (leadsOff_ || displayedHr_ <= 0 || rrCnt_ < 4) return false;
+    float med = rrMedian();
+    if (med <= 0) return false;
+    uint32_t refractory = (uint32_t)constrain(0.4f * med, (float)ECG_REFRACTORY_MS, 600.0f);
+    bool pinnedToFloor = med <= (float)refractory + 20.0f;
+    if (!pinnedToFloor) return true;
+    float mean = 0;
+    for (int i = 0; i < rrCnt_; i++) mean += rrBuf_[i];
+    mean /= rrCnt_;
+    if (mean <= 0) return false;
+    float var = 0;
+    for (int i = 0; i < rrCnt_; i++) { float d = rrBuf_[i] - mean; var += d * d; }
+    float cv = sqrtf(var / rrCnt_) / mean;
+    if (cv < 0.03f) {                       // inhumanly regular AND at the floor
+      if (millis() - lastLockLogMs_ > 10000) {
+        lastLockLogMs_ = millis();
+        Serial.printf("[ecg] HR INADMISSIBLE: interval train pinned at refractory "
+                      "(median %.0f ms, CV %.1f%%) - noise lock, blanking HR\n", med, cv * 100.0f);
+      }
+      return false;
+    }
+    return true;
+  }
+  uint32_t lastLockLogMs_ = 0;
+
   // Do the parked candidate intervals agree with each other? (A real rate
   // change tracks within 2-3 beats; scattered artifacts never agree.)
   bool pendingIntervalsAgree() {
@@ -782,14 +819,24 @@ private:
     lastPublishMs_ = now;
     if (!stateLock(5)) return;
     g_state.chEcg = leadsOff_ ? Chan::NO_CONTACT : Chan::OK;
-    g_state.hr = displayedHr_;
+    g_state.hrAdmissible = hrAdmissible();
+    g_state.hr = g_state.hrAdmissible ? displayedHr_ : 0.0f;
     g_state.hrFromEcg = hrFromEcg_;
     g_state.ecgQuality = quality_;
-    // RR is derived from R-peak amplitude modulation, so it is only as
-    // good as the beat train. Publishing it from a noisy/artefact trace
-    // produced values like "RESP 7" on a normally-breathing subject —
-    // worse than showing nothing. Require a good-quality ECG.
-    g_state.rr = (rrEma_.primed && quality_ >= 2) ? rrEma_.value : 0.0f;
+    // RESPIRATION IS NOT REPORTED (v3.8.0).
+    // The estimator counts mean-crossings of ~30 unevenly-spaced R-peak
+    // AMPLITUDES. Amplitude-modulation EDR from three AD8232 electrodes
+    // has an SNR at or below 1, and the count quantum is 1.25-3.2
+    // breaths/min and itself scales with the (possibly wrong) heart rate.
+    // The field's "RESP 7" on a normally-breathing subject back-solves to
+    // about two crossings — electrode settling, not breathing. A quality
+    // gate cannot rescue this: the ladder is self-referential and graded
+    // the 190 bpm noise lock as its HIGHEST score. Honest respiration
+    // needs impedance pneumography or capnography, which this board does
+    // not have. The pipeline is left intact (rrEma_ still computes, the
+    // trend ring still fills) so nothing else breaks, but the clinical
+    // value stays 0 => the UI shows "--" and net.h sends nothing.
+    g_state.rr = 0.0f;
     stateUnlock();
   }
 

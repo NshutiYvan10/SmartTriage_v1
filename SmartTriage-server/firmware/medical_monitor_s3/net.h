@@ -163,16 +163,27 @@ private:
     }
 
     if (buffered) {
+      // The offline buffer replays up to 5 minutes on reconnect, so every
+      // gate applied to a live payload MUST be applied here too or the
+      // suppressed values all arrive at once the moment WiFi returns.
       if (buffered->hr > 0)   doc["heartRate"]       = buffered->hr;
-      if (buffered->spo2 > 0) doc["spo2"]            = buffered->spo2;
-      if (buffered->rr > 0)   doc["respiratoryRate"] = buffered->rr;
+      if (buffered->spo2 > 0 && g_cal.spo2Calibrated()) doc["spo2"] = buffered->spo2;
       if (buffered->temp > 0 && g_cal.tempCalibrated())
         doc["temperature"] = ((int)(buffered->temp * 10)) / 10.0;
-      if (buffered->sys > 0)  { doc["systolicBp"] = buffered->sys; doc["diastolicBp"] = buffered->dia; }
+      if (buffered->sys > 0 && s.bpCalibrated) { doc["systolicBp"] = buffered->sys; doc["diastolicBp"] = buffered->dia; }
     } else {
-      if (s.hr > 0)   doc["heartRate"]       = (int)roundf(s.hr);
-      if (s.spo2 > 0) doc["spo2"]            = (int)roundf(s.spo2);
-      if (s.rr > 0)   doc["respiratoryRate"] = (int)roundf(s.rr);
+      // HR: s.hr is already 0 unless the beat train passed the
+      // admissibility test (sensors.h) — an inadmissible 190 bpm reaching
+      // SmartTriage can fire deterioration detection and the
+      // escalation-to-Resus pathway off a noise lock.
+      if (s.hr > 0 && s.hrAdmissible) doc["heartRate"] = (int)roundf(s.hr);
+      // SpO2: the 110-25R curve is a population fit and this build reads
+      // about 5 points LOW from an artifact in the AC estimate. An
+      // uncalibrated value must not enter the clinical record — and note
+      // that once trimmed, the trim is additive, so it MASKS hypoxia:
+      // that is exactly why the gate lives here and on the alarm.
+      if (s.spo2 > 0 && g_cal.spo2Calibrated()) doc["spo2"] = (int)roundf(s.spo2);
+      // respiratoryRate: deliberately never sent — see sensors.h publish().
       // Uncalibrated temperature NEVER reaches the clinical record: a
       // contact sensor without its site offset reads skin temp, and a
       // "30.8 C" landing in SmartTriage fires false hypothermia /
@@ -184,8 +195,19 @@ private:
         tempGateLogged_ = true;
         Serial.println("[net] temperature EXCLUDED from transmission until device-calibrated (serial: cal temp <ref C>)");
       }
-      if (s.bpLast.valid) {
-        // BP persists in every payload until a new manual reading replaces it.
+      // BLOOD PRESSURE — gated on s.bpCalibrated, which nothing in this
+      // firmware sets true, so BP does NOT transmit. That is deliberate,
+      // not an oversight: the cuff ADC saturates at
+      //   (8388607 - zeroRaw) / countsPerMmHg = about 124 mmHg
+      // so the cycle cannot inflate above a normal adult's systolic, and
+      // the shipped estimator reports a plausible-looking pressure anyway
+      // (an audit reproduced 114/76 from a cuff wrapped on a rolled
+      // TOWEL). A wrong-but-plausible BP in a triage record is worse than
+      // no BP: hypertension reads as reassuring, and this system carries a
+      // pre-eclampsia pathway keyed on blood pressure. Re-enable only
+      // after the pressure front-end is replaced (see the firmware README)
+      // and the estimator is validated against a reference sphygmomanometer.
+      if (s.bpLast.valid && s.bpCalibrated) {
         doc["systolicBp"]  = s.bpLast.sys;
         doc["diastolicBp"] = s.bpLast.dia;
       }
