@@ -88,7 +88,9 @@ public class ClinicalNoteService {
                 note.getAuthorUserId(), note.getAuthorRole());
 
         ClinicalNoteResponse response = ClinicalMapper.toResponse(note);
-        realTimeEventPublisher.publishClinicalNote(visit.getId(), response);
+        // After commit: a rolled-back note must never reach other clinicians'
+        // live timelines as a phantom entry.
+        realTimeEventPublisher.publishClinicalNoteAfterCommit(visit.getId(), response);
         return response;
     }
 
@@ -126,7 +128,7 @@ public class ClinicalNoteService {
                 original.getId(), correction.getId(), correction.getAuthorUserId(), correction.getAuthorRole());
 
         ClinicalNoteResponse response = ClinicalMapper.toResponse(correction);
-        realTimeEventPublisher.publishClinicalNote(original.getVisit().getId(), response);
+        realTimeEventPublisher.publishClinicalNoteAfterCommit(original.getVisit().getId(), response);
         return response;
     }
 

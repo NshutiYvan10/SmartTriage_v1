@@ -263,6 +263,32 @@ public class RealTimeEventPublisher {
                 topic, note.getId(), note.getSupersedesId());
     }
 
+    /**
+     * After-commit variant of {@link #publishClinicalNote}. Clinical notes
+     * are legal-grade records: broadcasting one from inside the writing
+     * transaction means a rollback after the publish leaves every subscribed
+     * clinician looking at a phantom note that never reached the record.
+     * Same fire-or-defer shape as the other *AfterCommit helpers.
+     */
+    public void publishClinicalNoteAfterCommit(UUID visitId, ClinicalNoteResponse note) {
+        Runnable fire = () -> {
+            try {
+                publishClinicalNote(visitId, note);
+            } catch (Exception e) {
+                log.warn("Failed to publish clinical note for visit {}: {}",
+                        visitId, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override public void afterCommit() { fire.run(); }
+                    });
+        } else {
+            fire.run();
+        }
+    }
+
     // ====================================================================
     // LAB ORDER TOPICS
     // ====================================================================

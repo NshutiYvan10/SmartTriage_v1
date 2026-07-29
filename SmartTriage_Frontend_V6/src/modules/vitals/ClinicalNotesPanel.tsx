@@ -12,7 +12,9 @@
  * from other clinicians editing the same visit.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileText, Send, AlertCircle, History, Lock, Loader2 } from 'lucide-react';
+import {
+  FileText, Send, AlertCircle, History, Lock, Loader2, ShieldCheck,
+} from 'lucide-react';
 import { clinicalNoteApi } from '@/api/clinicalNotes';
 import { subscribeToClinicalNotes } from '@/api/websocket';
 import type { ClinicalNoteResponse, NoteType, Role } from '@/api/types';
@@ -44,6 +46,40 @@ const NOTE_TYPE_LABEL: Record<NoteType, string> = NOTE_TYPES.reduce(
   {} as Record<NoteType, string>,
 );
 
+/**
+ * Visual identity per note family. The accent stripe + type chip let a
+ * clinician scan the narrative by COLOUR (assessment vs nursing vs plan)
+ * before reading a word — the same trick the vitals tiles use.
+ */
+const TYPE_ACCENT: Record<string, { bar: string; chipDark: string; chipLight: string }> = {
+  ASSESSMENT: { bar: '#f59e0b', chipDark: 'bg-amber-500/15 text-amber-300',   chipLight: 'bg-amber-100 text-amber-800' },
+  NURSING:    { bar: '#10b981', chipDark: 'bg-emerald-500/15 text-emerald-300', chipLight: 'bg-emerald-100 text-emerald-800' },
+  DOCTOR:     { bar: '#06b6d4', chipDark: 'bg-cyan-500/15 text-cyan-300',     chipLight: 'bg-cyan-100 text-cyan-800' },
+  PLAN:       { bar: '#8b5cf6', chipDark: 'bg-violet-500/15 text-violet-300', chipLight: 'bg-violet-100 text-violet-800' },
+  OTHER:      { bar: '#64748b', chipDark: 'bg-slate-500/15 text-slate-300',   chipLight: 'bg-slate-200 text-slate-700' },
+};
+
+function accentFor(type: NoteType) {
+  switch (type) {
+    case 'TRIAGE_NOTE':
+    case 'HISTORY_OF_PRESENTING_COMPLAINT':
+    case 'PHYSICAL_FINDINGS':
+    case 'REVIEW_OF_SYSTEMS':
+      return TYPE_ACCENT.ASSESSMENT;
+    case 'NURSING_NOTE':
+      return TYPE_ACCENT.NURSING;
+    case 'DOCTOR_NOTE':
+    case 'PROGRESS_NOTE':
+      return TYPE_ACCENT.DOCTOR;
+    case 'TREATMENT_PLAN':
+    case 'HANDOVER':
+    case 'DISCHARGE_SUMMARY':
+      return TYPE_ACCENT.PLAN;
+    default:
+      return TYPE_ACCENT.OTHER;
+  }
+}
+
 const CORRECTION_ALLOWED: ReadonlySet<string> = new Set([
   'DOCTOR', 'NURSE', 'SUPER_ADMIN',
 ]);
@@ -62,6 +98,14 @@ function roleLabel(role: Role | null | undefined): string {
   // Prettier than the underscore-shouty enum value.
   return role.replace(/_/g, ' ').toLowerCase()
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function initialsOf(name: string | null | undefined): string {
+  if (!name) return '·';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '·';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 interface ClinicalNotesPanelProps {
@@ -147,6 +191,8 @@ export function ClinicalNotesPanel({ visitId, className }: ClinicalNotesPanelPro
     return m;
   }, [notes]);
 
+  const activeCount = notes.length - supersededIds.size;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!composerContent.trim() || submitting) return;
@@ -207,32 +253,64 @@ export function ClinicalNotesPanel({ visitId, className }: ClinicalNotesPanelPro
   };
 
   // ── Styling helpers ────────────────────────────────────────────────────
-  const cardCls = `rounded-xl shadow-md p-4 ${
-    isDark ? glassCard + ' border border-white/10' : 'bg-white border border-gray-200'
-  }`;
-  const headerTextCls = isDark ? 'text-white' : 'text-gray-900';
-  const subtleTextCls = isDark ? 'text-slate-400' : 'text-gray-500';
-  const inputCls = `w-full px-3 py-2 text-sm rounded-lg border ${
+  const headerTextCls = isDark ? 'text-white' : 'text-slate-900';
+  const subtleTextCls = isDark ? 'text-slate-400' : 'text-slate-500';
+  const inputCls = `w-full px-3 py-2 text-sm rounded-xl border transition-colors ${
     isDark
       ? 'bg-white/5 border-white/10 text-white placeholder:text-slate-500'
-      : 'bg-white border-gray-200 text-gray-900 placeholder:text-gray-400'
-  } focus:outline-none focus:ring-2 focus:ring-blue-500/40`;
+      : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'
+  } focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500/40`;
+  const primaryBtnCls = (enabled: boolean) =>
+    `inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl transition-all ${
+      enabled
+        ? 'bg-cyan-600 hover:bg-cyan-700 text-white shadow-lg shadow-cyan-600/20'
+        : (isDark ? 'bg-white/10 text-slate-500' : 'bg-slate-200 text-slate-400') + ' cursor-not-allowed'
+    }`;
 
   return (
-    <div className={`${cardCls} ${className ?? ''}`}>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className={`text-sm font-bold flex items-center gap-2 ${headerTextCls}`}>
-          <FileText className="w-4 h-4" />
-          Clinical Notes
-        </h3>
-        <span className={`text-xs ${subtleTextCls}`}>
-          {notes.length} {notes.length === 1 ? 'note' : 'notes'}
-        </span>
+    // NOTE: glassCard from useTheme is a CSSProperties OBJECT — it must go
+    // through `style`, never string-concatenated into className (the old
+    // panel did exactly that, rendering "[object Object]" as a class and
+    // losing the glass look entirely).
+    <div
+      className={`rounded-2xl p-4 ${isDark ? 'border border-white/10' : 'bg-white border border-slate-200 shadow-sm'} ${className ?? ''}`}
+      style={isDark ? glassCard : undefined}
+      data-panel="clinical-notes"
+    >
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2.5">
+          <span className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+            isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-600'
+          }`}>
+            <FileText className="w-4 h-4" />
+          </span>
+          <div>
+            <h3 className={`text-sm font-bold leading-tight ${headerTextCls}`}>Clinical Notes</h3>
+            <p className={`text-[10px] font-semibold uppercase tracking-wider ${subtleTextCls}`}>
+              Append-only record
+            </p>
+          </div>
+        </div>
+        <div className="text-right">
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold ${
+            isDark ? 'bg-white/10 text-slate-200' : 'bg-slate-100 text-slate-700'
+          }`}>
+            {activeCount} {activeCount === 1 ? 'note' : 'notes'}
+          </span>
+          {supersededIds.size > 0 && (
+            <p className={`text-[10px] mt-1 ${subtleTextCls}`}>
+              +{supersededIds.size} superseded
+            </p>
+          )}
+        </div>
       </div>
 
       {/* ── Composer ─────────────────────────────────────────────────── */}
-      <form onSubmit={handleSubmit} className="mb-4 space-y-2">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <form onSubmit={handleSubmit} className={`rounded-xl border p-3 mb-4 ${
+        isDark ? 'border-white/10 bg-white/[0.03]' : 'border-slate-200 bg-slate-50/60'
+      }`}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
           <select
             className={inputCls}
             value={composerType}
@@ -255,35 +333,44 @@ export function ClinicalNotesPanel({ visitId, className }: ClinicalNotesPanelPro
         </div>
         <textarea
           className={`${inputCls} min-h-[88px] resize-y`}
-          placeholder={authUser ? `Note content — signing as ${authUser.fullName}` : 'Note content'}
+          placeholder="Write the note…"
           value={composerContent}
           onChange={(e) => setComposerContent(e.target.value)}
           disabled={submitting}
         />
         {submitError && (
-          <div className="flex items-center gap-1.5 text-xs text-red-500">
+          <div className="flex items-center gap-1.5 text-xs text-red-500 mt-2">
             <AlertCircle className="w-3.5 h-3.5" />
             {submitError}
           </div>
         )}
-        <div className="flex items-center justify-between">
-          <p className={`text-[11px] ${subtleTextCls} flex items-center gap-1`}>
-            <Lock className="w-3 h-3" />
-            Notes are append-only. Corrections create a new entry; the original is preserved.
-          </p>
+        <div className="flex items-center justify-between gap-3 mt-2.5">
+          {authUser ? (
+            <span className="inline-flex items-center gap-2 min-w-0">
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                isDark ? 'bg-cyan-500/20 text-cyan-300' : 'bg-cyan-100 text-cyan-700'
+              }`}>
+                {initialsOf(authUser.fullName)}
+              </span>
+              <span className={`text-[11px] truncate ${subtleTextCls}`}>
+                Signing as <span className={`font-semibold ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{authUser.fullName}</span>
+                {authUser.role ? ` · ${roleLabel(authUser.role as Role)}` : ''}
+              </span>
+            </span>
+          ) : <span />}
           <button
             type="submit"
             disabled={!composerContent.trim() || submitting || !authUser}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition-colors ${
-              composerContent.trim() && !submitting && authUser
-                ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
+            className={primaryBtnCls(!!composerContent.trim() && !submitting && !!authUser)}
           >
             {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
             {submitting ? 'Saving…' : 'Save note'}
           </button>
         </div>
+        <p className={`text-[10px] mt-2 flex items-center gap-1 ${subtleTextCls}`}>
+          <Lock className="w-3 h-3 shrink-0" />
+          Append-only — corrections create a new entry; the original is preserved.
+        </p>
       </form>
 
       {/* ── List ─────────────────────────────────────────────────────── */}
@@ -298,145 +385,169 @@ export function ClinicalNotesPanel({ visitId, className }: ClinicalNotesPanelPro
           {loadError}
         </div>
       ) : notes.length === 0 ? (
-        <div className={`text-center py-8 ${subtleTextCls}`}>
-          <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No clinical notes yet for this visit.</p>
+        <div className={`text-center py-10 ${subtleTextCls}`}>
+          <span className={`w-14 h-14 mx-auto mb-3 rounded-2xl border-2 border-dashed flex items-center justify-center ${
+            isDark ? 'border-white/15' : 'border-slate-200'
+          }`}>
+            <FileText className="w-6 h-6 opacity-40" />
+          </span>
+          <p className={`text-sm font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+            No notes yet for this visit
+          </p>
+          <p className="text-xs mt-1">The first entry starts the clinical narrative.</p>
         </div>
       ) : (
-        <div ref={listRef} className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+        <div ref={listRef} className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-1">
           {notes.map((note) => {
             const isSuperseded = supersededIds.has(note.id);
             const original = note.supersedesId ? noteById.get(note.supersedesId) : null;
             const isEditingThis = supersedingId === note.id;
-
-            const itemBg = isDark
-              ? (isSuperseded ? 'bg-white/[0.02]' : 'bg-white/[0.04]')
-              : (isSuperseded ? 'bg-gray-50' : 'bg-white');
-            const itemBorder = isDark
-              ? (isSuperseded ? 'border-white/5' : 'border-white/10')
-              : (isSuperseded ? 'border-gray-200' : 'border-gray-200');
+            const accent = accentFor(note.noteType);
 
             return (
               <div
                 key={note.id}
-                className={`rounded-lg border p-3 ${itemBg} ${itemBorder} ${isSuperseded ? 'opacity-70' : ''}`}
+                className={`relative rounded-xl border overflow-hidden transition-opacity ${
+                  isDark
+                    ? (isSuperseded ? 'bg-white/[0.02] border-white/5' : 'bg-white/[0.04] border-white/10')
+                    : (isSuperseded ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-200 shadow-sm')
+                } ${isSuperseded ? 'opacity-60' : ''}`}
               >
-                {/* Header line */}
-                <div className="flex flex-wrap items-center gap-2 mb-1">
-                  <span className={`text-xs font-bold ${headerTextCls}`}>
-                    {NOTE_TYPE_LABEL[note.noteType] ?? note.noteType}
-                  </span>
-                  {note.section && (
-                    <span className={`text-[10px] uppercase tracking-wider ${subtleTextCls}`}>
-                      · {note.section}
+                {/* Type accent stripe */}
+                <span
+                  className="absolute left-0 top-0 bottom-0 w-1"
+                  style={{ background: accent.bar, opacity: isSuperseded ? 0.35 : 0.9 }}
+                />
+                <div className="p-3 pl-4">
+                  {/* Header line */}
+                  <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                      isDark ? accent.chipDark : accent.chipLight
+                    }`}>
+                      {NOTE_TYPE_LABEL[note.noteType] ?? note.noteType}
                     </span>
-                  )}
-                  {note.authorRole && (
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
-                      {roleLabel(note.authorRole)}
-                    </span>
-                  )}
-                  {note.supersedesId && (
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 inline-flex items-center gap-1">
-                      <History className="w-3 h-3" />
-                      Correction
-                    </span>
-                  )}
-                  {isSuperseded && (
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">
-                      Superseded
-                    </span>
-                  )}
-                  <span className={`text-[11px] ml-auto ${subtleTextCls}`}>
-                    {formatRecordedAt(note.recordedAt)}
-                  </span>
-                </div>
-
-                {/* Author + correction-of pointer */}
-                <div className={`text-[11px] mb-1.5 ${subtleTextCls}`}>
-                  {note.recordedByName || '—'}
-                  {original && (
-                    <span className="ml-2">
-                      · corrects “{original.content.slice(0, 60)}{original.content.length > 60 ? '…' : ''}”
-                    </span>
-                  )}
-                </div>
-
-                {/* Body */}
-                <p
-                  className={`text-sm whitespace-pre-wrap ${
-                    isDark ? 'text-slate-200' : 'text-gray-800'
-                  } ${isSuperseded ? 'line-through decoration-1' : ''}`}
-                >
-                  {note.content}
-                </p>
-
-                {/* Inline supersede composer */}
-                {isEditingThis && (
-                  <div className={`mt-2 p-2 rounded-md border ${
-                    isDark ? 'border-white/10 bg-white/[0.03]' : 'border-amber-200 bg-amber-50'
-                  }`}>
-                    <p className={`text-[11px] mb-1.5 ${subtleTextCls}`}>
-                      The original will be preserved. Submitting writes a new entry that supersedes it.
-                    </p>
-                    <textarea
-                      className={`${inputCls} min-h-[72px] resize-y`}
-                      value={supersedeContent}
-                      onChange={(e) => setSupersedeContent(e.target.value)}
-                      disabled={supersedeBusy}
-                    />
-                    {supersedeError && (
-                      <div className="flex items-center gap-1.5 text-xs text-red-500 mt-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        {supersedeError}
-                      </div>
+                    {note.section && (
+                      <span className={`text-[10px] font-semibold ${subtleTextCls}`}>
+                        {note.section}
+                      </span>
                     )}
-                    <div className="flex items-center justify-end gap-2 mt-1.5">
-                      <button
-                        type="button"
-                        onClick={cancelSupersede}
+                    {note.supersedesId && (
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md inline-flex items-center gap-1 ${
+                        isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        <History className="w-3 h-3" />
+                        Correction
+                      </span>
+                    )}
+                    {isSuperseded && (
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
+                        isDark ? 'bg-white/10 text-slate-400' : 'bg-slate-200 text-slate-600'
+                      }`}>
+                        Superseded
+                      </span>
+                    )}
+                    <span className={`text-[11px] ml-auto tabular-nums ${subtleTextCls}`}>
+                      {formatRecordedAt(note.recordedAt)}
+                    </span>
+                  </div>
+
+                  {/* Author */}
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${
+                      isDark ? 'bg-white/10 text-slate-300' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {initialsOf(note.recordedByName)}
+                    </span>
+                    <span className={`text-[11px] font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                      {note.recordedByName || 'Unknown author'}
+                    </span>
+                    {note.authorRole && (
+                      <span className={`text-[10px] ${subtleTextCls}`}>· {roleLabel(note.authorRole)}</span>
+                    )}
+                    {note.authorRole && (
+                      <ShieldCheck className={`w-3 h-3 ${isDark ? 'text-emerald-400/70' : 'text-emerald-500/70'}`} aria-label="Server-attributed author" />
+                    )}
+                  </div>
+
+                  {/* Correction-of pointer */}
+                  {original && (
+                    <p className={`text-[11px] mb-1 italic ${subtleTextCls}`}>
+                      ↳ corrects “{original.content.slice(0, 60)}{original.content.length > 60 ? '…' : ''}”
+                    </p>
+                  )}
+
+                  {/* Body */}
+                  <p
+                    className={`text-sm whitespace-pre-wrap leading-relaxed ${
+                      isDark ? 'text-slate-200' : 'text-slate-800'
+                    } ${isSuperseded ? 'line-through decoration-1' : ''}`}
+                  >
+                    {note.content}
+                  </p>
+
+                  {/* Inline supersede composer */}
+                  {isEditingThis && (
+                    <div className={`mt-2.5 p-2.5 rounded-xl border ${
+                      isDark ? 'border-amber-500/20 bg-amber-500/[0.06]' : 'border-amber-200 bg-amber-50'
+                    }`}>
+                      <p className={`text-[11px] mb-1.5 ${subtleTextCls}`}>
+                        The original will be preserved. Submitting writes a new entry that supersedes it.
+                      </p>
+                      <textarea
+                        className={`${inputCls} min-h-[72px] resize-y`}
+                        value={supersedeContent}
+                        onChange={(e) => setSupersedeContent(e.target.value)}
                         disabled={supersedeBusy}
-                        className={`text-xs px-2.5 py-1 rounded-xl ${
-                          isDark ? 'text-slate-300 hover:bg-white/5' : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                      >
-                        Cancel
-                      </button>
+                      />
+                      {supersedeError && (
+                        <div className="flex items-center gap-1.5 text-xs text-red-500 mt-1">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          {supersedeError}
+                        </div>
+                      )}
+                      <div className="flex items-center justify-end gap-2 mt-2">
+                        <button
+                          type="button"
+                          onClick={cancelSupersede}
+                          disabled={supersedeBusy}
+                          className={`text-xs px-2.5 py-1.5 rounded-xl font-semibold ${
+                            isDark ? 'text-slate-300 hover:bg-white/5' : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => submitSupersede(note)}
+                          disabled={!supersedeContent.trim() || supersedeBusy}
+                          className={primaryBtnCls(!!supersedeContent.trim() && !supersedeBusy)}
+                        >
+                          {supersedeBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <History className="w-3.5 h-3.5" />}
+                          {supersedeBusy ? 'Saving…' : 'Save correction'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Per-row actions */}
+                  {!isEditingThis && !isSuperseded && canCorrect && (
+                    <div className="mt-1.5 flex items-center justify-end">
                       <button
                         type="button"
-                        onClick={() => submitSupersede(note)}
-                        disabled={!supersedeContent.trim() || supersedeBusy}
-                        className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-xl font-semibold ${
-                          supersedeContent.trim() && !supersedeBusy
-                            ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
-                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        onClick={() => startSupersede(note)}
+                        className={`text-[11px] font-semibold inline-flex items-center gap-1 px-2 py-1 rounded-lg transition-colors ${
+                          isDark
+                            ? 'text-amber-300/80 hover:text-amber-300 hover:bg-amber-500/10'
+                            : 'text-amber-700/80 hover:text-amber-800 hover:bg-amber-100'
                         }`}
+                        title="Append a correction; the original stays in the record"
                       >
-                        {supersedeBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <History className="w-3.5 h-3.5" />}
-                        {supersedeBusy ? 'Saving…' : 'Save correction'}
+                        <History className="w-3 h-3" />
+                        Correct
                       </button>
                     </div>
-                  </div>
-                )}
-
-                {/* Per-row actions */}
-                {!isEditingThis && !isSuperseded && canCorrect && (
-                  <div className="mt-2 flex items-center justify-end">
-                    <button
-                      type="button"
-                      onClick={() => startSupersede(note)}
-                      className={`text-[11px] inline-flex items-center gap-1 px-2 py-0.5 rounded-xl ${
-                        isDark
-                          ? 'text-amber-300 hover:bg-amber-500/10'
-                          : 'text-amber-700 hover:bg-amber-100'
-                      }`}
-                      title="Append a correction; the original stays in the record"
-                    >
-                      <History className="w-3 h-3" />
-                      Correct
-                    </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             );
           })}
