@@ -194,6 +194,11 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'audit-trail', 'reports', 'quality',
     'moh-reports', 'governance', 'safety-incidents',
     'override-register',
+    // ICU escalation pipeline — oversight view. The page's own scope
+    // text and backend authz both admit administrators; response-time /
+    // decline-rate tracking is a management KPI. Clinical actions stay
+    // doctor-gated server-side regardless of who can view.
+    'icu',
   ],
 
   // ── Hospital-level administration only ──
@@ -210,6 +215,9 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'settings', 'notifications', 'profile',
     'audit-trail', 'reports', 'quality',
     'safety-incidents', 'med-safety-overrides', 'override-register', 'moh-reports', 'governance',
+    // ICU escalation pipeline — oversight view (see SUPER_ADMIN note).
+    // The hospital admin also owns the icuCapacity config the page shows.
+    'icu',
     // Shift management — READ-ONLY governance view. The editor UI
     // suppresses mutate controls when role === 'HOSPITAL_ADMIN'; the
     // backend ShiftAssignmentAuthz.canAssign denies mutation attempts
