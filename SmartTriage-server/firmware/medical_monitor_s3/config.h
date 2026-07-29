@@ -18,7 +18,7 @@
 #pragma once
 
 // ======================== IDENTITY / NETWORK =========================
-#define FIRMWARE_VERSION   "s3-3.6.2"
+#define FIRMWARE_VERSION   "s3-3.6.3"
 
 #define WIFI_SSID          "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD      "YOUR_WIFI_PASSWORD"
@@ -105,11 +105,14 @@
 // values are also printed to serial as a TOUCH_CAL line — paste it here
 // if you ever want the default to match.
 //
-// v3.1.0 note: this default is suspect — its X span (337..1099) covers
-// only ~20% of the XPT2046 ADC range, which matches the observed "only
-// one spot on the right responds" behaviour. Run the on-device
-// calibration; it takes ten seconds and fixes swipe + buttons together.
-#define TOUCH_CAL { 337, 1099, 317, 3355, 7 }
+// v3.6.3: default replaced with values EMPIRICALLY VALIDATED on this
+// panel (2026-07-29): a 12-zone full-screen touch test using exactly
+// this table hit every zone with correct coordinates. Full ADC span on
+// both axes, so the fallback is genuinely usable — the on-device
+// calibration remains worthwhile only for the centre-trim (finger
+// parallax), not as a rescue. (The previous default {337,1099,317,3355,7}
+// had a ~20% X span — the "only one strip responds" table.)
+#define TOUCH_CAL { 250, 3600, 250, 3600, 7 }
 
 // Gesture tuning
 #define SWIPE_MIN_PX        50    // horizontal travel that flips a page
