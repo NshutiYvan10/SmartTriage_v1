@@ -37,7 +37,12 @@ public:
     if (s.spo2 > 0)  a.spo2Low  = s.spo2 < ALM_SPO2_CRIT;
     if (s.hr > 0)   { a.hrLow    = s.hr < ALM_HR_CRIT_LOW;
                       a.hrHigh   = s.hr > ALM_HR_CRIT_HIGH; }
-    if (s.temp > 0) { a.tempHigh = s.temp > ALM_TEMP_CRIT_HIGH;
+    // Temperature alarms only from a DEVICE-CALIBRATED sensor: an
+    // uncalibrated contact probe reads skin temp (3-6 C below core), so
+    // every uncalibrated reading would scream TEMP LOW at a normothermic
+    // patient. Same gate as transmission (net.h).
+    if (s.temp > 0 && g_cal.tempCalibrated()) {
+                      a.tempHigh = s.temp > ALM_TEMP_CRIT_HIGH;
                       a.tempLow  = s.temp < ALM_TEMP_CRIT_LOW; }
     if (s.bpLast.valid) {
       a.bpSysHigh = s.bpLast.sys > ALM_SYS_CRIT_HIGH;
@@ -72,7 +77,8 @@ public:
   static bool isWarning(const MonitorState &s) {
     if (s.spo2 > 0 && s.spo2 < ALM_SPO2_WARN) return true;
     if (s.hr > 0 && (s.hr < ALM_HR_WARN_LOW || s.hr > ALM_HR_WARN_HIGH)) return true;
-    if (s.temp > 0 && (s.temp > ALM_TEMP_WARN_HIGH || s.temp < ALM_TEMP_WARN_LOW)) return true;
+    if (s.temp > 0 && g_cal.tempCalibrated()
+        && (s.temp > ALM_TEMP_WARN_HIGH || s.temp < ALM_TEMP_WARN_LOW)) return true;
     if (s.rr > 0 && (s.rr < ALM_RR_WARN_LOW || s.rr > ALM_RR_WARN_HIGH)) return true;
     return false;
   }

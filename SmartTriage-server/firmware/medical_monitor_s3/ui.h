@@ -49,15 +49,26 @@
 #define UI_INK     0x18E3   // near-black slate — primary text
 #define UI_MUTED   0x632C   // mid grey — labels, secondary text
 #define UI_FAINT   0xC618   // light grey — frames, disabled, inactive dots
-#define UI_GOOD    0x0400   // dark green — in-range values (also ECG trace; LSB=0)
+#define UI_CARD    0xF7BE   // very light grey — vitals tile fill (premium card)
+#define UI_GOOD    0x0400   // dark green — in-range values (LSB=0)
 #define UI_WARN    0xCBC0   // dark amber — warning band (readable on white)
 #define UI_CRIT    0xF800   // red — critical band / alarms
-#define UI_PLETH   0x0333   // deep teal — pleth trace + accent (LSB=1)
+#define UI_PLETH   0x0333   // deep teal — accent (LSB=1)
 #define UI_ACCENT  0x0333
 #define UI_VIOLET  0x780F   // trends: RESP
 #define UI_BANNER  0xEF5D   // idle banner strip — very light grey
-// NOTE: UI_GOOD and UI_PLETH deliberately differ in bit 0 — drawTrace
-// keys its per-trace "previous y" slot on (color & 1).
+
+// ---------- scope panes (waveforms render like a real monitor) ----------
+// The clinical reference look — and the one the SmartTriage Monitoring
+// page uses — is a bright phosphor trace on a near-black scope, not a
+// dark line on white. Waveform panes therefore run their own dark
+// palette even though the rest of the UI stays light.
+#define UI_SCOPE       0x0000   // waveform pane background (black)
+#define UI_SCOPE_GRID  0x29A6   // faint scope grid (dark grey-green)
+#define UI_TRACE_ECG   0x07E0   // phosphor green  (LSB=0 — trace slot key)
+#define UI_TRACE_PLETH 0x07FF   // cyan            (LSB=1 — trace slot key)
+// NOTE: the two trace colors deliberately differ in bit 0 — drawTrace
+// keys its per-trace state (cursor, last-y, gain) on (color & 1).
 
 enum class Page : uint8_t { DASH = 0, WAVE, TREND, BP, DEVICE, COUNT };
 
@@ -375,17 +386,18 @@ private:
   struct Cell { char last[28] = ""; };
   Cell cells_[24];   // 0-13 pages · 14-21 BP-history rows
 
-  // Only fonts 2 and 4 are used for data (the fonts the previously working
-  // build proved are enabled in this project's User_Setup.h); `size` scales
-  // font 4 up for the big numerics. Fonts 6/7 are avoided deliberately —
-  // they lack the '/' glyph a BP reading needs, and may not be loaded.
+  // Fonts: 2/4 carry text (full glyph set); 6 carries the premium large
+  // numerics (48 px digits + '.' ':' '-' — User_Setup loads it). Font 6
+  // has NO '/' or '%', so BP strings stay on font 4 scaled, and units
+  // live in the tile header instead of beside the number. `size` scales
+  // any font up. `bg` lets a cell live on a card or scope pane.
   void cell(int id, int x, int y, int w, int h, const char *txt,
-            uint16_t color, uint8_t font, uint8_t size = 1) {
+            uint16_t color, uint8_t font, uint8_t size = 1, uint16_t bg = UI_BG) {
     if (!forceRedraw_ && strcmp(cells_[id].last, txt) == 0) return;
     strlcpy(cells_[id].last, txt, sizeof(cells_[id].last));
     val_.createSprite(w, h);
-    val_.fillSprite(UI_BG);
-    val_.setTextColor(color, UI_BG);
+    val_.fillSprite(bg);
+    val_.setTextColor(color, bg);
     val_.setTextDatum(MC_DATUM);
     val_.setTextSize(size);
     val_.drawString(txt, w / 2, h / 2, font);
@@ -404,53 +416,81 @@ private:
   // =====================================================================
   //  PAGE 1 — dashboard
   // =====================================================================
+  // Per-tile band-color accent bar cache (repaint only on band change).
+  uint16_t tileBand_[4] = {1, 1, 1, 1};
+
   void drawDashboard(const MonitorState &s) {
     int top = BANNER_H + 4;
-    int tileW = (W - 18) / 2, tileH = (H - top - 104) / 2;
+    int tileW = (W - 18) / 2, tileH = (H - top - 108) / 2;
     struct Tile { const char *label; const char *unit; };
+    static const Tile tiles[4] = {{"HR", "bpm"}, {"SpO2", "%"}, {"TEMP", "C"}, {"RESP", "/min"}};
 
     if (forceRedraw_) {
-      static const Tile tiles[4] = {{"HR", "bpm"}, {"SpO2", "%"}, {"TEMP", "C"}, {"RESP", "/min"}};
       for (int i = 0; i < 4; i++) {
         int x = 6 + (i % 2) * (tileW + 6), y = top + (i / 2) * (tileH + 6);
-        tft_.drawRoundRect(x, y, tileW, tileH, 8, UI_FAINT);
-        tft_.setTextColor(UI_MUTED, UI_BG);
-        tft_.drawString(tiles[i].label, x + 10, y + 6, 2);
+        tft_.fillRoundRect(x, y, tileW, tileH, 10, UI_CARD);
+        tft_.setTextColor(UI_MUTED, UI_CARD);
+        tft_.drawString(tiles[i].label, x + 16, y + 8, 4);
         tft_.setTextDatum(TR_DATUM);
-        tft_.drawString(tiles[i].unit, x + tileW - 10, y + 6, 2);
+        tft_.drawString(tiles[i].unit, x + tileW - 12, y + 12, 2);
         tft_.setTextDatum(TL_DATUM);
+        tileBand_[i] = 1;   // force accent repaint
       }
       int by = top + 2 * (tileH + 6);
-      tft_.drawRoundRect(6, by, W - 12, H - by - 42, 8, UI_FAINT);
-      tft_.setTextColor(UI_MUTED, UI_BG);
-      tft_.drawString("BP (last reading)", 16, by + 6, 2);
+      tft_.fillRoundRect(6, by, W - 12, H - by - 46, 10, UI_CARD);
+      tft_.setTextColor(UI_MUTED, UI_CARD);
+      tft_.drawString("BP", 16, by + 8, 4);
+      tft_.setTextColor(UI_FAINT, UI_CARD);
+      tft_.drawString("last reading", 62, by + 14, 2);
     }
+
+    // Colored left accent bar per tile — the at-a-glance band indicator
+    // (green in-range / amber warning / red critical), same trick the
+    // SmartTriage vitals tiles use.
+    auto accent = [&](int i, uint16_t c) {
+      if (tileBand_[i] == c) return;
+      tileBand_[i] = c;
+      int x = 6 + (i % 2) * (tileW + 6), y = top + (i / 2) * (tileH + 6);
+      tft_.fillRoundRect(x, y + 6, 5, tileH - 12, 2, c);
+    };
 
     char t[20];
     // HR (+ source/quality tag). A weak or stale ECG signal DIMS the
     // number and says so — a value flickering between "96" and "--" at
     // a bedside helps nobody, and a confidently-wrong number is worse.
     bool hrWeak = s.hrFromEcg && s.ecgQuality <= 1;
+    uint16_t hrC = hrWeak ? UI_MUTED
+                          : bandColor(s.hr, ALM_HR_WARN_LOW, ALM_HR_WARN_HIGH, ALM_HR_CRIT_LOW, ALM_HR_CRIT_HIGH);
     snprintf(t, sizeof(t), s.hr > 0 ? "%.0f" : "--", s.hr);
-    cell(0, 6 + 8, top + 22, tileW - 16, tileH - 42,
-         t, hrWeak ? UI_MUTED
-                   : bandColor(s.hr, ALM_HR_WARN_LOW, ALM_HR_WARN_HIGH, ALM_HR_CRIT_LOW, ALM_HR_CRIT_HIGH), 4, 2);
-    cell(10, 6 + 8, top + tileH - 20, tileW - 16, 16,
+    cell(0, 6 + 14, top + 26, tileW - 28, tileH - 48, t, hrC, 6, 1, UI_CARD);
+    accent(0, hrC);
+    cell(10, 6 + 14, top + tileH - 22, tileW - 28, 18,
          s.hr <= 0 ? "" : !s.hrFromEcg ? "PULSE-OX"
-                        : hrWeak ? "ECG - WEAK SIGNAL, CHECK ELECTRODES" : "ECG",
-         hrWeak ? UI_WARN : UI_MUTED, 1);
+                        : hrWeak ? "ECG - WEAK SIGNAL" : "ECG",
+         hrWeak ? UI_WARN : UI_FAINT, 2, 1, UI_CARD);
 
+    uint16_t spC = bandColor(s.spo2, ALM_SPO2_WARN, 101, ALM_SPO2_CRIT, 101);
     snprintf(t, sizeof(t), s.spo2 > 0 ? "%.0f" : "--", s.spo2);
-    cell(1, 12 + tileW + 8, top + 22, tileW - 16, tileH - 42,
-         t, bandColor(s.spo2, ALM_SPO2_WARN, 101, ALM_SPO2_CRIT, 101), 4, 2);
+    cell(1, 12 + tileW + 14, top + 26, tileW - 28, tileH - 48, t, spC, 6, 1, UI_CARD);
+    accent(1, spC);
 
+    // Temperature: an UNCALIBRATED contact sensor reads SKIN temp, degrees
+    // below core — display it dimmed with an explicit tag, never as a
+    // confident clinical value (and net.h excludes it from transmission).
+    bool tempCal = g_cal.tempCalibrated();
+    uint16_t tpC = !tempCal ? UI_MUTED
+                            : bandColor(s.temp, ALM_TEMP_WARN_LOW, ALM_TEMP_WARN_HIGH, ALM_TEMP_CRIT_LOW, ALM_TEMP_CRIT_HIGH);
     snprintf(t, sizeof(t), s.temp > 0 ? "%.1f" : "--.-", s.temp);
-    cell(2, 6 + 8, top + tileH + 6 + 22, tileW - 16, tileH - 42,
-         t, bandColor(s.temp, ALM_TEMP_WARN_LOW, ALM_TEMP_WARN_HIGH, ALM_TEMP_CRIT_LOW, ALM_TEMP_CRIT_HIGH), 4, 2);
+    cell(2, 6 + 14, top + tileH + 6 + 26, tileW - 28, tileH - 48, t, tpC, 6, 1, UI_CARD);
+    accent(2, tempCal ? tpC : UI_WARN);
+    cell(22, 6 + 14, top + 2 * tileH + 6 - 22, tileW - 28, 18,
+         (s.temp > 0 && !tempCal) ? "UNCAL - not transmitted" : "",
+         UI_WARN, 2, 1, UI_CARD);
 
+    uint16_t rrC = bandColor(s.rr, ALM_RR_WARN_LOW, ALM_RR_WARN_HIGH, 1, 99);
     snprintf(t, sizeof(t), s.rr > 0 ? "%.0f" : "--", s.rr);
-    cell(3, 12 + tileW + 8, top + tileH + 6 + 22, tileW - 16, tileH - 42,
-         t, bandColor(s.rr, ALM_RR_WARN_LOW, ALM_RR_WARN_HIGH, 1, 99), 4, 2);
+    cell(3, 12 + tileW + 14, top + tileH + 6 + 26, tileW - 28, tileH - 48, t, rrC, 6, 1, UI_CARD);
+    accent(3, rrC);
 
     // BP strip
     int by = top + 2 * (tileH + 6);
@@ -462,20 +502,20 @@ private:
       }
       snprintf(t, sizeof(t), "%d/%d", s.bpLast.sys, s.bpLast.dia);
       uint16_t c = (s.bpLast.sys > ALM_SYS_CRIT_HIGH || s.bpLast.sys < ALM_SYS_CRIT_LOW) ? UI_CRIT : UI_GOOD;
-      cell(4, 16, by + 22, 150, 34, t, c, 4);
+      cell(4, 70, by + 24, 170, 40, t, c, 4, 2, UI_CARD);
       char meta[56];
       snprintf(meta, sizeof(meta), "MAP %d   at %s%s", s.bpLast.map, when, s.bpCalibrated ? "" : "  UNCAL");
-      cell(5, 176, by + 30, W - 196, 18, meta, UI_MUTED, 2);
+      cell(5, 250, by + 34, W - 266, 20, meta, UI_MUTED, 2, 1, UI_CARD);
     } else {
-      cell(4, 16, by + 22, 150, 34, "--/--", UI_MUTED, 4);
-      cell(5, 176, by + 30, W - 196, 18, "no reading - use BP page", UI_MUTED, 2);
+      cell(4, 70, by + 24, 170, 40, "--/--", UI_MUTED, 4, 2, UI_CARD);
+      cell(5, 250, by + 34, W - 266, 20, "no reading - use BP page", UI_MUTED, 2, 1, UI_CARD);
     }
 
     // per-channel status chips
-    char chips[64];
-    snprintf(chips, sizeof(chips), "SPO2:%s  TEMP:%s  ECG:%s  CUFF:%s",
+    char chips[72];
+    snprintf(chips, sizeof(chips), "SPO2 %s   TEMP %s   ECG %s   CUFF %s",
              chanTxt(s.chSpo2), chanTxt(s.chTemp), chanTxt(s.chEcg), chanTxt(s.chBp));
-    cell(6, 6, H - 40, W - 12, 12, chips, UI_MUTED, 1);
+    cell(6, 6, H - 44, W - 12, 16, chips, UI_MUTED, 2);
   }
 
   static const char *chanTxt(Chan c) {
@@ -510,24 +550,29 @@ private:
     int ecgY = top, plethY = top + ecgH + 4;
 
     if (!waveInit_) {
+      // Scope panes: black, rounded, with a faint center reference line —
+      // the phosphor-on-black look of a real monitor (and the SmartTriage
+      // Monitoring page this display should visually match).
       tft_.fillRect(0, top, plotW, H - top - 28, UI_BG);
-      tft_.drawRect(0, ecgY, plotW, ecgH, UI_FAINT);
-      tft_.drawRect(0, plethY, plotW, plethH, UI_FAINT);
-      tft_.setTextColor(UI_GOOD, UI_BG);   tft_.drawString("ECG  (Lead II)", 6, ecgY + 3, 1);
-      tft_.setTextColor(UI_PLETH, UI_BG);  tft_.drawString("PLETH (SpO2)", 6, plethY + 3, 1);
+      tft_.fillRoundRect(0, ecgY, plotW, ecgH, 6, UI_SCOPE);
+      tft_.fillRoundRect(0, plethY, plotW, plethH, 6, UI_SCOPE);
+      drawScopeGrid(ecgY, ecgH, plotW);
+      drawScopeGrid(plethY, plethH, plotW);
+      tft_.setTextColor(UI_TRACE_ECG, UI_SCOPE);   tft_.drawString("ECG - LEAD II", 8, ecgY + 4, 2);
+      tft_.setTextColor(UI_TRACE_PLETH, UI_SCOPE); tft_.drawString("PLETH - SpO2", 8, plethY + 4, 2);
       waveX_[0] = waveX_[1] = 1;
       ecgReadHead_ = g_ecgWaveHead;
       plethReadHead_ = g_plethWaveHead;
-      dispPeak_[0] = dispPeak_[1] = 400.0f;   // fresh auto-gain per page entry
+      gainReset(0); gainReset(1);   // fresh display gain per page entry
       lastPlethState_ = -1;
       waveInit_ = true;
     }
 
     if (!s.simulation && s.chEcg == Chan::NO_CONTACT) {
-      cell(7, plotW / 2 - 90, ecgY + ecgH / 2 - 10, 180, 20, "ECG LEADS OFF", UI_CRIT, 2);
+      cell(7, plotW / 2 - 90, ecgY + ecgH / 2 - 10, 180, 20, "ECG LEADS OFF", UI_CRIT, 2, 1, UI_SCOPE);
     } else {
-      cell(7, plotW / 2 - 90, ecgY + ecgH / 2 - 10, 1, 1, "", UI_BG, 1); // clear marker
-      drawTrace(g_ecgWave, g_ecgWaveHead, ecgReadHead_, ecgY + 2, ecgH - 4, plotW, UI_GOOD);
+      cell(7, plotW / 2 - 90, ecgY + ecgH / 2 - 10, 1, 1, "", UI_SCOPE, 1, 1, UI_SCOPE); // clear marker
+      drawTrace(g_ecgWave, g_ecgWaveHead, ecgReadHead_, ecgY + 4, ecgH - 8, plotW, UI_TRACE_ECG);
     }
 
     // Pleth pane: NEVER show a stale/frozen curve for a sensor that is
@@ -538,71 +583,110 @@ private:
                    : s.chSpo2 == Chan::NO_CONTACT ? 1 : 2;
     if (plethState != lastPlethState_) {
       lastPlethState_ = plethState;
-      tft_.fillRect(1, plethY + 1, plotW - 2, plethH - 2, UI_BG);
-      tft_.setTextColor(UI_PLETH, UI_BG);
-      tft_.drawString("PLETH (SpO2)", 6, plethY + 3, 1);
-      plethReadHead_ = g_plethWaveHead;   // don't replay stale ring content
-      waveX_[UI_PLETH & 1] = 1;           // restart its sweep on the cleared pane
-      lastPy_[UI_PLETH & 1] = -1;
+      tft_.fillRoundRect(0, plethY, plotW, plethH, 6, UI_SCOPE);
+      drawScopeGrid(plethY, plethH, plotW);
+      tft_.setTextColor(UI_TRACE_PLETH, UI_SCOPE);
+      tft_.drawString("PLETH - SpO2", 8, plethY + 4, 2);
+      plethReadHead_ = g_plethWaveHead;         // don't replay stale ring content
+      waveX_[UI_TRACE_PLETH & 1] = 1;           // restart its sweep on the cleared pane
+      lastPy_[UI_TRACE_PLETH & 1] = -1;
     }
     if (plethState == 0) {
-      drawTrace(g_plethWave, g_plethWaveHead, plethReadHead_, plethY + 2, plethH - 4, plotW, UI_PLETH);
+      drawTrace(g_plethWave, g_plethWaveHead, plethReadHead_, plethY + 4, plethH - 8, plotW, UI_TRACE_PLETH);
     } else {
       cell(23, plotW / 2 - 110, plethY + plethH / 2 - 9, 220, 18,
            plethState == 1 ? "PLACE FINGER ON SENSOR" : "SPO2 SENSOR NOT DETECTED",
-           plethState == 1 ? UI_WARN : UI_MUTED, 2);
+           plethState == 1 ? UI_WARN : UI_MUTED, 2, 1, UI_SCOPE);
     }
 
-    // numerics column
+    // numerics column — large font-6 digits, aligned with each pane
     char t[16];
     bool hrWeak = s.hrFromEcg && s.ecgQuality <= 1;
     snprintf(t, sizeof(t), s.hr > 0 ? "%.0f" : "--", s.hr);
-    cell(8, W - numW, ecgY + 14, numW - 4, 40, t,
+    cell(8, W - numW, ecgY + 20, numW - 4, 52, t,
          hrWeak ? UI_MUTED
-                : bandColor(s.hr, ALM_HR_WARN_LOW, ALM_HR_WARN_HIGH, ALM_HR_CRIT_LOW, ALM_HR_CRIT_HIGH), 4);
-    if (forceRedraw_) { tft_.setTextColor(UI_MUTED, UI_BG); tft_.drawString("HR bpm", W - numW + 8, ecgY + 2, 1); }
+                : bandColor(s.hr, ALM_HR_WARN_LOW, ALM_HR_WARN_HIGH, ALM_HR_CRIT_LOW, ALM_HR_CRIT_HIGH), 6);
+    if (forceRedraw_) { tft_.setTextColor(UI_MUTED, UI_BG); tft_.drawString("HR bpm", W - numW + 8, ecgY + 2, 2); }
 
-    snprintf(t, sizeof(t), s.spo2 > 0 ? "%.0f%%" : "--", s.spo2);
-    cell(9, W - numW, plethY + 14, numW - 4, 34, t,
-         bandColor(s.spo2, ALM_SPO2_WARN, 101, ALM_SPO2_CRIT, 101), 4);
-    if (forceRedraw_) { tft_.setTextColor(UI_MUTED, UI_BG); tft_.drawString("SpO2", W - numW + 8, plethY + 2, 1); }
+    snprintf(t, sizeof(t), s.spo2 > 0 ? "%.0f" : "--", s.spo2);
+    cell(9, W - numW, plethY + 20, numW - 4, 52, t,
+         bandColor(s.spo2, ALM_SPO2_WARN, 101, ALM_SPO2_CRIT, 101), 6);
+    if (forceRedraw_) { tft_.setTextColor(UI_MUTED, UI_BG); tft_.drawString("SpO2 %", W - numW + 8, plethY + 2, 2); }
+  }
+
+  // Faint scope grid: dotted horizontal lines at 1/4, 1/2, 3/4 height.
+  // Kept dotted + sparse so the erase-ahead cursor can cheaply restore
+  // the column it just wiped (see drawTrace).
+  void drawScopeGrid(int y, int h, int plotW) {
+    for (int q = 1; q <= 3; q++) {
+      int gy = y + h * q / 4;
+      for (int gx = 2; gx < plotW - 2; gx += 4) tft_.drawPixel(gx, gy, UI_SCOPE_GRID);
+    }
   }
 
   // consume new ring samples; draw one column per sample with an erase-ahead cursor.
   //
-  // AUTO-GAIN (v3.4.1): the pane is normalised to the signal's own recent
-  // peak amplitude — professional-monitor behaviour. The previous fixed
-  // ±2047 mapping made a normal QRS a small squiggle and every motion
-  // artifact a full-height spike ("line spikes very high, then shrinks
-  // down small" — field report). Gain rises instantly to contain a
-  // bigger signal and relaxes slowly (~12%/s), so beat height stays
-  // steady and an artifact compresses the trace only briefly.
+  // DISPLAY GAIN (v3.7.0) — median of recent window maxima. The previous
+  // attack/decay auto-gain had a RATCHET: attack (0.5/sample) was ~1000x
+  // faster than decay (0.9995/sample), so the gain tracked the noise
+  // PEAK HISTORY. With old electrodes popping every few seconds, every
+  // real beat rendered 1.7-2.2x too small between pops — exactly the
+  // "doesn't look like a real ECG" complaint. Now: each trace collects
+  // the max |sample| over a 512-sample window (~2 s @250 Hz — guaranteed
+  // to contain a QRS) and the gain is the MEDIAN of the last 5 window
+  // maxima. One artifact ruins one window; the median ignores it. Beat
+  // height stays rock-steady, adapting to a genuine amplitude change in
+  // ~4-6 s like a real monitor's auto-scale.
+  struct TraceGain {
+    float winMax = 0; int winN = 0;
+    float hist[5] = {400, 400, 400, 400, 400}; int histN = 0;
+    float gain = 400;
+    void push(float a) {
+      if (a > winMax) winMax = a;
+      if (++winN < 512) return;
+      hist[histN % 5] = max(winMax, 250.0f);           // noise floor
+      histN++; winMax = 0; winN = 0;
+      float s[5]; memcpy(s, hist, sizeof(s));
+      for (int i = 1; i < 5; i++) { float k = s[i]; int j = i - 1;
+        while (j >= 0 && s[j] > k) { s[j + 1] = s[j]; j--; } s[j + 1] = k; }
+      gain = s[2];
+    }
+  };
+  TraceGain traceGain_[2];
+  void gainReset(int slot) { traceGain_[slot] = TraceGain(); }
+
   void drawTrace(volatile int16_t *ring, volatile uint16_t &headRef,
                  uint16_t &readHead, int y, int h, int plotW, uint16_t color) {
     uint16_t head = headRef;
-    float &gainPeak = dispPeak_[color & 1];
+    TraceGain &tg = traceGain_[color & 1];
     int budget = 40;                                   // samples per frame cap
     while (readHead != head && budget-- > 0) {
       readHead = (uint16_t)((readHead + 1) % ECG_WAVE_RING);
       int16_t v = ring[readHead];
-      float a = fabsf((float)v);
-      // Soft attack: a lone spike only pulls the gain halfway toward it, so
-      // one artifact can't collapse the rest of the trace to a flat line; a
-      // real QRS (several samples) still reaches full height within ~3
-      // samples. Relaxation stays slow so beat height holds steady.
-      if (a > gainPeak) gainPeak += 0.5f * (a - gainPeak);
-      else gainPeak *= 0.9995f;                        // ~12%/s relaxation @250 Hz
-      if (gainPeak < 250.0f) gainPeak = 250.0f;        // noise floor: don't zoom into flatline
-      int py = y + h / 2 - (int)((float)v / (gainPeak * 1.15f) * (h / 2 - 2));
+      tg.push(fabsf((float)v));
+      // Artifacts taller than the gain CLIP at the pane edge (constrain
+      // below) — exactly what a real monitor does — instead of shrinking
+      // every beat to make room for them.
+      int py = y + h / 2 - (int)((float)v / (tg.gain * 1.25f) * (h / 2 - 2));
       py = constrain(py, y, y + h - 1);
 
       // erase-ahead cursor (classic monitor sweep), private to this trace
       int &x = waveX_[color & 1];
       int eraseX = (x + 6) % plotW;
-      if (eraseX > 1) tft_.drawFastVLine(eraseX, y, h, UI_BG);
+      if (eraseX > 1 && eraseX < plotW - 1) {
+        tft_.drawFastVLine(eraseX, y, h, UI_SCOPE);
+        // restore the dotted grid pixels this column carried
+        if ((eraseX & 3) == 2) {
+          for (int q = 1; q <= 3; q++) tft_.drawPixel(eraseX, y - 4 + (h + 8) * q / 4, UI_SCOPE_GRID);
+        }
+      }
 
       if (x > 1 && lastPy_[color & 1] >= 0) {
+        // 2-px stroke: the phosphor-bright trace reads as a solid
+        // waveform instead of a hairline (drawn as two offset lines,
+        // cheap enough at 40 samples/frame).
         tft_.drawLine(x - 1, lastPy_[color & 1], x, py, color);
+        tft_.drawLine(x - 1, lastPy_[color & 1] + 1, x, py + 1, color);
       } else {
         tft_.drawPixel(x, py, color);
       }
@@ -611,7 +695,6 @@ private:
     }
   }
   int lastPy_[2] = {-1, -1};
-  float dispPeak_[2] = {400.0f, 400.0f};   // per-trace display auto-gain
   int lastPlethState_ = -1;
 
   // =====================================================================
@@ -642,9 +725,9 @@ private:
     for (int i = 0; i < 4; i++) {
       int y = top + i * (chartH + 4);
       tft_.fillRect(0, y, chartW + 8, chartH, UI_BG);
-      tft_.drawRect(4, y, chartW, chartH, UI_FAINT);
+      tft_.drawRoundRect(4, y, chartW, chartH, 4, UI_FAINT);
       tft_.setTextColor(rows[i].color, UI_BG);
-      tft_.drawString(rows[i].label, 8, y + 2, 1);
+      tft_.drawString(rows[i].label, 10, y + 3, 2);
 
       const TrendRing *r = rows[i].r;
       if (r->count < 2) continue;
@@ -673,7 +756,7 @@ private:
       snprintf(lbl, sizeof(lbl), "%.0f-%.0f", lo + pad, hi - pad);
       tft_.setTextColor(UI_MUTED, UI_BG);
       tft_.setTextDatum(TR_DATUM);
-      tft_.drawString(lbl, chartW, y + 2, 1);
+      tft_.drawString(lbl, chartW - 2, y + 3, 2);
       tft_.setTextDatum(TL_DATUM);
     }
     drawBpHistory(s, chartW);
@@ -710,14 +793,24 @@ private:
   // =====================================================================
   int btnX_, btnY_, btnW_, btnH_;
 
+  // The content area is a STATE MACHINE with a hard clear on every state
+  // change. The previous version drew its result/status cells at
+  // DIFFERENT positions per state (measuring vs FAILED vs result) and
+  // the cell cache only compares text — so switching states left the
+  // old state's pixels underneath ("FAILED" overlapping stale text,
+  // observed in the field). One fillRect per transition ends the class.
+  int lastBpUiState_ = -1;
+
   void drawBpPage(const MonitorState &s) {
     int top = BANNER_H + 6;
-    btnW_ = 200; btnH_ = 54;
-    btnX_ = W / 2 - btnW_ / 2; btnY_ = H - btnH_ - 36;
+    btnW_ = 210; btnH_ = 58;
+    btnX_ = W / 2 - btnW_ / 2 + 30; btnY_ = H - btnH_ - 36;
 
     if (forceRedraw_) {
       tft_.setTextColor(UI_MUTED, UI_BG);
-      tft_.drawString("OSCILLOMETRIC BLOOD PRESSURE", 10, top, 2);
+      tft_.drawString("BLOOD PRESSURE", 10, top, 4);
+      tft_.setTextColor(UI_FAINT, UI_BG);
+      tft_.drawString("oscillometric", 10, top + 28, 2);
       if (!s.bpCalibrated) {
         tft_.setTextColor(UI_WARN, UI_BG);
         tft_.setTextDatum(TR_DATUM);
@@ -729,7 +822,15 @@ private:
     bool busy = s.bpPhase == BpPhase::INFLATING || s.bpPhase == BpPhase::MEASURING
              || s.bpPhase == BpPhase::COMPUTING || s.bpPhase == BpPhase::ZEROING;
 
-    // result / live area
+    int uiState = busy ? 1 : s.bpPhase == BpPhase::ERROR ? 2 : s.bpLast.valid ? 3 : 0;
+    int areaY = top + 34, areaH = btnY_ - areaY - 8;
+    if (forceRedraw_ || uiState != lastBpUiState_) {
+      lastBpUiState_ = uiState;
+      tft_.fillRect(0, areaY, W, areaH, UI_BG);
+      cells_[11].last[0] = cells_[12].last[0] = cells_[13].last[0] = '\0';
+    }
+
+    // result / live area — every state draws into the SAME cleared frame
     char t[32];
     if (busy) {
       // During a REAL measurement the BP task owns the whole shared bus
@@ -739,31 +840,28 @@ private:
       // that would sit frozen mid-value. (The sim cycle does update the
       // number — it never touches the bus.)
       snprintf(t, sizeof(t), s.simulation ? "%.0f" : "MEASURING", s.cuffPressure);
-      cell(11, W / 2 - 140, top + 30, 280, 56, t, UI_WARN, 4, s.simulation ? 2 : 1);
-      cell(12, W / 2 - 150, top + 92, 300, 18,
+      cell(11, W / 2 - 140, areaY + 8, 280, 56, t, UI_WARN, s.simulation ? 6 : 4, 1);
+      cell(12, W / 2 - 150, areaY + 70, 300, 20,
            s.simulation ? "cuff mmHg (simulated)" : "display pauses while measuring",
            UI_MUTED, 2);
-      cell(13, W / 2 - 150, top + 116, 300, 20,
+      cell(13, W / 2 - 160, areaY + 94, 320, 20,
            s.simulation ? "Measuring - hold still" : "hold still - press & HOLD screen to stop",
            UI_WARN, 2);
     } else if (s.bpPhase == BpPhase::ERROR) {
-      cell(11, W / 2 - 150, top + 30, 300, 40, "FAILED", UI_CRIT, 4);
-      cell(12, W / 2 - 170, top + 84, 340, 18, s.bpError, UI_CRIT, 2);
-      cell(13, 40, top + 146, W - 80, 20, "", UI_BG, 1);
-      tft_.fillRect(40, top + 146, W - 80, 16, UI_BG);
+      cell(11, W / 2 - 150, areaY + 8, 300, 44, "FAILED", UI_CRIT, 4, 1);
+      cell(12, W / 2 - 200, areaY + 60, 400, 20, s.bpError, UI_CRIT, 2);
+      cell(13, W / 2 - 160, areaY + 86, 320, 20, "check cuff, then press START BP to retry", UI_MUTED, 2);
     } else if (s.bpLast.valid) {
       snprintf(t, sizeof(t), "%d/%d", s.bpLast.sys, s.bpLast.dia);
-      cell(11, W / 2 - 140, top + 30, 280, 56, t, UI_GOOD, 4, 2);
+      cell(11, W / 2 - 140, areaY + 8, 280, 56, t, UI_GOOD, 4, 2);
       char meta[48];
       char when[10] = "--:--";
       if (s.bpLast.at > 0) { struct tm tmv; localtime_r(&s.bpLast.at, &tmv); snprintf(when, sizeof(when), "%02d:%02d", tmv.tm_hour, tmv.tm_min); }
       snprintf(meta, sizeof(meta), "MAP %d mmHg   measured %s", s.bpLast.map, when);
-      cell(12, W / 2 - 150, top + 96, 300, 18, meta, UI_MUTED, 2);
-      cell(13, 40, top + 146, W - 80, 20, "", UI_BG, 1);
-      tft_.fillRect(40, top + 146, W - 80, 16, UI_BG);
+      cell(12, W / 2 - 150, areaY + 72, 300, 20, meta, UI_MUTED, 2);
     } else {
-      cell(11, W / 2 - 150, top + 40, 300, 40, "no reading yet", UI_MUTED, 4);
-      cell(12, W / 2 - 170, top + 92, 340, 18, "wrap cuff snugly, then press start", UI_MUTED, 2);
+      cell(11, W / 2 - 150, areaY + 16, 300, 44, "--/--", UI_MUTED, 4, 2);
+      cell(12, W / 2 - 170, areaY + 72, 340, 20, "wrap cuff snugly, then press START BP", UI_MUTED, 2);
     }
 
     // start/cancel button — repainted only when its state changes (an
@@ -774,18 +872,20 @@ private:
     if (forceRedraw_ || btnState != lastBpBtn_) {
       lastBpBtn_ = btnState;
       uint16_t bc = busy ? UI_CRIT : UI_GOOD;
-      tft_.fillRoundRect(btnX_, btnY_, btnW_, btnH_, 10, bc);
+      tft_.fillRoundRect(btnX_, btnY_, btnW_, btnH_, 12, bc);
       tft_.setTextColor(TFT_WHITE, bc);
       tft_.setTextDatum(MC_DATUM);
       tft_.drawString(busy ? "CANCEL" : "START BP", btnX_ + btnW_ / 2, btnY_ + btnH_ / 2, 4);
       tft_.setTextDatum(TL_DATUM);
-      // guided pump-scale calibration (see bp.h) — hidden while busy
+      // Pump-scale calibration (see bp.h) — maintenance, deliberately
+      // DEMOTED to a small outline chip: needed once per pump module,
+      // not part of the clinical flow. Hidden while a cycle runs.
       if (!busy) {
-        tft_.fillRoundRect(8, btnY_, 116, btnH_, 10, UI_ACCENT);
-        tft_.setTextColor(TFT_WHITE, UI_ACCENT);
+        tft_.fillRoundRect(8, btnY_ + 10, 100, btnH_ - 20, 8, UI_BG);
+        tft_.drawRoundRect(8, btnY_ + 10, 100, btnH_ - 20, 8, UI_FAINT);
+        tft_.setTextColor(UI_MUTED, UI_BG);
         tft_.setTextDatum(MC_DATUM);
-        tft_.drawString("CAL", 66, btnY_ + btnH_ / 2 - 10, 4);
-        tft_.drawString("PUMP", 66, btnY_ + btnH_ / 2 + 14, 2);
+        tft_.drawString("CAL PUMP", 58, btnY_ + btnH_ / 2, 2);
         tft_.setTextDatum(TL_DATUM);
       } else {
         tft_.fillRect(8, btnY_, 116, btnH_, UI_BG);
@@ -798,61 +898,90 @@ private:
   //  PAGE 5 — device status
   // =====================================================================
   int simBtnY_ = 0;
-  void drawDevice(const MonitorState &s) {
-    int top = BANNER_H + 6, lh = 22, y = top;
-    char line[64];
 
-    auto row = [&](int id, const char *v, uint16_t c) {
-      cell(id, 150, y, W - 156, lh - 4, v, c, 2);
-      y += lh;
+  // Rebuilt (v3.7.0): three titled sections — CONNECTION / DEVICE /
+  // CALIBRATION — with merged, readable rows instead of ten cramped
+  // label:value lines, and the maintenance actions demoted to a compact
+  // button row at the bottom. The calibration section makes the three
+  // stored calibrations (touch / BP scale / temperature) first-class
+  // status the user can SEE, instead of hidden NVS state.
+  void drawDevice(const MonitorState &s) {
+    int top = BANNER_H + 6, lh = 22;
+    char line[72];
+
+    auto section = [&](const char *title, int y) {
+      tft_.setTextColor(UI_ACCENT, UI_BG);
+      tft_.drawString(title, 10, y, 2);
+      int tw = tft_.textWidth(title, 2);
+      tft_.drawFastHLine(18 + tw, y + 8, W - 30 - tw, UI_FAINT);
     };
+    auto row = [&](int id, const char *label, const char *v, uint16_t c, int y) {
+      if (forceRedraw_) { tft_.setTextColor(UI_MUTED, UI_BG); tft_.drawString(label, 14, y, 2); }
+      cell(id, 118, y - 2, W - 126, lh - 2, v, c, 2);
+    };
+
+    int yConn = top, yDev = top + 18 + 3 * lh + 6, yCal = yDev + 18 + 3 * lh + 6;
     if (forceRedraw_) {
-      const char *labels[] = {"WiFi", "Signal", "Server", "Last sync", "Device", "Firmware",
-                              "Transmit", "Buffered", "Sensors", "Clock"};
-      int ly = top;
-      for (int i = 0; i < 10; i++) { tft_.setTextColor(UI_MUTED, UI_BG); tft_.drawString(labels[i], 10, ly, 2); ly += lh; }
+      section("CONNECTION", yConn);
+      section("DEVICE", yDev);
+      section("CALIBRATION", yCal);
     }
 
-    snprintf(line, sizeof(line), "%s%s", s.wifiUp ? "connected  " : "DISCONNECTED", s.wifiUp ? WiFi.SSID().c_str() : "");
-    row(0, line, s.wifiUp ? UI_GOOD : UI_CRIT);
-    snprintf(line, sizeof(line), s.wifiUp ? "%d dBm" : "-", s.wifiRssi);
-    row(1, line, s.wifiRssi > -70 ? UI_GOOD : UI_WARN);
-    row(2, s.backendUp ? "SmartTriage receiving" : "NOT REACHABLE", s.backendUp ? UI_GOOD : UI_CRIT);
-    if (s.lastAckAt > 0) {
+    // ── CONNECTION ──
+    int y = yConn + 18;
+    snprintf(line, sizeof(line), s.wifiUp ? "%s   %d dBm" : "DISCONNECTED",
+             s.wifiUp ? WiFi.SSID().c_str() : "", s.wifiRssi);
+    row(0, "WiFi", line, s.wifiUp ? (s.wifiRssi > -70 ? UI_GOOD : UI_WARN) : UI_CRIT, y); y += lh;
+    if (s.backendUp && s.lastAckAt > 0) {
       struct tm tmv; localtime_r(&s.lastAckAt, &tmv);
-      snprintf(line, sizeof(line), "%02d:%02d:%02d", tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
-    } else strlcpy(line, "never", sizeof(line));
-    row(3, line, s.lastAckAt > 0 ? UI_INK : UI_WARN);
-    row(4, DEVICE_SERIAL " (session bound at ED)", UI_INK);
-    row(5, FIRMWARE_VERSION, UI_INK);
-    snprintf(line, sizeof(line), "%lu ok / %lu failed", (unsigned long)s.txOk, (unsigned long)s.txFail);
-    row(6, line, UI_INK);
-    snprintf(line, sizeof(line), "%u offline readings", s.offlineBuffered);
-    row(7, line, s.offlineBuffered ? UI_WARN : UI_INK);
+      snprintf(line, sizeof(line), "receiving   last ack %02d:%02d:%02d", tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+    } else if (s.backendUp) strlcpy(line, "receiving", sizeof(line));
+    else strlcpy(line, "NOT REACHABLE", sizeof(line));
+    row(1, "Server", line, s.backendUp ? UI_GOOD : UI_CRIT, y); y += lh;
+    row(2, "Clock", s.clockSynced ? "NTP synced (UTC)" : "NOT SYNCED", s.clockSynced ? UI_GOOD : UI_WARN, y);
+
+    // ── DEVICE ──
+    y = yDev + 18;
+    row(3, "Identity", DEVICE_SERIAL "   " FIRMWARE_VERSION, UI_INK, y); y += lh;
+    snprintf(line, sizeof(line), "%lu ok / %lu failed   %u buffered",
+             (unsigned long)s.txOk, (unsigned long)s.txFail, s.offlineBuffered);
+    row(4, "Transmit", line, s.offlineBuffered ? UI_WARN : UI_INK, y); y += lh;
     sensorRowY_ = y;   // this row is tappable — cycles the pulse-ox LED drive
-    snprintf(line, sizeof(line), "SPO2:%s TEMP:%s ECG:%s CUFF:%s%s",
+    snprintf(line, sizeof(line), "SPO2 %s  TEMP %s  ECG %s  CUFF %s%s",
              chanTxt(s.chSpo2), chanTxt(s.chTemp), chanTxt(s.chEcg), chanTxt(s.chBp),
              s.spo2LedLevel == 2 ? "" : s.spo2LedLevel == 1 ? "  [LED HALF]" : "  [LED OFF]");
-    row(8, line, s.spo2LedLevel == 2 ? UI_INK : UI_WARN);
-    row(9, s.clockSynced ? "NTP synced (UTC)" : "NOT SYNCED", s.clockSynced ? UI_GOOD : UI_WARN);
+    row(5, "Sensors", line, s.spo2LedLevel == 2 ? UI_INK : UI_WARN, y);
 
-    // simulation toggle — repainted only when its state changes
-    simBtnY_ = y + 4;
+    // ── CALIBRATION ── (stored, survives reflash; serial console: 'cal show')
+    y = yCal + 18;
+    bool tempCal = g_cal.tempCalibrated();
+    snprintf(line, sizeof(line), "TOUCH %s   BP %s   TEMP %s",
+             calFromNvs_ ? "ok" : "default",
+             s.bpCalibrated ? "ok" : "uncal",
+             tempCal ? "ok" : "UNCAL - not transmitted");
+    row(6, "Stored", line, tempCal ? UI_INK : UI_WARN, y);
+
+    // ── maintenance buttons — repainted only when state changes ──
+    simBtnY_ = H - 26 - 40;
     int simState = s.simulation ? 1 : 0;
     if (forceRedraw_ || simState != lastSimBtn_) {
       lastSimBtn_ = simState;
-      uint16_t sc = s.simulation ? TFT_ORANGE : UI_FAINT;
-      tft_.fillRoundRect(10, simBtnY_, 220, 32, 8, sc);
-      tft_.setTextColor(s.simulation ? TFT_BLACK : UI_INK, sc);
+      if (s.simulation) {
+        tft_.fillRoundRect(10, simBtnY_, 220, 32, 8, TFT_ORANGE);
+        tft_.setTextColor(TFT_BLACK, TFT_ORANGE);
+      } else {
+        tft_.fillRoundRect(10, simBtnY_, 220, 32, 8, UI_BG);
+        tft_.drawRoundRect(10, simBtnY_, 220, 32, 8, UI_FAINT);
+        tft_.setTextColor(UI_MUTED, UI_BG);
+      }
       tft_.setTextDatum(MC_DATUM);
       tft_.drawString(s.simulation ? "SIMULATION: ON" : "SIMULATION: OFF", 120, simBtnY_ + 16, 2);
       tft_.setTextDatum(TL_DATUM);
     }
-
-    // touch-calibration button — static, drawn on page entry
     if (forceRedraw_) {
-      tft_.fillRoundRect(240, simBtnY_, 220, 32, 8, UI_ACCENT);
-      tft_.setTextColor(TFT_WHITE, UI_ACCENT);
+      tft_.fillRoundRect(240, simBtnY_, 220, 32, 8, UI_BG);
+      tft_.drawRoundRect(240, simBtnY_, 220, 32, 8, calFromNvs_ ? UI_FAINT : UI_WARN);
+      tft_.setTextColor(calFromNvs_ ? UI_MUTED : UI_WARN, UI_BG);
       tft_.setTextDatum(MC_DATUM);
       tft_.drawString(calFromNvs_ ? "CALIBRATE TOUCH" : "CALIBRATE TOUCH !", 350, simBtnY_ + 16, 2);
       tft_.setTextDatum(TL_DATUM);

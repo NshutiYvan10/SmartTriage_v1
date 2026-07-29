@@ -166,13 +166,24 @@ private:
       if (buffered->hr > 0)   doc["heartRate"]       = buffered->hr;
       if (buffered->spo2 > 0) doc["spo2"]            = buffered->spo2;
       if (buffered->rr > 0)   doc["respiratoryRate"] = buffered->rr;
-      if (buffered->temp > 0) doc["temperature"]     = ((int)(buffered->temp * 10)) / 10.0;
+      if (buffered->temp > 0 && g_cal.tempCalibrated())
+        doc["temperature"] = ((int)(buffered->temp * 10)) / 10.0;
       if (buffered->sys > 0)  { doc["systolicBp"] = buffered->sys; doc["diastolicBp"] = buffered->dia; }
     } else {
       if (s.hr > 0)   doc["heartRate"]       = (int)roundf(s.hr);
       if (s.spo2 > 0) doc["spo2"]            = (int)roundf(s.spo2);
       if (s.rr > 0)   doc["respiratoryRate"] = (int)roundf(s.rr);
-      if (s.temp > 0) doc["temperature"]     = ((int)(s.temp * 10)) / 10.0;
+      // Uncalibrated temperature NEVER reaches the clinical record: a
+      // contact sensor without its site offset reads skin temp, and a
+      // "30.8 C" landing in SmartTriage fires false hypothermia /
+      // deterioration detections (observed live). Display-only until
+      // 'cal temp <ref>' stores the offset; then transmission resumes.
+      if (s.temp > 0 && g_cal.tempCalibrated())
+        doc["temperature"] = ((int)(s.temp * 10)) / 10.0;
+      else if (s.temp > 0 && !tempGateLogged_) {
+        tempGateLogged_ = true;
+        Serial.println("[net] temperature EXCLUDED from transmission until device-calibrated (serial: cal temp <ref C>)");
+      }
       if (s.bpLast.valid) {
         // BP persists in every payload until a new manual reading replaces it.
         doc["systolicBp"]  = s.bpLast.sys;
@@ -277,6 +288,7 @@ private:
   bool clockRequested_ = false;
   // server discovery (mDNS): current base URL + resolution bookkeeping
   String serverBase_ = SERVER_BASE;
+  bool tempGateLogged_ = false;
   bool mdnsUp_ = false, serverResolved_ = false;
   uint32_t txFailStreak_ = 0, lastResolveMs_ = 0;
   OfflineReading ring_[OFFLINE_BUFFER_SIZE];
