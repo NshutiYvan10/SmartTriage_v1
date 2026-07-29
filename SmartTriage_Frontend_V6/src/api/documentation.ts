@@ -1,4 +1,4 @@
-import { get, post, put } from './client';
+import { get, post, put, downloadBlob } from './client';
 
 export interface ClinicalDocument {
   id: string;
@@ -66,6 +66,8 @@ export const documentationApi = {
   amend: (id: string, data: { content: string; amendmentReason: string; notes?: string }) => post<ClinicalDocument>(`/documents/${id}/amend`, data),
   getForVisit: (visitId: string, page = 0) => get<{ content: ClinicalDocument[]; totalElements: number }>(`/documents/visit/${visitId}?page=${page}&size=20`),
   get: (id: string) => get<ClinicalDocument>(`/documents/${id}`),
+  /** Download the document as a branded, printable PDF (returns the blob + filename). */
+  downloadPdf: (id: string) => downloadBlob(`/documents/${id}/pdf`, 'clinical-document.pdf'),
   generateDischargeSummary: (visitId: string) => post<ClinicalDocument>(`/documents/visit/${visitId}/discharge-summary`),
   generateHandover: (visitId: string) => post<ClinicalDocument>(`/documents/visit/${visitId}/handover`),
 };

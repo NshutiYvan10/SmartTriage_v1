@@ -2,16 +2,21 @@ package com.smartTriage.smartTriage_server.module.documentation.controller;
 
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
 import com.smartTriage.smartTriage_server.module.documentation.dto.*;
+import com.smartTriage.smartTriage_server.module.documentation.service.ClinicalDocumentPdfService;
 import com.smartTriage.smartTriage_server.module.documentation.service.ClinicalDocumentService;
+import com.smartTriage.smartTriage_server.module.user.entity.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -35,6 +40,7 @@ import java.util.UUID;
 public class ClinicalDocumentController {
 
     private final ClinicalDocumentService documentService;
+    private final ClinicalDocumentPdfService documentPdfService;
 
     // ====================================================================
     // CREATE
@@ -108,6 +114,27 @@ public class ClinicalDocumentController {
     public ResponseEntity<ApiResponse<ClinicalDocumentResponse>> getDocument(@PathVariable UUID id) {
         ClinicalDocumentResponse response = documentService.getDocument(id);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    /** Render the document as a professional, printable PDF (branded letterhead,
+     *  patient banner, structured body, electronic-signature attestation). */
+    @GetMapping("/{id}/pdf")
+    @PreAuthorize("@clinicalAuthz.canAccessDocument(authentication, #id)")
+    public ResponseEntity<byte[]> downloadDocumentPdf(@PathVariable UUID id, Authentication authentication) {
+        ClinicalDocumentPdfService.RenderedPdf pdf = documentPdfService.render(id, actorName(authentication));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + pdf.filename() + "\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf.bytes());
+    }
+
+    private static String actorName(Authentication authentication) {
+        if (authentication != null && authentication.getPrincipal() instanceof User u) {
+            String name = ((u.getFirstName() == null ? "" : u.getFirstName()) + " "
+                    + (u.getLastName() == null ? "" : u.getLastName())).trim();
+            return name.isBlank() ? u.getEmail() : name;
+        }
+        return "SmartTriage user";
     }
 
     // ====================================================================

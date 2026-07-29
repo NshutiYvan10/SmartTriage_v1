@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   FileText, Search, Plus, CheckCircle, Clock, PenTool, Shield,
   ChevronDown, ChevronUp, Loader2, RefreshCw, X, AlertTriangle,
-  FileSignature, ClipboardList, FilePlus2, Eye,
+  FileSignature, ClipboardList, FilePlus2, Eye, FileDown,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { documentationApi } from '@/api/documentation';
@@ -16,6 +16,7 @@ import { visitApi } from '@/api/visits';
 import type { VisitResponse } from '@/api/types';
 import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
 import { ModalPortal } from '@/components/ModalPortal';
+import { PdfPreviewModal, usePdfPreview } from '@/components/PdfPreviewModal';
 import { ApiError } from '@/api/client';
 import { format } from 'date-fns';
 import { useTheme } from '@/hooks/useTheme';
@@ -175,6 +176,21 @@ export function ClinicalDocumentation() {
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
   const [totalElements, setTotalElements] = useState(0);
   const [page, setPage] = useState(0);
+  // In-app PDF preview of a document's printable version.
+  const { showPdf, previewProps } = usePdfPreview();
+  const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
+
+  const openDocumentPdf = useCallback(async (id: string) => {
+    setPdfBusyId(id);
+    try {
+      const { blob, filename } = await documentationApi.downloadPdf(id);
+      showPdf(blob, filename);
+    } catch (e) {
+      console.error('[Documentation] PDF export failed', e);
+    } finally {
+      setPdfBusyId(null);
+    }
+  }, [showPdf]);
 
   // ── Create form state ──
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -822,9 +838,20 @@ export function ClinicalDocumentation() {
                                 {doc.authorName ? ` · ${doc.authorName}` : ''}
                               </p>
                             </div>
-                            <button onClick={() => setExpandedDocId(null)} className="text-white/70 hover:text-white flex-shrink-0" aria-label="Close">
-                              <X className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <button
+                                onClick={() => openDocumentPdf(doc.id)}
+                                disabled={pdfBusyId === doc.id}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-white/10 text-white hover:bg-white/20 disabled:opacity-50"
+                                title="Open the printable PDF"
+                              >
+                                {pdfBusyId === doc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                                PDF
+                              </button>
+                              <button onClick={() => setExpandedDocId(null)} className="text-white/70 hover:text-white" aria-label="Close">
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
                           <div className="px-5 py-5">
                       {/* Document content — rendered as a professional
@@ -1072,6 +1099,9 @@ export function ClinicalDocumentation() {
             </div>
           </div>
         )}
+
+        {/* ── In-app PDF preview (branded, printable clinical document) ── */}
+        <PdfPreviewModal {...previewProps} />
       </div>
     </div>
   );
