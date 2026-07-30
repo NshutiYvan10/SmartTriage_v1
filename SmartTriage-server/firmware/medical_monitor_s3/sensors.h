@@ -148,8 +148,21 @@ private:
     // up to 100 Hz, and each flap repaints the whole pleth pane and restarts
     // its sweep — visible chaos next to the ECG for a signal that is simply
     // marginal. Latch on above the threshold, release only well below it.
-    fingerOn_ = fingerOn_ ? (ir > (long)(FINGER_IR_THRESHOLD * FINGER_IR_RELEASE_FRAC))
-                          : (ir > FINGER_IR_THRESHOLD);
+    // AC extraction runs on EVERY sample, finger or not: a band-pass has
+    // STATE, so it must see a continuous stream. (Re-filtering the stored
+    // window from scratch every 500 ms would inject a filter transient into
+    // every single measurement.)
+    float irAcS  = irAcLp_.process(irAcHp_.highpass((float)ir,  SPO2_AC_HP_ALPHA), SPO2_AC_LP_ALPHA);
+    float redAcS = redAcLp_.process(redAcHp_.highpass((float)red, SPO2_AC_HP_ALPHA), SPO2_AC_LP_ALPHA);
+
+    irBuf_[bufIdx_]    = ir;
+    redBuf_[bufIdx_]   = red;
+    irAcBuf_[bufIdx_]  = irAcS;
+    redAcBuf_[bufIdx_] = redAcS;
+    bufIdx_ = (bufIdx_ + 1) % SPO2_BUFFER_SIZE;
+    if (sampleCount_ < SPO2_BUFFER_SIZE) sampleCount_++;
+
+    updatePresence(ir, irAcS);
     if (!fingerOn_) return;
     lastFingerMs_ = millis();
 
@@ -163,11 +176,6 @@ private:
     g_plethWave[h] = (int16_t)constrain(smooth / 8.0f, -2000.0f, 2000.0f);
     g_plethWaveHead = h;
 
-    irBuf_[bufIdx_]  = ir;
-    redBuf_[bufIdx_] = red;
-    bufIdx_ = (bufIdx_ + 1) % SPO2_BUFFER_SIZE;
-    if (sampleCount_ < SPO2_BUFFER_SIZE) sampleCount_++;
-
     // HR fallback from the IR beat detector while ECG can't provide it
     if (ecgLeadsOff && checkForBeat(ir)) {
       uint32_t now = millis();
@@ -177,6 +185,46 @@ private:
       }
       lastIrBeatMs_ = now;
     }
+  }
+
+  // Presence from pulsatility, DC only as a floor (see config.h).
+  void updatePresence(long ir, float irAc) {
+    uint32_t now = millis();
+    acEnv_ = 0.98f * acEnv_ + 0.02f * fabsf(irAc);
+    float floorNow = fingerOn_ ? SPO2_IR_DC_FLOOR * FINGER_IR_RELEASE_FRAC : SPO2_IR_DC_FLOOR;
+    if ((float)ir <= floorNow) { fingerOn_ = false; pulseSince_ = 0; return; }
+    bool pulsatile = ir > 0 && (acEnv_ / (float)ir) > SPO2_MIN_PULSATILITY;
+    if (pulsatile) {
+      if (!pulseSince_) pulseSince_ = now;
+      if (now - pulseSince_ >= SPO2_PRESENCE_MS) fingerOn_ = true;
+      lastPulsatileMs_ = now;
+    } else {
+      pulseSince_ = 0;
+      if (fingerOn_ && lastPulsatileMs_ && now - lastPulsatileMs_ > SPO2_PULSE_LOST_MS) {
+        fingerOn_ = false;
+      }
+    }
+  }
+
+  // LED-current AGC. The path was pinned at 27.1 mA/LED while the register
+  // reaches ~50 mA, and IR DC varies several-fold between fingers: a fixed
+  // current under-drives thick or cold fingers (reads low, or drops out) and
+  // over-drives thin ones. Servo the current to hold IR DC inside a window.
+  // 1 Hz, one index per step, wide (>3:1) deadband => cannot oscillate; every
+  // step is logged. Only at the clinical LED level — the Device-page
+  // diagnostic override wins.
+  void maybeAgc(float irDC) {
+    if (ledLevel_ != 2 || chip_ != Chip::M30100) return;
+    uint32_t now = millis();
+    if (now - lastAgcMs_ < 1000) return;
+    lastAgcMs_ = now;
+    uint8_t idx = (uint8_t)(ledPa_ & 0x0F);
+    if      (irDC < SPO2_IR_DC_TARGET_LO && idx < 0x0F) idx++;
+    else if (irDC > SPO2_IR_DC_TARGET_HI && idx > 0x04) idx--;
+    else return;
+    ledPa_ = (uint8_t)((idx << 4) | idx);
+    legacy_.setLedConfig(ledPa_);
+    Serial.printf("[spo2] AGC: irDC %.0f -> LED 0x%02X\n", irDC, ledPa_);
   }
 
   void computeSpo2() {
@@ -193,13 +241,20 @@ private:
     // whole window, so the noise cancels and R reflects true pulsatility.
     // For matched waveforms RMS and p-p are proportional, so the 110-25R
     // calibration curve is unchanged — this only removes the noise bias.
+    // AC from the BAND-PASSED stream (config.h SPO2_AC_*), DC from the raw
+    // window. Subtracting the window mean from the raw signal — what this
+    // did before — leaves drift inside AC and biases R high, i.e. SpO2 LOW.
+    // The band-passed series is already zero-mean, so RMS is taken directly.
     double irSq = 0, redSq = 0;
     for (int i = 0; i < n; i++) {
-      double a = (double)irBuf_[i]  - irDC;  irSq  += a * a;
-      double b = (double)redBuf_[i] - redDC; redSq += b * b;
+      irSq  += (double)irAcBuf_[i]  * irAcBuf_[i];
+      redSq += (double)redAcBuf_[i] * redAcBuf_[i];
     }
     float irAC = sqrtf((float)(irSq / n)), redAC = sqrtf((float)(redSq / n));
-    if (irAC < 60.0f || redAC < 40.0f) return;          // no pulsatile signal
+    // Floors are LOWER than the pre-band-pass ones (60/40): removing drift
+    // removes amplitude that was never pulsatile. Perfusion below is the
+    // real quality gate.
+    if (irAC < 20.0f || redAC < 12.0f) return;          // no pulsatile signal
 
     // report the classic peak-to-peak-equivalent perfusion index (≈2.83×RMS
     // for a pulse-shaped wave) so the published PI keeps its usual scale
@@ -220,6 +275,18 @@ private:
 
     if (ema_.primed && outlierAbsolute(raw, ema_.value, SPO2_OUTLIER_ABS)) return;
     ema_.update(raw, EMA_ALPHA_SPO2);
+
+    maybeAgc(irDC);
+
+    // The line that lets thresholds be set from MEASURED values instead of
+    // guesses (AGC window, pulsatility floor, perfusion gate).
+    if (millis() - lastDiagMs_ >= 5000) {
+      lastDiagMs_ = millis();
+      Serial.printf("[spo2] irDC=%.0f redDC=%.0f irACrms=%.1f redACrms=%.1f PI=%.2f%% "
+                    "R=%.3f -> %.0f%% led=0x%02X trim=%+.1f\n",
+                    irDC, redDC, irAC, redAC, perfusion_ * 100.0f, rMed, raw,
+                    ledPa_, g_cal.spo2Trim());
+    }
   }
 
   void publish(bool ecgLeadsOff) {
@@ -236,6 +303,8 @@ private:
     sampleCount_ = 0; bufIdx_ = 0;
     rHist_.reset(); ema_.reset();
     plethDc_.reset(); plethLp_.reset();
+    irAcHp_.reset(); irAcLp_.reset(); redAcHp_.reset(); redAcLp_.reset();
+    acEnv_ = 0; pulseSince_ = 0; lastPulsatileMs_ = 0;
     irBeatBpm_ = 0; lastIrBeatMs_ = 0;
     perfusion_ = 0;
   }
@@ -246,6 +315,12 @@ private:
   Chip  chip_ = Chip::NONE;
   bool  present_ = false, fingerOn_ = false;
   long  irBuf_[SPO2_BUFFER_SIZE] = {0}, redBuf_[SPO2_BUFFER_SIZE] = {0};
+  float irAcBuf_[SPO2_BUFFER_SIZE] = {0}, redAcBuf_[SPO2_BUFFER_SIZE] = {0};
+  DcTracker irAcHp_, redAcHp_;
+  LowPass   irAcLp_, redAcLp_;
+  float acEnv_ = 0;
+  uint32_t pulseSince_ = 0, lastPulsatileMs_ = 0, lastAgcMs_ = 0, lastDiagMs_ = 0;
+  uint8_t  ledPa_ = SPO2_LED_FULL_30100;
   int   bufIdx_ = 0, sampleCount_ = 0;
   MedianRing<R_RATIO_HIST_SIZE> rHist_;
   Ema   ema_;
@@ -307,7 +382,7 @@ public:
 
     if (raw < TEMP_RAW_MIN) {                 // sensor not against skin
       noContactSince_ = noContactSince_ ? noContactSince_ : now;
-      if (now - noContactSince_ > 5000) { ema_.reset(); publish(Chan::NO_CONTACT, 0); }
+      if (now - noContactSince_ > 5000) { ema_.reset(); resetPlateau(); publish(Chan::NO_CONTACT, 0); }
       return;
     }
     noContactSince_ = 0;
@@ -319,7 +394,31 @@ public:
     calibrated = constrain(calibrated, TEMP_MIN, TEMP_MAX);
     if (ema_.primed && outlierAbsolute(calibrated, ema_.value, TEMP_OUTLIER_ABS)) return;
     ema_.update(calibrated, EMA_ALPHA_TEMP);
+    updatePlateau(now);
     publish(Chan::OK, ema_.value);
+  }
+
+  bool settled() const { return settled_; }
+
+  // Plateau test: the smoothed value must drift less than TEMP_PLATEAU_BAND
+  // across each of TEMP_PLATEAU_WINDOWS consecutive windows. Any contact loss
+  // resets it — a new person starts unsettled by construction.
+  void updatePlateau(uint32_t now) {
+    if (!windowStart_) { windowStart_ = now; windowRef_ = ema_.value; return; }
+    if (now - windowStart_ < TEMP_PLATEAU_WINDOW_MS) return;
+    bool stable = fabsf(ema_.value - windowRef_) < TEMP_PLATEAU_BAND;
+    stableWindows_ = stable ? stableWindows_ + 1 : 0;
+    if (stableWindows_ >= TEMP_PLATEAU_WINDOWS && !settled_) {
+      settled_ = true;
+      Serial.printf("[temp] plateau reached at %.2f C - reading is now valid "
+                    "(calibrate only from here)\n", ema_.value);
+    }
+    windowStart_ = now;
+    windowRef_ = ema_.value;
+  }
+
+  void resetPlateau() {
+    settled_ = false; stableWindows_ = 0; windowStart_ = 0; windowRef_ = 0;
   }
 
   // Recalibration changes the offset by more than TEMP_OUTLIER_ABS, which
@@ -328,6 +427,11 @@ public:
   void resetSmoothing() { ema_.reset(); }
 
 private:
+  bool     settled_ = false;
+  int      stableWindows_ = 0;
+  uint32_t windowStart_ = 0;
+  float    windowRef_ = 0;
+
   float readRaw() {
     Wire.beginTransmission(MAX30205_ADDR);
     Wire.write(0x00);
@@ -340,6 +444,7 @@ private:
     if (!stateLock(5)) return;
     g_state.chTemp = c;
     g_state.temp = t;
+    g_state.tempSettled = settled_ && c == Chan::OK;
     stateUnlock();
   }
   bool present_ = false;
@@ -390,7 +495,23 @@ public:
       onLeadsOff(now, irFallbackBpm, fingerOn);
       return;
     }
-    if (loRaw) return;   // connected, but this sample is contact noise — skip it
+    subjectReset_ = false;   // leads are on: arm the next new-patient reset
+    if (loRaw) {
+      // Connected, but THIS sample is contact noise. Do NOT just return: the
+      // 50 Hz notch has fixed coefficients for exactly 250 Hz and is savagely
+      // intolerant of a wrong MEAN sample interval (this repo's own bench
+      // numbers: 4.03 ms -> ~16 dB rejection, 4.25 ms -> ~2 dB). Dropping
+      // samples silently destroys mains rejection. Keep the filters fed and
+      // suppress DETECTION instead — with a tail, because the Q=8 notch and
+      // the 400 ms baseline tracker ring for 150-400 ms after contact
+      // returns, and one supra-threshold ring per refractory period is itself
+      // a noise lock.
+      float hpN = dc_.highpass((float)analogRead(PIN_ECG), ECG_BASELINE_ALPHA);
+      (void)detectionSignal(notch_.process(hpN));
+      detSuppressUntil_ = now + ECG_CONTACT_TAIL_MS;
+      inBeat_ = false;
+      return;
+    }
     leadsOnSince_ = leadsOnSince_ ? leadsOnSince_ : now;
 
     int raw = analogRead(PIN_ECG);
@@ -412,9 +533,58 @@ public:
     g_ecgWaveHead = h;
     finalizeBeatExport(h);
 
-    detectRPeak(filtered, now);
+    detectRPeak(detectionSignal(filtered), now);
     maybeComputeRespiration(now);
     publish(now);
+  }
+
+  // ---- detection-only front end (Pan-Tompkins). The CLINICAL trace
+  // (g_ecgWave / beatExport_) keeps the 0.5-40 Hz signal untouched; only the
+  // DETECTOR sees this. Returns the integrated signal and latches the
+  // instantaneous |slope|, which is what discriminates QRS from T wave.
+  float detectionSignal(float filtered) {
+    float bp = detFast_.process(filtered, ECG_DET_LP_FAST)
+             - detSlow_.process(filtered, ECG_DET_LP_SLOW);
+    float deriv = bp - detPrev_;
+    detPrev_ = bp;
+    detSlope_ = fabsf(deriv);
+    // Rolling DECAYING MAX of the instantaneous slope (~100 ms memory).
+    // Needed because det is a 120 ms moving INTEGRAL: it only crosses
+    // threshold once enough energy has accumulated, i.e. AFTER the steepest
+    // part of the QRS upstroke has already passed through the derivative
+    // stage. Seeding slopePeak_ at the threshold crossing therefore captured
+    // the decaying TAIL, trained slopeEma_ on tails, and compared tail
+    // against tail — destroying the 2.9x QRS-vs-T margin the whole
+    // discrimination depends on. Seed from this instead.
+    slopeRunMax_ = max(detSlope_, slopeRunMax_ * ECG_SLOPE_DECAY);
+    float sq = deriv * deriv;
+    detSum_ -= detRing_[detIdx_];
+    detRing_[detIdx_] = sq;
+    detSum_ += sq;
+    detIdx_ = (detIdx_ + 1) % ECG_DET_WIN;
+    return detSum_ / (float)ECG_DET_WIN;
+  }
+
+  // Wipe every learned parameter. adaptive_ and ampEma_ were previously never
+  // reset for the life of a boot, so THE FIRST SUBJECT'S SIGNAL CALIBRATED THE
+  // DETECTOR FOR EVERYONE AFTER THEM — the dominant failure mode when a queue
+  // of people test the device on themselves.
+  void resetSubject(const char *why) {
+    adaptive_ = 0; ampEma_ = 0; slopeEma_ = 0;
+    noiseFloor_ = 0; noiseSum_ = 0; noiseSamples_ = 0;
+    for (int i = 0; i < 8; i++) ampHist_[i] = 0;
+    ampIdx_ = ampCnt_ = 0; halveGuard_ = 0;
+    rrIdx_ = rrCnt_ = 0; pendingCnt_ = 0;
+    displayedHr_ = 0; hrFromEcg_ = false;
+    rrEma_.reset(); rCount_ = 0; rIdx_ = 0;
+    dc_.reset(); notch_.reset();
+    detFast_.reset(); detSlow_.reset(); detPrev_ = 0; detSlope_ = 0; slopeRunMax_ = 0;
+    for (int i = 0; i < ECG_DET_WIN; i++) detRing_[i] = 0;
+    detSum_ = 0; detIdx_ = 0;
+    lastAcceptedMs_ = 0; lastCandidateMs_ = 0;
+    inBeat_ = false; peakVal_ = 0; slopePeak_ = 0;
+    ppgHist_.reset();
+    Serial.printf("[ecg] SUBJECT RESET (%s) - detector thresholds re-learn from scratch\n", why);
   }
 
   // ---- interference / timing diagnostics (v3.5.2, read-only) ----
@@ -492,14 +662,29 @@ private:
 
   void onLeadsOff(uint32_t now, float irFallbackBpm, bool fingerOn) {
     leadsOnSince_ = 0;
+    detSuppressUntil_ = now + ECG_CONTACT_TAIL_MS;
     inBeat_ = false;
     // trace flatlines visibly (UI overlays "LEADS OFF")
     uint16_t h = (uint16_t)((g_ecgWaveHead + 1) % ECG_WAVE_RING);
     g_ecgWave[h] = 0;
     g_ecgWaveHead = h;
 
-    // HR falls back to the IR beat detector when a finger is on the pulse-ox
-    if (fingerOn && irFallbackBpm > 0) acceptHr(irFallbackBpm, false);
+    // Leads off long enough = the next person. Re-learn from scratch.
+    if (!leadsOffSince_) leadsOffSince_ = now;
+    if (!subjectReset_ && now - leadsOffSince_ >= ECG_SUBJECT_RESET_MS) {
+      subjectReset_ = true;
+      resetSubject("leads off > 2 s - assuming new patient");
+    }
+
+    // HR falls back to the IR beat detector when a finger is on the pulse-ox,
+    // but ONLY when that estimate is self-consistent: irBeatBpm_ accepts any
+    // single 300-2000 ms delta with no median and no rhythm validation, so it
+    // can double-count exactly the way the ECG path did.
+    if (fingerOn && irFallbackBpm > 0) {
+      ppgHist_.push(irFallbackBpm);
+      float med = ppgHist_.median();
+      if (med > 0 && fabsf(irFallbackBpm - med) <= 0.20f * med) acceptHr(med, false);
+    }
     updateQualityAndHold(now);
     publish(now);
   }
@@ -510,8 +695,51 @@ private:
   // ECG_RHYTHM_N consecutive mutually-consistent intervals. This is what
   // stops T-waves and motion artifacts from bouncing the display
   // (field report: HR jumping 115 ↔ 96).
-  void detectRPeak(float filtered, uint32_t now) {
-    float threshold = max(adaptive_ * ECG_ADAPT_FRACTION, 150.0f);
+  void detectRPeak(float det, uint32_t now) {
+    // Contact-noise tail: filters stayed fed, detection stays off.
+    if (now < detSuppressUntil_) { updateQualityAndHold(now); return; }
+
+    // Noise floor measured BETWEEN beats — this is what makes the detector
+    // person-independent (R amplitude varies 5-10x with placement).
+    // Noise floor. Priming matters: a single-sample prime that happened to
+    // land mid-QRS would set the floor far too high, and a 0.001 EMA would
+    // take ~15 minutes to recover. Average the first second instead, then
+    // track slowly.
+    if (!inBeat_) {
+      if (noiseSamples_ < 250) {
+        noiseSum_ += det; noiseSamples_++;
+        noiseFloor_ = noiseSum_ / (float)noiseSamples_;
+      } else {
+        noiseFloor_ = 0.999f * noiseFloor_ + 0.001f * det;
+      }
+    }
+
+    // DETECTION STAYS OFF until the noise floor holds real baseline. At boot
+    // detRing_ is zeroed, so det starts near 0 and the floor primes near 0,
+    // making the gate collapse to its 1.0 absolute floor — while dc_, notch_
+    // and the two detection low-passes are all still settling and their
+    // transient produces large derivatives. That combination manufactures
+    // "beats" out of the startup transient and anchors the R-R clock on junk
+    // (the first such candidate returns true as the anchor beat, so it is not
+    // even rejected). Half a second of baseline first.
+    if (noiseSamples_ < ECG_DET_PRIME_SAMPLES) { updateQualityAndHold(now); return; }
+
+    // A long rejection run must not wedge the detector: re-anchor the R-R
+    // reference so the next good beat bootstraps a fresh rhythm.
+    if (lastAcceptedMs_ && now - lastAcceptedMs_ > 3000) lastAcceptedMs_ = 0;
+
+    // adaptive_ decays when no beat is being accepted. One artifact train
+    // used to drive it up permanently (300 -> ~1500), after which a real QRS
+    // could never reach threshold again for the rest of the boot.
+    if (lastAcceptedMs_ && now - lastAcceptedMs_ > 2000 && now - lastDecayMs_ >= 250) {
+      lastDecayMs_ = now;
+      adaptive_ *= 0.9873f;                    // ≈0.95 per second
+    }
+
+    // Absolute floor so an all-zero start (or a dead input) cannot make
+    // every sample a "beat".
+    float noiseGate = max(noiseFloor_ * ECG_DET_NOISE_MULT, 1.0f);
+    float threshold = max(adaptive_ * ECG_ADAPT_FRACTION, noiseGate);
     // Dynamic refractory: 40% of the rhythm's median R-R (never below the
     // hard floor) keeps the detector out of T-wave territory at slow rates.
     uint32_t refractory = ECG_REFRACTORY_MS;
@@ -520,19 +748,30 @@ private:
     }
     bool pastRefractory = (now - lastCandidateMs_) > refractory;
 
-    if (filtered > threshold && pastRefractory) {
-      if (!inBeat_) { inBeat_ = true; peakVal_ = filtered; peakHead_ = g_ecgWaveHead; }
-      else if (filtered > peakVal_) { peakVal_ = filtered; peakHead_ = g_ecgWaveHead; }
-    } else if (inBeat_ && filtered < threshold * 0.5f) {
+    if (det > threshold && pastRefractory) {
+      if (!inBeat_) { inBeat_ = true; peakVal_ = det; slopePeak_ = slopeRunMax_; peakHead_ = g_ecgWaveHead; }
+      else {
+        if (det > peakVal_) { peakVal_ = det; peakHead_ = g_ecgWaveHead; }
+        if (detSlope_ > slopePeak_) slopePeak_ = detSlope_;
+      }
+    } else if (inBeat_ && det < threshold * 0.5f) {
       inBeat_ = false;
-      if (peakVal_ < ECG_MIN_PEAK_AMP) return;              // noise, not a beat
+      if (peakVal_ < noiseGate) return;                     // noise, not a beat
 
-      long candRr = lastCandidateMs_ > 0 ? (long)(now - lastCandidateMs_) : 0;
+      // TWO CLOCKS. lastCandidateMs_ is the refractory reference and advances
+      // on EVERY candidate. lastAcceptedMs_ is the R-R reference and advances
+      // ONLY on acceptance. Sharing one clock meant a REJECTED T wave still
+      // moved the interval reference, so the displayed rate settled at
+      // trueHR/(1-f) — 1.54x at a 35% rejection rate. That is how an absurd
+      // 2x error becomes a plausible 125 bpm, which is far more dangerous.
+      long candRr = lastAcceptedMs_ > 0 ? (long)(now - lastAcceptedMs_) : 0;
       lastCandidateMs_ = now;
       qualTotal_++;
 
-      if (validateBeat(candRr, peakVal_)) {
+      if (validateBeat(candRr, peakVal_, slopePeak_)) {
+        lastAcceptedMs_ = now;
         qualOk_++;
+        slopeEma_ = slopeEma_ > 0 ? 0.2f * slopePeak_ + 0.8f * slopeEma_ : slopePeak_;
         adaptive_ = ECG_ADAPT_ALPHA * peakVal_ + (1.0f - ECG_ADAPT_ALPHA) * adaptive_;
         ampEma_ = ampEma_ > 0 ? 0.2f * peakVal_ + 0.8f * ampEma_ : peakVal_;
         scheduleBeatExport(peakHead_);
@@ -553,9 +792,22 @@ private:
   }
 
   // Candidate R-R (measured candidate-to-candidate) against the rhythm.
-  bool validateBeat(long rr, float amp) {
+  bool validateBeat(long rr, float amp, float slope) {
+    if (halveGuard_ > 0) halveGuard_--;                     // decays per CANDIDATE
     if (rr <= 0) return true;                               // first anchor beat
     if (rr < 300 || rr > 2000) { pendingCnt_ = 0; return false; }
+
+    // ---- T-WAVE / NOISE DISCRIMINATION, ABOVE THE RHYTHM ACCEPT ----
+    // Any discriminator placed BELOW the ±30 % accept is unreachable for an
+    // ESTABLISHED wrong rhythm: a doubled train's intervals sit within ±30 %
+    // of their OWN median, so beat and T wave both pass and the lock is
+    // self-sustaining. SLOPE is the discriminator, not amplitude: on the
+    // integrated detection signal the T:QRS peak-slope ratio is about 0.175,
+    // a 2.9x margin, where amplitude alone has almost none.
+    if (rrCnt_ >= 4 && rr < ECG_TWAVE_MAX_RR && slopeEma_ > 0
+        && slope < ECG_TWAVE_SLOPE_FRAC * slopeEma_) {
+      return false;
+    }
 
     if (rrCnt_ < 4) {
       // Bootstrap, but PLAUSIBILITY-GATED. Accepting any 300-2000 ms
@@ -567,10 +819,13 @@ private:
       if (rr >= 400) { pushRr(rr); pendingCnt_ = 0; return true; }
       pendingRr_[pendingCnt_ % ECG_RHYTHM_N] = (float)rr;
       pendingCnt_++;
-      if (pendingCnt_ >= ECG_RHYTHM_N && pendingIntervalsAgree()) {
-        for (int i = 0; i < ECG_RHYTHM_N; i++) pushRr((long)pendingRr_[i]);
-        pendingCnt_ = 0;
-        return true;
+      if (pendingCnt_ >= ECG_RHYTHM_N) {
+        if (pendingIntervalsAgree()) {
+          for (int i = 0; i < ECG_RHYTHM_N; i++) pushRr((long)pendingRr_[i]);
+          pendingCnt_ = 0;
+          return true;
+        }
+        pendingCnt_ = 0;    // 3-in-a-row test, not a sliding window
       }
       return false;
     }
@@ -598,11 +853,11 @@ private:
       return false;
     }
     // Re-lock window opened by the oversensing detector: drop the small
-    // peaks so the rhythm re-forms on true R waves only.
-    if (halveGuard_ > 0 && ampEma_ > 0 && amp < 0.75f * ampEma_) {
-      halveGuard_--;
-      return false;
-    }
+    // peaks so the rhythm re-forms on true R waves only. (The counter is
+    // decremented once per CANDIDATE at function entry — decrementing it only
+    // inside this narrow branch latched it at 12 forever, which in turn kept
+    // the oversensing detector permanently disabled after its first firing.)
+    if (halveGuard_ > 0 && ampEma_ > 0 && amp < 0.75f * ampEma_) return false;
     // Rhythm-change gate: N consecutive off-rhythm intervals that agree
     // WITH EACH OTHER become the new rhythm (a real HR change tracks
     // within ~2-3 beats; scattered artifacts never agree).
@@ -633,7 +888,9 @@ private:
   // would blank a genuine paediatric SVT at 220 bpm — HR_MAX is 250 and
   // this monitor is used on children.
   bool hrAdmissible() {
-    if (leadsOff_ || displayedHr_ <= 0 || rrCnt_ < 4) return false;
+    if (displayedHr_ <= 0) return false;
+    if (!hrFromEcg_) return true;      // PPG fallback — validated in onLeadsOff
+    if (leadsOff_ || rrCnt_ < 4) return false;
     float med = rrMedian();
     if (med <= 0) return false;
     uint32_t refractory = (uint32_t)constrain(0.4f * med, (float)ECG_REFRACTORY_MS, 600.0f);
@@ -656,7 +913,7 @@ private:
     }
     return true;
   }
-  uint32_t lastLockLogMs_ = 0;
+  uint32_t lastLockLogMs_ = 0, lastDetDiagMs_ = 0;
 
   // Do the parked candidate intervals agree with each other? (A real rate
   // change tracks within 2-3 beats; scattered artifacts never agree.)
@@ -837,13 +1094,27 @@ private:
     // trend ring still fills) so nothing else breaks, but the clinical
     // value stays 0 => the UI shows "--" and net.h sends nothing.
     g_state.rr = 0.0f;
+
+    // Detector telemetry — the line that makes the noise-relative thresholds
+    // tunable from measured values instead of guesses.
+    if (millis() - lastDetDiagMs_ >= 5000) {
+      lastDetDiagMs_ = millis();
+      Serial.printf("[ecg] det noise=%.0f thr=%.0f peak=%.0f slope=%.1f slopeEma=%.1f "
+                    "rrN=%d hr=%.0f adm=%d q=%u\n",
+                    noiseFloor_, max(adaptive_ * ECG_ADAPT_FRACTION, noiseFloor_ * ECG_DET_NOISE_MULT),
+                    peakVal_, slopePeak_, slopeEma_, rrCnt_, displayedHr_,
+                    g_state.hrAdmissible ? 1 : 0, quality_);
+    }
     stateUnlock();
   }
 
   DcTracker dc_;
   NotchFilter notch_;
   bool  leadsOff_ = true, inBeat_ = false, hrFromEcg_ = false, beatReady_ = false;
-  float peakVal_ = 0, adaptive_ = ECG_INITIAL_THRESHOLD;
+  // adaptive_ starts at 0: it is trained by accepted peaks on the INTEGRATED
+  // detection scale, where the old raw-signal ECG_INITIAL_THRESHOLD (300) has
+  // no meaning. Until it trains, the noise-relative gate governs.
+  float peakVal_ = 0, adaptive_ = 0;
   uint16_t peakHead_ = 0, exportPeakHead_ = 0;
   int   samplesUntilExport_ = 0;
   int16_t beatExport_[ECG_EXPORT_SAMPLES] = {0};
@@ -857,6 +1128,18 @@ private:
   float pendingRr_[ECG_RHYTHM_N] = {0};
   int   pendingCnt_ = 0;
   float ampEma_ = 0, displayedHr_ = 0;
+  // detection-chain state
+  LowPass  detFast_, detSlow_;
+  float    detPrev_ = 0, detSlope_ = 0, slopeRunMax_ = 0, slopePeak_ = 0, slopeEma_ = 0;
+  float    detRing_[ECG_DET_WIN] = {0};
+  float    detSum_ = 0;
+  int      detIdx_ = 0;
+  float    noiseFloor_ = 0, noiseSum_ = 0;
+  int      noiseSamples_ = 0;
+  uint32_t detSuppressUntil_ = 0, lastAcceptedMs_ = 0, lastDecayMs_ = 0;
+  uint32_t leadsOffSince_ = 0;
+  bool     subjectReset_ = false;
+  MedianRing<5> ppgHist_;
   float ampHist_[8] = {0};      // accepted peak amplitudes (oversensing test)
   int   ampIdx_ = 0, ampCnt_ = 0;
   int   halveGuard_ = 0;        // beats left in the "reject small peaks" re-lock

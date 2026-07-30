@@ -486,7 +486,10 @@ private:
     cell(2, 6 + 8, top + tileH + 6 + 22, tileW - 16, tileH - 42, t, tpC, 4, 2, UI_CARD);
     accent(2, tempCal ? tpC : UI_WARN);
     cell(22, 6 + 8, top + 2 * tileH + 6 - 20, tileW - 16, 16,
-         (s.temp > 0 && !tempCal) ? "SKIN TEMP - RUN cal temp" : "",
+         s.temp <= 0 ? ""
+         : !tempCal ? "SKIN TEMP - RUN cal temp"
+         : !s.tempSettled ? "STABILISING - HOLD IN PLACE"
+         : "",
          UI_WARN, 1, 1, UI_CARD);
 
     // RESP: not reported by this hardware (see sensors.h publish()). The

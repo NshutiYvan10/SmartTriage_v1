@@ -68,6 +68,9 @@ struct MonitorState {
   // the beat train carries the signature of a noise/T-wave lock, and it
   // gates display, alarms and transmission alike.
   bool     hrAdmissible = false;
+  // Temperature has PLATEAUED (see config.h TEMP_PLATEAU_*). False means the
+  // sensor is still equilibrating and the value is an underestimate.
+  bool     tempSettled = false;
 
   bool     bpRequested = false;     // UI → bpTask trigger
   bool     bpCancelRequested = false; // UI → bpTask: abort the running cycle NOW

@@ -44,7 +44,14 @@
 
 // Safety rails: an offset beyond these is a placement/coupling problem
 // (sensor in air, strap loose), not a calibration — refuse to store it.
-#define CAL_TEMP_OFFSET_MAX   10.0f   // °C, either direction
+// A CONTACT sensor's site offset is small: deep axilla is about +0.4 C, and
+// no legitimate placement needs more than ~1.5 C. The old 10 C rail happily
+// stored a SITE ERROR: running "cal temp 36.8" with the probe on the WRIST
+// (raw ~31) stores +5.8 C — and calibrating is the act that OPENS both the
+// transmission gate (net.h) and the alarm gate (alarms.h). Correct axillary
+// placement afterwards then reads 36.4 + 5.8 = 42.2 C, clamps to TEMP_MAX,
+// transmits, and fires critical hyperthermia. The rail refuses that outright.
+#define CAL_TEMP_OFFSET_MAX    1.5f   // °C, either direction
 #define CAL_SPO2_TRIM_MAX      6.0f   // points, either direction
 
 class VitalCal {

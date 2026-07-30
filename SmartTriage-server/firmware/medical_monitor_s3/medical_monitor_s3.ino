@@ -235,6 +235,24 @@ static void calConsolePoll() {
         Serial.printf("[cal] reference %.1f C outside 30-43 — typo?\n", ref);
         continue;
       }
+      // Refuse to calibrate off a SITE ERROR. A core reference typed while the
+      // probe reads ~31 C means the probe is on the wrist/forearm, not in the
+      // axilla — storing that offset would then unlock transmission and alarms
+      // on a 5-6 C lie. See cal.h.
+      if (s.temp < TEMP_CAL_MIN_RAW) {
+        Serial.printf("[cal] REFUSED: probe reads %.1f C, which is SKIN not core. A core "
+                      "reference is only valid from a deep-axillary placement (expect "
+                      ">= %.0f C before calibrating). Move the probe, wait for the "
+                      "plateau, retry.\n", s.temp, TEMP_CAL_MIN_RAW);
+        continue;
+      }
+      if (!temp.settled()) {
+        Serial.println("[cal] REFUSED: temperature has not plateaued yet. The sensor needs "
+                       "minutes, not seconds — hold placement until '[temp] plateau reached' "
+                       "appears, then calibrate. Calibrating on the transient bakes in the "
+                       "settling error and it will NOT transfer to the next person.");
+        continue;
+      }
       float newOfs = g_cal.tempOffset() + (ref - s.temp);
       if (!g_cal.setTempOffset(newOfs)) {
         Serial.printf("[cal] refused: offset %+.2f C exceeds +/-%.0f rail — that gap is a "

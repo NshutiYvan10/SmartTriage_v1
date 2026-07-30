@@ -18,7 +18,7 @@
 #pragma once
 
 // ======================== IDENTITY / NETWORK =========================
-#define FIRMWARE_VERSION   "s3-3.8.0"
+#define FIRMWARE_VERSION   "s3-3.9.0"
 
 #define WIFI_SSID          "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD      "YOUR_WIFI_PASSWORD"
@@ -171,6 +171,34 @@
 #define RR_OUTLIER_FRAC   0.40f
 
 // ======================== MAX30102 ===================================
+// AC EXTRACTION (v3.9.0). The AC term used to be the RMS about the mean of
+// the RAW window, so any non-pulsatile drift inside the 1 s window entered
+// BOTH channels' AC and dragged R toward 1.0 — and SpO2 = 110-25R toward 85.
+// Modelled: 0.5 % of common-mode drift turns a true R of 0.52 into 0.645
+// (97 % -> 94 %); 0.8 % gives 91 %. That is the field's 91-94 %, and it is an
+// ARTEFACT — not an offset a per-person trim could ever absorb. Both channels
+// are now band-passed to the pulse band before the RMS. Alphas from
+// f3dB = -ln(1-a)*fs/2pi at 100 SPS: 0.5 Hz -> 0.031, 5 Hz -> 0.27.
+#define SPO2_AC_HP_ALPHA   0.031f
+#define SPO2_AC_LP_ALPHA   0.27f
+
+// PRESENCE. An absolute DC threshold on an uncalibrated optical path is the
+// wrong test: IR DC varies several-fold with finger thickness, seating,
+// perfusion and skin pigmentation, so a fixed 50 000 biases "off-patient"
+// against darker skin and thicker fingers — precisely this device's
+// population. DC is now only a floor ("something is on the sensor"); the
+// real test is sustained PULSATILITY.
+#define SPO2_IR_DC_FLOOR        8000.0f   // lifted units; was FINGER_IR_THRESHOLD 50000
+#define SPO2_MIN_PULSATILITY    0.0010f   // |AC| envelope / DC
+#define SPO2_PRESENCE_MS         800UL    // pulsatility must persist this long
+#define SPO2_PULSE_LOST_MS      3000UL    // DC present but no pulse this long -> off
+
+// LED-current AGC window (lifted units; the x4 lift puts full scale near
+// 262 140). SET THESE FROM THE [spo2] DIAGNOSTIC LINE on real fingers — they
+// are a starting window, not a measured constant.
+#define SPO2_IR_DC_TARGET_LO   60000.0f
+#define SPO2_IR_DC_TARGET_HI  200000.0f
+
 #define SPO2_BUFFER_SIZE   100    // 1 s @ 100 Hz — one cardiac cycle
 #define SPO2_MIN_SAMPLES    25
 #define R_RATIO_HIST_SIZE   10
@@ -183,6 +211,30 @@
 
 // ======================== ECG DETECTOR ===============================
 #define ECG_BASELINE_ALPHA   0.01f   // DC/baseline-wander tracker (~0.4 Hz HPF)
+// DETECTION CHAIN (v3.9.0). Beat detection no longer runs on the display
+// signal. Detecting on a 0.5-40 Hz trace means the T wave and chest EMG sit
+// in the SAME band as the QRS, so no amplitude threshold can separate them —
+// which is why the field unit locked onto a doubled rate. The detector now
+// uses the standard Pan-Tompkins front end: band-pass (difference of two
+// low-passes) -> derivative -> square -> moving integrate. That suppresses
+// the T wave by roughly 25x and EMG by 10-20x RELATIVE TO the QRS, which is
+// the only person-independent way to tell them apart.
+// f3dB = -ln(1-a)*fs/2pi at 250 Hz: 0.30 -> 14.2 Hz, 0.12 -> 5.1 Hz.
+#define ECG_DET_LP_FAST      0.30f
+#define ECG_DET_LP_SLOW      0.12f
+#define ECG_DET_WIN            30    // 120 ms moving integrate @250 Hz
+// Thresholds are NOISE-RELATIVE, not absolute: R-wave amplitude varies 5-10x
+// with electrode placement, so a fixed floor either misses small signals or
+// admits noise on large ones. Absolute ECG_MIN_PEAK_AMP / ECG_INITIAL_THRESHOLD
+// are no longer used by the detector for exactly that reason.
+#define ECG_DET_NOISE_MULT    4.0f   // peak must exceed 4x the measured noise floor
+#define ECG_DET_PRIME_SAMPLES  125   // 0.5 s of baseline before detection is allowed
+#define ECG_SLOPE_DECAY       0.96f  // per-sample decay of the rolling slope max (~100 ms)
+#define ECG_TWAVE_SLOPE_FRAC  0.50f  // T:QRS peak-slope ratio is ~0.175 => 2.9x margin
+#define ECG_TWAVE_MAX_RR       360   // ms; only intervals this short can be T waves
+#define ECG_CONTACT_TAIL_MS    250   // suppress detection this long after contact noise
+#define ECG_SUBJECT_RESET_MS  2000   // leads off this long => new patient, re-learn
+
 #define ECG_REFRACTORY_MS    300
 #define ECG_MIN_PEAK_AMP     200
 #define ECG_ADAPT_ALPHA      0.15f
@@ -253,6 +305,20 @@
 // clinical thermometer ("cal temp <ref>" on the serial console, cal.h)
 // and persisted in NVS.
 #define TEMP_SITE_OFFSET_C  0.2f
+// PLATEAU DETECTION (v3.9.0). A contact sensor needs minutes, not seconds:
+// the display EMA alone (alpha 0.08 at 1 Hz) has tau = 12.0 s, so 36 s just
+// for the FILTER to settle, on top of the sensor/skin interface's own thermal
+// lag. Someone holding the probe for 10-20 s sees a value still climbing from
+// room temperature — ALWAYS LOW, whatever offset is stored. That is why one
+// person's calibration cannot transfer to the next: they are being compared
+// at different points on different settling curves. The reading is therefore
+// marked UNSETTLED until it stops moving, and calibration is refused while
+// unsettled.
+#define TEMP_PLATEAU_BAND     0.05f   // °C of drift per window that counts as stable
+#define TEMP_PLATEAU_WINDOW_MS 5000UL
+#define TEMP_PLATEAU_WINDOWS      3   // consecutive stable windows required (15 s)
+#define TEMP_CAL_MIN_RAW      34.0f   // refuse a CORE reference below this (site error)
+
 #define TEMP_RAW_MIN       25.0f   // below → sensor not on skin
 #define TEMP_RAW_MAX       45.0f
 
