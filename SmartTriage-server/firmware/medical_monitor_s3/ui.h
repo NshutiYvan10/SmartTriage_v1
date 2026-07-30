@@ -232,7 +232,10 @@ public:
 
     if (pageDirty_) {
       uint32_t t0 = millis();
-      tft_.fillScreen(UI_BG);
+      // Content band only. fillScreen also paints the banner and nav strips,
+      // both of which are redrawn on the very next lines — 16 % of a
+      // 460,800-byte transfer (ILI9488 SPI is 3 bytes/pixel) for nothing.
+      tft_.fillRect(0, BANNER_H, W, H - BANNER_H - 26, UI_BG);
       drawChrome();
       // The full-screen clear wipes PIXELS; these wipe the CACHES that decide
       // whether a pixel gets redrawn. forceRedraw_ covers one frame, but the
@@ -245,7 +248,8 @@ public:
       lastBpBtn_ = -1; lastBpUiState_ = -1; lastSimBtn_ = -1;
       lastPlethState_ = -1;
       tileBand_[0] = tileBand_[1] = tileBand_[2] = tileBand_[3] = 1;
-      pageFlipMs_ = t0;
+      pageClearMs_ = millis() - t0;
+      pageFlipMs_ = millis();      // from here on we are timing the page draw
       pageDirty_ = false;
       forceRedraw_ = true;
       waveInit_ = false;
@@ -265,9 +269,10 @@ public:
     }
     forceRedraw_ = false;
     if (pageFlipMs_) {
-      uint32_t took = millis() - pageFlipMs_;
+      uint32_t draw = millis() - pageFlipMs_;
       pageFlipMs_ = 0;
-      Serial.printf("[ui] page -> %d repainted in %lu ms\n", (int)page_, (unsigned long)took);
+      Serial.printf("[ui] page -> %d: clear=%lu ms draw=%lu ms\n",
+                    (int)page_, (unsigned long)pageClearMs_, (unsigned long)draw);
     }
     xSemaphoreGive(g_spiBusMutex);
     stage = 7;
@@ -376,7 +381,7 @@ private:
   Page page_ = Page::DASH;
   bool pageDirty_ = true, forceRedraw_ = true, waveInit_ = false;
   bool bootReinit_ = false;   // one-time cold-boot re-init latch
-  uint32_t pageFlipMs_ = 0;   // set on a page repaint, timed out at frame end
+  uint32_t pageFlipMs_ = 0, pageClearMs_ = 0;   // page-repaint phase timing
 
   // ---------- shared chrome: bottom navigation bar ----------
   // v3.1.1 — real touch targets. The v3.1.0 "< prev / next >" labels sat
@@ -550,6 +555,16 @@ private:
     };
 
     char t[20];
+    // Value sprites are sized to the TEXT, not to the tile. Pushing a
+    // 215x51 sprite (10,965 px) through the 8bpp -> 18bpp per-pixel
+    // conversion to draw a 3-digit number was the dominant cost in the
+    // measured 637 ms page repaint. 130x58 covers the widest string this
+    // ever holds ("--.-" at font 4 size 2 is ~112 px), and the text CENTRE
+    // is unchanged to the pixel, so nothing moves on screen.
+    const int vw = 130, vh = 58;
+    auto vx = [&](int col) { return 6 + col * (tileW + 6) + (tileW - vw) / 2; };
+    auto vy = [&](int row) { return top + row * (tileH + 6) + 22 + (tileH - 42 - vh) / 2; };
+
     // HR (+ source/quality tag). A weak or stale ECG signal DIMS the
     // number and says so — a value flickering between "96" and "--" at
     // a bedside helps nobody, and a confidently-wrong number is worse.
@@ -557,7 +572,7 @@ private:
     uint16_t hrC = hrWeak ? UI_MUTED
                           : bandColor(s.hr, ALM_HR_WARN_LOW, ALM_HR_WARN_HIGH, ALM_HR_CRIT_LOW, ALM_HR_CRIT_HIGH);
     snprintf(t, sizeof(t), s.hr > 0 ? "%.0f" : "--", s.hr);
-    cell(0, 6 + 8, top + 22, tileW - 16, tileH - 42, t, hrC, 4, 2, UI_CARD);
+    cell(0, vx(0), vy(0), vw, vh, t, hrC, 4, 2, UI_CARD);
     accent(0, hrC);
     // A bare "--" with no reason is a support call. When HR is blanked,
     // SAY WHY in the tag line (this branch previously rendered "" for
@@ -571,7 +586,7 @@ private:
 
     uint16_t spC = bandColor(s.spo2, ALM_SPO2_WARN, 101, ALM_SPO2_CRIT, 101);
     snprintf(t, sizeof(t), s.spo2 > 0 ? "%.0f" : "--", s.spo2);
-    cell(1, 12 + tileW + 8, top + 22, tileW - 16, tileH - 42, t, spC, 4, 2, UI_CARD);
+    cell(1, vx(1), vy(0), vw, vh, t, spC, 4, 2, UI_CARD);
     accent(1, spC);
 
     // Temperature: an UNCALIBRATED contact sensor reads SKIN temp, degrees
@@ -581,7 +596,7 @@ private:
     uint16_t tpC = !tempCal ? UI_MUTED
                             : bandColor(s.temp, ALM_TEMP_WARN_LOW, ALM_TEMP_WARN_HIGH, ALM_TEMP_CRIT_LOW, ALM_TEMP_CRIT_HIGH);
     snprintf(t, sizeof(t), s.temp > 0 ? "%.1f" : "--.-", s.temp);
-    cell(2, 6 + 8, top + tileH + 6 + 22, tileW - 16, tileH - 42, t, tpC, 4, 2, UI_CARD);
+    cell(2, vx(0), vy(1), vw, vh, t, tpC, 4, 2, UI_CARD);
     accent(2, tempCal ? tpC : UI_WARN);
     cell(22, 6 + 8, top + 2 * tileH + 6 - 20, tileW - 16, 16,
          s.temp <= 0 ? ""
@@ -593,7 +608,7 @@ private:
     // RESP: not reported by this hardware (see sensors.h publish()). The
     // tile stays so the layout is unchanged, and says so plainly rather
     // than showing a number nobody should act on.
-    cell(3, 12 + tileW + 8, top + tileH + 6 + 22, tileW - 16, tileH - 42, "--", UI_MUTED, 4, 2, UI_CARD);
+    cell(3, vx(1), vy(1), vw, vh, "--", UI_MUTED, 4, 2, UI_CARD);
     accent(3, UI_FAINT);
     cell(24, 12 + tileW + 8, top + 2 * tileH + 6 - 20, tileW - 16, 16,
          "not measured on this device", UI_MUTED, 1, 1, UI_CARD);
