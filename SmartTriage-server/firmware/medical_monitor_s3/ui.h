@@ -145,6 +145,28 @@ public:
     // clocking the sensor mid-draw is not.
     if (xSemaphoreTake(g_spiBusMutex, pdMS_TO_TICKS(100)) != pdTRUE) return;
     stage = 2;
+
+    // ---- cold-boot display re-init (v3.9.1) ----
+    // Field: the same build renders fine after an upload (soft reset — the
+    // panel keeps power and stays initialized) but comes up WHITE after a
+    // cold power-on, with frames/touch/sensors all healthy. White with a
+    // live backlight = controller never accepted its init sequence: at a
+    // cold start the panel/rail (this box also wakes a pump driver at
+    // power-on) is not ready when tft.init() runs ~1.5 s in. Re-send the
+    // full init once at ~4 s, when the rails are long stable, and repaint.
+    // On a boot where the first init already took, this costs one brief
+    // flicker; on a cold boot it brings the panel up. Runs under the SPI
+    // mutex like every other display access.
+    if (!bootReinit_ && millis() > 4000) {
+      bootReinit_ = true;
+      tft_.init();
+      tft_.setRotation(1);
+      tft_.setTouch(cal_);
+      tft_.fillScreen(UI_BG);
+      pageDirty_ = true;
+      Serial.println("[ui] display re-initialized (cold-boot guard)");
+    }
+
     MonitorState s = snapshotState();
     stage = 3;
     handleTouch(s);
@@ -288,6 +310,7 @@ private:
   int W = 480, H = 320, BANNER_H = 26;
   Page page_ = Page::DASH;
   bool pageDirty_ = true, forceRedraw_ = true, waveInit_ = false;
+  bool bootReinit_ = false;   // one-time cold-boot re-init latch
 
   // ---------- shared chrome: bottom navigation bar ----------
   // v3.1.1 — real touch targets. The v3.1.0 "< prev / next >" labels sat
@@ -634,10 +657,10 @@ private:
     tft_.fillRect(0, y, plotW, h, UI_SCOPE);
     for (int q = 1; q <= 3; q++) {
       int gy = y + h * q / 4;
-      for (int gx = 2; gx < plotW - 2; gx += 4) tft_.drawPixel(gx, gy, UI_SCOPE_GRID);
+      for (int gx = 2; gx < plotW - 2; gx += 12) tft_.drawPixel(gx, gy, UI_SCOPE_GRID);
     }
     for (int gx = SCOPE_VDIV; gx < plotW - 2; gx += SCOPE_VDIV) {
-      for (int gy = y + 2; gy < y + h - 2; gy += 4) tft_.drawPixel(gx, gy, UI_SCOPE_GRID);
+      for (int gy = y + 2; gy < y + h - 2; gy += 8) tft_.drawPixel(gx, gy, UI_SCOPE_GRID);
     }
     tft_.setTextColor(labelColor, UI_SCOPE);
     tft_.drawString(label, 6, y + 3, 1);
@@ -691,8 +714,8 @@ private:
         tft_.drawFastVLine(eraseX, y, h, UI_SCOPE);
         // restore the grid pixels this column carried
         if (eraseX % SCOPE_VDIV == 0) {
-          for (int gy = y + 2; gy < y + h - 2; gy += 4) tft_.drawPixel(eraseX, gy, UI_SCOPE_GRID);
-        } else if ((eraseX & 3) == 2) {
+          for (int gy = y + 2; gy < y + h - 2; gy += 8) tft_.drawPixel(eraseX, gy, UI_SCOPE_GRID);
+        } else if (eraseX % 12 == 2) {
           for (int q = 1; q <= 3; q++) tft_.drawPixel(eraseX, y + h * q / 4, UI_SCOPE_GRID);
         }
       }

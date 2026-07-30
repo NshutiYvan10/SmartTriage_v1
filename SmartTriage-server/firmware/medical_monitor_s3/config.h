@@ -18,7 +18,7 @@
 #pragma once
 
 // ======================== IDENTITY / NETWORK =========================
-#define FIRMWARE_VERSION   "s3-3.9.0"
+#define FIRMWARE_VERSION   "s3-3.9.1"
 
 #define WIFI_SSID          "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD      "YOUR_WIFI_PASSWORD"
