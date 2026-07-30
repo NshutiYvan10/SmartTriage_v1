@@ -19,13 +19,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.awt.Color;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -79,45 +77,51 @@ public class OperationalReportService {
         Instant to = date.plusDays(1).atStartOfDay(KIGALI).toInstant();
 
         PdfReport r = begin("Daily ED Activity", "Daily Activity", "Operational report", hospital, requestedBy);
-        r.metaStrip(List.of(
-                PdfReport.kv("Report date", date.toString()),
-                PdfReport.kv("Scope", "Whole department · all zones"),
-                PdfReport.kv("Requested by", requestedBy),
-                PdfReport.kv("Source", "Live clinical records")));
+        r.ledgerIdTable(List.of(
+                PdfReport.lcellMono("Report date", date.toString()),
+                PdfReport.lcell("Scope", "Whole department · all zones"),
+                PdfReport.lcell("Requested by", requestedBy),
+                PdfReport.lcell("Source", "Live clinical records")));
 
+        int s = 0;
         ActivityStats stats = queries.activityStats(hospitalId, from, to);
-        r.sectionHeader("Activity at a glance");
-        r.kpiTiles(List.of(
-                PdfReport.kpi(grp(stats.arrivals()), null, "Arrivals"),
-                PdfReport.kpi(grp(stats.triaged()), null, "Triaged"),
-                PdfReport.kpi(dec(stats.avgWaitMinutes()), "min", "Avg wait"),
-                PdfReport.kpi(dec(stats.avgLosMinutes()), "min", "Avg length of stay")));
+        r.ledgerSection(sec(++s), "Activity at a glance");
+        List<PdfReport.LedgerCell> glance = new ArrayList<>();
+        kpiCell(glance, grp(stats.arrivals()), null, "Arrivals");
+        kpiCell(glance, grp(stats.triaged()), null, "Triaged");
+        kpiCell(glance, dec(stats.avgWaitMinutes()), "min", "Avg wait");
+        kpiCell(glance, dec(stats.avgLosMinutes()), "min", "Avg length of stay");
+        r.ledgerKv(glance);
 
-        acuityMix(r, queries.categoryBreakdown(hospitalId, from, to), stats.triaged());
+        acuityMix(r, sec(++s), queries.categoryBreakdown(hospitalId, from, to), stats.triaged());
 
-        r.sectionHeader("Dispositions");
+        r.ledgerSection(sec(++s), "Dispositions");
         Map<String, Long> disp = queries.dispositions(hospitalId, from, to);
         if (disp.isEmpty()) {
             r.paragraph("None recorded on this date.", PdfReport.F_META);
         } else {
-            r.barList(dispositionBars(disp));
+            dispositionTable(r, disp);
         }
 
-        r.sectionHeader("Clinical module activity");
+        r.ledgerSection(sec(++s), "Clinical module activity");
         ModuleActivity mod = queries.moduleActivity(hospitalId, from, to);
         int sepsis = mohIndicatorQueries.countSepsisScreened(hospitalId, from, to);
         int isolation = mohIndicatorQueries.countIsolationActivated(hospitalId, from, to);
-        r.metricGrid(List.of(
-                new PdfReport.Metric(String.valueOf(sepsis), "Sepsis screens", PdfReport.MetricTone.NEUTRAL),
-                new PdfReport.Metric(String.valueOf(isolation), "Isolations activated", PdfReport.MetricTone.NEUTRAL),
-                new PdfReport.Metric(String.valueOf(mod.hypoglycemiaEvents()), "Hypoglycemia events", PdfReport.MetricTone.NEUTRAL),
-                new PdfReport.Metric(String.valueOf(mod.fastTrackActivations()), "Fast-track activations", PdfReport.MetricTone.NEUTRAL),
-                new PdfReport.Metric(String.valueOf(mod.incidentsReported()), "Safety incidents reported",
-                        mod.incidentsReported() > 0 ? PdfReport.MetricTone.ATTENTION : PdfReport.MetricTone.NEUTRAL),
-                new PdfReport.Metric(String.valueOf(mod.severeIncidents()), "Severe-harm / death incidents",
-                        mod.severeIncidents() == 0 ? PdfReport.MetricTone.GOOD : PdfReport.MetricTone.ATTENTION)));
+        List<PdfReport.LedgerCell> module = new ArrayList<>();
+        module.add(PdfReport.lcellMono("Sepsis screens", String.valueOf(sepsis)));
+        module.add(PdfReport.lcellMono("Isolations activated", String.valueOf(isolation)));
+        module.add(PdfReport.lcellMono("Hypoglycemia events", String.valueOf(mod.hypoglycemiaEvents())));
+        module.add(PdfReport.lcellMono("Fast-track activations", String.valueOf(mod.fastTrackActivations())));
+        module.add(mod.incidentsReported() > 0
+                ? PdfReport.lcellColor("Safety incidents reported", String.valueOf(mod.incidentsReported()), PdfReport.ACCENT)
+                : PdfReport.lcellMono("Safety incidents reported", "0"));
+        module.add(mod.severeIncidents() == 0
+                ? PdfReport.lcellColor("Severe-harm / death incidents", "0", PdfReport.SATS_GREEN)
+                : PdfReport.lcellColor("Severe-harm / death incidents", String.valueOf(mod.severeIncidents()), PdfReport.DANGER));
+        r.ledgerKv(module);
 
-        r.sectionHeader("Department census", "at generation time");
+        r.ledgerSection(sec(++s), "Department census");
+        r.paragraph("At generation time.", PdfReport.F_META);
         censusTiles(r, queries.censusByZone(hospitalId));
 
         footerNote(r);
@@ -140,66 +144,73 @@ public class OperationalReportService {
                 : date.plusDays(1).atTime(7, 0).atZone(KIGALI).toInstant();
 
         PdfReport r = begin("Shift Handover Summary", "Shift Handover", "Shift handover", hospital, requestedBy);
-        r.metaStrip(List.of(
-                PdfReport.kv("Shift", p + " · " + date),
-                PdfReport.kv("Window", DT.format(from) + " → " + DT.format(to)),
-                PdfReport.kv("Requested by", requestedBy),
-                PdfReport.kv("Source", "Live clinical records")));
+        r.ledgerIdTable(List.of(
+                PdfReport.lcell("Shift", p + " · " + date),
+                PdfReport.lcell("Requested by", requestedBy),
+                PdfReport.lcellFullMono("Window", DT.format(from) + " → " + DT.format(to)),
+                PdfReport.lcell("Source", "Live clinical records")));
 
         OpenWork w = queries.openWork(hospitalId);
-        if (w.criticalAlertsUnacked() > 0) {
-            r.alertBanner(w.criticalAlertsUnacked() + " CRITICAL alert(s) UNACKNOWLEDGED — review before accepting handover");
+        boolean critical = w.criticalAlertsUnacked() > 0;
+        if (critical) {
+            r.paragraph(w.criticalAlertsUnacked() + " CRITICAL alert(s) UNACKNOWLEDGED — review before accepting handover",
+                    PdfReport.F_ALERT);
         }
 
-        r.sectionHeader("Open work being handed over");
-        r.workRows(List.of(
-                workRow("Unacknowledged CRITICAL alerts", w.criticalAlertsUnacked(),
-                        PdfReport.WorkTone.CRIT, "Act now", "Clear", false),
-                workRow("Sepsis bundles in progress", w.sepsisBundlesOpen(),
-                        PdfReport.WorkTone.INFO, "In progress", "None", false),
-                workRow("Active isolations", w.isolationsActive(),
-                        PdfReport.WorkTone.INFO, "Ongoing", "None", false),
-                workRow("Isolations awaiting a room", w.isolationsUnroomed(),
-                        PdfReport.WorkTone.WARN, "Attention", "None", false),
-                workRow("Unresolved hypoglycemia events", w.hypoUnresolved(),
-                        PdfReport.WorkTone.INFO, "Monitor", "None", false),
-                workRow("… of which recheck OVERDUE", w.hypoRecheckOverdue(),
-                        PdfReport.WorkTone.OVER, "Overdue", "None", true),
-                workRow("Open safety incidents", w.incidentsOpen(),
-                        PdfReport.WorkTone.WARN, "Attention", "None", false)));
+        int s = 0;
+        r.ledgerSection(sec(++s), "Open work being handed over", critical);
+        r.ledgerDataTable(new String[]{"Open work", "Count", "Status"}, new float[]{58, 15, 27}, List.of(
+                openRow("Unacknowledged CRITICAL alerts", w.criticalAlertsUnacked(), "Act now", "Clear"),
+                openRow("Sepsis bundles in progress", w.sepsisBundlesOpen(), "In progress", "None"),
+                openRow("Active isolations", w.isolationsActive(), "Ongoing", "None"),
+                openRow("Isolations awaiting a room", w.isolationsUnroomed(), "Attention", "None"),
+                openRow("Unresolved hypoglycemia events", w.hypoUnresolved(), "Monitor", "None"),
+                openRow("… of which recheck OVERDUE", w.hypoRecheckOverdue(), "Overdue", "None"),
+                openRow("Open safety incidents", w.incidentsOpen(), "Attention", "None")),
+                new boolean[]{false, true, false});
 
-        r.sectionHeader("Department state", "at generation time");
+        r.ledgerSection(sec(++s), "Department state");
+        r.paragraph("At generation time.", PdfReport.F_META);
         censusTiles(r, queries.censusByZone(hospitalId));
-        r.chipRow(acuityChips(queries.acuityNow(hospitalId)));
+        Map<String, Long> acuityNow = queries.acuityNow(hospitalId);
+        if (!acuityNow.isEmpty()) {
+            r.subHeader("Acuity now");
+            List<String[]> acuityRows = new ArrayList<>();
+            for (String key : satsOrder(acuityNow)) {
+                if (acuityNow.containsKey(key)) acuityRows.add(new String[]{pretty(key), grp(acuityNow.get(key))});
+            }
+            r.ledgerDataTable(new String[]{"Category", "In department"}, new float[]{60, 40}, acuityRows,
+                    new boolean[]{false, true});
+        }
 
-        r.sectionHeader("Activity during the shift window");
+        r.ledgerSection(sec(++s), "Activity during the shift window");
         ActivityStats stats = queries.activityStats(hospitalId, from, to);
-        r.kpiTiles(List.of(
-                PdfReport.kpi(grp(stats.arrivals()), null, "Arrivals"),
-                PdfReport.kpi(grp(stats.triaged()), null, "Triaged"),
-                PdfReport.kpi(dec(stats.avgWaitMinutes()), "min", "Avg wait")), 3);
+        List<PdfReport.LedgerCell> activity = new ArrayList<>();
+        kpiCell(activity, grp(stats.arrivals()), null, "Arrivals");
+        kpiCell(activity, grp(stats.triaged()), null, "Triaged");
+        kpiCell(activity, dec(stats.avgWaitMinutes()), "min", "Avg wait");
+        r.ledgerKv(activity);
         Map<String, Long> disp = queries.dispositions(hospitalId, from, to);
         if (!disp.isEmpty()) {
-            List<PdfReport.Chip> flow = new ArrayList<>();
-            for (Map.Entry<String, Long> e : disp.entrySet()) {
-                flow.add(new PdfReport.Chip(null, pretty(e.getKey()), String.valueOf(e.getValue())));
-            }
-            r.chipRow(flow);
+            r.subHeader("Dispositions");
+            dispositionTable(r, disp);
         }
 
-        r.sectionHeader("Rostered staff", p + " shift");
+        r.ledgerSection(sec(++s), "Rostered staff — " + p + " shift");
         List<Object[]> roster = queries.staffing(hospitalId, date, p);
         List<String[]> rows = new ArrayList<>();
-        for (Object[] s : roster) {
+        for (Object[] st : roster) {
             rows.add(new String[]{
-                    str(s[0]), pretty(str(s[1])),
-                    (str(s[2]) + " " + str(s[3])).trim() + (Boolean.TRUE.equals(s[4]) ? "  (SHIFT LEAD)" : "")});
+                    str(st[0]), pretty(str(st[1])),
+                    (str(st[2]) + " " + str(st[3])).trim() + (Boolean.TRUE.equals(st[4]) ? "  (SHIFT LEAD)" : "")});
         }
-        r.dataTable(new String[]{"Zone", "Function", "Staff member"}, new float[]{20, 30, 50}, rows, 3);
+        r.ledgerDataTable(new String[]{"Zone", "Function", "Staff member"}, new float[]{20, 30, 50}, rows,
+                new boolean[]{false, false, false});
 
         r.spacer(4f);
-        r.narrative("Handover is complete only when both leads have reviewed the open work above and signed.");
-        r.signatureBlock("Outgoing shift lead", "Incoming shift lead");
+        r.paragraph("Handover is complete only when both leads have reviewed the open work above and signed.",
+                PdfReport.F_BODY);
+        r.ledgerSignatures("Outgoing shift lead", "Incoming shift lead");
 
         footerNote(r);
         return new RenderedPdf(r.finish(), "shift-handover-" + date + "-" + p.toLowerCase() + ".pdf");
@@ -216,45 +227,43 @@ public class OperationalReportService {
         Instant t = to.plusDays(1).atStartOfDay(KIGALI).toInstant();
 
         PdfReport r = begin("Period Activity", "Period Activity", "Activity report — period", hospital, requestedBy);
-        r.metaStrip(List.of(
-                PdfReport.kv("Period", D_SHORT.format(from) + " → " + D_SHORT.format(to) + " " + to.getYear()),
-                PdfReport.kv("Days", (java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1) + " (inclusive)"),
-                PdfReport.kv("Requested by", requestedBy),
-                PdfReport.kv("Source", "Live clinical records")));
+        r.ledgerIdTable(List.of(
+                PdfReport.lcell("Period", D_SHORT.format(from) + " → " + D_SHORT.format(to) + " " + to.getYear()),
+                PdfReport.lcell("Days", (java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1) + " (inclusive)"),
+                PdfReport.lcell("Requested by", requestedBy),
+                PdfReport.lcell("Source", "Live clinical records")));
 
+        int s = 0;
         ActivityStats stats = queries.activityStats(hospitalId, f, t);
-        r.sectionHeader("Period totals");
-        r.kpiTiles(List.of(
-                PdfReport.kpi(grp(stats.arrivals()), null, "Arrivals"),
-                PdfReport.kpi(grp(stats.triaged()), null, "Triaged"),
-                PdfReport.kpi(dec(stats.avgWaitMinutes()), "min", "Avg wait"),
-                PdfReport.kpi(dec(stats.avgLosMinutes()), "min", "Avg length of stay")));
+        r.ledgerSection(sec(++s), "Period totals");
+        List<PdfReport.LedgerCell> totalsKv = new ArrayList<>();
+        kpiCell(totalsKv, grp(stats.arrivals()), null, "Arrivals");
+        kpiCell(totalsKv, grp(stats.triaged()), null, "Triaged");
+        kpiCell(totalsKv, dec(stats.avgWaitMinutes()), "min", "Avg wait");
+        kpiCell(totalsKv, dec(stats.avgLosMinutes()), "min", "Avg length of stay");
+        r.ledgerKv(totalsKv);
 
         Map<String, Long> cats = queries.categoryBreakdown(hospitalId, f, t);
-        acuityMix(r, cats, stats.triaged());
+        acuityMix(r, sec(++s), cats, stats.triaged());
 
         Map<String, Long> disp = queries.dispositions(hospitalId, f, t);
         if (!disp.isEmpty()) {
-            r.sectionHeader("Dispositions");
-            r.barList(dispositionBars(disp));
+            r.ledgerSection(sec(++s), "Dispositions");
+            dispositionTable(r, disp);
         }
 
         List<Object[]> trend = queries.dailyTrend(hospitalId, f, t);
+        r.ledgerSection(sec(++s), "Daily breakdown");
         if (trend.size() >= 2) {
-            double[] arrivals = new double[trend.size()];
             double peak = 0, low = Double.MAX_VALUE;
-            for (int i = 0; i < trend.size(); i++) {
-                arrivals[i] = asLong(trend.get(i)[1]);
-                peak = Math.max(peak, arrivals[i]);
-                low = Math.min(low, arrivals[i]);
+            for (Object[] d : trend) {
+                double v = asLong(d[1]);
+                peak = Math.max(peak, v);
+                low = Math.min(low, v);
             }
-            LocalDate mid = from.plusDays(java.time.temporal.ChronoUnit.DAYS.between(from, to) / 2);
-            r.sectionHeader("Daily arrivals — trend",
-                    trend.size() + " days · peak " + Math.round(peak) + " · low " + Math.round(low));
-            r.trendChart(arrivals, D_SHORT.format(from), D_SHORT.format(mid), D_SHORT.format(to));
+            r.paragraph(trend.size() + " days · peak " + Math.round(peak) + " · low " + Math.round(low)
+                    + " arrivals/day", PdfReport.F_META);
         }
-
-        r.sectionHeader("Per-day breakdown");
         List<String[]> rows = new ArrayList<>();
         for (Object[] d : trend) {
             rows.add(new String[]{
@@ -262,17 +271,17 @@ public class OperationalReportService {
                     String.valueOf(d[3]), String.valueOf(d[4]), String.valueOf(d[5]),
                     String.valueOf(d[6]), String.valueOf(d[7]), dec(asDouble(d[8]))});
         }
-        String[] totals = new String[]{
+        // Period totals as the final row (the 1a table's dedicated totals row → a flat labelled row).
+        rows.add(new String[]{
                 "Period total", grp(stats.arrivals()),
                 grp(satsCount(cats, "RED")), grp(satsCount(cats, "ORANGE")),
                 grp(satsCount(cats, "YELLOW")), grp(satsCount(cats, "GREEN")),
                 grp(dispCount(disp, "ADMIT")), grp(dispCount(disp, "LWBS", "LEFT")),
-                dec(stats.avgWaitMinutes())};
-        r.dataTable(
+                dec(stats.avgWaitMinutes())});
+        r.ledgerDataTable(
                 new String[]{"Date", "Arrivals", "Red", "Orange", "Yellow", "Green", "Admitted", "LWBS", "Avg wait"},
-                new Color[]{null, null, PdfReport.SATS_RED, PdfReport.SATS_ORANGE,
-                        PdfReport.SATS_YELLOW, PdfReport.SATS_GREEN, null, null, null},
-                new float[]{16, 11, 9, 10, 10, 10, 12, 9, 13}, rows, totals, 1);
+                new float[]{16, 11, 9, 10, 10, 10, 12, 9, 13}, rows,
+                new boolean[]{true, true, true, true, true, true, true, true, true});
 
         footerNote(r);
         return new RenderedPdf(r.finish(), "period-activity-" + from + "-to-" + to + ".pdf");
@@ -318,19 +327,21 @@ public class OperationalReportService {
         String name = (caller.getFirstName() + " " + caller.getLastName()).trim();
 
         PdfReport r = begin("My Clinical Activity", "My Activity", "Clinician report", hospital, name);
-        r.metaStrip(List.of(
-                PdfReport.kv("Clinician", name + " (" + caller.getRole() + ")"),
-                PdfReport.kv("Period", from + " → " + to + " (inclusive)"),
-                PdfReport.kv("Source", "Live clinical records")));
+        r.ledgerIdTable(List.of(
+                PdfReport.lcell("Clinician", name + " (" + caller.getRole() + ")"),
+                PdfReport.lcell("Period", from + " → " + to + " (inclusive)"),
+                PdfReport.lcellFull("Source", "Live clinical records")));
 
+        int s = 0;
         MyActivity a = queries.myActivity(caller.getId(), hospitalId, f, t);
-        r.sectionHeader("Workload");
-        r.kpiTiles(List.of(
-                PdfReport.kpi(grp(a.primaryVisits()), null, "Patients (primary clinician)"),
-                PdfReport.kpi(grp(a.notesAuthored()), null, "Clinical notes authored"),
-                PdfReport.kpi(grp(a.prescriptions()), null, "Medications prescribed")), 3);
+        r.ledgerSection(sec(++s), "Workload");
+        List<PdfReport.LedgerCell> workload = new ArrayList<>();
+        kpiCell(workload, grp(a.primaryVisits()), null, "Patients (primary clinician)");
+        kpiCell(workload, grp(a.notesAuthored()), null, "Clinical notes authored");
+        kpiCell(workload, grp(a.prescriptions()), null, "Medications prescribed");
+        r.ledgerKv(workload);
 
-        r.sectionHeader("Patients seen as primary clinician");
+        r.ledgerSection(sec(++s), "Patients seen as primary clinician");
         List<Object[]> visitRows = queries.myVisitRows(caller.getId(), hospitalId, f, t, MY_VISITS_CAP);
         List<String[]> rows = new ArrayList<>();
         for (Object[] v : visitRows) {
@@ -339,8 +350,8 @@ public class OperationalReportService {
                     v[2] != null ? DT.format(((java.sql.Timestamp) v[2]).toInstant()) : "—",
                     str(v[3]), pretty(str(v[4]))});
         }
-        r.dataTable(new String[]{"Visit", "Patient", "Arrival", "Category", "Disposition"},
-                new float[]{22, 28, 20, 12, 18}, rows, 5);
+        r.ledgerDataTable(new String[]{"Visit", "Patient", "Arrival", "Category", "Disposition"},
+                new float[]{22, 28, 20, 12, 18}, rows, new boolean[]{true, false, true, false, false});
         if (a.primaryVisits() > MY_VISITS_CAP) {
             r.tableNote("Showing the most recent " + MY_VISITS_CAP + " of " + a.primaryVisits() + " visits.");
         }
@@ -358,10 +369,10 @@ public class OperationalReportService {
         Hospital hospital = hospital(hospitalId);
 
         PdfReport r = begin("Quality Metrics", "Quality Metrics", "Quality & governance", hospital, requestedBy);
-        r.metaStrip(List.of(
-                PdfReport.kv("Period", from + " → " + to + " (inclusive)"),
-                PdfReport.kv("Requested by", requestedBy),
-                PdfReport.kv("Source", "Scheduled daily quality snapshots")));
+        r.ledgerIdTable(List.of(
+                PdfReport.lcell("Period", from + " → " + to + " (inclusive)"),
+                PdfReport.lcell("Requested by", requestedBy),
+                PdfReport.lcellFull("Source", "Scheduled daily quality snapshots")));
 
         // findByHospitalAndDateRange + Java filter rather than findDailySnapshotsInRange:
         // that finder compares the enum path to a string literal ('DAILY') and returned
@@ -375,30 +386,33 @@ public class OperationalReportService {
             r.paragraph("No quality snapshots exist for this period. Snapshots are captured daily by the "
                     + "quality scheduler; pick a period that includes captured days.", PdfReport.F_BODY);
         } else {
+            int s = 0;
             QualityMetricSnapshot latest = snaps.get(snaps.size() - 1);
-            r.sectionHeader("Latest captured day", String.valueOf(latest.getSnapshotDate()));
-            r.kpiTiles(List.of(
-                    PdfReport.kpi(n(latest.getTotalPatients()), null, "Patients"),
-                    PdfReport.kpi(n(latest.getTotalAdmissions()), null, "Admissions"),
-                    PdfReport.kpi(n(latest.getTotalLeftWithoutBeingSeen()), null, "LWBS"),
-                    PdfReport.kpi(dec(latest.getAverageWaitTimeMinutes()), "min", "Avg wait"),
-                    PdfReport.kpi(dec(latest.getAverageDoorToTriageMinutes()), "min", "Door → triage"),
-                    PdfReport.kpi(dec(latest.getAverageTewsScore()), null, "Avg TEWS")), 3);
+            r.ledgerSection(sec(++s), "Latest captured day");
+            r.paragraph(String.valueOf(latest.getSnapshotDate()), PdfReport.F_META);
+            List<PdfReport.LedgerCell> kpis = new ArrayList<>();
+            kpiCell(kpis, n(latest.getTotalPatients()), null, "Patients");
+            kpiCell(kpis, n(latest.getTotalAdmissions()), null, "Admissions");
+            kpiCell(kpis, n(latest.getTotalLeftWithoutBeingSeen()), null, "LWBS");
+            kpiCell(kpis, dec(latest.getAverageWaitTimeMinutes()), "min", "Avg wait");
+            kpiCell(kpis, dec(latest.getAverageDoorToTriageMinutes()), "min", "Door → triage");
+            kpiCell(kpis, dec(latest.getAverageTewsScore()), null, "Avg TEWS");
+            r.ledgerKv(kpis);
 
-            r.sectionHeader("Daily snapshots");
+            r.ledgerSection(sec(++s), "Daily snapshots");
             List<String[]> rows = new ArrayList<>();
-            for (QualityMetricSnapshot s : snaps) {
+            for (QualityMetricSnapshot snap : snaps) {
                 rows.add(new String[]{
-                        String.valueOf(s.getSnapshotDate()), n(s.getTotalPatients()),
-                        n(s.getRedPatients()), n(s.getOrangePatients()),
-                        n(s.getTotalAdmissions()), n(s.getTotalDeaths()),
-                        n(s.getTotalLeftWithoutBeingSeen()), dec(s.getAverageWaitTimeMinutes()),
-                        n(s.getRetriageCount())});
+                        String.valueOf(snap.getSnapshotDate()), n(snap.getTotalPatients()),
+                        n(snap.getRedPatients()), n(snap.getOrangePatients()),
+                        n(snap.getTotalAdmissions()), n(snap.getTotalDeaths()),
+                        n(snap.getTotalLeftWithoutBeingSeen()), dec(snap.getAverageWaitTimeMinutes()),
+                        n(snap.getRetriageCount())});
             }
-            r.dataTable(
+            r.ledgerDataTable(
                     new String[]{"Date", "Patients", "Red", "Orange", "Admitted", "Deaths", "LWBS", "Avg wait", "Re-triages"},
-                    new Color[]{null, null, PdfReport.SATS_RED, PdfReport.SATS_ORANGE, null, null, null, null, null},
-                    new float[]{15, 11, 8, 10, 12, 10, 9, 12, 13}, rows, null, 1);
+                    new float[]{15, 11, 8, 10, 12, 10, 9, 12, 13}, rows,
+                    new boolean[]{true, true, true, true, true, true, true, true, true});
         }
 
         footerNote(r);
@@ -444,70 +458,56 @@ public class OperationalReportService {
     // shared rendering helpers
     // ─────────────────────────────────────────────────────────────────
 
-    /** The SATS acuity mix: section header w/ total, 100% stacked bar, legend. */
-    private void acuityMix(PdfReport r, Map<String, Long> cats, long triaged) {
+    /** The SATS acuity mix as a #1b bordered data table (category · meaning · count · share). */
+    private void acuityMix(PdfReport r, String section, Map<String, Long> cats, long triaged) {
         long total = cats.values().stream().mapToLong(Long::longValue).sum();
-        r.sectionHeader("Triage acuity mix", grp(triaged) + " triaged · SATS");
+        r.ledgerSection(section, "Triage acuity mix");
         if (total <= 0) {
             r.paragraph("No triage records in this window.", PdfReport.F_META);
             return;
         }
-        List<PdfReport.Segment> segs = new ArrayList<>();
-        List<PdfReport.LegendItem> leg = new ArrayList<>();
+        r.paragraph(grp(triaged) + " triaged · SATS", PdfReport.F_META);
+        List<String[]> rows = new ArrayList<>();
         for (String key : satsOrder(cats)) {
             long v = cats.getOrDefault(key, 0L);
             if (v <= 0) continue;
-            Color c = satsColor(key);
-            segs.add(new PdfReport.Segment(grp(v), v, c, c == PdfReport.SATS_YELLOW));
-            leg.add(new PdfReport.LegendItem(c, pretty(key), satsMeaning(key), grp(v), pct(v, total)));
+            rows.add(new String[]{pretty(key), satsMeaning(key), grp(v), pct(v, total)});
         }
-        r.stackedBar(segs);
-        r.legend(leg);
+        r.ledgerDataTable(new String[]{"Category", "Meaning", "Count", "Share"},
+                new float[]{22, 34, 22, 22}, rows, new boolean[]{false, false, true, true});
     }
 
-    /** Census tiles per zone plus a highlighted in-department total. */
+    /** Department census as a #1b bordered data table (per zone) plus a final in-department total row. */
     private void censusTiles(PdfReport r, Map<String, Long> census) {
         if (census.isEmpty()) {
             r.paragraph("No active visits right now.", PdfReport.F_META);
             return;
         }
-        List<PdfReport.KeyVal> zones = new ArrayList<>();
+        List<String[]> rows = new ArrayList<>();
         long total = 0;
         for (Map.Entry<String, Long> e : census.entrySet()) {
-            zones.add(PdfReport.kv(pretty(e.getKey()), String.valueOf(e.getValue())));
+            rows.add(new String[]{pretty(e.getKey()), grp(e.getValue())});
             total += e.getValue();
         }
-        r.censusTiles(zones, PdfReport.kv("In department", grp(total)));
+        rows.add(new String[]{"In department (total)", grp(total)});
+        r.ledgerDataTable(new String[]{"Zone", "Patients"}, new float[]{60, 40}, rows,
+                new boolean[]{false, true});
     }
 
-    private static PdfReport.WorkRow workRow(String label, long value, PdfReport.WorkTone toneWhenPresent,
-                                             String pillWhenPresent, String pillWhenZero, boolean sub) {
-        boolean present = value > 0;
-        return new PdfReport.WorkRow(label, String.valueOf(value),
-                present ? toneWhenPresent : PdfReport.WorkTone.OK, sub,
-                present ? pillWhenPresent : pillWhenZero);
-    }
-
-    private static List<PdfReport.Chip> acuityChips(Map<String, Long> acuity) {
-        List<PdfReport.Chip> chips = new ArrayList<>();
-        Map<String, Long> ordered = new LinkedHashMap<>();
-        for (String k : satsOrder(acuity)) if (acuity.containsKey(k)) ordered.put(k, acuity.get(k));
-        for (Map.Entry<String, Long> e : ordered.entrySet()) {
-            chips.add(new PdfReport.Chip(satsColor(e.getKey()), pretty(e.getKey()), String.valueOf(e.getValue())));
-        }
-        return chips;
-    }
-
-    private static List<PdfReport.BarRow> dispositionBars(Map<String, Long> disp) {
-        long max = disp.values().stream().mapToLong(Long::longValue).max().orElse(1);
+    /** Dispositions as a #1b bordered data table (disposition · count · share), busiest first. */
+    private void dispositionTable(PdfReport r, Map<String, Long> disp) {
         long total = disp.values().stream().mapToLong(Long::longValue).sum();
-        List<PdfReport.BarRow> rows = new ArrayList<>();
+        List<String[]> rows = new ArrayList<>();
         disp.entrySet().stream()
                 .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
-                .forEach(e -> rows.add(new PdfReport.BarRow(
-                        pretty(e.getKey()), (double) e.getValue() / max,
-                        dispositionColor(e.getKey()), grp(e.getValue()), pct(e.getValue(), total))));
-        return rows;
+                .forEach(e -> rows.add(new String[]{pretty(e.getKey()), grp(e.getValue()), pct(e.getValue(), total)}));
+        r.ledgerDataTable(new String[]{"Disposition", "Count", "Share"},
+                new float[]{56, 22, 22}, rows, new boolean[]{false, true, true});
+    }
+
+    /** One open-work row: label · count · a status word (the "present" word when > 0, else the "clear" word). */
+    private static String[] openRow(String label, long value, String pillWhenPresent, String pillWhenZero) {
+        return new String[]{label, grp(value), value > 0 ? pillWhenPresent : pillWhenZero};
     }
 
     /** SATS keys in clinical order (then anything unexpected, so nothing is dropped). */
@@ -519,16 +519,6 @@ public class OperationalReportService {
         return order;
     }
 
-    private static Color satsColor(String key) {
-        String k = key.toUpperCase();
-        if (k.contains("RED")) return PdfReport.SATS_RED;
-        if (k.contains("ORANGE")) return PdfReport.SATS_ORANGE;
-        if (k.contains("YELLOW")) return PdfReport.SATS_YELLOW;
-        if (k.contains("GREEN")) return PdfReport.SATS_GREEN;
-        if (k.contains("BLUE")) return PdfReport.SATS_BLUE;
-        return PdfReport.SLATE_400;
-    }
-
     private static String satsMeaning(String key) {
         return switch (key.toUpperCase()) {
             case "RED" -> "Immediate";
@@ -538,15 +528,6 @@ public class OperationalReportService {
             case "BLUE" -> "Dead on arrival";
             default -> "";
         };
-    }
-
-    private static Color dispositionColor(String key) {
-        String k = key.toUpperCase();
-        if (k.contains("DISCHARG")) return PdfReport.SATS_GREEN;
-        if (k.contains("ADMIT")) return PdfReport.BRAND;
-        if (k.contains("LWBS") || k.contains("LEFT")) return PdfReport.ACCENT;
-        if (k.contains("DECEAS") || k.contains("DEAD") || k.contains("DEATH")) return PdfReport.DANGER;
-        return PdfReport.SLATE_400;
     }
 
     private static long satsCount(Map<String, Long> cats, String key) {
@@ -573,9 +554,21 @@ public class OperationalReportService {
     private PdfReport begin(String title, String docType, String eyebrow, Hospital hospital, String requestedBy) {
         List<String> meta = new ArrayList<>();
         if (hospital.getHospitalCode() != null) meta.add("Facility code · " + hospital.getHospitalCode());
-        return PdfReport.begin(new PdfReport.Spec(
+        // Footer confidentiality clause is kept SHORT (the ledger footer renders it
+        // left-aligned as "CONFIDENTIAL — {clause}"; a long clause overruns the centred
+        // attribution). The "generated from live clinical data" provenance lives in the
+        // body footer note instead.
+        return PdfReport.beginLedger(new PdfReport.Spec(
                 title, docType, hospital.getName(), meta, requestedBy,
-                "Operational report — generated from live clinical data", eyebrow));
+                "OPERATIONAL REPORT", eyebrow));
+    }
+
+    /** Two-digit #1b section number: 1 → "01". */
+    private static String sec(int n) { return n < 10 ? "0" + n : String.valueOf(n); }
+
+    /** Append a KPI as a monospace ledger key/value cell (folds the unit into the value). */
+    private static void kpiCell(List<PdfReport.LedgerCell> cells, String value, String unit, String label) {
+        cells.add(PdfReport.lcellMono(label, unit != null && !unit.isBlank() ? value + " " + unit : value));
     }
 
     private void footerNote(PdfReport r) {

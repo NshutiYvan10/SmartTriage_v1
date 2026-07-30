@@ -124,6 +124,13 @@ export function LabOrdersView() {
   // restricts it to these roles, so only show the buttons to who can actually use them
   // (a NURSE has the lab page but would get a 403 on generate).
   const canLabReport = ['SUPER_ADMIN', 'LAB_TECHNICIAN', 'HOSPITAL_ADMIN'].includes(user?.role ?? '');
+  // Lab-order mutations (acknowledge / receive / reject / process / enter-result / verify)
+  // are LAB_TECHNICIAN/SUPER_ADMIN only server-side (LabOrderController). A charge nurse can
+  // SEE the worklist (all zones, via canSeeAllZonesAtHospital) but must get a READ-ONLY view
+  // — without these gates she saw buttons that simply 403'd. Critical-result read-back is a
+  // separate DOCTOR/SUPER_ADMIN action (/acknowledge-critical).
+  const canActOnOrders = ['LAB_TECHNICIAN', 'SUPER_ADMIN'].includes(user?.role ?? '');
+  const canAckCritical = ['DOCTOR', 'SUPER_ADMIN'].includes(user?.role ?? '');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [reportBusy, setReportBusy] = useState(false);
@@ -499,6 +506,8 @@ export function LabOrdersView() {
                 text={text}
                 isLoading={actionLoading === order.id}
                 isHeadLabTech={isHeadLabTech}
+                canActOnOrders={canActOnOrders}
+                canAckCritical={canAckCritical}
                 onOpenChart={() => order.visitId && navigate(chartPathForRole(user?.role, order.visitId))}
                 onReceive={() => handleReceive(order)}
                 onReject={() => setRejectTarget(order)}
@@ -584,6 +593,8 @@ interface CardProps {
   text: any;
   isLoading: boolean;
   isHeadLabTech: boolean;
+  canActOnOrders: boolean;
+  canAckCritical: boolean;
   onOpenChart: () => void;
   onReceive: () => void;
   onReject: () => void;
@@ -597,7 +608,7 @@ interface CardProps {
 }
 
 function LabOrderCard({
-  order, animationDelay, glassCard, glassInner, text, isLoading, isHeadLabTech,
+  order, animationDelay, glassCard, glassInner, text, isLoading, isHeadLabTech, canActOnOrders, canAckCritical,
   onOpenChart, onReceive, onReject, onAckOrder, onStartProcessing, onEnterResult, onAcknowledge,
   onVerify, onVerifyReject, onOverride,
 }: CardProps) {
@@ -754,7 +765,7 @@ function LabOrderCard({
 
       {/* Actions */}
       <div className="flex flex-wrap gap-2">
-        {(order.status === 'ORDERED' || order.status === 'SPECIMEN_COLLECTED') && (
+        {canActOnOrders && (order.status === 'ORDERED' || order.status === 'SPECIMEN_COLLECTED') && (
           <>
             {!order.acknowledgedByLabAt && (
               <button
@@ -782,7 +793,7 @@ function LabOrderCard({
             </button>
           </>
         )}
-        {order.status === 'RECEIVED_BY_LAB' && (
+        {canActOnOrders && order.status === 'RECEIVED_BY_LAB' && (
           <>
             <button
               onClick={onStartProcessing}
@@ -801,7 +812,7 @@ function LabOrderCard({
             </button>
           </>
         )}
-        {order.status === 'PROCESSING' && (
+        {canActOnOrders && order.status === 'PROCESSING' && (
           <button
             onClick={onEnterResult}
             disabled={isLoading}
@@ -810,7 +821,7 @@ function LabOrderCard({
             <Beaker className="w-3 h-3" /> Enter result
           </button>
         )}
-        {order.status === 'AWAITING_VERIFICATION' && (
+        {canActOnOrders && order.status === 'AWAITING_VERIFICATION' && (
           <>
             {isHeadLabTech && (
               <>
@@ -842,7 +853,7 @@ function LabOrderCard({
             )}
           </>
         )}
-        {order.isCritical && !order.criticalValueAcknowledgedAt && order.status === 'RESULTED' && (
+        {canAckCritical && order.isCritical && !order.criticalValueAcknowledgedAt && order.status === 'RESULTED' && (
           <button
             onClick={onAcknowledge}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold bg-rose-500 text-white hover:bg-rose-600"

@@ -16,7 +16,6 @@ import com.lowagie.text.pdf.PdfPCell;
 import com.lowagie.text.pdf.PdfPCellEvent;
 import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfPageEventHelper;
-import com.lowagie.text.pdf.PdfTemplate;
 import com.lowagie.text.pdf.PdfWriter;
 
 import java.awt.Color;
@@ -101,6 +100,43 @@ public final class PdfReport {
     // Logo box tint: cyan wash pre-composited over white (flat — no PDF alpha games).
     public static final Color LOGO_TINT = new Color(236, 249, 252);
     public static final Color LOGO_BORDER = new Color(178, 240, 249);
+
+    // ── Redesign #1a additive tokens (chips / callouts / allergy / alert severities) ──
+    public static final Color HAIRLINE_FAINT = new Color(241, 245, 249);   // slate-100 — kv underlines
+    // Status chips (bg / fg) — match the FE status semantics exactly.
+    public static final Color CHIP_GREEN_BG = new Color(220, 252, 231);    // #dcfce7 administered/resulted/confirmed
+    public static final Color CHIP_GREEN_FG = new Color(22, 101, 52);      // #166534
+    public static final Color CHIP_SLATE_BG = new Color(226, 232, 240);    // #e2e8f0 ordered/pending
+    public static final Color CHIP_SLATE_FG = new Color(51, 65, 85);       // #334155
+    public static final Color CHIP_RED_BG = new Color(254, 226, 226);      // #fee2e2 critical
+    public static final Color CHIP_RED_FG = new Color(153, 27, 27);        // #991b1b
+    public static final Color CHIP_AMBER_BG = new Color(254, 243, 199);    // #fef3c7 acknowledgement pending
+    public static final Color CHIP_AMBER_FG = new Color(146, 64, 14);      // #92400e
+    public static final Color CHIP_ORANGE_BG = new Color(255, 237, 213);   // #ffedd5 worsening
+    public static final Color CHIP_ORANGE_FG = new Color(154, 52, 18);     // #9a3412
+    // Callout boxes.
+    public static final Color CALLOUT_YELLOW_BG = new Color(254, 252, 232);     // #fefce8 chief complaint
+    public static final Color CALLOUT_YELLOW_BORDER = new Color(253, 230, 138); // #fde68a
+    public static final Color CALLOUT_AMBER_BG = new Color(255, 251, 235);      // #fffbeb red-flag
+    public static final Color CALLOUT_AMBER_BORDER = new Color(254, 215, 170);  // #fed7aa
+    public static final Color CALLOUT_AMBER_HEAD = new Color(146, 64, 14);      // #92400e
+    // Allergy strip.
+    public static final Color ALLERGY_BG = new Color(254, 242, 242);       // #fef2f2
+    public static final Color ALLERGY_BORDER = new Color(254, 202, 202);   // #fecaca
+    public static final Color ALLERGY_TEXT = new Color(153, 27, 27);       // #991b1b
+    // Alert severity cards (bg / left-bar / heading).
+    public static final Color ALERT_CRIT_BG = new Color(254, 242, 242);    // #fef2f2
+    public static final Color ALERT_CRIT_BAR = new Color(220, 38, 38);     // #dc2626
+    public static final Color ALERT_CRIT_HEAD = new Color(185, 28, 28);    // #b91c1c
+    public static final Color ALERT_HIGH_BG = new Color(255, 247, 237);    // #fff7ed
+    public static final Color ALERT_HIGH_BAR = new Color(234, 88, 12);     // #ea580c
+    public static final Color ALERT_HIGH_HEAD = new Color(194, 65, 12);    // #c2410c
+    public static final Color ALERT_MED_BG = new Color(255, 251, 235);     // #fffbeb
+    public static final Color ALERT_MED_BAR = new Color(217, 119, 6);      // #d97706
+    public static final Color ALERT_MED_HEAD = new Color(146, 64, 14);     // #92400e
+
+    // Courier timestamp for line-item rows (design ts colour #94a3b8).
+    static final Font F_MONO_TS = new Font(Font.COURIER, 7.2f, Font.NORMAL, SLATE_400);
 
     // ── Type scale (Helvetica) ──
     public static final Font F_WORDMARK = new Font(Font.HELVETICA, 17, Font.BOLD, BRAND_DEEP);
@@ -189,6 +225,64 @@ public final class PdfReport {
 
     /** One handover workload row: label | count | status pill. */
     public record WorkRow(String label, String value, WorkTone tone, boolean sub, String pillText) {}
+
+    // ── Redesign #1a records ──────────────────────────────────────────
+
+    /** A SITUATION 2-up grid row (label/value); {@code full} spans both columns. */
+    public record GridPair(String label, String value, boolean full) {}
+    public static GridPair gp(String label, String value) { return new GridPair(label, value, false); }
+    public static GridPair gpFull(String label, String value) { return new GridPair(label, value, true); }
+
+    /**
+     * A line-item row (investigations / medications / diagnosis): monospace
+     * timestamp · bold label · muted type · status chip · right-aligned detail.
+     * {@code type} and {@code detail} are optional; chip colours are explicit.
+     */
+    public record LineItem(String timestamp, String label, String type,
+                           String status, Color statusBg, Color statusFg, String detail) {}
+
+    /** Build a line item, auto-selecting the status-chip colour from the status text. */
+    public static LineItem lineItem(String ts, String label, String type, String status, String detail) {
+        Color[] c = chipColors(status);
+        return new LineItem(ts, label, type, status, c[0], c[1], detail);
+    }
+
+    /** Map a status string to a [bg, fg] chip colour pair (green / slate / red). */
+    public static Color[] chipColors(String status) {
+        if (status == null) return new Color[]{CHIP_SLATE_BG, CHIP_SLATE_FG};
+        String s = status.toUpperCase();
+        if (s.contains("CRITICAL") || s.contains("POSITIVE") || s.contains("ABNORMAL"))
+            return new Color[]{CHIP_RED_BG, CHIP_RED_FG};
+        if (s.contains("ADMINISTERED") || s.contains("RESULTED") || s.contains("CONFIRMED")
+                || s.contains("COMPLETED") || s.contains("GIVEN") || s.contains("DONE"))
+            return new Color[]{CHIP_GREEN_BG, CHIP_GREEN_FG};
+        return new Color[]{CHIP_SLATE_BG, CHIP_SLATE_FG};
+    }
+
+    /** An ASSESSMENT card (fast-track / sepsis screening): heading + inline chip + body lines. */
+    public record Card(String heading, Color headingColor, String chip, Color chipBg, Color chipFg,
+                       Color bg, Color border, List<String> body) {}
+
+    /** A red-flag row inside the amber red-flag callout: text + severity chip + muted trailing. */
+    public record RedFlag(String text, String chip, Color chipBg, Color chipFg, String trailing) {}
+
+    /** A dot-marker timeline row: coloured dot + bold label + value + muted interval note. */
+    public record TimelineRow(String label, String value, String note, Color dot) {}
+
+    /** One alert inside a severity group: bold lead + body + optional escalation tag. */
+    public record AlertItem(String lead, String body, String escTag) {}
+    /** A severity group of alerts: coloured heading + count + left-bordered cards. */
+    public record AlertGroup(String title, Color headColor, Color cardBg, Color bar, List<AlertItem> items) {}
+
+    /** Callout-box variant: pale-yellow chief complaint, amber red-flag, or neutral panel. */
+    public enum CalloutVariant { CHIEF, REDFLAG, NEUTRAL }
+
+    /** A plain #1a stat/vitals tile: big value (optionally semantic-coloured) over a muted label. */
+    public record StatTile(String value, String label, Color valueColor) {}
+    public static StatTile stat(String value, String label) { return new StatTile(value, label, INK); }
+    public static StatTile stat(String value, String label, Color valueColor) {
+        return new StatTile(value, label, valueColor != null ? valueColor : INK);
+    }
 
     private final Document doc;
     private final ByteArrayOutputStream out;
@@ -1215,12 +1309,22 @@ public final class PdfReport {
 
     /** SBAR group header: letter badge + uppercase label + band rule. */
     public void sbarGroup(String letter, String label) {
+        sbarGroup(letter, label, BRAND_DEEP);
+    }
+
+    /**
+     * SBAR / section header with an explicit badge colour — brand for S/B/A/R,
+     * {@link #SATS_RED} for the alerts section, {@link #MUTED} for the neutral
+     * "•" sections (disposition / timeline / notes). Label + rule stay branded
+     * so every badged header reads as one family.
+     */
+    public void sbarGroup(String letter, String label, Color badgeColor) {
         try {
-            PdfPTable t = new PdfPTable(new float[]{5.2f, 1.6f, 34f, 59.2f});
+            PdfPTable t = new PdfPTable(new float[]{5.2f, 1.6f, 43f, 50.2f});
             t.setWidthPercentage(100);
             t.setSpacingBefore(12f);
             t.setSpacingAfter(2f);
-            PdfPCell badge = boxed(new BoxStyle().fill(BRAND_DEEP).radius(5.5f));
+            PdfPCell badge = boxed(new BoxStyle().fill(badgeColor).radius(5.5f));
             badge.setFixedHeight(19f);
             badge.setVerticalAlignment(Element.ALIGN_MIDDLE);
             badge.setPaddingTop(3.4f);
@@ -1598,6 +1702,733 @@ public final class PdfReport {
         }
     }
 
+    // ══════════════════════════════════════════════════════════════════
+    // Redesign #1a primitives — structured clinical cards / rows / groups.
+    // Additive: every method above keeps its exact signature.
+    // ══════════════════════════════════════════════════════════════════
+
+    /** A single body line with **bold** spans (no panel). */
+    public void bodyLine(String rich) {
+        if (rich == null || rich.isBlank()) return;
+        try {
+            Paragraph p = richBody(rich, F_BODY, F_VALUE_BD);
+            p.setLeading(12.5f);
+            p.setSpacingBefore(5f);
+            doc.add(p);
+        } catch (Exception e) { throw new IllegalStateException("PDF bodyLine failed", e); }
+    }
+
+    /** A small muted note line with **bold** spans (trend notes, attributions). */
+    public void mutedNote(String rich) {
+        if (rich == null || rich.isBlank()) return;
+        try {
+            Paragraph p = richBody(rich, new Font(Font.HELVETICA, 8, Font.NORMAL, MUTED),
+                    new Font(Font.HELVETICA, 8, Font.BOLD, MUTED));
+            p.setLeading(10.5f);
+            p.setSpacingBefore(4f);
+            doc.add(p);
+        } catch (Exception e) { throw new IllegalStateException("PDF mutedNote failed", e); }
+    }
+
+    private static Paragraph richBody(String line, Font normal, Font bold) {
+        Paragraph p = new Paragraph();
+        String[] parts = line.split("\\*\\*", -1);
+        for (int i = 0; i < parts.length; i++) {
+            if (parts[i].isEmpty()) continue;
+            p.add(new Chunk(parts[i], i % 2 == 1 ? bold : normal));
+        }
+        if (p.isEmpty()) p.add(new Chunk(" ", normal));
+        return p;
+    }
+
+    /** A crisp rounded status chip sized to hug its text (left-aligned in its host cell). */
+    private static PdfPTable miniChip(String text, Color bg, Color fg) {
+        Font f = new Font(Font.HELVETICA, 7f, Font.BOLD, fg);
+        float w;
+        try { w = f.getCalculatedBaseFont(true).getWidthPoint(text, 7f) + 13f; }
+        catch (Exception e) { w = text.length() * 4.2f + 13f; }
+        PdfPTable t = new PdfPTable(1);
+        t.setTotalWidth(w);
+        t.setLockedWidth(true);
+        t.setHorizontalAlignment(Element.ALIGN_LEFT);
+        PdfPCell c = boxed(new BoxStyle().fill(bg).radius(4f));
+        c.setFixedHeight(12.5f);
+        c.setHorizontalAlignment(Element.ALIGN_CENTER);
+        c.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        c.setPaddingTop(2.4f);
+        Chunk tc = new Chunk(text, f);
+        tc.setCharacterSpacing(0.2f);
+        Paragraph p = new Paragraph(tc);
+        p.setAlignment(Element.ALIGN_CENTER);
+        p.setLeading(7.5f);
+        c.addElement(p);
+        t.addCell(c);
+        return t;
+    }
+
+    /** An inline chip (Chunk with a padded background) that flows within prose. */
+    private static Chunk inlineChip(String text, Color bg, Color fg) {
+        Chunk c = new Chunk(" " + text + " ", new Font(Font.HELVETICA, 7.5f, Font.BOLD, fg));
+        c.setBackground(bg, 1.5f, 1.6f, 1.5f, 2.6f);
+        return c;
+    }
+
+    /**
+     * Allergy / chronic-condition strip: two side-by-side boxes. Left is
+     * red-tinted with a "!" glyph + red allergy chip(s) when allergies exist
+     * (neutral "None recorded" otherwise); right is a neutral chronic panel.
+     */
+    public void allergyStrip(String allergies, String chronic) {
+        try {
+            boolean hasAllergy = allergies != null && !allergies.isBlank();
+            Paragraph lp = new Paragraph();
+            if (hasAllergy) {
+                lp.add(new Chunk("!  ", new Font(Font.HELVETICA, 11, Font.BOLD, SATS_RED)));
+                Chunk lbl = new Chunk("KNOWN ALLERGIES   ", new Font(Font.HELVETICA, 7.5f, Font.BOLD, ALLERGY_TEXT));
+                lbl.setCharacterSpacing(0.4f);
+                lp.add(lbl);
+                for (String a : allergies.split("[,;]")) {
+                    String v = a.trim();
+                    if (v.isEmpty()) continue;
+                    lp.add(inlineChip(v, CHIP_RED_BG, CHIP_RED_FG));
+                    lp.add(new Chunk("  ", F_BODY));
+                }
+            } else {
+                Chunk lbl = new Chunk("KNOWN ALLERGIES   ", new Font(Font.HELVETICA, 7.5f, Font.BOLD, MUTED));
+                lbl.setCharacterSpacing(0.4f);
+                lp.add(lbl);
+                lp.add(new Chunk("None recorded", new Font(Font.HELVETICA, 9, Font.NORMAL, INK_SOFT)));
+            }
+            lp.setLeading(13f);
+            PdfPCell leftCell = boxed(new BoxStyle()
+                    .fill(hasAllergy ? ALLERGY_BG : PANEL)
+                    .border(hasAllergy ? ALLERGY_BORDER : HAIRLINE_SOFT, 0.9f).radius(8f));
+            leftCell.setPadding(8f); leftCell.setPaddingLeft(11f);
+            leftCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+            leftCell.addElement(lp);
+
+            Paragraph rp = new Paragraph();
+            Chunk clbl = new Chunk("CHRONIC CONDITIONS   ", new Font(Font.HELVETICA, 7.5f, Font.BOLD, MUTED));
+            clbl.setCharacterSpacing(0.4f);
+            rp.add(clbl);
+            rp.add(new Chunk(chronic != null && !chronic.isBlank() ? chronic : "None",
+                    new Font(Font.HELVETICA, 9, Font.NORMAL, INK_SOFT)));
+            rp.setLeading(13f);
+            PdfPCell rightCell = boxed(new BoxStyle().fill(PANEL).border(HAIRLINE_SOFT, 0.9f).radius(8f));
+            rightCell.setPadding(8f); rightCell.setPaddingLeft(11f);
+            rightCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+            rightCell.addElement(rp);
+
+            PdfPTable t = new PdfPTable(new float[]{49.3f, 1.4f, 49.3f});
+            t.setWidthPercentage(100);
+            t.setSpacingBefore(7f);
+            t.addCell(leftCell);
+            t.addCell(gapCell());
+            t.addCell(rightCell);
+            doc.add(t);
+        } catch (Exception e) { throw new IllegalStateException("PDF allergyStrip failed", e); }
+    }
+
+    /**
+     * A callout box: {@link CalloutVariant#CHIEF} = pale-yellow with a bold ink
+     * heading (chief complaint), {@link CalloutVariant#REDFLAG} = amber with a
+     * small colored uppercase heading, {@link CalloutVariant#NEUTRAL} = slate
+     * panel. Body supports **bold** and multiple lines; heading is optional.
+     */
+    public void calloutBox(CalloutVariant v, String heading, String body) {
+        if ((heading == null || heading.isBlank()) && (body == null || body.isBlank())) return;
+        try {
+            Color bg, border;
+            switch (v) {
+                case CHIEF -> { bg = CALLOUT_YELLOW_BG; border = CALLOUT_YELLOW_BORDER; }
+                case REDFLAG -> { bg = CALLOUT_AMBER_BG; border = CALLOUT_AMBER_BORDER; }
+                default -> { bg = PANEL; border = HAIRLINE_SOFT; }
+            }
+            PdfPCell cell = boxed(new BoxStyle().fill(bg).border(border, 0.9f).radius(8f));
+            cell.setPadding(9f); cell.setPaddingLeft(13f);
+            boolean hasHeading = heading != null && !heading.isBlank();
+            if (hasHeading) {
+                if (v == CalloutVariant.CHIEF) {
+                    Paragraph hp = new Paragraph(heading, new Font(Font.HELVETICA, 9.5f, Font.BOLD, INK));
+                    hp.setLeading(11f);
+                    cell.addElement(hp);
+                } else {
+                    Color hc = v == CalloutVariant.REDFLAG ? CALLOUT_AMBER_HEAD : MUTED;
+                    Chunk hck = new Chunk(heading.toUpperCase(), new Font(Font.HELVETICA, 8f, Font.BOLD, hc));
+                    hck.setCharacterSpacing(0.4f);
+                    Paragraph hp = new Paragraph(hck);
+                    hp.setLeading(10f);
+                    cell.addElement(hp);
+                }
+            }
+            if (body != null && !body.isBlank()) {
+                for (String ln : body.split("\n", -1)) {
+                    if (ln.isBlank()) continue;
+                    Paragraph bp = richBody(ln, new Font(Font.HELVETICA, 9, Font.NORMAL, INK),
+                            new Font(Font.HELVETICA, 9, Font.BOLD, INK));
+                    bp.setLeading(12.5f);
+                    bp.setSpacingBefore(hasHeading ? 2.5f : 0f);
+                    cell.addElement(bp);
+                }
+            }
+            PdfPTable wrap = new PdfPTable(1);
+            wrap.setWidthPercentage(100);
+            wrap.setSpacingBefore(7f);
+            wrap.addCell(cell);
+            doc.add(wrap);
+        } catch (Exception e) { throw new IllegalStateException("PDF calloutBox failed", e); }
+    }
+
+    /** The amber red-flag-signs callout: colored heading + a chip-tagged line per sign. */
+    public void redFlagCallout(String heading, List<RedFlag> flags) {
+        if (flags == null || flags.isEmpty()) return;
+        try {
+            PdfPCell cell = boxed(new BoxStyle().fill(CALLOUT_AMBER_BG).border(CALLOUT_AMBER_BORDER, 0.9f).radius(8f));
+            cell.setPadding(9f); cell.setPaddingLeft(13f);
+            if (heading != null && !heading.isBlank()) {
+                Chunk hk = new Chunk(heading.toUpperCase(), new Font(Font.HELVETICA, 8f, Font.BOLD, CALLOUT_AMBER_HEAD));
+                hk.setCharacterSpacing(0.4f);
+                Paragraph hp = new Paragraph(hk);
+                hp.setLeading(10f);
+                cell.addElement(hp);
+            }
+            for (RedFlag rf : flags) {
+                Paragraph p = new Paragraph();
+                p.add(new Chunk(rf.text() + "  ", new Font(Font.HELVETICA, 9, Font.NORMAL, INK)));
+                if (rf.chip() != null && !rf.chip().isBlank())
+                    p.add(inlineChip(rf.chip(), rf.chipBg(), rf.chipFg()));
+                if (rf.trailing() != null && !rf.trailing().isBlank())
+                    p.add(new Chunk("  " + rf.trailing(), new Font(Font.HELVETICA, 9, Font.NORMAL, MUTED)));
+                p.setLeading(13.5f);
+                p.setSpacingBefore(4f);
+                cell.addElement(p);
+            }
+            PdfPTable wrap = new PdfPTable(1);
+            wrap.setWidthPercentage(100);
+            wrap.setSpacingBefore(7f);
+            wrap.addCell(cell);
+            doc.add(wrap);
+        } catch (Exception e) { throw new IllegalStateException("PDF redFlagCallout failed", e); }
+    }
+
+    /**
+     * A 2-up SITUATION grid: label/value pairs (thin faint underlines, small
+     * muted label + value); a {@code full} pair spans the whole width.
+     */
+    public void kvGrid(List<GridPair> rows) {
+        List<GridPair> shown = rows.stream()
+                .filter(r -> r.value() != null && !r.value().isBlank()).toList();
+        if (shown.isEmpty()) return;
+        try {
+            PdfPTable t = new PdfPTable(2);
+            t.setWidthPercentage(100);
+            t.setSpacingBefore(7f);
+            boolean leftFilled = false;
+            for (GridPair r : shown) {
+                if (r.full()) {
+                    if (leftFilled) { t.addCell(pairCell(null, null, false)); leftFilled = false; }
+                    PdfPCell c = pairCell(r.label(), r.value(), true);
+                    c.setColspan(2);
+                    t.addCell(c);
+                } else {
+                    t.addCell(pairCell(r.label(), r.value(), false));
+                    leftFilled = !leftFilled;
+                }
+            }
+            if (leftFilled) t.addCell(pairCell(null, null, false));
+            doc.add(t);
+        } catch (Exception e) { throw new IllegalStateException("PDF kvGrid failed", e); }
+    }
+
+    private static PdfPCell pairCell(String label, String value, boolean full) {
+        PdfPCell cell = new PdfPCell();
+        if (label == null && value == null) { cell.setBorder(Rectangle.NO_BORDER); return cell; }
+        cell.setBorder(Rectangle.BOTTOM);
+        cell.setBorderColor(HAIRLINE_FAINT);
+        cell.setBorderWidthBottom(0.9f);
+        cell.setPaddingTop(4.5f); cell.setPaddingBottom(4.5f);
+        cell.setPaddingRight(full ? 0f : 24f);   // gutter between the two columns
+        PdfPTable inner = new PdfPTable(new float[]{44, 56});
+        inner.setWidthPercentage(100);
+        inner.getDefaultCell().setBorder(Rectangle.NO_BORDER);
+        PdfPCell lc = new PdfPCell(new Phrase(label, new Font(Font.HELVETICA, 8.5f, Font.NORMAL, MUTED)));
+        lc.setBorder(Rectangle.NO_BORDER); lc.setVerticalAlignment(Element.ALIGN_BOTTOM);
+        inner.addCell(lc);
+        PdfPCell vc = new PdfPCell(new Phrase(value, new Font(Font.HELVETICA, 9, Font.BOLD, INK)));
+        vc.setBorder(Rectangle.NO_BORDER);
+        vc.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        vc.setVerticalAlignment(Element.ALIGN_BOTTOM);
+        inner.addCell(vc);
+        cell.addElement(inner);
+        return cell;
+    }
+
+    /**
+     * Line-item rows (investigations / medications / diagnosis): each a bordered
+     * rounded row with monospace timestamp · bold label · muted type · status
+     * chip · right-aligned detail. The type column is dropped when no row has one.
+     */
+    public void lineItems(List<LineItem> rows) {
+        if (rows == null || rows.isEmpty()) return;
+        try {
+            boolean showType = rows.stream().anyMatch(r -> r.type() != null && !r.type().isBlank());
+            float[] w = showType ? new float[]{17f, 23f, 12f, 19f, 29f}
+                                 : new float[]{17f, 33f, 19f, 31f};
+            boolean first = true;
+            for (LineItem r : rows) {
+                PdfPTable inner = new PdfPTable(w);
+                inner.setWidthPercentage(100);
+                inner.getDefaultCell().setBorder(Rectangle.NO_BORDER);
+
+                PdfPCell ts = new PdfPCell(new Phrase(r.timestamp() != null ? r.timestamp() : "", F_MONO_TS));
+                ts.setBorder(Rectangle.NO_BORDER); ts.setVerticalAlignment(Element.ALIGN_MIDDLE);
+                inner.addCell(ts);
+
+                PdfPCell lbl = new PdfPCell(new Phrase(r.label() != null ? r.label() : "",
+                        new Font(Font.HELVETICA, 8.5f, Font.BOLD, INK)));
+                lbl.setBorder(Rectangle.NO_BORDER); lbl.setVerticalAlignment(Element.ALIGN_MIDDLE);
+                inner.addCell(lbl);
+
+                if (showType) {
+                    PdfPCell ty = new PdfPCell(new Phrase(r.type() != null ? r.type() : "",
+                            new Font(Font.HELVETICA, 7f, Font.NORMAL, MUTED)));
+                    ty.setBorder(Rectangle.NO_BORDER); ty.setVerticalAlignment(Element.ALIGN_MIDDLE);
+                    inner.addCell(ty);
+                }
+
+                PdfPCell chip = new PdfPCell();
+                chip.setBorder(Rectangle.NO_BORDER); chip.setVerticalAlignment(Element.ALIGN_MIDDLE);
+                chip.setPaddingTop(1f); chip.setPaddingBottom(1f);
+                if (r.status() != null && !r.status().isBlank())
+                    chip.addElement(miniChip(r.status(), r.statusBg(), r.statusFg()));
+                inner.addCell(chip);
+
+                PdfPCell det = new PdfPCell(new Phrase(r.detail() != null ? r.detail() : "",
+                        new Font(Font.HELVETICA, 8f, Font.NORMAL, MUTED)));
+                det.setBorder(Rectangle.NO_BORDER);
+                det.setHorizontalAlignment(Element.ALIGN_RIGHT);
+                det.setVerticalAlignment(Element.ALIGN_MIDDLE);
+                inner.addCell(det);
+
+                PdfPCell rowCell = boxed(new BoxStyle().fill(Color.WHITE).border(HAIRLINE_SOFT, 0.8f).radius(7f).underlay());
+                rowCell.setPadding(5.5f); rowCell.setPaddingLeft(9f); rowCell.setPaddingRight(9f);
+                rowCell.addElement(inner);
+                PdfPTable outer = new PdfPTable(1);
+                outer.setWidthPercentage(100);
+                outer.setSpacingBefore(first ? 7f : 4f);
+                outer.addCell(rowCell);
+                doc.add(outer);
+                first = false;
+            }
+        } catch (Exception e) { throw new IllegalStateException("PDF lineItems failed", e); }
+    }
+
+    /** Two side-by-side assessment cards (a single card renders full-width). */
+    public void twoUpCards(Card left, Card right) {
+        try {
+            if (left != null && right != null) {
+                PdfPTable t = new PdfPTable(new float[]{49f, 2f, 49f});
+                t.setWidthPercentage(100); t.setSpacingBefore(7f);
+                t.addCell(cardCell(left)); t.addCell(gapCell()); t.addCell(cardCell(right));
+                doc.add(t);
+            } else {
+                Card only = left != null ? left : right;
+                if (only == null) return;
+                PdfPTable t = new PdfPTable(1);
+                t.setWidthPercentage(100); t.setSpacingBefore(7f);
+                t.addCell(cardCell(only));
+                doc.add(t);
+            }
+        } catch (Exception e) { throw new IllegalStateException("PDF twoUpCards failed", e); }
+    }
+
+    private static PdfPCell cardCell(Card c) {
+        PdfPCell cell = boxed(new BoxStyle().fill(c.bg()).border(c.border(), 0.9f).radius(8f));
+        cell.setPadding(9f); cell.setPaddingLeft(12f);
+        Paragraph hp = new Paragraph();
+        Chunk hk = new Chunk(c.heading().toUpperCase(), new Font(Font.HELVETICA, 8f, Font.BOLD, c.headingColor()));
+        hk.setCharacterSpacing(0.3f);
+        hp.add(hk);
+        if (c.chip() != null && !c.chip().isBlank()) {
+            hp.add(new Chunk("  ", hk.getFont()));
+            hp.add(inlineChip(c.chip(), c.chipBg(), c.chipFg()));
+        }
+        hp.setLeading(12f);
+        cell.addElement(hp);
+        List<String> body = c.body();
+        for (int i = 0; body != null && i < body.size(); i++) {
+            String ln = body.get(i);
+            if (ln == null || ln.isBlank()) continue;
+            Paragraph bp = new Paragraph(ln, new Font(Font.HELVETICA, 8.5f, Font.NORMAL, i == 0 ? INK : MUTED));
+            bp.setLeading(11.5f); bp.setSpacingBefore(i == 0 ? 4.5f : 1.5f);
+            cell.addElement(bp);
+        }
+        return cell;
+    }
+
+    /** Dot-marker timeline rows; give the current/last row an acuity-coloured dot. */
+    public void timeline(List<TimelineRow> rows) {
+        if (rows == null || rows.isEmpty()) return;
+        try {
+            boolean first = true;
+            for (TimelineRow r : rows) {
+                PdfPTable t = new PdfPTable(new float[]{3.5f, 96.5f});
+                t.setWidthPercentage(100);
+                t.setSpacingBefore(first ? 8f : 6f); first = false;
+                final Color dotColor = r.dot() != null ? r.dot() : BRAND;
+                PdfPCell dc = new PdfPCell(); dc.setBorder(Rectangle.NO_BORDER);
+                dc.setCellEvent((cell, pos, canvases) -> {
+                    PdfContentByte bg = canvases[PdfPTable.BACKGROUNDCANVAS];
+                    bg.saveState();
+                    bg.setColorFill(dotColor);
+                    bg.circle(pos.getLeft() + 4f, (pos.getBottom() + pos.getTop()) / 2f, 3.2f);
+                    bg.fill();
+                    bg.restoreState();
+                });
+                t.addCell(dc);
+                Paragraph p = new Paragraph();
+                p.add(new Chunk(r.label(), new Font(Font.HELVETICA, 9, Font.BOLD, INK)));
+                if (r.value() != null && !r.value().isBlank())
+                    p.add(new Chunk("  —  " + r.value(), new Font(Font.HELVETICA, 9, Font.NORMAL, INK)));
+                if (r.note() != null && !r.note().isBlank())
+                    p.add(new Chunk("   " + r.note(), new Font(Font.HELVETICA, 8.5f, Font.NORMAL, MUTED)));
+                p.setLeading(11f);
+                PdfPCell tc = new PdfPCell(p);
+                tc.setBorder(Rectangle.NO_BORDER); tc.setVerticalAlignment(Element.ALIGN_MIDDLE);
+                t.addCell(tc);
+                doc.add(t);
+            }
+        } catch (Exception e) { throw new IllegalStateException("PDF timeline failed", e); }
+    }
+
+    /**
+     * Severity-grouped alerts: per group a small bold coloured uppercase heading
+     * ("CRITICAL · 6") then left-bordered coloured cards (bold lead + body, with
+     * an optional trailing "unacknowledged N min" escalation tag).
+     */
+    public void alertGroups(List<AlertGroup> groups) {
+        if (groups == null || groups.isEmpty()) return;
+        try {
+            for (AlertGroup g : groups) {
+                if (g.items() == null || g.items().isEmpty()) continue;
+                Chunk gk = new Chunk(g.title().toUpperCase(), new Font(Font.HELVETICA, 8f, Font.BOLD, g.headColor()));
+                gk.setCharacterSpacing(0.4f);
+                Paragraph gp = new Paragraph(gk);
+                gp.setSpacingBefore(10f); gp.setSpacingAfter(1f); gp.setLeading(10f);
+                doc.add(gp);
+                for (AlertItem it : g.items()) {
+                    Paragraph p = new Paragraph();
+                    if (it.lead() != null && !it.lead().isBlank())
+                        p.add(new Chunk(it.lead() + "  ", new Font(Font.HELVETICA, 8.5f, Font.BOLD, INK)));
+                    if (it.body() != null && !it.body().isBlank())
+                        p.add(new Chunk(it.body(), new Font(Font.HELVETICA, 8.5f, Font.NORMAL, INK_SOFT)));
+                    if (it.escTag() != null && !it.escTag().isBlank())
+                        p.add(new Chunk("   " + it.escTag(), new Font(Font.HELVETICA, 7f, Font.BOLD, ALERT_CRIT_HEAD)));
+                    p.setLeading(11.5f);
+                    PdfPCell rowCell = boxed(new BoxStyle().fill(g.cardBg()).leftStripe(g.bar(), 2.6f).radius(6f));
+                    rowCell.setPadding(7f); rowCell.setPaddingLeft(12f); rowCell.setPaddingRight(10f);
+                    rowCell.addElement(p);
+                    PdfPTable outer = new PdfPTable(1);
+                    outer.setWidthPercentage(100);
+                    outer.setSpacingBefore(4f);
+                    outer.addCell(rowCell);
+                    doc.add(outer);
+                }
+            }
+        } catch (Exception e) { throw new IllegalStateException("PDF alertGroups failed", e); }
+    }
+
+    /**
+     * Two side-by-side bordered signature boxes (handing-over / receiving), each
+     * with blank Name / Signature / Date-time underlines to complete by hand.
+     */
+    public void signatureBoxes(String leftLabel, String rightLabel) {
+        try {
+            PdfPTable t = new PdfPTable(new float[]{49f, 2f, 49f});
+            t.setWidthPercentage(100);
+            t.setSpacingBefore(10f);
+            t.addCell(sigBox(leftLabel));
+            t.addCell(gapCell());
+            t.addCell(sigBox(rightLabel));
+            doc.add(t);
+        } catch (Exception e) { throw new IllegalStateException("PDF signatureBoxes failed", e); }
+    }
+
+    private static PdfPCell sigBox(String label) {
+        PdfPCell cell = boxed(new BoxStyle().fill(Color.WHITE).border(HAIRLINE_SOFT, 0.9f).radius(8f).underlay());
+        cell.setPadding(12f);
+        Chunk lk = new Chunk(label != null ? label.toUpperCase() : "", F_LABEL);
+        lk.setCharacterSpacing(0.5f);
+        Paragraph lp = new Paragraph(lk);
+        lp.setSpacingAfter(12f); lp.setLeading(10f);
+        cell.addElement(lp);
+        for (String line : new String[]{"Name", "Signature", "Date / time"}) {
+            Paragraph p = new Paragraph(line, new Font(Font.HELVETICA, 8, Font.NORMAL, SLATE_400));
+            p.setLeading(9f);
+            cell.addElement(p);
+            PdfPTable ul = new PdfPTable(1);
+            ul.setWidthPercentage(100);
+            PdfPCell ulc = new PdfPCell(new Phrase(" ", F_META));
+            ulc.setBorder(Rectangle.BOTTOM);
+            ulc.setBorderColor(HAIRLINE);
+            ulc.setBorderWidthBottom(0.8f);
+            ulc.setFixedHeight(15f);
+            ul.addCell(ulc);
+            cell.addElement(ul);
+        }
+        return cell;
+    }
+
+    /**
+     * The #1a patient banner: a neutral rounded panel (#f8fafc / #e2e8f0) whose
+     * first row carries the patient name + a labelled ID row (Visit/MRN in mono)
+     * on the left and a solid acuity pill with a "TEWS n" caption on the right,
+     * and whose second row — separated by a hairline — carries the report-meta
+     * items with the acknowledgement rendered as a status chip.
+     *
+     * @param ids            label/value pairs; values labelled Visit/MRN render mono
+     * @param tews           small caption under the pill (e.g. "TEWS 5"); may be null
+     * @param meta           the plain meta items (report type / generated / handing over)
+     * @param acknowledgement the acknowledgement item rendered as a chip (may be null)
+     * @param ackAmber       true → amber "pending" chip, false → green "done" chip
+     */
+    public void patientBanner(String name, List<KeyVal> ids,
+                              String acuityLevel, String acuityMeaning, Color acuityColor, String tews,
+                              List<KeyVal> meta, KeyVal acknowledgement, boolean ackAmber) {
+        try {
+            boolean hasPill = acuityLevel != null && !acuityLevel.isBlank() && acuityColor != null;
+
+            // ── Row 1: name + id row (left) | acuity pill + TEWS (right) ──
+            PdfPTable row1 = new PdfPTable(hasPill ? new float[]{76f, 24f} : new float[]{100f});
+            row1.setWidthPercentage(100);
+            row1.getDefaultCell().setBorder(Rectangle.NO_BORDER);
+
+            PdfPCell left = new PdfPCell();
+            left.setBorder(Rectangle.NO_BORDER);
+            left.setVerticalAlignment(Element.ALIGN_TOP);
+            Paragraph nm = new Paragraph(name != null && !name.isBlank() ? name : "Unknown",
+                    new Font(Font.HELVETICA, 13.5f, Font.BOLD, INK));
+            nm.setLeading(15f);
+            left.addElement(nm);
+            List<KeyVal> shownIds = ids == null ? List.of() : ids.stream()
+                    .filter(p -> p.value() != null && !p.value().isBlank()).toList();
+            if (!shownIds.isEmpty()) {
+                PdfPTable idT = new PdfPTable(idRowWidths(shownIds));
+                idT.setWidthPercentage(100);
+                idT.setSpacingBefore(6f);
+                idT.getDefaultCell().setBorder(Rectangle.NO_BORDER);
+                for (KeyVal id : shownIds) {
+                    PdfPCell ic = new PdfPCell();
+                    ic.setBorder(Rectangle.NO_BORDER);
+                    ic.setPaddingRight(8f);
+                    Chunk lc = new Chunk(id.label().toUpperCase(), new Font(Font.HELVETICA, 6f, Font.BOLD, MUTED));
+                    lc.setCharacterSpacing(0.4f);
+                    Paragraph lp = new Paragraph(lc);
+                    lp.setLeading(7f);
+                    ic.addElement(lp);
+                    boolean mono = id.label().toLowerCase().contains("visit") || id.label().equalsIgnoreCase("MRN");
+                    Font vf = mono ? new Font(Font.COURIER, 7.3f, Font.NORMAL, INK)
+                                   : new Font(Font.HELVETICA, 7.7f, Font.NORMAL, INK);
+                    Paragraph vp = new Paragraph(id.value(), vf);
+                    vp.setLeading(9.5f);
+                    vp.setSpacingBefore(1.5f);
+                    ic.addElement(vp);
+                    idT.addCell(ic);
+                }
+                left.addElement(idT);
+            }
+            row1.addCell(left);
+
+            if (hasPill) {
+                PdfPCell right = new PdfPCell();
+                right.setBorder(Rectangle.NO_BORDER);
+                right.setVerticalAlignment(Element.ALIGN_MIDDLE);
+                right.setHorizontalAlignment(Element.ALIGN_CENTER);
+                String pillText = acuityMeaning != null && !acuityMeaning.isBlank()
+                        ? acuityLevel.toUpperCase() + " · " + acuityMeaning.toUpperCase()
+                        : acuityLevel.toUpperCase();
+                PdfPTable pill = solidPill(pillText, acuityColor);
+                pill.setHorizontalAlignment(Element.ALIGN_CENTER);
+                right.addElement(pill);
+                if (tews != null && !tews.isBlank()) {
+                    Paragraph tp = new Paragraph(tews, new Font(Font.HELVETICA, 6.3f, Font.NORMAL, SLATE_400));
+                    tp.setAlignment(Element.ALIGN_CENTER);
+                    tp.setLeading(7f);
+                    tp.setSpacingBefore(3.5f);
+                    right.addElement(tp);
+                }
+                row1.addCell(right);
+            }
+
+            // ── Row 2: report-meta items + acknowledgement chip, over a hairline ──
+            List<KeyVal> metaItems = meta == null ? new ArrayList<>() : new ArrayList<>(meta.stream()
+                    .filter(p -> p.value() != null && !p.value().isBlank()).toList());
+            boolean hasAck = acknowledgement != null && acknowledgement.value() != null
+                    && !acknowledgement.value().isBlank();
+            int cols = metaItems.size() + (hasAck ? 1 : 0);
+            PdfPTable row2 = null;
+            if (cols > 0) {
+                row2 = new PdfPTable(metaRowWidths(metaItems.size(), hasAck));
+                row2.setWidthPercentage(100);
+                row2.setSpacingBefore(11f);
+                for (KeyVal m : metaItems) row2.addCell(metaCell(m.label(), m.value()));
+                if (hasAck) {
+                    PdfPCell ac = new PdfPCell();
+                    ac.setBorder(Rectangle.TOP);
+                    ac.setBorderColor(HAIRLINE_SOFT);
+                    ac.setBorderWidthTop(0.9f);
+                    ac.setPaddingTop(9f);
+                    PdfPTable inner = new PdfPTable(new float[]{60f, 40f});
+                    inner.setWidthPercentage(100);
+                    inner.getDefaultCell().setBorder(Rectangle.NO_BORDER);
+                    PdfPCell la = new PdfPCell();
+                    la.setBorder(Rectangle.NO_BORDER);
+                    la.setVerticalAlignment(Element.ALIGN_MIDDLE);
+                    Chunk lac = new Chunk(acknowledgement.label().toUpperCase(),
+                            new Font(Font.HELVETICA, 6f, Font.BOLD, MUTED));
+                    lac.setCharacterSpacing(0.3f);
+                    Paragraph lap = new Paragraph(lac);
+                    lap.setLeading(8f);
+                    la.addElement(lap);
+                    inner.addCell(la);
+                    PdfPCell ca = new PdfPCell();
+                    ca.setBorder(Rectangle.NO_BORDER);
+                    ca.setVerticalAlignment(Element.ALIGN_MIDDLE);
+                    ca.addElement(miniChip(acknowledgement.value(),
+                            ackAmber ? CHIP_AMBER_BG : CHIP_GREEN_BG,
+                            ackAmber ? CHIP_AMBER_FG : CHIP_GREEN_FG));
+                    inner.addCell(ca);
+                    ac.addElement(inner);
+                    row2.addCell(ac);
+                }
+            }
+
+            PdfPCell panel = boxed(new BoxStyle().fill(PANEL).border(HAIRLINE_SOFT, 1f).radius(10f).underlay());
+            panel.setPaddingTop(12f);
+            panel.setPaddingBottom(12f);
+            panel.setPaddingLeft(14f);
+            panel.setPaddingRight(14f);
+            panel.addElement(row1);
+            if (row2 != null) panel.addElement(row2);
+            PdfPTable outer = new PdfPTable(1);
+            outer.setWidthPercentage(100);
+            outer.setSpacingBefore(6f);
+            outer.addCell(panel);
+            doc.add(outer);
+        } catch (Exception e) {
+            throw new IllegalStateException("PDF patientBanner (banner v2) failed", e);
+        }
+    }
+
+    /** Column widths for the banner id row — give the (long, mono) Visit value more room. */
+    private static float[] idRowWidths(List<KeyVal> ids) {
+        int n = ids.size();
+        if (n == 4) return new float[]{33f, 20f, 15f, 22f};
+        float[] w = new float[n];
+        java.util.Arrays.fill(w, 1f);
+        return w;
+    }
+
+    private static float[] metaRowWidths(int metaCount, boolean hasAck) {
+        int n = metaCount + (hasAck ? 1 : 0);
+        // ACKNOWLEDGEMENT (col 4) is the longest label + a chip, so it gets the most
+        // room; without it "ACKNOWLEDGEMENT" broke mid-word ("ACKNOWLEDGE / MENT").
+        if (n == 4) return new float[]{18f, 19f, 30f, 33f};
+        float[] w = new float[n];
+        java.util.Arrays.fill(w, 1f);
+        return w;
+    }
+
+    /** One banner meta item: small uppercase label + value on one line, over a hairline. */
+    private static PdfPCell metaCell(String label, String value) {
+        PdfPCell c = new PdfPCell();
+        c.setBorder(Rectangle.TOP);
+        c.setBorderColor(HAIRLINE_SOFT);
+        c.setBorderWidthTop(0.9f);
+        c.setPaddingTop(9f);
+        c.setPaddingRight(8f);
+        Paragraph p = new Paragraph();
+        Chunk lc = new Chunk(label.toUpperCase() + "  ", new Font(Font.HELVETICA, 6.3f, Font.BOLD, MUTED));
+        lc.setCharacterSpacing(0.3f);
+        p.add(lc);
+        p.add(new Chunk(value, new Font(Font.HELVETICA, 7.4f, Font.NORMAL, INK)));
+        p.setLeading(10f);
+        c.addElement(p);
+        return c;
+    }
+
+    /** A solid, fully-rounded acuity pill (coloured fill, white text), sized to hug its text. */
+    private static PdfPTable solidPill(String text, Color bg) {
+        Font f = new Font(Font.HELVETICA, 7f, Font.BOLD, Color.WHITE);
+        float w;
+        try { w = f.getCalculatedBaseFont(true).getWidthPoint(text, 7f) + 18f; }
+        catch (Exception e) { w = text.length() * 4.4f + 18f; }
+        PdfPTable t = new PdfPTable(1);
+        t.setTotalWidth(w);
+        t.setLockedWidth(true);
+        t.setHorizontalAlignment(Element.ALIGN_CENTER);
+        PdfPCell c = boxed(new BoxStyle().fill(bg).radius(11f));
+        c.setFixedHeight(16f);
+        c.setHorizontalAlignment(Element.ALIGN_CENTER);
+        c.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        c.setPaddingTop(3.6f);
+        Chunk tc = new Chunk(text, f);
+        tc.setCharacterSpacing(0.3f);
+        Paragraph p = new Paragraph(tc);
+        p.setAlignment(Element.ALIGN_CENTER);
+        p.setLeading(8f);
+        c.addElement(p);
+        t.addCell(c);
+        return t;
+    }
+
+    /**
+     * #1a stat / vitals tiles — a flat bordered card (1px #e2e8f0, radius 8, no
+     * accent), centered value (optionally semantic-coloured) over a small muted
+     * uppercase label. {@code perRow} tiles per row; {@code valueSize} the value
+     * font size (≈11 for the 4-up stats, ≈9.5 for the 6-up vitals).
+     */
+    public void statCards(List<StatTile> tiles, int perRow, float valueSize) {
+        List<StatTile> shown = tiles.stream()
+                .filter(s -> s.value() != null && !s.value().isBlank()).toList();
+        if (shown.isEmpty()) return;
+        try {
+            int n = Math.min(perRow, Math.max(1, shown.size()));
+            PdfPTable t = new PdfPTable(gutteredWidths(n, 10f, 0.7f));
+            t.setWidthPercentage(100);
+            t.setSpacingBefore(6f);
+            int i = 0;
+            for (StatTile s : shown) {
+                if (i > 0 && i % n == 0) {
+                    PdfPCell g = gapCell();
+                    g.setColspan(n * 2 - 1);
+                    g.setFixedHeight(5f);
+                    t.addCell(g);
+                }
+                PdfPCell cell = boxed(new BoxStyle().fill(Color.WHITE).border(HAIRLINE_SOFT, 1f).radius(8f));
+                cell.setPadding(7f);
+                Paragraph num = new Paragraph(s.value(),
+                        new Font(Font.HELVETICA, valueSize, Font.BOLD, s.valueColor() != null ? s.valueColor() : INK));
+                num.setAlignment(Element.ALIGN_CENTER);
+                num.setLeading(valueSize + 1.5f);
+                cell.addElement(num);
+                Chunk lc = new Chunk(s.label().toUpperCase(), F_TILE_LBL);
+                lc.setCharacterSpacing(0.4f);
+                Paragraph lbl = new Paragraph(lc);
+                lbl.setAlignment(Element.ALIGN_CENTER);
+                lbl.setLeading(8f);
+                lbl.setSpacingBefore(2.5f);
+                cell.addElement(lbl);
+                t.addCell(cell);
+                if (i % n != n - 1 && i != shown.size() - 1) t.addCell(gapCell());
+                i++;
+            }
+            int rem = shown.size() % n;
+            if (rem != 0) for (int k = rem; k < n; k++) { t.addCell(gapCell()); if (k < n - 1) t.addCell(gapCell()); }
+            doc.add(t);
+        } catch (Exception e) { throw new IllegalStateException("PDF statCards failed", e); }
+    }
+
     public void paragraph(String text, Font font) {
         if (text == null || text.isBlank()) return;
         try { doc.add(new Paragraph(text, font)); }
@@ -1645,44 +2476,27 @@ public final class PdfReport {
     // ── Every-page chrome: running header (p≥2) + footer w/ attribution + Page X of Y ──
     private static final class Chrome extends PdfPageEventHelper {
         private final Spec spec;
-        private final Font footFont = new Font(Font.HELVETICA, 7, Font.NORMAL, MUTED);
+        private final Font footFont = new Font(Font.HELVETICA, 7, Font.NORMAL, SLATE_400);
         private final Font footStrong = new Font(Font.HELVETICA, 7, Font.BOLD, BRAND_DEEP);
-        private final Font runHdr = new Font(Font.HELVETICA, 7.5f, Font.BOLD, MUTED);
         private final Instant generatedAt;
-        private PdfTemplate totalPages;
 
         Chrome(Spec spec, Instant generatedAt) { this.spec = spec; this.generatedAt = generatedAt; }
 
         @Override
-        public void onOpenDocument(PdfWriter writer, Document doc) {
-            totalPages = writer.getDirectContent().createTemplate(30, 12);
-        }
-
-        @Override
         public void onEndPage(PdfWriter writer, Document doc) {
             PdfContentByte cb = writer.getDirectContent();
-            int page = writer.getPageNumber();
 
-            // Running header on continuation pages so a multi-page report stays branded.
-            if (page > 1) {
-                Phrase h = new Phrase("SmartTriage  ·  " + spec.reportKind(), runHdr);
-                ColumnText.showTextAligned(cb, Element.ALIGN_RIGHT, h, doc.right(), doc.top() + 18, 0);
-                cb.setColorStroke(HAIRLINE);
-                cb.setLineWidth(0.5f);
-                cb.moveTo(doc.left(), doc.top() + 14);
-                cb.lineTo(doc.right(), doc.top() + 14);
-                cb.stroke();
-            }
-
-            // Footer hairline.
+            // #1a footer band — a hairline over three parts, repeating on every page.
+            // No running header and no page numbers: the masthead is page 1 only and
+            // content simply continues on later pages.
             float y = doc.bottom() - 16;
-            cb.setColorStroke(HAIRLINE);
-            cb.setLineWidth(0.5f);
+            cb.setColorStroke(HAIRLINE_SOFT);
+            cb.setLineWidth(0.7f);
             cb.moveTo(doc.left(), y + 8);
             cb.lineTo(doc.right(), y + 8);
             cb.stroke();
 
-            // Left: confidentiality. Center: attribution. Right: Page X of Y.
+            // Left: confidentiality (#94a3b8). Center: attribution (#94a3b8).
             String conf = spec.confidentiality() != null ? spec.confidentiality() : "Confidential";
             ColumnText.showTextAligned(cb, Element.ALIGN_LEFT,
                     new Phrase("CONFIDENTIAL — " + conf, footFont), doc.left(), y, 0);
@@ -1693,28 +2507,508 @@ public final class PdfReport {
                     new Phrase("Generated by " + who + " · " + TS.format(generatedAt), footFont),
                     (doc.left() + doc.right()) / 2, y, 0);
 
-            Phrase pageLabel = new Phrase("Page " + page + " of ", footStrong);
-            float len = footStrong.getCalculatedBaseFont(true)
-                    .getWidthPoint("Page " + page + " of ", 7f);
-            float rightX = doc.right();
-            ColumnText.showTextAligned(cb, Element.ALIGN_LEFT, pageLabel, rightX - len - 14, y, 0);
-            cb.addTemplate(totalPages, rightX - 14, y);
+            // Right: document wordmark (#0369a1, bold).
+            String mark = "SmartTriage · " + (spec.reportKind() != null ? spec.reportKind() : "Report");
+            ColumnText.showTextAligned(cb, Element.ALIGN_RIGHT, new Phrase(mark, footStrong), doc.right(), y, 0);
         }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // Redesign #1b primitives — flat "ledger / dossier" style.
+    // Additive: nothing above changes. beginLedger() swaps ONLY the
+    // masthead + footer for the flat ink-ruled ledger chrome; every helper
+    // below draws flat bordered tables — no rounded corners, no shadow —
+    // per design #1b. Tokens: ink #0f172a, hairline #cbd5e1, muted #64748b,
+    // header/zebra fill #f1f5f9, monospace = Courier.
+    // ══════════════════════════════════════════════════════════════════
+
+    /** #1b header / zebra fill (#f1f5f9 — slate-100). */
+    public static final Color LEDGER_FILL = new Color(241, 245, 249);
+
+    // #1b type scale (Helvetica; Courier for mono data per the README).
+    static final Font F_L_WORDMARK  = new Font(Font.HELVETICA, 10.5f, Font.BOLD, INK);
+    static final Font F_L_WORDSOFT  = new Font(Font.HELVETICA, 10.5f, Font.NORMAL, MUTED);
+    static final Font F_L_ORGLINE   = new Font(Font.HELVETICA, 6.3f, Font.NORMAL, MUTED);
+    static final Font F_L_TITLE     = new Font(Font.HELVETICA, 13f, Font.BOLD, INK);
+    static final Font F_L_GEN       = new Font(Font.COURIER, 7.5f, Font.NORMAL, MUTED);
+    static final Font F_L_LC        = new Font(Font.HELVETICA, 6.8f, Font.BOLD, MUTED);   // .lc id label
+    static final Font F_L_LV        = new Font(Font.HELVETICA, 8.5f, Font.NORMAL, INK);   // .lv id value
+    static final Font F_L_LV_MONO   = new Font(Font.COURIER, 8f, Font.NORMAL, INK);
+    static final Font F_L_SN        = new Font(Font.HELVETICA, 7.5f, Font.BOLD, Color.WHITE); // "01" tag
+    static final Font F_L_SH        = new Font(Font.HELVETICA, 9.5f, Font.BOLD, INK);     // section label
+    static final Font F_L_K2        = new Font(Font.HELVETICA, 7.5f, Font.NORMAL, MUTED); // .k2
+    static final Font F_L_V2        = new Font(Font.HELVETICA, 8.5f, Font.NORMAL, INK);   // .v2
+    static final Font F_L_V2_MONO   = new Font(Font.COURIER, 8f, Font.NORMAL, INK);
+    static final Font F_L_TH        = new Font(Font.HELVETICA, 6.8f, Font.BOLD, MUTED);   // table header
+    static final Font F_L_TD        = new Font(Font.HELVETICA, 8f, Font.NORMAL, INK);     // table cell
+    static final Font F_L_TD_MONO   = new Font(Font.COURIER, 7.6f, Font.NORMAL, INK);
+    static final Font F_L_SIG       = new Font(Font.HELVETICA, 8f, Font.NORMAL, SLATE_400);
+
+    /** ISO-ish timestamp for the ledger masthead's "Generated …" line. */
+    private static final DateTimeFormatter TS_ISO =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.of("Africa/Kigali"));
+
+    /**
+     * A cell in a #1b bordered table (the ID table or a key/value table): a label
+     * + a styled value. {@code full} spans the value across the whole row;
+     * {@code mono} renders the value in Courier (dates / IDs / numeric data);
+     * {@code color} colours (and bolds) the value; {@code chip} renders the value
+     * as an OUTLINED chip (1.5px border + text both in {@code color}).
+     */
+    public record LedgerCell(String label, String value, boolean full, boolean mono, Color color, boolean chip) {}
+    public static LedgerCell lcell(String label, String value)      { return new LedgerCell(label, value, false, false, null, false); }
+    public static LedgerCell lcellFull(String label, String value)  { return new LedgerCell(label, value, true, false, null, false); }
+    public static LedgerCell lcellMono(String label, String value)  { return new LedgerCell(label, value, false, true, null, false); }
+    public static LedgerCell lcellFullMono(String label, String value) { return new LedgerCell(label, value, true, true, null, false); }
+    public static LedgerCell lcellColor(String label, String value, Color color) { return new LedgerCell(label, value, false, false, color, false); }
+    public static LedgerCell lcellChip(String label, String value, Color color)  { return new LedgerCell(label, value, false, false, color, true); }
+
+    /** A row of the compact #1b alert table: severity square + label, alert lead, and a detail. */
+    public record LedgerAlert(Color severityColor, String severityLabel, String alert, String detail) {}
+    public static LedgerAlert lalert(Color severityColor, String severityLabel, String alert, String detail) {
+        return new LedgerAlert(severityColor, severityLabel, alert, detail);
+    }
+
+    /** Open a flat #1b "ledger / dossier" A4 report — ink-ruled masthead + footer, flat bordered tables. */
+    public static PdfReport beginLedger(Spec spec) {
+        Document doc = new Document(PageSize.A4, 42, 42, 44, 58);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try {
+            Instant generatedAt = Instant.now();
+            PdfWriter writer = PdfWriter.getInstance(doc, out);
+            writer.setPageEvent(new LedgerChrome(spec, generatedAt));
+            doc.open();
+            PdfReport r = new PdfReport(doc, out);
+            r.ledgerMasthead(spec, generatedAt);
+            return r;
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not start ledger PDF report", e);
+        }
+    }
+
+    // ── #1b masthead (page 1) ─────────────────────────────────────────
+    private void ledgerMasthead(Spec spec, Instant generatedAt) throws Exception {
+        // Row A: 28px logo + "SMARTTRIAGE · Healthcare Platform" (left) | hospital
+        // one-liner (right), over a 2px solid ink rule.
+        PdfPTable rowA = new PdfPTable(new float[]{47f, 53f});
+        rowA.setWidthPercentage(100);
+        rowA.getDefaultCell().setBorder(Rectangle.NO_BORDER);
+
+        PdfPTable left = new PdfPTable(new float[]{26f, 174f});
+        left.setTotalWidth(200f);
+        left.getDefaultCell().setBorder(Rectangle.NO_BORDER);
+        PdfPCell logoCell = new PdfPCell();
+        logoCell.setBorder(Rectangle.NO_BORDER);
+        logoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
+        logoCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        Image logo = logo();
+        if (logo != null) {
+            logo.scaleToFit(22, 22);
+            logo.setAlignment(Image.ALIGN_LEFT);
+            logoCell.addElement(logo);
+        }
+        left.addCell(logoCell);
+        PdfPCell wm = new PdfPCell();
+        wm.setBorder(Rectangle.NO_BORDER);
+        wm.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        Paragraph wmp = new Paragraph();
+        Chunk brand = new Chunk("SMARTTRIAGE", F_L_WORDMARK);
+        brand.setCharacterSpacing(0.3f);
+        wmp.add(brand);
+        wmp.add(new Chunk(" · Healthcare Platform", F_L_WORDSOFT));
+        wmp.setLeading(13f);
+        wm.addElement(wmp);
+        left.addCell(wm);
+        PdfPCell leftWrap = new PdfPCell(left);
+        leftWrap.setBorder(Rectangle.NO_BORDER);
+        leftWrap.setVerticalAlignment(Element.ALIGN_BOTTOM);
+        leftWrap.setPaddingBottom(3f);
+        rowA.addCell(leftWrap);
+
+        PdfPCell right = new PdfPCell(new Phrase(ledgerOrgLine(spec), F_L_ORGLINE));
+        right.setBorder(Rectangle.NO_BORDER);
+        right.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        right.setVerticalAlignment(Element.ALIGN_BOTTOM);
+        right.setPaddingBottom(3f);
+        rowA.addCell(right);
+        doc.add(rowA);
+
+        // 2px solid ink rule.
+        doc.add(accentRule(2.0f, INK));
+
+        // Row B: report title (left) | mono "Generated …" (right).
+        PdfPTable rowB = new PdfPTable(new float[]{66f, 34f});
+        rowB.setWidthPercentage(100);
+        rowB.setSpacingBefore(6f);
+        rowB.getDefaultCell().setBorder(Rectangle.NO_BORDER);
+        Chunk tc = new Chunk(spec.reportTitle() != null ? spec.reportTitle().toUpperCase() : "", F_L_TITLE);
+        tc.setCharacterSpacing(0.3f);
+        PdfPCell tCell = new PdfPCell(new Phrase(tc));
+        tCell.setBorder(Rectangle.NO_BORDER);
+        tCell.setVerticalAlignment(Element.ALIGN_BOTTOM);
+        rowB.addCell(tCell);
+        PdfPCell gCell = new PdfPCell(new Phrase("Generated " + TS_ISO.format(generatedAt), F_L_GEN));
+        gCell.setBorder(Rectangle.NO_BORDER);
+        gCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        gCell.setVerticalAlignment(Element.ALIGN_BOTTOM);
+        rowB.addCell(gCell);
+        doc.add(rowB);
+        spacer(2f);
+    }
+
+    /** "Org · address · phone · email" one-liner for the ledger masthead (blanks dropped). */
+    private static String ledgerOrgLine(Spec spec) {
+        StringBuilder sb = new StringBuilder();
+        if (spec.orgName() != null && !spec.orgName().isBlank()) sb.append(spec.orgName().trim());
+        if (spec.orgMeta() != null) {
+            for (String m : spec.orgMeta()) {
+                if (m == null || m.isBlank()) continue;
+                if (sb.length() > 0) sb.append("  ·  ");
+                sb.append(m.trim());
+            }
+        }
+        return sb.toString();
+    }
+
+    // ── #1b bordered ID table (labels tinted, all cells 1px hairline) ──
+    /**
+     * The flat bordered ID table under the masthead — the #1b analogue of the
+     * patient banner. Cells pack two label/value pairs per row (11–15% tinted
+     * label cells + value cells); a {@code full} cell spans the value across the
+     * row. A {@code chip} value renders as an OUTLINED chip in its category colour.
+     */
+    public void ledgerIdTable(List<LedgerCell> cells) {
+        List<LedgerCell> shown = cells.stream()
+                .filter(c -> c.value() != null && !c.value().isBlank()).toList();
+        if (shown.isEmpty()) return;
+        try {
+            PdfPTable t = new PdfPTable(new float[]{17f, 33f, 17f, 33f});
+            t.setWidthPercentage(100);
+            t.setSpacingBefore(10f);
+            int col = 0;                                   // 0 = row start, 2 = second pair
+            for (LedgerCell c : shown) {
+                if (c.full() && col == 2) { t.addCell(padCell()); t.addCell(padCell()); col = 0; }
+                t.addCell(idLabelCell(c.label()));
+                PdfPCell v = idValueCell(c);
+                if (c.full()) { v.setColspan(3); t.addCell(v); col = 0; }
+                else { t.addCell(v); col = (col == 0) ? 2 : 0; }
+            }
+            if (col == 2) { t.addCell(padCell()); t.addCell(padCell()); }
+            doc.add(t);
+        } catch (Exception e) { throw new IllegalStateException("PDF ledgerIdTable failed", e); }
+    }
+
+    private static PdfPCell idLabelCell(String label) {
+        Chunk c = new Chunk(label != null ? label.toUpperCase() : "", F_L_LC);
+        c.setCharacterSpacing(0.3f);
+        PdfPCell cell = new PdfPCell(new Phrase(c));
+        cell.setBackgroundColor(LEDGER_FILL);
+        cell.setBorderColor(HAIRLINE);
+        cell.setBorderWidth(1f);
+        cell.setPadding(5f);
+        cell.setPaddingLeft(7f);
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        return cell;
+    }
+
+    private static PdfPCell idValueCell(LedgerCell c) {
+        PdfPCell cell;
+        if (c.chip() && c.color() != null) {
+            cell = new PdfPCell();
+            cell.addElement(ledgerOutlineChip(c.value(), c.color()));
+            cell.setPaddingTop(3.5f); cell.setPaddingBottom(3.5f); cell.setPaddingRight(4f);
+        } else {
+            Font f = c.mono() ? F_L_LV_MONO
+                    : (c.color() != null ? new Font(Font.HELVETICA, 8.5f, Font.BOLD, c.color()) : F_L_LV);
+            cell = new PdfPCell(new Phrase(c.value(), f));
+            cell.setPadding(5f);
+        }
+        cell.setBorderColor(HAIRLINE);
+        cell.setBorderWidth(1f);
+        cell.setPaddingLeft(7f);
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        return cell;
+    }
+
+    /** An outlined (border-only) square-ish chip in {@code color}: the #1b triage/severity treatment. */
+    private static PdfPTable ledgerOutlineChip(String text, Color color) {
+        Font f = new Font(Font.HELVETICA, 8.5f, Font.BOLD, color);
+        float w;
+        try { w = f.getCalculatedBaseFont(true).getWidthPoint(text, 8.5f) + 16f; }
+        catch (Exception e) { w = text.length() * 5f + 16f; }
+        PdfPTable t = new PdfPTable(1);
+        t.setTotalWidth(w);
+        t.setLockedWidth(true);
+        t.setHorizontalAlignment(Element.ALIGN_LEFT);
+        PdfPCell c = boxed(new BoxStyle().border(color, 1.5f).radius(3f));
+        c.setFixedHeight(15f);
+        c.setHorizontalAlignment(Element.ALIGN_CENTER);
+        c.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        c.setPaddingTop(3f);
+        Chunk tc = new Chunk(text, f);
+        tc.setCharacterSpacing(0.2f);
+        Paragraph p = new Paragraph(tc);
+        p.setAlignment(Element.ALIGN_CENTER);
+        p.setLeading(9f);
+        c.addElement(p);
+        t.addCell(c);
+        return t;
+    }
+
+    // ── #1b numbered section header ───────────────────────────────────
+    /** A numbered #1b section header: a dark "01" tag + uppercase label + a 1.5px ink bottom rule. */
+    public void ledgerSection(String number, String label) { ledgerSection(number, label, false); }
+
+    /** As {@link #ledgerSection(String, String)}; {@code alert} renders the tag + rule in red. */
+    public void ledgerSection(String number, String label, boolean alert) {
+        try {
+            Color accent = alert ? SATS_RED : INK;
+            Paragraph p = new Paragraph();
+            Chunk tag = new Chunk(number != null ? number : "", F_L_SN);
+            tag.setBackground(accent, 3.5f, 2f, 3.5f, 2.5f);
+            p.add(tag);
+            Chunk lbl = new Chunk("   " + (label != null ? label.toUpperCase() : ""), F_L_SH);
+            lbl.setCharacterSpacing(0.4f);
+            p.add(lbl);
+            p.setLeading(13f);
+            PdfPCell cell = new PdfPCell(p);
+            cell.setBorder(Rectangle.BOTTOM);
+            cell.setBorderColor(accent);
+            cell.setBorderWidthBottom(1.5f);
+            cell.setPaddingTop(3f);
+            cell.setPaddingBottom(5f);
+            cell.setPaddingLeft(0f);
+            PdfPTable t = new PdfPTable(1);
+            t.setWidthPercentage(100);
+            t.setSpacingBefore(15f);
+            t.setSpacingAfter(3f);
+            t.addCell(cell);
+            doc.add(t);
+        } catch (Exception e) { throw new IllegalStateException("PDF ledgerSection failed", e); }
+    }
+
+    // ── #1b bordered key/value table (faint bottom-rule rows) ─────────
+    /** A flat key/value table (#1b .k2/.v2): muted labels + values, faint row rules, no outer border. */
+    public void ledgerKv(List<LedgerCell> cells) {
+        List<LedgerCell> shown = cells.stream()
+                .filter(c -> c.value() != null && !c.value().isBlank()).toList();
+        if (shown.isEmpty()) return;
+        try {
+            PdfPTable t = new PdfPTable(new float[]{18f, 32f, 18f, 32f});
+            t.setWidthPercentage(100);
+            t.setSpacingBefore(2f);
+            int col = 0;
+            for (LedgerCell c : shown) {
+                if (c.full() && col == 2) { t.addCell(padCell()); t.addCell(padCell()); col = 0; }
+                t.addCell(kvLabelCell(c.label()));
+                PdfPCell v = kvValueCell(c);
+                if (c.full()) { v.setColspan(3); t.addCell(v); col = 0; }
+                else { t.addCell(v); col = (col == 0) ? 2 : 0; }
+            }
+            if (col == 2) { t.addCell(padCell()); t.addCell(padCell()); }
+            doc.add(t);
+        } catch (Exception e) { throw new IllegalStateException("PDF ledgerKv failed", e); }
+    }
+
+    private static PdfPCell kvLabelCell(String label) {
+        PdfPCell cell = new PdfPCell(new Phrase(label, F_L_K2));
+        cell.setBorder(Rectangle.BOTTOM);
+        cell.setBorderColor(LEDGER_FILL);
+        cell.setBorderWidthBottom(1f);
+        cell.setPaddingTop(5f); cell.setPaddingBottom(5f);
+        cell.setPaddingLeft(2f); cell.setPaddingRight(8f);
+        cell.setVerticalAlignment(Element.ALIGN_TOP);
+        return cell;
+    }
+
+    private static PdfPCell kvValueCell(LedgerCell c) {
+        Font f = c.mono() ? F_L_V2_MONO
+                : (c.color() != null ? new Font(Font.HELVETICA, 8.5f, Font.BOLD, c.color()) : F_L_V2);
+        PdfPCell cell = new PdfPCell(multiLine(c.value(), f));
+        cell.setBorder(Rectangle.BOTTOM);
+        cell.setBorderColor(LEDGER_FILL);
+        cell.setBorderWidthBottom(1f);
+        cell.setPaddingTop(5f); cell.setPaddingBottom(5f);
+        cell.setPaddingLeft(2f); cell.setPaddingRight(8f);
+        cell.setVerticalAlignment(Element.ALIGN_TOP);
+        return cell;
+    }
+
+    /** A borderless spacer cell (pads out an odd trailing pair in a 4-col ledger table). */
+    private static PdfPCell padCell() {
+        PdfPCell cell = new PdfPCell(new Phrase(""));
+        cell.setBorder(Rectangle.NO_BORDER);
+        return cell;
+    }
+
+    /** A phrase that keeps embedded newlines as hard line breaks. */
+    private static Phrase multiLine(String text, Font f) {
+        Phrase p = new Phrase();
+        String[] lines = text.split("\n", -1);
+        for (int i = 0; i < lines.length; i++) {
+            p.add(new Chunk(lines[i], f));
+            if (i < lines.length - 1) p.add(Chunk.NEWLINE);
+        }
+        return p;
+    }
+
+    // ── #1b bordered data table (repeating header, mono data columns) ─
+    /**
+     * A flat bordered data table (#1b .ic2/.iv2 / .ac/.av): a tinted header row
+     * (repeats on page breaks) over 1px-hairline data cells. {@code monoCols[i]}
+     * renders column i in Courier (dates / IDs / numeric data).
+     */
+    public void ledgerDataTable(String[] headers, float[] widths, List<String[]> rows, boolean[] monoCols) {
+        if (headers == null || headers.length == 0) return;
+        try {
+            PdfPTable t = new PdfPTable(widths != null && widths.length == headers.length
+                    ? widths : uniformWidths(headers.length));
+            t.setWidthPercentage(100);
+            t.setSpacingBefore(4f);
+            t.setHeaderRows(1);
+            for (String h : headers) t.addCell(ledgerHeadCell(h));
+            if (rows == null || rows.isEmpty()) {
+                PdfPCell empty = new PdfPCell(new Phrase("No records.", F_L_TD));
+                empty.setColspan(headers.length);
+                empty.setBorderColor(HAIRLINE);
+                empty.setBorderWidth(1f);
+                empty.setPadding(5f); empty.setPaddingLeft(6f);
+                t.addCell(empty);
+            } else {
+                for (String[] row : rows) {
+                    for (int i = 0; i < headers.length; i++) {
+                        String v = row != null && i < row.length && row[i] != null ? row[i] : "—";
+                        boolean mono = monoCols != null && i < monoCols.length && monoCols[i];
+                        PdfPCell c = new PdfPCell(new Phrase(v, mono ? F_L_TD_MONO : F_L_TD));
+                        c.setBorderColor(HAIRLINE);
+                        c.setBorderWidth(1f);
+                        c.setPadding(5f); c.setPaddingLeft(6f);
+                        c.setVerticalAlignment(Element.ALIGN_MIDDLE);
+                        t.addCell(c);
+                    }
+                }
+            }
+            doc.add(t);
+        } catch (Exception e) { throw new IllegalStateException("PDF ledgerDataTable failed", e); }
+    }
+
+    private static PdfPCell ledgerHeadCell(String h) {
+        Chunk hc = new Chunk(h != null ? h.toUpperCase() : "", F_L_TH);
+        hc.setCharacterSpacing(0.3f);
+        PdfPCell c = new PdfPCell(new Phrase(hc));
+        c.setBackgroundColor(LEDGER_FILL);
+        c.setBorderColor(HAIRLINE);
+        c.setBorderWidth(1f);
+        c.setPadding(4f); c.setPaddingLeft(6f);
+        return c;
+    }
+
+    // ── #1b compact alert table (SEV / ALERT / DETAIL) ────────────────
+    /** The compact #1b alert table: a severity-coloured 8px square + CRIT/HIGH/MED, the alert, a detail. */
+    public void ledgerAlertTable(List<LedgerAlert> alerts) {
+        if (alerts == null || alerts.isEmpty()) return;
+        try {
+            PdfPTable t = new PdfPTable(new float[]{14f, 40f, 46f});
+            t.setWidthPercentage(100);
+            t.setSpacingBefore(4f);
+            t.setHeaderRows(1);
+            for (String h : new String[]{"SEV", "ALERT", "DETAIL"}) t.addCell(ledgerHeadCell(h));
+            for (LedgerAlert a : alerts) {
+                final Color sq = a.severityColor() != null ? a.severityColor() : MUTED;
+                PdfPCell sev = new PdfPCell(new Phrase(a.severityLabel() != null ? a.severityLabel() : "",
+                        new Font(Font.HELVETICA, 8f, Font.BOLD, INK)));
+                sev.setBorderColor(HAIRLINE); sev.setBorderWidth(1f);
+                sev.setPadding(5f); sev.setPaddingLeft(17f);
+                sev.setVerticalAlignment(Element.ALIGN_MIDDLE);
+                sev.setCellEvent((cell, pos, canvases) -> {
+                    PdfContentByte bg = canvases[PdfPTable.BACKGROUNDCANVAS];
+                    float s = 6.5f;
+                    bg.saveState();
+                    bg.setColorFill(sq);
+                    bg.rectangle(pos.getLeft() + 6f, (pos.getBottom() + pos.getTop()) / 2f - s / 2f, s, s);
+                    bg.fill();
+                    bg.restoreState();
+                });
+                t.addCell(sev);
+                PdfPCell al = new PdfPCell(new Phrase(a.alert() != null ? a.alert() : "",
+                        new Font(Font.HELVETICA, 8f, Font.BOLD, INK)));
+                al.setBorderColor(HAIRLINE); al.setBorderWidth(1f);
+                al.setPadding(5f); al.setPaddingLeft(6f);
+                al.setVerticalAlignment(Element.ALIGN_MIDDLE);
+                t.addCell(al);
+                PdfPCell de = new PdfPCell(new Phrase(a.detail() != null ? a.detail() : "", F_L_TD));
+                de.setBorderColor(HAIRLINE); de.setBorderWidth(1f);
+                de.setPadding(5f); de.setPaddingLeft(6f);
+                de.setVerticalAlignment(Element.ALIGN_MIDDLE);
+                t.addCell(de);
+            }
+            doc.add(t);
+        } catch (Exception e) { throw new IllegalStateException("PDF ledgerAlertTable failed", e); }
+    }
+
+    // ── #1b ledger signature table (bordered, printable blank underlines) ──
+    /** A bordered two-column sign-off table with printable blank underlines for Name / Signature / Date-time. */
+    public void ledgerSignatures(String leftLabel, String rightLabel) {
+        try {
+            PdfPTable t = new PdfPTable(new float[]{50f, 50f});
+            t.setWidthPercentage(100);
+            t.setSpacingBefore(10f);
+            t.setKeepTogether(true);
+            t.setHeaderRows(1);
+            t.addCell(ledgerHeadCell(leftLabel));
+            t.addCell(ledgerHeadCell(rightLabel));
+            for (String line : new String[]{"Name: ________________________",
+                    "Signature: ____________________",
+                    "Date / time: __________________"}) {
+                t.addCell(sigLineCell(line));
+                t.addCell(sigLineCell(line));
+            }
+            doc.add(t);
+        } catch (Exception e) { throw new IllegalStateException("PDF ledgerSignatures failed", e); }
+    }
+
+    private static PdfPCell sigLineCell(String text) {
+        PdfPCell cell = new PdfPCell(new Phrase(text, F_L_SIG));
+        cell.setBorderColor(HAIRLINE);
+        cell.setBorderWidth(1f);
+        cell.setPadding(8f);
+        return cell;
+    }
+
+    // ── #1b every-page footer: 2px ink top rule + three parts ─────────
+    private static final class LedgerChrome extends PdfPageEventHelper {
+        private final Spec spec;
+        private final Instant generatedAt;
+        private final Font footFont = new Font(Font.HELVETICA, 6.4f, Font.NORMAL, MUTED);
+        private final Font footStrong = new Font(Font.HELVETICA, 6.4f, Font.BOLD, INK);
+
+        LedgerChrome(Spec spec, Instant generatedAt) { this.spec = spec; this.generatedAt = generatedAt; }
 
         @Override
-        public void onCloseDocument(PdfWriter writer, Document doc) {
-            totalPages.beginText();
-            try {
-                totalPages.setFontAndSize(footStrong.getCalculatedBaseFont(true), 7f);
-                totalPages.setColorFill(BRAND_DEEP);
-                // close() has already advanced past the last real page, so the writer's
-                // page number is one too high here (a 2-page report would say "of 3").
-                totalPages.showText(String.valueOf(writer.getPageNumber() - 1));
-            } catch (Exception ignored) {
-                // total-count is cosmetic; never fail the render over it
-            } finally {
-                totalPages.endText();
-            }
+        public void onEndPage(PdfWriter writer, Document doc) {
+            PdfContentByte cb = writer.getDirectContent();
+            float y = doc.bottom() - 20;
+            cb.saveState();
+            cb.setColorStroke(INK);
+            cb.setLineWidth(2f);
+            cb.moveTo(doc.left(), y + 11);
+            cb.lineTo(doc.right(), y + 11);
+            cb.stroke();
+            cb.restoreState();
+
+            String conf = spec.confidentiality() != null ? spec.confidentiality() : "protected health record";
+            ColumnText.showTextAligned(cb, Element.ALIGN_LEFT,
+                    new Phrase("CONFIDENTIAL — " + conf.toUpperCase(), footFont), doc.left(), y, 0);
+
+            String who = (spec.exportedByName() != null && !spec.exportedByName().isBlank())
+                    ? spec.exportedByName() : "SmartTriage user";
+            ColumnText.showTextAligned(cb, Element.ALIGN_CENTER,
+                    new Phrase("Generated by " + who + " · " + TS.format(generatedAt), footFont),
+                    (doc.left() + doc.right()) / 2, y, 0);
+
+            String kind = spec.reportKind() != null ? spec.reportKind() : "Report";
+            ColumnText.showTextAligned(cb, Element.ALIGN_RIGHT,
+                    new Phrase("SMARTTRIAGE · " + kind.toUpperCase(), footStrong), doc.right(), y, 0);
         }
     }
 }

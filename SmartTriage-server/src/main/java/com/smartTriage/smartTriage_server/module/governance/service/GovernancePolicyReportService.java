@@ -4,7 +4,6 @@ import com.smartTriage.smartTriage_server.common.enums.PolicyStatus;
 import com.smartTriage.smartTriage_server.common.enums.PolicyType;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.common.report.PdfReport;
-import com.smartTriage.smartTriage_server.common.report.PdfReport.KeyVal;
 import com.smartTriage.smartTriage_server.module.governance.entity.ClinicalPolicy;
 import com.smartTriage.smartTriage_server.module.governance.repository.ClinicalPolicyRepository;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
@@ -14,6 +13,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.awt.Color;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -24,8 +24,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-
-import static com.smartTriage.smartTriage_server.common.report.PdfReport.kv;
 
 /**
  * Clinical Governance reporting — turns the policy register into professional,
@@ -79,7 +77,7 @@ public class GovernancePolicyReportService {
                 .orElseThrow(() -> new ResourceNotFoundException("Hospital", "id", hospitalId));
         List<ClinicalPolicy> policies = loadRegister(hospitalId);
 
-        PdfReport r = PdfReport.begin(new PdfReport.Spec(
+        PdfReport r = PdfReport.beginLedger(new PdfReport.Spec(
                 "Clinical Governance Report",
                 "Clinical Governance",
                 h.getName(),
@@ -88,7 +86,7 @@ public class GovernancePolicyReportService {
                 "clinical governance register",
                 "Governance & compliance"));
 
-        // ── Governance at a glance ──
+        // ── Governance at a glance: the #1b bordered summary table ──
         Instant now = Instant.now();
         long total = policies.size();
         long active = countStatus(policies, PolicyStatus.ACTIVE);
@@ -101,22 +99,22 @@ public class GovernancePolicyReportService {
                         && !p.getEffectiveTo().isAfter(now.plus(30, ChronoUnit.DAYS)))
                 .count();
 
-        r.kpiTiles(List.of(
-                new PdfReport.Kpi(Long.toString(total), "", "Policies on register"),
-                new PdfReport.Kpi(Long.toString(active), "", "Active"),
-                new PdfReport.Kpi(Long.toString(inFlight), "", "In draft / approval"),
-                new PdfReport.Kpi(Long.toString(suspended), "", "Suspended"),
-                new PdfReport.Kpi(Long.toString(archived), "", "Archived"),
-                new PdfReport.Kpi(Long.toString(dueReview), "", "Due for review ≤30d")
-        ), 3);
+        r.ledgerIdTable(List.of(
+                PdfReport.lcellMono("Policies on register", Long.toString(total)),
+                PdfReport.lcellMono("Active", Long.toString(active)),
+                PdfReport.lcellMono("In draft / approval", Long.toString(inFlight)),
+                PdfReport.lcellMono("Suspended", Long.toString(suspended)),
+                PdfReport.lcellMono("Archived", Long.toString(archived)),
+                PdfReport.lcellMono("Due for review ≤30d", Long.toString(dueReview))));
 
         // ── The register ──
-        r.sectionHeader("Policy register");
+        r.ledgerSection("01", "Policy register");
         if (policies.isEmpty()) {
-            r.narrative("No clinical policies have been recorded for this hospital yet.");
+            r.paragraph("No clinical policies have been recorded for this hospital yet.", PdfReport.F_BODY);
         } else {
             String[] headers = {"Code", "Policy", "Type", "Ver.", "Status", "Effective", "Review by", "Approved by"};
             float[] widths = {1.05f, 2.5f, 1.55f, 0.7f, 1.15f, 1.15f, 1.15f, 1.6f};
+            boolean[] mono = {true, false, false, true, false, true, true, false};
             List<String[]> rows = new ArrayList<>();
             for (ClinicalPolicy p : policies) {
                 rows.add(new String[]{
@@ -130,7 +128,7 @@ public class GovernancePolicyReportService {
                         nz(p.getApprovedByName())
                 });
             }
-            r.dataTable(headers, widths, rows, headers.length); // text columns — left-aligned
+            r.ledgerDataTable(headers, widths, rows, mono);
         }
 
         r.spacer(6f);
@@ -184,7 +182,7 @@ public class GovernancePolicyReportService {
         Hospital h = p.getHospital();
         String orgName = h != null && notBlank(h.getName()) ? h.getName() : "SmartTriage — system-wide policy";
 
-        PdfReport r = PdfReport.begin(new PdfReport.Spec(
+        PdfReport r = PdfReport.beginLedger(new PdfReport.Spec(
                 notBlank(p.getPolicyName()) ? p.getPolicyName() : "Clinical Policy",
                 "Clinical Policy",
                 orgName,
@@ -193,45 +191,43 @@ public class GovernancePolicyReportService {
                 "clinical governance policy",
                 typeLabel(p.getPolicyType())));
 
-        // Status + effective window as the at-a-glance banner.
-        String window = p.getEffectiveFrom() != null
-                ? "Effective " + fmtDate(p.getEffectiveFrom())
-                    + (p.getEffectiveTo() != null ? " — review by " + fmtDate(p.getEffectiveTo()) : "")
-                : "";
-        r.statusBanner(statusLabel(p.getStatus()) + (window.isEmpty() ? "" : " · " + window));
-
-        List<KeyVal> id = new ArrayList<>();
-        addKv(id, "Policy code", p.getPolicyCode());
-        addKv(id, "Type", typeLabel(p.getPolicyType()));
-        addKv(id, "Version", p.getPolicyVersion());
-        addKv(id, "Created by", p.getCreatedByName());
-        addKv(id, "Approved by", p.getApprovedByName());
-        if (p.getApprovedAt() != null) addKv(id, "Approved at", fmtDateTime(p.getApprovedAt()));
-        r.keyValues(id);
-
-        if (notBlank(p.getDescription())) {
-            r.sectionHeader("Summary");
-            r.narrative(p.getDescription());
+        // ── Identity: status as an outlined chip, effective window + attribution ──
+        List<PdfReport.LedgerCell> id = new ArrayList<>();
+        if (p.getStatus() != null) {
+            id.add(PdfReport.lcellChip("Status", statusLabel(p.getStatus()), statusColor(p.getStatus())));
         }
+        if (notBlank(p.getPolicyCode())) id.add(PdfReport.lcellMono("Policy code", p.getPolicyCode()));
+        id.add(PdfReport.lcell("Type", typeLabel(p.getPolicyType())));
+        if (notBlank(p.getPolicyVersion())) id.add(PdfReport.lcellMono("Version", p.getPolicyVersion()));
+        if (p.getEffectiveFrom() != null) id.add(PdfReport.lcellMono("Effective from", fmtDate(p.getEffectiveFrom())));
+        if (p.getEffectiveTo() != null) id.add(PdfReport.lcellMono("Review by", fmtDate(p.getEffectiveTo())));
+        if (notBlank(p.getCreatedByName())) id.add(PdfReport.lcell("Created by", p.getCreatedByName()));
+        if (notBlank(p.getApprovedByName())) id.add(PdfReport.lcell("Approved by", p.getApprovedByName()));
+        if (p.getApprovedAt() != null) id.add(PdfReport.lcellFullMono("Approved at", fmtDateTime(p.getApprovedAt())));
+        r.ledgerIdTable(id);
 
-        r.sectionHeader("Policy");
-        r.narrative(notBlank(p.getPolicyContent()) ? p.getPolicyContent() : "No policy content recorded.");
-
+        int s = 0;
+        if (notBlank(p.getDescription())) {
+            r.ledgerSection(sec(++s), "Summary");
+            prose(r, p.getDescription());
+        }
+        r.ledgerSection(sec(++s), "Policy");
+        prose(r, notBlank(p.getPolicyContent()) ? p.getPolicyContent() : "No policy content recorded.");
         if (notBlank(p.getApprovalNotes())) {
-            r.sectionHeader("Approval notes");
-            r.narrative(p.getApprovalNotes());
+            r.ledgerSection(sec(++s), "Approval notes");
+            prose(r, p.getApprovalNotes());
         }
         if (notBlank(p.getChangeReason())) {
-            r.sectionHeader("Change reason");
-            r.narrative(p.getChangeReason());
+            r.ledgerSection(sec(++s), "Change reason");
+            prose(r, p.getChangeReason());
         }
         if (notBlank(p.getNotes())) {
-            r.sectionHeader("Notes");
-            r.narrative(p.getNotes());
+            r.ledgerSection(sec(++s), "Notes");
+            prose(r, p.getNotes());
         }
 
         // Handwriting lines for the accountable owner + reviewer.
-        r.signatureBlock("Approved by", "Reviewed by");
+        r.ledgerSignatures("Approved by", "Reviewed by");
 
         return new RenderedPdf(r.finish(), "policy_" + slug(p.getPolicyCode(), p.getPolicyName()) + ".pdf");
     }
@@ -265,8 +261,16 @@ public class GovernancePolicyReportService {
         return i == null ? "—" : DT.format(i);
     }
 
-    private static void addKv(List<KeyVal> list, String label, String value) {
-        if (notBlank(value)) list.add(kv(label, value));
+    /** Two-digit #1b section number: 1 → "01". */
+    private static String sec(int n) { return n < 10 ? "0" + n : String.valueOf(n); }
+
+    /** Emit free-text policy prose as flat #1b body lines (blank lines → a small gap). */
+    private static void prose(PdfReport r, String text) {
+        if (text == null || text.isBlank()) return;
+        for (String line : text.split("\n", -1)) {
+            if (line.isBlank()) { r.spacer(4f); continue; }
+            r.paragraph(line.replace("**", "").trim(), PdfReport.F_BODY);
+        }
     }
 
     private static String typeLabel(PolicyType t) {
@@ -294,6 +298,18 @@ public class GovernancePolicyReportService {
             case ACTIVE -> "Active";
             case SUSPENDED -> "Suspended";
             case ARCHIVED -> "Archived";
+        };
+    }
+
+    /** Lifecycle status → the semantic colour of its #1b outlined chip. */
+    private static Color statusColor(PolicyStatus s) {
+        if (s == null) return PdfReport.MUTED;
+        return switch (s) {
+            case ACTIVE -> PdfReport.SATS_GREEN;
+            case APPROVED -> PdfReport.BRAND;
+            case PENDING_APPROVAL -> PdfReport.ACCENT;
+            case SUSPENDED -> PdfReport.SATS_ORANGE;
+            case DRAFT, ARCHIVED -> PdfReport.MUTED;
         };
     }
 

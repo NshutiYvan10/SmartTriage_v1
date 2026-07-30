@@ -14,8 +14,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.smartTriage.smartTriage_server.common.report.PdfReport.kv;
-
 /**
  * Renders a LAB REPORTING PACK PDF — a workload + turnaround-time summary over a date window,
  * computed entirely from existing LabOrder timestamps (no new columns): volume by priority,
@@ -37,7 +35,7 @@ public class LabReportPdfService {
     public byte[] render(String hospitalName, LocalDate from, LocalDate to,
                          List<LabOrder> orders, String exportedBy) {
         try {
-            PdfReport r = PdfReport.begin(new PdfReport.Spec(
+            PdfReport r = PdfReport.beginLedger(new PdfReport.Spec(
                     "Laboratory Reporting Pack",
                     "Laboratory Report",
                     hospitalName != null ? hospitalName : "Hospital",
@@ -46,32 +44,35 @@ public class LabReportPdfService {
                     "laboratory report",
                     "Laboratory reporting"));
 
-            r.metaStrip(List.of(
-                    PdfReport.kv("Report", "Workload & turnaround summary"),
-                    PdfReport.kv("Period", from + " → " + to),
-                    PdfReport.kv("Orders", String.valueOf(orders.size())),
-                    PdfReport.kv("Requested by", exportedBy)));
+            r.ledgerIdTable(List.of(
+                    PdfReport.lcell("Report", "Workload & turnaround summary"),
+                    PdfReport.lcellMono("Orders", String.valueOf(orders.size())),
+                    PdfReport.lcellFullMono("Period", from + " → " + to),
+                    PdfReport.lcell("Requested by", exportedBy)));
 
-            r.sectionHeader("Volume");
-            r.statTiles(buildVolume(orders));
+            int s = 0;
 
-            r.sectionHeader("Turnaround time");
-            List<PdfReport.KeyVal> tat = buildTurnaround(orders);
+            r.ledgerSection(sec(++s), "Volume");
+            r.ledgerKv(buildVolume(orders));
+
+            r.ledgerSection(sec(++s), "Turnaround time");
+            List<PdfReport.LedgerCell> tat = buildTurnaround(orders);
             if (tat.isEmpty()) {
-                r.narrative("No resulted orders with a recorded turnaround in this period.");
+                r.paragraph("No resulted orders with a recorded turnaround in this period.", PdfReport.F_BODY);
             } else {
-                r.keyValues(tat);
+                r.ledgerKv(tat);
             }
 
-            r.sectionHeader("Pending & exceptions");
-            r.keyValues(buildPending(orders));
+            r.ledgerSection(sec(++s), "Pending & exceptions");
+            r.ledgerKv(buildPending(orders));
 
-            r.sectionHeader("Busiest tests");
-            List<String> top = buildTopTests(orders);
+            r.ledgerSection(sec(++s), "Busiest tests");
+            List<String[]> top = buildTopTests(orders);
             if (top.isEmpty()) {
-                r.narrative("No orders in this period.");
+                r.paragraph("No orders in this period.", PdfReport.F_BODY);
             } else {
-                r.bullets(top);
+                r.ledgerDataTable(new String[]{"Test", "Orders"}, new float[]{78, 22}, top,
+                        new boolean[]{false, true});
             }
 
             return r.finish();
@@ -81,29 +82,29 @@ public class LabReportPdfService {
         }
     }
 
-    private List<PdfReport.KeyVal> buildVolume(List<LabOrder> orders) {
+    private List<PdfReport.LedgerCell> buildVolume(List<LabOrder> orders) {
         long stat = orders.stream().filter(o -> o.getPriority() == LabPriority.STAT).count();
         long urgent = orders.stream().filter(o -> o.getPriority() == LabPriority.URGENT).count();
         long routine = orders.stream().filter(o -> o.getPriority() == LabPriority.ROUTINE).count();
         long resulted = orders.stream().filter(o -> o.getStatus() == LabOrderStatus.RESULTED).count();
         return List.of(
-                kv("Total orders", String.valueOf(orders.size())),
-                kv("STAT", String.valueOf(stat)),
-                kv("Urgent", String.valueOf(urgent)),
-                kv("Routine", String.valueOf(routine)),
-                kv("Resulted", String.valueOf(resulted)));
+                PdfReport.lcellMono("Total orders", String.valueOf(orders.size())),
+                PdfReport.lcellMono("STAT", String.valueOf(stat)),
+                PdfReport.lcellMono("Urgent", String.valueOf(urgent)),
+                PdfReport.lcellMono("Routine", String.valueOf(routine)),
+                PdfReport.lcellMono("Resulted", String.valueOf(resulted)));
     }
 
-    private List<PdfReport.KeyVal> buildTurnaround(List<LabOrder> orders) {
-        List<PdfReport.KeyVal> rows = new ArrayList<>();
+    private List<PdfReport.LedgerCell> buildTurnaround(List<LabOrder> orders) {
+        List<PdfReport.LedgerCell> rows = new ArrayList<>();
         // Mean turnaround over resulted orders that recorded a turnaround.
         List<Integer> tats = orders.stream()
                 .filter(o -> o.getTurnaroundMinutes() != null)
                 .map(LabOrder::getTurnaroundMinutes).toList();
         if (!tats.isEmpty()) {
             double mean = tats.stream().mapToInt(Integer::intValue).average().orElse(0);
-            rows.add(kv("Mean turnaround (min)", String.valueOf(Math.round(mean))));
-            rows.add(kv("Resulted with turnaround recorded", String.valueOf(tats.size())));
+            rows.add(PdfReport.lcellMono("Mean turnaround (min)", String.valueOf(Math.round(mean))));
+            rows.add(PdfReport.lcellMono("Resulted with turnaround recorded", String.valueOf(tats.size())));
         }
         // STAT compliance: of STAT orders with a turnaround, the share within the 30-min target.
         List<LabOrder> statWithTat = orders.stream()
@@ -112,27 +113,30 @@ public class LabReportPdfService {
             long within = statWithTat.stream()
                     .filter(o -> o.getTurnaroundMinutes() <= LabPriority.STAT.getTargetMinutes()).count();
             double pct = 100.0 * within / statWithTat.size();
-            rows.add(kv("STAT within 30-min target",
+            rows.add(PdfReport.lcellMono("STAT within 30-min target",
                     String.format("%d/%d (%.0f%%)", within, statWithTat.size(), pct)));
         }
         return rows;
     }
 
-    private List<PdfReport.KeyVal> buildPending(List<LabOrder> orders) {
+    private List<PdfReport.LedgerCell> buildPending(List<LabOrder> orders) {
         long pending = orders.stream().filter(o -> !TERMINAL.contains(o.getStatus())).count();
         long critical = orders.stream().filter(LabOrder::isCritical).count();
         long abnormal = orders.stream().filter(LabOrder::isAbnormal).count();
         long rejected = orders.stream().filter(o -> o.getStatus() == LabOrderStatus.REJECTED).count();
         long cancelled = orders.stream().filter(o -> o.getStatus() == LabOrderStatus.CANCELLED).count();
         return List.of(
-                kv("Still pending (not resulted/rejected/cancelled)", String.valueOf(pending)),
-                kv("Critical results", String.valueOf(critical)),
-                kv("Abnormal results", String.valueOf(abnormal)),
-                kv("Rejected specimens", String.valueOf(rejected)),
-                kv("Cancelled", String.valueOf(cancelled)));
+                PdfReport.lcellMono("Still pending (not resulted/rejected/cancelled)", String.valueOf(pending)),
+                // Exceptions get the #1b red/amber emphasis when non-zero.
+                critical > 0 ? PdfReport.lcellColor("Critical results", String.valueOf(critical), PdfReport.DANGER)
+                             : PdfReport.lcellMono("Critical results", "0"),
+                abnormal > 0 ? PdfReport.lcellColor("Abnormal results", String.valueOf(abnormal), PdfReport.ACCENT)
+                             : PdfReport.lcellMono("Abnormal results", "0"),
+                PdfReport.lcellMono("Rejected specimens", String.valueOf(rejected)),
+                PdfReport.lcellMono("Cancelled", String.valueOf(cancelled)));
     }
 
-    private List<String> buildTopTests(List<LabOrder> orders) {
+    private List<String[]> buildTopTests(List<LabOrder> orders) {
         Map<String, Integer> byTest = new LinkedHashMap<>();
         for (LabOrder o : orders) {
             String t = o.getTestName() != null ? o.getTestName() : "(unnamed)";
@@ -141,7 +145,10 @@ public class LabReportPdfService {
         return byTest.entrySet().stream()
                 .sorted((a, b) -> b.getValue() - a.getValue())
                 .limit(10)
-                .map(e -> e.getKey() + " — " + e.getValue())
+                .map(e -> new String[]{e.getKey(), String.valueOf(e.getValue())})
                 .toList();
     }
+
+    /** Two-digit #1b section number: 1 → "01". */
+    private static String sec(int n) { return n < 10 ? "0" + n : String.valueOf(n); }
 }

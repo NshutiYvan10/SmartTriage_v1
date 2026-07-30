@@ -6,10 +6,16 @@ import com.smartTriage.smartTriage_server.common.enums.EdZone;
 import com.smartTriage.smartTriage_server.common.enums.InfectionRiskLevel;
 import com.smartTriage.smartTriage_server.common.enums.IsolationType;
 import com.smartTriage.smartTriage_server.common.enums.NotifiableDisease;
+import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.alert.entity.ClinicalAlert;
 import com.smartTriage.smartTriage_server.module.alert.mapper.ClinicalAlertMapper;
 import com.smartTriage.smartTriage_server.module.alert.repository.ClinicalAlertRepository;
+import com.smartTriage.smartTriage_server.module.bed.dto.PlacePatientRequest;
+import com.smartTriage.smartTriage_server.module.bed.dto.TransferPatientRequest;
+import com.smartTriage.smartTriage_server.module.bed.entity.Bed;
+import com.smartTriage.smartTriage_server.module.bed.repository.BedRepository;
+import com.smartTriage.smartTriage_server.module.bed.service.BedService;
 import com.smartTriage.smartTriage_server.module.isolation.dto.InfectionScreeningRequest;
 import com.smartTriage.smartTriage_server.module.isolation.dto.InfectionScreeningResponse;
 import com.smartTriage.smartTriage_server.module.isolation.engine.InfectionScreeningEngine;
@@ -39,6 +45,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -77,6 +84,12 @@ public class InfectionIsolationService {
      *  ({@code autoScreenFromTriage} / {@code raiseScreeningRequired}) must start their
      *  own transactions, which a plain {@code this} call would silently skip. */
     private final ObjectProvider<InfectionIsolationService> self;
+    /** Isolation room assignment now physically relocates the patient into an
+     *  ISOLATION bed. BedService is taken via ObjectProvider (lazy) mirroring the
+     *  {@code self} pattern, so there is no construction-order coupling to the bed
+     *  module; BedRepository is a plain repository and is injected directly. */
+    private final BedRepository bedRepository;
+    private final ObjectProvider<BedService> bedServiceProvider;
 
     /**
      * Run infection screening for a visit. Creates the screening record, raises
@@ -351,16 +364,71 @@ public class InfectionIsolationService {
         log.info("ISOLATION_SCREENING_REQUIRED raised: visit={}, reason={}", visitId, reason);
     }
 
-    /** Assign an isolation room — records the room, the actor, and the time; stops the placement clock. */
+    /**
+     * Assign an isolation room — a PHYSICAL relocation, not just a label. Resolves a
+     * free ISOLATION bed (preferring one whose code/label matches the requested room),
+     * moves the patient into it (transfer from their current bed, or a fresh placement),
+     * flips the visit to the ISOLATION zone, and records the room / actor / time while
+     * stopping the placement clock. Fails clearly if no isolation bed is free.
+     *
+     * <p>Previously this only wrote the room string onto the screening record and never
+     * touched the visit's zone or bed, so "assign room" left the patient in their
+     * original (e.g. OBSERVATION) zone — the move never actually happened.
+     */
     @Transactional
     public InfectionScreening assignIsolationRoom(UUID screeningId, String roomNumber) {
         InfectionScreening screening = screeningRepository.findByIdAndIsActiveTrue(screeningId)
                 .orElseThrow(() -> new ResourceNotFoundException("InfectionScreening", "id", screeningId));
 
+        Visit visit = screening.getVisit();
+        if (visit == null) {
+            throw new ClinicalBusinessException("Isolation screening has no associated visit to relocate.");
+        }
+
+        // Resolve a free isolation bed FIRST — if there is none we abort before
+        // recording anything, so the screening never claims a placement that
+        // did not happen.
+        UUID hospitalId = visit.getHospital().getId();
+        List<Bed> freeIsolation = bedRepository.findAvailableInZone(hospitalId, EdZone.ISOLATION);
+        if (freeIsolation.isEmpty()) {
+            throw new ClinicalBusinessException(
+                    "No isolation bed is currently available. Free or add an ISOLATION bed, "
+                            + "then assign the room again.");
+        }
+        Bed target = matchRequestedIsolationBed(freeIsolation, roomNumber).orElse(freeIsolation.get(0));
+
+        String actor = resolveCurrentUserName();
+
+        // Physically move the patient into the isolation bed, reusing BedService so
+        // monitor sessions + bed-change events are handled: transfer if they already
+        // occupy a bed, otherwise a fresh placement.
+        Bed currentBed = visit.getCurrentBed();
+        BedService bedService = bedServiceProvider.getObject();
+        if (currentBed == null) {
+            bedService.placePatient(target.getId(),
+                    PlacePatientRequest.builder().visitId(visit.getId()).build(), actor);
+        } else if (!currentBed.getId().equals(target.getId())) {
+            bedService.transferPatient(currentBed.getId(),
+                    TransferPatientRequest.builder()
+                            .destinationBedId(target.getId())
+                            .reason("Isolation placement — moved to isolation room")
+                            .build(),
+                    actor);
+        }
+        // else: already in the chosen isolation bed — nothing to move.
+
+        // BedService place/transfer set the visit's currentBed but NOT its zone; set it
+        // explicitly so the patient reads as ISOLATION everywhere (dashboards, routing, alerts).
+        visit.setCurrentEdZone(EdZone.ISOLATION);
+        visitRepository.save(visit);
+
+        // Record the room as the actual bed now holding the patient (reflects reality).
         Instant now = Instant.now();
-        screening.setIsolationRoomAssigned(roomNumber);
+        String roomLabel = (target.getLabel() != null && !target.getLabel().isBlank())
+                ? target.getLabel() : target.getCode();
+        screening.setIsolationRoomAssigned(roomLabel);
         screening.setIsolationRoomAssignedAt(now);
-        screening.setIsolationAssignedByName(resolveCurrentUserName());
+        screening.setIsolationAssignedByName(actor);
         if (screening.getIsolationStartedAt() == null) {
             screening.setIsolationStartedAt(now);
         }
@@ -368,9 +436,18 @@ public class InfectionIsolationService {
         screening = screeningRepository.save(screening);
 
         publishIsolationDashboard(screening.getVisit(), "ROOM_ASSIGNED");
-        log.info("Isolation room assigned: screening={}, room={}, by={}",
-                screeningId, roomNumber, screening.getIsolationAssignedByName());
+        log.info("Isolation room assigned + patient relocated to ISOLATION: screening={}, bed={}, by={}",
+                screeningId, target.getCode(), actor);
         return hydrateForResponse(screening);
+    }
+
+    /** Prefer an available isolation bed whose code or label matches the requested room string. */
+    private Optional<Bed> matchRequestedIsolationBed(List<Bed> beds, String requested) {
+        if (requested == null || requested.isBlank()) return Optional.empty();
+        String r = requested.trim();
+        return beds.stream()
+                .filter(b -> r.equalsIgnoreCase(b.getCode()) || r.equalsIgnoreCase(b.getLabel()))
+                .findFirst();
     }
 
     /** End / clear isolation — explicit, actor-stamped, with a mandatory reason (de-isolation). */

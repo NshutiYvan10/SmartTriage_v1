@@ -2,7 +2,6 @@ package com.smartTriage.smartTriage_server.module.ems.service;
 
 import com.smartTriage.smartTriage_server.common.enums.EmsInterventionType;
 import com.smartTriage.smartTriage_server.common.report.PdfReport;
-import com.smartTriage.smartTriage_server.common.report.PdfReport.KeyVal;
 import com.smartTriage.smartTriage_server.module.ems.entity.EmsIntervention;
 import com.smartTriage.smartTriage_server.module.ems.entity.EmsRun;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
@@ -17,8 +16,6 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-
-import static com.smartTriage.smartTriage_server.common.report.PdfReport.kv;
 
 /**
  * Renders an {@link EmsRun} (+ its interventions) into a professional, printable Patient Care
@@ -82,7 +79,7 @@ public class EmsPcrPdfService {
         }
 
         try {
-            PdfReport r = PdfReport.begin(new PdfReport.Spec(
+            PdfReport r = PdfReport.beginLedger(new PdfReport.Spec(
                     "Patient Care Report (PCR)",
                     "Patient Care Report",
                     orgName,
@@ -92,24 +89,34 @@ public class EmsPcrPdfService {
                     "Pre-hospital · EMS"));
 
             renderSubject(r, run);
-            r.sectionHeader("Run & Crew");
-            r.keyValues(buildRunCrew(run));
-            r.sectionHeader("Timeline");
-            r.keyValues(buildTimeline(run));
-            r.sectionHeader("Incident");
-            r.keyValues(buildIncident(run));
-            r.sectionHeader("Field Triage");
-            r.keyValues(buildFieldTriage(run));
-            r.sectionHeader("On-Scene Vital Signs");
-            r.statTiles(buildVitals(run));
-            r.sectionHeader("Medications & Fluids Given");
-            r.bullets(buildMedications(interventions));
-            r.sectionHeader("Procedures & Interventions");
-            r.bullets(buildProcedures(interventions));
-            r.sectionHeader("Transfer of Care");
-            r.keyValues(buildTransferOfCare(run));
-            r.sectionHeader("Narrative");
-            r.narrative(run.getNotes());
+
+            int s = 0;
+            r.ledgerSection(sec(++s), "Run & Crew");
+            r.ledgerKv(buildRunCrew(run));
+            r.ledgerSection(sec(++s), "Timeline");
+            r.ledgerKv(buildTimeline(run));
+            r.ledgerSection(sec(++s), "Incident");
+            r.ledgerKv(buildIncident(run));
+            r.ledgerSection(sec(++s), "Field Triage");
+            r.ledgerKv(buildFieldTriage(run));
+
+            r.ledgerSection(sec(++s), "On-Scene Vital Signs");
+            renderVitals(r, run);
+
+            r.ledgerSection(sec(++s), "Medications & Fluids Given");
+            renderInterventions(r, interventions, true);
+            r.ledgerSection(sec(++s), "Procedures & Interventions");
+            renderInterventions(r, interventions, false);
+
+            r.ledgerSection(sec(++s), "Transfer of Care");
+            r.ledgerKv(buildTransferOfCare(run));
+
+            r.ledgerSection(sec(++s), "Narrative");
+            if (notBlank(run.getNotes())) prose(r, run.getNotes());
+            else r.paragraph("No narrative recorded.", PdfReport.F_BODY);
+
+            // Transfer-of-care is a signed handoff — printable sign-off lines for both parties.
+            r.ledgerSignatures("Handing over — EMS crew", "Receiving — ED clinician");
 
             return r.finish();
         } catch (Exception e) {
@@ -119,12 +126,12 @@ public class EmsPcrPdfService {
         }
     }
 
-    // ── Subject banner ──────────────────────────────────────────────
+    // ── Subject: the #1b bordered ID table (field-triage category as an outlined chip) ──
     private void renderSubject(PdfReport r, EmsRun run) {
         Patient patient = safePatient(run);
         boolean unidentified = patient != null && patient.isUnidentified();
         if (unidentified) {
-            r.alertBanner("UNIDENTIFIED PATIENT — identity unresolved");
+            r.paragraph("UNIDENTIFIED PATIENT — identity unresolved", PdfReport.F_ALERT);
         }
 
         String patientName = patient != null
@@ -132,27 +139,28 @@ public class EmsPcrPdfService {
                 : "";
         if (patientName.isBlank()) patientName = "Unidentified field patient";
 
-        List<KeyVal> ids = new ArrayList<>();
+        List<PdfReport.LedgerCell> ids = new ArrayList<>();
+        ids.add(PdfReport.lcell("Patient", patientName));
+        // Field triage category as the outlined SATS-coloured chip, when captured.
+        String cat = run.getFieldTriageCategory();
+        if (cat != null && !cat.isBlank()) {
+            ids.add(PdfReport.lcellChip("Field triage", cat.toUpperCase(), satsColor(cat)));
+        }
         String ageSex = joinDot(
                 run.getPatientAgeYears() != null ? String.valueOf(run.getPatientAgeYears()) : null,
                 run.getPatientSex() != null && !run.getPatientSex().isBlank() ? run.getPatientSex() : null);
-        if (ageSex != null) ids.add(kv("Age / Sex", ageSex));
+        if (ageSex != null) ids.add(PdfReport.lcell("Age / Sex", ageSex));
         if (patient != null && patient.getMedicalRecordNumber() != null && !patient.getMedicalRecordNumber().isBlank()) {
-            ids.add(kv("MRN", patient.getMedicalRecordNumber()));
+            ids.add(PdfReport.lcellMono("MRN", patient.getMedicalRecordNumber()));
         }
         Visit visit = safeVisit(run);
         if (visit != null && visit.getVisitNumber() != null && !visit.getVisitNumber().isBlank()) {
-            ids.add(kv("ED Visit", visit.getVisitNumber()));
+            ids.add(PdfReport.lcellMono("ED Visit", visit.getVisitNumber()));
         }
         if (patient != null && patient.getNationalId() != null && !patient.getNationalId().isBlank()) {
-            ids.add(kv("National ID", patient.getNationalId()));
+            ids.add(PdfReport.lcellMono("National ID", patient.getNationalId()));
         }
-        // Field triage category as the banner pill (SATS-colored), when captured.
-        String cat = run.getFieldTriageCategory();
-        r.patientBanner(patientName, ids,
-                cat != null && !cat.isBlank() ? cat.toUpperCase() : null,
-                cat != null && !cat.isBlank() ? "Field triage" : null,
-                satsColor(cat));
+        r.ledgerIdTable(ids);
     }
 
     /** "a · b" from non-blank parts, or null. */
@@ -175,125 +183,159 @@ public class EmsPcrPdfService {
         return PdfReport.SLATE_400;
     }
 
-    // ── Sections ────────────────────────────────────────────────────
-    private List<KeyVal> buildRunCrew(EmsRun run) {
-        List<KeyVal> pairs = new ArrayList<>();
-        pairs.add(kv("Service", run.getService() != null ? run.getService().name() : null));
-        pairs.add(kv("Unit callsign", run.getUnitCallsign()));
-        pairs.add(kv("Crew / Paramedic", run.getParamedicName()));
-        pairs.add(kv("Status", run.getStatus() != null ? run.getStatus().name() : null));
-        pairs.add(kv("Lifecycle stage", lifecycleStage(run)));
-        pairs.add(kv("Priority transport (lights)", run.isLightsActive() ? "ACTIVE" : "No"));
-        pairs.add(kv("Cancelled reason", run.getCancelReason()));
-        return pairs;
+    // ── Sections (flat #1b bordered key/value tables) ────────────────
+    private List<PdfReport.LedgerCell> buildRunCrew(EmsRun run) {
+        List<PdfReport.LedgerCell> c = new ArrayList<>();
+        add(c, "Service", run.getService() != null ? run.getService().name() : null);
+        add(c, "Unit callsign", run.getUnitCallsign());
+        add(c, "Crew / Paramedic", run.getParamedicName());
+        add(c, "Status", run.getStatus() != null ? run.getStatus().name() : null);
+        add(c, "Lifecycle stage", lifecycleStage(run));
+        add(c, "Priority transport (lights)", run.isLightsActive() ? "ACTIVE" : "No");
+        addFull(c, "Cancelled reason", run.getCancelReason());
+        return c;
     }
 
-    private List<KeyVal> buildTimeline(EmsRun run) {
-        List<KeyVal> pairs = new ArrayList<>();
-        pairs.add(kv("Dispatched", ts(run.getDispatchedAt())));
-        pairs.add(kv("Scene arrived", ts(run.getSceneArrivedAt())));
-        pairs.add(kv("Scene left", ts(run.getSceneLeftAt())));
-        pairs.add(kv("ED arrived", ts(run.getEdArrivedAt())));
-        pairs.add(kv("Handed off", ts(run.getHandedOffAt())));
+    private List<PdfReport.LedgerCell> buildTimeline(EmsRun run) {
+        List<PdfReport.LedgerCell> c = new ArrayList<>();
+        addMono(c, "Dispatched", ts(run.getDispatchedAt()));
+        addMono(c, "Scene arrived", ts(run.getSceneArrivedAt()));
+        addMono(c, "Scene left", ts(run.getSceneLeftAt()));
+        addMono(c, "ED arrived", ts(run.getEdArrivedAt()));
+        addMono(c, "Handed off", ts(run.getHandedOffAt()));
         // Computed intervals — only where both endpoints exist.
-        pairs.add(kv("Response time", interval(run.getDispatchedAt(), run.getSceneArrivedAt())));
-        pairs.add(kv("On-scene time", interval(run.getSceneArrivedAt(), run.getSceneLeftAt())));
-        pairs.add(kv("Transport time", interval(run.getSceneLeftAt(), run.getEdArrivedAt())));
-        pairs.add(kv("Total run time", interval(run.getDispatchedAt(), run.getHandedOffAt())));
-        return pairs;
+        addMono(c, "Response time", interval(run.getDispatchedAt(), run.getSceneArrivedAt()));
+        addMono(c, "On-scene time", interval(run.getSceneArrivedAt(), run.getSceneLeftAt()));
+        addMono(c, "Transport time", interval(run.getSceneLeftAt(), run.getEdArrivedAt()));
+        addMono(c, "Total run time", interval(run.getDispatchedAt(), run.getHandedOffAt()));
+        return c;
     }
 
-    private List<KeyVal> buildIncident(EmsRun run) {
-        List<KeyVal> pairs = new ArrayList<>();
-        pairs.add(kv("Location", run.getIncidentLocation()));
-        pairs.add(kv("Mechanism", run.getMechanism()));
+    private List<PdfReport.LedgerCell> buildIncident(EmsRun run) {
+        List<PdfReport.LedgerCell> c = new ArrayList<>();
+        add(c, "Location", run.getIncidentLocation());
+        add(c, "Mechanism", run.getMechanism());
+        addMono(c, "ETA (minutes)", run.getEtaMinutes() != null ? run.getEtaMinutes().toString() : null);
         Visit v = safeVisit(run);
-        pairs.add(kv("Chief complaint", v != null ? v.getChiefComplaint() : null));
-        pairs.add(kv("History", run.getHistorySummary()));
-        pairs.add(kv("Injuries observed", run.getInjuriesObserved()));
-        pairs.add(kv("ETA (minutes)", run.getEtaMinutes() != null ? run.getEtaMinutes().toString() : null));
-        return pairs;
+        addFull(c, "Chief complaint", v != null ? v.getChiefComplaint() : null);
+        addFull(c, "History", run.getHistorySummary());
+        addFull(c, "Injuries observed", run.getInjuriesObserved());
+        return c;
     }
 
-    private List<KeyVal> buildFieldTriage(EmsRun run) {
-        List<KeyVal> pairs = new ArrayList<>();
-        pairs.add(kv("Category", run.getFieldTriageCategory()));
-        pairs.add(kv("TEWS", run.getFieldTewsScore() != null ? run.getFieldTewsScore().toString() : null));
-        pairs.add(kv("Reason", run.getFieldTriageReason()));
-        pairs.add(kv("Pediatric", Boolean.TRUE.equals(run.getFieldTriageIsChild()) ? "Yes" : null));
-        return pairs;
+    private List<PdfReport.LedgerCell> buildFieldTriage(EmsRun run) {
+        List<PdfReport.LedgerCell> c = new ArrayList<>();
+        add(c, "Category", run.getFieldTriageCategory());
+        addMono(c, "TEWS", run.getFieldTewsScore() != null ? run.getFieldTewsScore().toString() : null);
+        add(c, "Pediatric", Boolean.TRUE.equals(run.getFieldTriageIsChild()) ? "Yes" : null);
+        addFull(c, "Reason", run.getFieldTriageReason());
+        return c;
     }
 
-    private List<KeyVal> buildVitals(EmsRun run) {
-        List<KeyVal> tiles = new ArrayList<>();
-        tiles.add(kv("GCS", num(run.getFieldGcs())));
-        tiles.add(kv("RR", num(run.getFieldRespRate())));
-        tiles.add(kv("HR", num(run.getFieldHr())));
+    /** On-scene vitals as the #1b bordered mono table: a header row of present vitals over one value row. */
+    private void renderVitals(PdfReport r, EmsRun run) {
+        List<String> labels = new ArrayList<>();
+        List<String> values = new ArrayList<>();
+        addVital(labels, values, "GCS", num(run.getFieldGcs()));
+        addVital(labels, values, "RR", num(run.getFieldRespRate()));
+        addVital(labels, values, "HR", num(run.getFieldHr()));
         String bp = (run.getFieldSbp() != null || run.getFieldDbp() != null)
                 ? (num(run.getFieldSbp()) + "/" + num(run.getFieldDbp())) : "";
-        tiles.add(kv("BP mmHg", (bp.isBlank() || bp.equals("/")) ? null : bp));
-        tiles.add(kv("SpO2 %", run.getFieldSpo2() != null ? run.getFieldSpo2().toString() : null));
-        tiles.add(kv("Temp °C", run.getFieldTemp() != null ? run.getFieldTemp().toPlainString() : null));
-        tiles.add(kv("Glucose mmol/L", run.getFieldGlucose() != null ? run.getFieldGlucose().toPlainString() : null));
-        return tiles;
-    }
-
-    /** Medications & fluids given — the MEDICATION / FLUID interventions. */
-    private List<String> buildMedications(List<EmsIntervention> interventions) {
-        return formatInterventions(interventions, true);
-    }
-
-    /** Every OTHER intervention (oxygen, airway, CPR, splinting, tourniquet…). */
-    private List<String> buildProcedures(List<EmsIntervention> interventions) {
-        return formatInterventions(interventions, false);
+        addVital(labels, values, "BP mmHg", (bp.isBlank() || bp.equals("/")) ? null : bp);
+        addVital(labels, values, "SpO2 %", run.getFieldSpo2() != null ? run.getFieldSpo2().toString() : null);
+        addVital(labels, values, "Temp °C", run.getFieldTemp() != null ? run.getFieldTemp().toPlainString() : null);
+        addVital(labels, values, "Glucose mmol/L", run.getFieldGlucose() != null ? run.getFieldGlucose().toPlainString() : null);
+        if (labels.isEmpty()) {
+            r.paragraph("No on-scene vitals recorded.", PdfReport.F_BODY);
+            return;
+        }
+        boolean[] mono = new boolean[labels.size()];
+        java.util.Arrays.fill(mono, true);
+        List<String[]> valueRow = new ArrayList<>();
+        valueRow.add(values.toArray(new String[0]));
+        r.ledgerDataTable(labels.toArray(new String[0]), null, valueRow, mono);
     }
 
     /**
-     * Format the interventions into bullet lines. When {@code medsAndFluids} is true, only the
-     * MEDICATION / FLUID types are emitted (with a dose-forward layout); otherwise every remaining
-     * intervention type is emitted (the procedures / interventions bucket).
+     * Render an intervention bucket as a #1b bordered data table. When {@code medsAndFluids} is true,
+     * only the MEDICATION / FLUID types are emitted; otherwise every other intervention type is.
+     * Columns: Time (mono) · Type · Detail (detail · dose · route) · By · Outcome (+ notes).
      */
-    private List<String> formatInterventions(List<EmsIntervention> interventions, boolean medsAndFluids) {
-        List<String> lines = new ArrayList<>();
-        if (interventions == null) return lines;
-        for (EmsIntervention iv : interventions) {
-            boolean isMedOrFluid = iv.getType() == EmsInterventionType.MEDICATION
-                    || iv.getType() == EmsInterventionType.FLUID;
-            if (medsAndFluids != isMedOrFluid) continue;
+    private void renderInterventions(PdfReport r, List<EmsIntervention> interventions, boolean medsAndFluids) {
+        List<String[]> rows = new ArrayList<>();
+        if (interventions != null) {
+            for (EmsIntervention iv : interventions) {
+                boolean isMedOrFluid = iv.getType() == EmsInterventionType.MEDICATION
+                        || iv.getType() == EmsInterventionType.FLUID;
+                if (medsAndFluids != isMedOrFluid) continue;
 
-            List<String> parts = new ArrayList<>();
-            // Lead with the type label for procedures (so a bare "CPR" reads clearly); meds/fluids
-            // lead with the drug detail.
-            if (!medsAndFluids && iv.getType() != null) parts.add(iv.getType().getDescription());
-            if (iv.getDetail() != null && !iv.getDetail().isBlank()) parts.add(iv.getDetail());
-            if (iv.getDose() != null && !iv.getDose().isBlank()) parts.add(iv.getDose());
-            if (iv.getRoute() != null && !iv.getRoute().isBlank()) parts.add(iv.getRoute());
-            if (iv.getGivenAt() != null) parts.add("@ " + ts(iv.getGivenAt()));
-            if (iv.getGivenByName() != null && !iv.getGivenByName().isBlank()) parts.add("by " + iv.getGivenByName());
-
-            StringBuilder line = new StringBuilder(String.join("  ·  ", parts));
-            if (iv.getOutcome() != null && !iv.getOutcome().isBlank()) {
-                line.append("  →  ").append(iv.getOutcome());
+                String time = iv.getGivenAt() != null ? ts(iv.getGivenAt()) : "—";
+                String type = iv.getType() != null ? iv.getType().getDescription() : "—";
+                List<String> spec = new ArrayList<>();
+                if (iv.getDetail() != null && !iv.getDetail().isBlank()) spec.add(iv.getDetail());
+                if (iv.getDose() != null && !iv.getDose().isBlank()) spec.add(iv.getDose());
+                if (iv.getRoute() != null && !iv.getRoute().isBlank()) spec.add(iv.getRoute());
+                String detail = spec.isEmpty() ? "—" : String.join(" · ", spec);
+                String by = iv.getGivenByName() != null && !iv.getGivenByName().isBlank() ? iv.getGivenByName() : "—";
+                StringBuilder outcome = new StringBuilder();
+                if (iv.getOutcome() != null && !iv.getOutcome().isBlank()) outcome.append(iv.getOutcome());
+                if (iv.getNotes() != null && !iv.getNotes().isBlank()) {
+                    if (outcome.length() > 0) outcome.append(' ');
+                    outcome.append('(').append(iv.getNotes()).append(')');
+                }
+                rows.add(new String[]{time, type, detail, by, outcome.length() == 0 ? "—" : outcome.toString()});
             }
-            if (iv.getNotes() != null && !iv.getNotes().isBlank()) {
-                line.append("  (").append(iv.getNotes()).append(")");
-            }
-            String text = line.toString().trim();
-            if (!text.isBlank()) lines.add(text);
         }
-        return lines;
+        if (rows.isEmpty()) {
+            r.paragraph("None recorded.", PdfReport.F_BODY);
+            return;
+        }
+        r.ledgerDataTable(new String[]{"Time", "Type", "Detail", "By", "Outcome"},
+                new float[]{16, 18, 34, 16, 16}, rows,
+                new boolean[]{true, false, false, false, false});
     }
 
-    private List<KeyVal> buildTransferOfCare(EmsRun run) {
-        List<KeyVal> pairs = new ArrayList<>();
-        pairs.add(kv("Handed off to", run.getHandedOffToName()));
-        pairs.add(kv("Acknowledgement", run.getHandoverAcknowledgementText()));
+    private List<PdfReport.LedgerCell> buildTransferOfCare(EmsRun run) {
+        List<PdfReport.LedgerCell> c = new ArrayList<>();
+        add(c, "Handed off to", run.getHandedOffToName());
+        addFull(c, "Acknowledgement", run.getHandoverAcknowledgementText());
         if (run.getPreArrivalAckedByName() != null && !run.getPreArrivalAckedByName().isBlank()) {
-            pairs.add(kv("Pre-arrival acknowledged by", run.getPreArrivalAckedByName()
-                    + (run.getPreArrivalAckedAt() != null ? " (" + ts(run.getPreArrivalAckedAt()) + ")" : "")));
+            addFull(c, "Pre-arrival acknowledged by", run.getPreArrivalAckedByName()
+                    + (run.getPreArrivalAckedAt() != null ? " (" + ts(run.getPreArrivalAckedAt()) + ")" : ""));
         }
-        return pairs;
+        return c;
     }
+
+    // ── ledger-cell + section builders ───────────────────────────────
+    private static void add(List<PdfReport.LedgerCell> c, String label, String v) {
+        if (notBlank(v)) c.add(PdfReport.lcell(label, v));
+    }
+
+    private static void addMono(List<PdfReport.LedgerCell> c, String label, String v) {
+        if (notBlank(v)) c.add(PdfReport.lcellMono(label, v));
+    }
+
+    private static void addFull(List<PdfReport.LedgerCell> c, String label, String v) {
+        if (notBlank(v)) c.add(PdfReport.lcellFull(label, v));
+    }
+
+    private static void addVital(List<String> labels, List<String> values, String label, String v) {
+        if (notBlank(v)) { labels.add(label); values.add(v); }
+    }
+
+    /** Two-digit #1b section number: 1 → "01". */
+    private static String sec(int n) { return n < 10 ? "0" + n : String.valueOf(n); }
+
+    /** Emit the paramedic narrative as flat #1b body lines (blank lines → a small gap). */
+    private static void prose(PdfReport r, String text) {
+        if (text == null || text.isBlank()) return;
+        for (String line : text.split("\n", -1)) {
+            if (line.isBlank()) { r.spacer(4f); continue; }
+            r.paragraph(line.replace("**", "").trim(), PdfReport.F_BODY);
+        }
+    }
+
+    private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
 
     // ── Helpers ─────────────────────────────────────────────────────
 

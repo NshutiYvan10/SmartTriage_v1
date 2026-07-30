@@ -211,6 +211,17 @@ public class BedService {
         if (clinicalAuthz.canSeeAllZonesAtHospital(auth, hospitalId)) {
             return all;
         }
+        // Doctors are cross-zone clinical decision-makers: placing or transferring a
+        // patient inherently means finding a free bed in ANOTHER zone, and a doctor
+        // frequently has no single "covered zone" the way a rostered nurse does (they
+        // may hold no zone shift assignment at all). Zone-scoping the board to their
+        // shift therefore left such a doctor with an EMPTY bed board — the reported
+        // "bed management not working for doctors". Doctors already have hospital-wide
+        // patient access (ClinicalAuthz.canAccessPatient), so the whole-hospital bed
+        // board is not a new PHI boundary for them — only for zone-bound nurses.
+        if (caller.getRole() == Role.DOCTOR) {
+            return all;
+        }
         Set<EdZone> covered = currentCoveredZones(caller.getId(), hospitalId);
         return all.stream()
                 .filter(b -> b.getZone() != null && covered.contains(b.getZone()))

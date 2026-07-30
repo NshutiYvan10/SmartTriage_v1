@@ -242,6 +242,12 @@ export const ROLE_PAGES: Record<UserRole, AppPage[]> = {
     'documentation', 'handover', 'ems',
     // Aggregate "my investigations" view (Workflow 2 refinement).
     'investigations',
+    // Imaging & Diagnostics worklist — doctors perform/report ordered
+    // imaging/ECG studies. The backend already authorizes DOCTOR on the
+    // worklist GET + markInProgress + recordResult (InvestigationController),
+    // so this only closes a frontend RBAC gap (NURSE/LAB_TECHNICIAN already
+    // had it). Complements the read-only 'investigations' roll-up above.
+    'imaging',
     // Medication administration queue (Workflow 3) — doctors can see
     // the queue too because they often need to verify a colleague's
     // STAT order landed and is being acted on. The separation-of-

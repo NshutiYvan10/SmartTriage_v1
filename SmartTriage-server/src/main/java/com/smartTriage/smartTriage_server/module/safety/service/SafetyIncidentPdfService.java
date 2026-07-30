@@ -2,6 +2,7 @@ package com.smartTriage.smartTriage_server.module.safety.service;
 
 import com.smartTriage.smartTriage_server.common.enums.IncidentSeverity;
 import com.smartTriage.smartTriage_server.common.report.PdfReport;
+import com.smartTriage.smartTriage_server.common.report.PdfReport.LedgerCell;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import com.smartTriage.smartTriage_server.module.safety.entity.SafetyIncident;
 import lombok.extern.slf4j.Slf4j;
@@ -14,15 +15,23 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
-import static com.smartTriage.smartTriage_server.common.report.PdfReport.kv;
+import static com.smartTriage.smartTriage_server.common.report.PdfReport.lcell;
+import static com.smartTriage.smartTriage_server.common.report.PdfReport.lcellChip;
+import static com.smartTriage.smartTriage_server.common.report.PdfReport.lcellColor;
+import static com.smartTriage.smartTriage_server.common.report.PdfReport.lcellFull;
+import static com.smartTriage.smartTriage_server.common.report.PdfReport.lcellMono;
 
 /**
  * Renders a {@link SafetyIncident} into a printable single-incident report PDF — the formal record
  * for the quality/governance file: classification, timeline, narrative, investigation, root cause,
- * corrective action, and closure. Built on the shared {@link PdfReport} house style — incident
- * banner with a severity pill, patient-harm alert, labelled parameter strip, narrative panels —
- * so it reads as a branded, consistent deliverable. Must run in an open transaction (reads the
- * lazy hospital association).
+ * corrective action, and closure.
+ *
+ * <p>A safety incident is a <b>tabular, audit-oriented</b> record that is scanned and
+ * cross-referenced rather than read start-to-finish, so it uses the shared {@link PdfReport}
+ * kit's <b>#1b "ledger / dossier"</b> style: a flat ink-ruled masthead, a bordered incident ID
+ * table (with severity as an outlined chip), numbered section headers (01, 02…), flat bordered
+ * key/value tables with monospace dates, and an ink-ruled footer. Must run in an open
+ * transaction (reads the lazy hospital association).
  */
 @Slf4j
 @Service
@@ -49,76 +58,66 @@ public class SafetyIncidentPdfService {
             String orgName = (h != null && h.getName() != null && !h.getName().isBlank())
                     ? h.getName() : "Hospital";
 
-            PdfReport r = PdfReport.begin(new PdfReport.Spec(
-                    "Safety Incident Report",
-                    "Safety Incident Report",
+            // #1b ledger chrome: ink-ruled masthead + footer.
+            PdfReport r = PdfReport.beginLedger(new PdfReport.Spec(
+                    "Safety Incident Report",       // masthead title → "SAFETY INCIDENT REPORT"
+                    "Safety Incident",              // footer doc type → "SMARTTRIAGE · SAFETY INCIDENT"
                     orgName,
                     orgMeta(h),
                     exportedBy,
-                    "patient-safety incident report",
+                    "protected health record",      // footer left → "CONFIDENTIAL — PROTECTED HEALTH RECORD"
                     "Patient safety & governance"));
 
-            // Incident banner: number + at-a-glance identity, severity as a colored pill.
-            List<PdfReport.KeyVal> ids = new ArrayList<>();
-            ids.add(kv("Type", pretty(name(i.getIncidentType()))));
-            if (i.getIncidentDateTime() != null) ids.add(kv("Occurred", ts(i.getIncidentDateTime())));
-            if (i.getLocationInHospital() != null) ids.add(kv("Location", i.getLocationInHospital()));
-            if (i.getReportedByName() != null) ids.add(kv("Reported by", i.getReportedByName()));
+            // ── Incident ID table: identity at a glance; severity as an outlined chip ──
+            List<LedgerCell> id = new ArrayList<>();
+            id.add(lcellMono("Incident No", nz(i.getIncidentNumber())));
             IncidentSeverity sev = i.getSeverity();
-            r.patientBanner("Incident " + nz(i.getIncidentNumber()), ids,
-                    sev != null ? pretty(sev.name()) : null,
-                    sev != null ? "Severity" : null,
-                    sev != null ? severityColor(sev) : null);
+            if (sev != null) id.add(lcellChip("Severity", pretty(sev.name()), severityColor(sev)));
+            id.add(lcell("Type", pretty(name(i.getIncidentType()))));
+            id.add(lcell("Status", pretty(name(i.getStatus()))));
+            if (i.getIncidentDateTime() != null) id.add(lcellMono("Occurred", ts(i.getIncidentDateTime())));
+            if (notBlank(i.getLocationInHospital())) id.add(lcell("Location", i.getLocationInHospital()));
+            id.add(reportedByCell(i));
+            if (i.getReportedAt() != null) id.add(lcellMono("Reported At", ts(i.getReportedAt())));
+            id.add(harmedCell(i));
+            id.add(lcell("Anonymous", i.isAnonymous() ? "Yes" : "No"));
+            r.ledgerIdTable(id);
 
-            // Prominent safety banner (patient harm and/or critical severity).
-            String banner = severityBanner(i);
-            if (banner != null) r.alertBanner(banner);
+            int n = 0;
 
-            // Report parameters at a glance.
-            r.metaStrip(List.of(
-                    kv("Status", pretty(name(i.getStatus()))),
-                    kv("Patient harmed", tri(i.getPatientHarmed())),
-                    kv("Reported", ts(i.getReportedAt())),
-                    kv("Reporter role", i.getReportedByRole()),
-                    kv("Anonymous report", i.isAnonymous() ? "Yes" : null)));
+            // ── 0n INCIDENT DETAILS ──
+            List<LedgerCell> details = new ArrayList<>();
+            addFull(details, "Description", i.getDescription());
+            addFull(details, "Contributing factors", i.getContributingFactors());
+            addFull(details, "Immediate actions", i.getImmediateActions());
+            addFull(details, "Involved staff", i.getInvolvedStaffNames());
+            if (!details.isEmpty()) { r.ledgerSection(num(++n), "Incident details"); r.ledgerKv(details); }
 
-            narrativeSection(r, "Description", i.getDescription());
-            narrativeSection(r, "Contributing factors", i.getContributingFactors());
-            narrativeSection(r, "Immediate actions", i.getImmediateActions());
-            narrativeSection(r, "Involved staff", i.getInvolvedStaffNames());
+            // ── 0n INVESTIGATION ──
+            List<LedgerCell> inv = new ArrayList<>();
+            add(inv, "Investigator", i.getInvestigatorName());
+            add(inv, "Root cause category", i.getRootCauseCategory());
+            addMono(inv, "Started", ts(i.getInvestigationStartedAt()));
+            addMono(inv, "Completed", ts(i.getInvestigationCompletedAt()));
+            addFull(inv, "Root cause analysis", i.getRootCauseAnalysis());
+            if (!inv.isEmpty()) { r.ledgerSection(num(++n), "Investigation"); r.ledgerKv(inv); }
 
-            if (anyPresent(i.getInvestigatorName(), ts(i.getInvestigationStartedAt()),
-                    ts(i.getInvestigationCompletedAt()), i.getRootCauseCategory(), i.getRootCauseAnalysis())) {
-                r.sectionHeader("Investigation");
-                r.keyValues(List.of(
-                        kv("Investigator", i.getInvestigatorName()),
-                        kv("Started", ts(i.getInvestigationStartedAt())),
-                        kv("Completed", ts(i.getInvestigationCompletedAt())),
-                        kv("Root cause category", i.getRootCauseCategory())));
-                subNarrative(r, "Root cause analysis", i.getRootCauseAnalysis());
-            }
+            // ── 0n CORRECTIVE ACTION ──
+            List<LedgerCell> ca = new ArrayList<>();
+            addFull(ca, "Action", i.getCorrectiveAction());
+            add(ca, "Owner", i.getCorrectiveActionOwner());
+            addMono(ca, "Deadline", ts(i.getCorrectiveActionDeadline()));
+            addMono(ca, "Completed", ts(i.getCorrectiveActionCompletedAt()));
+            addFull(ca, "Preventive measures", i.getPreventiveMeasures());
+            if (!ca.isEmpty()) { r.ledgerSection(num(++n), "Corrective action"); r.ledgerKv(ca); }
 
-            if (anyPresent(i.getCorrectiveAction(), i.getCorrectiveActionOwner(),
-                    ts(i.getCorrectiveActionDeadline()), ts(i.getCorrectiveActionCompletedAt()),
-                    i.getPreventiveMeasures())) {
-                r.sectionHeader("Corrective action");
-                r.keyValues(List.of(
-                        kv("Action", i.getCorrectiveAction()),
-                        kv("Owner", i.getCorrectiveActionOwner()),
-                        kv("Deadline", ts(i.getCorrectiveActionDeadline())),
-                        kv("Completed", ts(i.getCorrectiveActionCompletedAt()))));
-                subNarrative(r, "Preventive measures", i.getPreventiveMeasures());
-            }
-
-            if (i.getClosedAt() != null || i.getClosedByName() != null
-                    || notBlank(i.getLessonsLearned()) || notBlank(i.getNotes())) {
-                r.sectionHeader("Closure");
-                r.keyValues(List.of(
-                        kv("Closed", ts(i.getClosedAt())),
-                        kv("Closed by", i.getClosedByName())));
-                subNarrative(r, "Lessons learned", i.getLessonsLearned());
-                subNarrative(r, "Notes", i.getNotes());
-            }
+            // ── 0n CLOSURE ──
+            List<LedgerCell> cl = new ArrayList<>();
+            addMono(cl, "Closed", ts(i.getClosedAt()));
+            add(cl, "Closed by", i.getClosedByName());
+            addFull(cl, "Lessons learned", i.getLessonsLearned());
+            addFull(cl, "Notes", i.getNotes());
+            if (!cl.isEmpty()) { r.ledgerSection(num(++n), "Closure"); r.ledgerKv(cl); }
 
             return r.finish();
         } catch (Exception e) {
@@ -127,23 +126,46 @@ public class SafetyIncidentPdfService {
         }
     }
 
+    // ── ledger-cell builders ──
+
+    /** Add a plain half-width key/value cell when the value is present. */
+    private static void add(List<LedgerCell> l, String label, String v) {
+        if (notBlank(v)) l.add(lcell(label, v));
+    }
+
+    /** Add a monospace half-width cell (dates / IDs) when the value is present. */
+    private static void addMono(List<LedgerCell> l, String label, String v) {
+        if (notBlank(v)) l.add(lcellMono(label, v));
+    }
+
+    /** Add a full-width row (long prose) when the value is present. */
+    private static void addFull(List<LedgerCell> l, String label, String v) {
+        if (notBlank(v)) l.add(lcellFull(label, v));
+    }
+
+    /** Reporter identity, folding the role in and honouring anonymous reporting. */
+    private static LedgerCell reportedByCell(SafetyIncident i) {
+        String name = i.getReportedByName();
+        if (i.isAnonymous() || !notBlank(name)) name = "Anonymous";
+        String role = i.getReportedByRole();
+        String value = notBlank(role) ? name + " (" + role + ")" : name;
+        return lcell("Reported By", value);
+    }
+
+    /** Patient-harm flag — rendered red/bold when harm occurred (the ledger's emphasis idiom). */
+    private static LedgerCell harmedCell(SafetyIncident i) {
+        Boolean harmed = i.getPatientHarmed();
+        if (harmed == null) return lcell("Patient Harmed", "Not recorded");
+        return harmed ? lcellColor("Patient Harmed", "Yes", PdfReport.DANGER)
+                      : lcell("Patient Harmed", "No");
+    }
+
+    /** Two-digit section number: 1 → "01". */
+    private static String num(int n) { return n < 10 ? "0" + n : String.valueOf(n); }
+
     // ── helpers ──
 
-    /** A full section header + narrative panel; renders nothing when the content is blank. */
-    private static void narrativeSection(PdfReport r, String label, String content) {
-        if (content == null || content.isBlank()) return;
-        r.sectionHeader(label);
-        r.narrative(content);
-    }
-
-    /** A small sub-header + narrative panel inside an existing section. */
-    private static void subNarrative(PdfReport r, String label, String content) {
-        if (content == null || content.isBlank()) return;
-        r.subHeader(label);
-        r.narrative(content);
-    }
-
-    /** Severity → the semantic color of its pill (green = no harm … red = severe/death). */
+    /** Severity → the semantic colour of its outlined chip (green = no harm … red = severe/death). */
     private static Color severityColor(IncidentSeverity sev) {
         return switch (sev) {
             case NEAR_MISS, NO_HARM -> PdfReport.SATS_GREEN;
@@ -165,18 +187,6 @@ public class SafetyIncidentPdfService {
         return lines;
     }
 
-    /** The safety banner: patient harm and/or a severe/critical severity, else null. */
-    private static String severityBanner(SafetyIncident i) {
-        String sev = name(i.getSeverity());
-        boolean harm = Boolean.TRUE.equals(i.getPatientHarmed());
-        boolean critical = sev != null
-                && (sev.contains("SEVERE") || sev.contains("DEATH") || sev.contains("CRITICAL"));
-        if (harm && critical) return "PATIENT HARM REPORTED · severity " + pretty(sev);
-        if (harm) return "PATIENT HARM REPORTED";
-        if (critical) return "SEVERITY " + pretty(sev).toUpperCase();
-        return null;
-    }
-
     private static void addIfPresent(List<String> lines, String v) {
         if (v != null && !v.isBlank()) lines.add(v);
     }
@@ -192,15 +202,6 @@ public class SafetyIncidentPdfService {
     }
 
     private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
-
-    private static boolean anyPresent(String... vals) {
-        for (String v : vals) if (notBlank(v)) return true;
-        return false;
-    }
-
-    private static String tri(Boolean b) {
-        return b != null ? (b ? "Yes" : "No") : null;
-    }
 
     /** "MODERATE_HARM" → "Moderate harm". */
     private static String pretty(String enumName) {
