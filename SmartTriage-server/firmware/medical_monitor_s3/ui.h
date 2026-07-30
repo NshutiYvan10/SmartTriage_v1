@@ -184,8 +184,21 @@ public:
     stage = 4;
 
     if (pageDirty_) {
+      uint32_t t0 = millis();
       tft_.fillScreen(UI_BG);
       drawChrome();
+      // The full-screen clear wipes PIXELS; these wipe the CACHES that decide
+      // whether a pixel gets redrawn. forceRedraw_ covers one frame, but the
+      // per-surface latches and the text cache outlive it, and any slot whose
+      // text happens to match its previous value on a different page would be
+      // silently skipped — leaving a hole in the freshly-cleared screen.
+      for (int i = 0; i < (int)(sizeof(cells_) / sizeof(cells_[0])); i++) cells_[i].last[0] = '\0';
+      bannerSig_[0] = '\0';
+      lastTrendSig_ = 0xFFFFFFFF;
+      lastBpBtn_ = -1; lastBpUiState_ = -1; lastSimBtn_ = -1;
+      lastPlethState_ = -1;
+      tileBand_[0] = tileBand_[1] = tileBand_[2] = tileBand_[3] = 1;
+      pageFlipMs_ = t0;
       pageDirty_ = false;
       forceRedraw_ = true;
       waveInit_ = false;
@@ -204,6 +217,11 @@ public:
       default: break;
     }
     forceRedraw_ = false;
+    if (pageFlipMs_) {
+      uint32_t took = millis() - pageFlipMs_;
+      pageFlipMs_ = 0;
+      Serial.printf("[ui] page -> %d repainted in %lu ms\n", (int)page_, (unsigned long)took);
+    }
     xSemaphoreGive(g_spiBusMutex);
     stage = 7;
     frameCount = frameCount + 1;
@@ -311,6 +329,7 @@ private:
   Page page_ = Page::DASH;
   bool pageDirty_ = true, forceRedraw_ = true, waveInit_ = false;
   bool bootReinit_ = false;   // one-time cold-boot re-init latch
+  uint32_t pageFlipMs_ = 0;   // set on a page repaint, timed out at frame end
 
   // ---------- shared chrome: bottom navigation bar ----------
   // v3.1.1 — real touch targets. The v3.1.0 "< prev / next >" labels sat
@@ -406,7 +425,16 @@ private:
 
   // ---------- value cell: sprite-rendered, redrawn only on change ----------
   struct Cell { char last[28] = ""; };
-  Cell cells_[28];   // 0-13 pages · 14-21 BP-history rows · 22-25 status tags
+  // Cell-cache slots are GLOBAL, so two pages must never share an index:
+  // the cache compares TEXT only, so a shared slot means page B can suppress
+  // a redraw that page A needs (and vice versa) for any frame where
+  // forceRedraw_ is false. The Device page previously reused 0-9 — the same
+  // slots as the dashboard tiles/BP strip and the waveform numerics.
+  //   0-13  dashboard / waveform / BP-page values
+  //   14-21 BP-history rows (trends)
+  //   22-24 status tags (temp, pleth message, resp)
+  //   25-34 Device-page rows
+  Cell cells_[36];
 
   // Only fonts 2 and 4 are used for data (the fonts the previously working
   // build proved are enabled in this project's User_Setup.h); `size` scales
@@ -934,7 +962,7 @@ private:
     char line[64];
 
     auto row = [&](int id, const char *v, uint16_t c) {
-      cell(id, 150, y, W - 156, lh - 4, v, c, 2);
+      cell(25 + id, 150, y, W - 156, lh - 4, v, c, 2);   // 25.. = Device slots
       y += lh;
     };
     if (forceRedraw_) {
