@@ -97,11 +97,33 @@ public:
       digitalWrite(TFT_RST, HIGH); delay(150);
 #endif
       tft_.init();
+
+      // SOFTWARE RESET OVER THE DATA LINES — the fix for a dead RST wire.
+      // TFT_eSPI sends SWRST *only* when TFT_RST is undefined:
+      //     if (TFT_RST >= 0) { ...pulse the pin... }
+      //     else writecommand(TFT_SWRST);
+      // TFT_RST is 9 here, so the library pulses GPIO 9 and NEVER sends the
+      // command. If that wire is broken or intermittent the panel therefore
+      // receives no reset at all — which explains the exact field asymmetry:
+      // after an upload the panel is still in the valid state it was left in,
+      // so the init sequence lands on a configured controller and works; on a
+      // COLD power-up it comes up undefined, never gets reset, mis-parses the
+      // init and stays white. Sending SWRST ourselves reaches the panel over
+      // MOSI/SCLK/CS/DC, so it works whether or not GPIO 9 is connected.
+      // Done from attempt 2 onward so a healthy panel keeps the fast path.
+      if (attempt > 1) {
+        tft_.writecommand(0x01);        // ILI9488 SWRST
+        delay(150);                     // >120 ms before further commands
+        tft_.init();                    // re-send init to a freshly reset panel
+      }
       tft_.setRotation(1);
 
       // Functional proof: colour a corner, read it back. Compared with a
       // tolerance because ILI9488 stores 18-bit colour, so a 16-bit value
       // does not always round-trip exactly.
+      // CAVEAT when reading the log: a broken TFT_MISO (GPIO 13) breaks this
+      // check WITHOUT affecting display output, so "not verified" plus a
+      // working screen means suspect MISO, not the panel.
       tft_.fillRect(0, 0, 8, 8, TFT_RED);
       uint16_t got = tft_.readPixel(2, 2);
       bool looksRed = (got >> 11) >= 28 && (((got >> 5) & 0x3F) <= 6) && ((got & 0x1F) <= 6);
