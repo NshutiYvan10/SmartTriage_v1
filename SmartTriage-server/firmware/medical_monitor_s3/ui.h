@@ -73,9 +73,54 @@ enum class Page : uint8_t { DASH = 0, WAVE, TREND, BP, DEVICE, COUNT };
 
 class UiController {
 public:
+  // Cold-boot panel bring-up, VERIFIED instead of assumed.
+  //
+  // Field evidence: the display renders correctly after an UPLOAD (esptool
+  // resets only the MCU — the panel keeps its supply and stays initialized
+  // from before) but stays WHITE after an unplug/replug (the panel is power
+  // cycled too). So the init sequence is not reaching a panel whose own rail
+  // is still settling; the MCU simply boots faster than the display.
+  //
+  // Therefore: pulse the panel's HARDWARE reset generously (ILI9488 wants
+  // >120 ms before it will accept commands), run init, then PROVE it worked
+  // by writing a known pixel and reading it back over MISO. Retry, and log
+  // every attempt — so the serial record answers the hardware-vs-timing
+  // question by itself: a readback that changes means the panel is alive and
+  // we merely needed to wait; a readback that never changes across five
+  // hardware resets means commands are not reaching it at all.
+  bool bringUpDisplay(const char *why) {
+    for (int attempt = 1; attempt <= 5; attempt++) {
+#if defined(TFT_RST) && (TFT_RST >= 0)
+      pinMode(TFT_RST, OUTPUT);
+      digitalWrite(TFT_RST, HIGH); delay(10);
+      digitalWrite(TFT_RST, LOW);  delay(30);
+      digitalWrite(TFT_RST, HIGH); delay(150);
+#endif
+      tft_.init();
+      tft_.setRotation(1);
+
+      // Functional proof: colour a corner, read it back. Compared with a
+      // tolerance because ILI9488 stores 18-bit colour, so a 16-bit value
+      // does not always round-trip exactly.
+      tft_.fillRect(0, 0, 8, 8, TFT_RED);
+      uint16_t got = tft_.readPixel(2, 2);
+      bool looksRed = (got >> 11) >= 28 && (((got >> 5) & 0x3F) <= 6) && ((got & 0x1F) <= 6);
+      Serial.printf("[ui] panel bring-up (%s) attempt %d: readback 0x%04X%s\n",
+                    why, attempt, got, looksRed ? "  OK" : "");
+      if (looksRed) { panelVerified_ = true; return true; }
+      delay(120);
+    }
+    Serial.println("[ui] panel NOT VERIFIED after 5 hardware resets. If the readback above "
+                   "never changed, the panel is not answering: check TFT_RST (GPIO 9), "
+                   "TFT_MISO (GPIO 13) and the display's 3V3 rail. (Note: some panels do "
+                   "not support pixel read-back at all, in which case the display may still "
+                   "be fine — judge by the screen.)");
+    return false;
+  }
+  bool panelVerified_ = false;
+
   void begin() {
-    tft_.init();
-    tft_.setRotation(1);
+    bringUpDisplay("boot");
     // Hand the BP cycle a way to detach/reattach the display SPI driver
     // cleanly around its exclusive-bus measurement (see bp.h / state.h).
     g_tftSpi = &tft_.getSPIinstance();
@@ -159,12 +204,14 @@ public:
     // mutex like every other display access.
     if (!bootReinit_ && millis() > 4000) {
       bootReinit_ = true;
-      tft_.init();
-      tft_.setRotation(1);
-      tft_.setTouch(cal_);
-      tft_.fillScreen(UI_BG);
-      pageDirty_ = true;
-      Serial.println("[ui] display re-initialized (cold-boot guard)");
+      // Skip the retry storm if the panel already proved itself at boot —
+      // re-initialising a working display costs a visible flicker.
+      if (!panelVerified_) {
+        bringUpDisplay("4s cold-boot guard");
+        tft_.setTouch(cal_);
+        tft_.fillScreen(UI_BG);
+        pageDirty_ = true;
+      }
     }
 
     MonitorState s = snapshotState();
