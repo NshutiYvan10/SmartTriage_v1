@@ -18,6 +18,7 @@ import { usePatientStore } from '@/store/patientStore';
 import { patientApi } from '@/api/patients';
 import type { PatientResponse } from '@/api/types';
 import { useAuthStore } from '@/store/authStore';
+import { hasFeature } from '@/types/roles';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';
 import type { Patient } from '@/types';
@@ -232,13 +233,17 @@ export function PatientsList() {
                   </button>
                 ))}
               </div>
-              <button
-                onClick={() => navigate('/entry')}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-sm font-bold transition-all duration-300 shadow-lg shadow-cyan-500/25 hover:-translate-y-1 hover:shadow-xl"
-              >
-                <UserPlus className="w-4 h-4" />
-                New Patient
-              </button>
+              {/* Registration is a nurse / registrar desk task — doctors don't have the
+                  register_patient feature (nor the /entry route), so hide the button for them. */}
+              {user && hasFeature(user.role, 'register_patient') && (
+                <button
+                  onClick={() => navigate('/entry')}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-sm font-bold transition-all duration-300 shadow-lg shadow-cyan-500/25 hover:-translate-y-1 hover:shadow-xl"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  New Patient
+                </button>
+              )}
             </div>
           </div>
         </div>

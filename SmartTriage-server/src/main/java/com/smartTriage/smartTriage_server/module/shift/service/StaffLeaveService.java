@@ -110,6 +110,14 @@ public class StaffLeaveService {
             throw new ClinicalBusinessException(
                     "Only REQUESTED leave can be approved (current: " + row.getLeaveStatus() + ")");
         }
+        // Separation of duties: an approver may NOT approve their own leave request,
+        // even holding charge-nurse-tier authority. It must be actioned by a different
+        // CN-tier approver (or the hospital-admin fallback in ShiftAssignmentAuthz).
+        if (row.getUser() != null && row.getUser().getId().equals(actor.getId())) {
+            throw new ClinicalBusinessException(
+                    "You cannot approve your own leave request — it must be approved by another "
+                            + "charge-nurse-tier approver or a hospital administrator.");
+        }
         row.setLeaveStatus(LeaveStatus.APPROVED);
         row.setApprovedAt(Instant.now());
         row.setApprovedBy(actor);

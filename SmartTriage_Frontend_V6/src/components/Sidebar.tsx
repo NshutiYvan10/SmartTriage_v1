@@ -175,7 +175,7 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         // start/stop recording, live status. Extracted from the Siren page.
         { id: 'monitor', label: 'Monitor', icon: Monitor, pageId: 'monitor' as AppPage },
         { id: 'documentation', label: 'Documentation', icon: FileText, pageId: 'documentation' as AppPage },
-        { id: 'consent-referrals', label: 'Consent & Consultations', icon: ShieldCheck, pageId: 'documentation' as AppPage },
+        { id: 'consent-referrals', label: 'Consultations', icon: ShieldCheck, pageId: 'documentation' as AppPage },
         { id: 'handover', label: 'Handover', icon: ClipboardCheck, pageId: 'handover' as AppPage },
       ],
     },
@@ -240,7 +240,9 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
   //
   //   • SUPER_ADMIN: NOT granted any shift-management visibility.
   //     Cross-tenant national role, no floor duties.
-  const isChargeNurse = user?.designation === 'CHARGE_NURSE';
+  // Includes an active ("acting") CN delegate — they get the same shift-management
+  // pages with full access; the backend honours the delegation in canAssign.
+  const isChargeNurse = user?.designation === 'CHARGE_NURSE' || user?.isActingChargeNurse === true;
   const isHospitalAdmin = userRole === 'HOSPITAL_ADMIN';
 
   // Shift surfaces visible to CN (full access) and HOSPITAL_ADMIN (read-only).
@@ -277,6 +279,8 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         }
         // Doctor Workspace only for DOCTOR
         if (item.id === 'doctor-workspace') return userRole === 'DOCTOR';
+        // Vitals Rounds is a nursing rounding tool — not a doctor surface.
+        if (item.id === 'vitals-rounds') return userRole !== 'DOCTOR' && canAccessPage(userRole, item.pageId);
         // RBAC fix — Triage Queue requires triage authority on today's shift.
         if (item.id === 'triage') return isTriageAuthority && canAccessPage(userRole, item.pageId);
         return canAccessPage(userRole, item.pageId);

@@ -368,28 +368,6 @@ export function MohReportView() {
           ))}
         </div>
 
-        {/* -- Status Pipeline Legend -------------------------------- */}
-        <div className="rounded-2xl p-4 animate-fade-up" style={{ ...glassCard, animationDelay: '0.12s' } as any}>
-          <p className={`text-[10px] font-bold ${text.muted} uppercase tracking-wider mb-3`}>Report Lifecycle</p>
-          <div className="flex items-center gap-2 flex-wrap">
-            {STATUS_PIPELINE.map((st, i) => {
-              const cfg = STATUS_CONFIG[st];
-              return (
-                <div key={st} className="flex items-center gap-2">
-                  <span className={`text-[10px] font-bold ${cfg.color} px-2.5 py-1 rounded-lg`} style={{ background: cfg.bg, border: cfg.border }}>
-                    {cfg.label}
-                  </span>
-                  {i < STATUS_PIPELINE.length - 1 && <ArrowRight className={`w-3 h-3 ${text.muted}`} />}
-                </div>
-              );
-            })}
-            <span className={`text-[10px] ${text.muted} mx-1`}>or</span>
-            <span className="text-[10px] font-bold text-red-600 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
-              Rejected
-            </span>
-          </div>
-        </div>
-
         {/* -- Report List ------------------------------------------ */}
         <div className="space-y-2">
           <div className="flex items-center justify-between px-1 animate-fade-up" style={{ animationDelay: '0.18s' } as any}>

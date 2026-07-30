@@ -7,6 +7,7 @@ import com.smartTriage.smartTriage_server.module.shift.dto.BulkPlanResult;
 import com.smartTriage.smartTriage_server.module.shift.dto.CopyWeekRequest;
 import com.smartTriage.smartTriage_server.module.shift.dto.CreateShiftAssignmentRequest;
 import com.smartTriage.smartTriage_server.module.shift.dto.ShiftAssignmentResponse;
+import com.smartTriage.smartTriage_server.module.shift.repository.ChargeNurseDelegationRepository;
 import com.smartTriage.smartTriage_server.module.shift.repository.StaffLeaveRepository;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftAssignmentService;
 import com.smartTriage.smartTriage_server.module.shift.service.ShiftPlanningService;
@@ -18,6 +19,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.HashMap;
@@ -39,6 +41,7 @@ public class ShiftAssignmentController {
     private final ShiftAssignmentService shiftAssignmentService;
     private final ShiftPlanningService shiftPlanningService;
     private final StaffLeaveRepository staffLeaveRepository;
+    private final ChargeNurseDelegationRepository chargeNurseDelegationRepository;
 
     /**
      * Assign a staff member to a zone for the current shift.
@@ -126,6 +129,7 @@ public class ShiftAssignmentController {
         if (user == null) {
             body.put("assignment", "");
             body.put("isOnApprovedLeave", false);
+            body.put("isActingChargeNurse", false);
             return ResponseEntity.ok(ApiResponse.success(body));
         }
         Optional<ShiftAssignmentResponse> assignment =
@@ -144,6 +148,15 @@ public class ShiftAssignmentController {
         boolean onLeave = !staffLeaveRepository
                 .findApprovedCovering(user.getId(), todayKigali).isEmpty();
         body.put("isOnApprovedLeave", onLeave);
+
+        // Acting Charge Nurse: does this user currently hold a delegated CN authority
+        // (additive, windowed)? The frontend needs this to surface the shift-management
+        // pages to a delegate — the backend already honours the same delegation in
+        // ShiftAssignmentAuthz.canAssign.
+        boolean actingCharge = user.getHospital() != null
+                && chargeNurseDelegationRepository.findActiveDelegationForDelegate(
+                        user.getHospital().getId(), user.getId(), Instant.now()).isPresent();
+        body.put("isActingChargeNurse", actingCharge);
 
         return ResponseEntity.ok(ApiResponse.success(body));
     }

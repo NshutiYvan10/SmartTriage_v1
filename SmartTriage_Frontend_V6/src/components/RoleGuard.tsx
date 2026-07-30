@@ -48,7 +48,11 @@ export function RoleGuard({ page, feature, allowDesignations, requiresShiftFunct
     (feature ? hasFeature(user.role, feature) : true);
 
   const designationGrants =
-    !!allowDesignations && !!user.designation && allowDesignations.includes(user.designation);
+    (!!allowDesignations && !!user.designation && allowDesignations.includes(user.designation))
+    // An active ("acting") Charge Nurse delegate satisfies a CHARGE_NURSE-gated page
+    // even though their PERMANENT designation isn't CHARGE_NURSE. The backend
+    // authorises the same delegation (ShiftAssignmentAuthz.canAssign).
+    || (!!allowDesignations && allowDesignations.includes('CHARGE_NURSE') && !!user.isActingChargeNurse);
 
   // RBAC: shift-function gate. Authority follows TODAY'S assignment, not
   // permanent designation — a senior nurse rostered as ZONE_NURSE today

@@ -51,6 +51,13 @@ export interface AuthUser {
    * with ZONE_NURSE shift function can't access the /triage route.
    */
   currentShiftFunction?: ShiftFunction | null;
+  /**
+   * True when the user currently holds a delegated ("acting") Charge Nurse
+   * authority (additive, windowed). Set from /shifts/me/current. Treated as
+   * charge-nurse authority in RoleGuard, the Sidebar, and hasSeniorNurseAuthority
+   * — the backend enforces the same delegation in ShiftAssignmentAuthz.canAssign.
+   */
+  isActingChargeNurse?: boolean;
 }
 
 /** RBAC fix — frontend mirror of the backend ShiftFunction enum. */
@@ -108,7 +115,8 @@ export function hasSeniorNurseAuthority(user: AuthUser | null): boolean {
   if (!user || user.role !== 'NURSE') return false;
   return user.designation === 'CHARGE_NURSE'
     || user.designation === 'SENIOR_NURSE'
-    || !!user.isShiftLead;
+    || !!user.isShiftLead
+    || !!user.isActingChargeNurse;
 }
 
 /** May invoke the break-the-glass override (mirrors ClinicalAuthz.canInvokeBreakTheGlass). */
@@ -348,7 +356,12 @@ export const useAuthStore = create<AuthState>((set, get) => {
       const currentUser = get().user;
       if (!currentUser) return;
       try {
-        const { assignment } = await shiftApi.getMyCurrent();
+        const res = await shiftApi.getMyCurrent();
+        const assignment = res.assignment;
+        // Delegated ("acting") CN authority is independent of a shift assignment —
+        // a delegate may be off-shift yet still hold it — so read it from the
+        // response and apply it in BOTH branches below.
+        const isActingChargeNurse = !!res.isActingChargeNurse;
         // Backend sentinel: '' or null means "no active shift". Treat
         // both identically — user is off-shift.
         if (!assignment) {
@@ -359,6 +372,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
             isShiftLead: false,
             isOnShift: false,
             currentShiftFunction: null,
+            isActingChargeNurse,
           };
           localStorage.setItem('st-auth-user', JSON.stringify(updated));
           set({ user: updated });
@@ -379,6 +393,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
           // RBAC fix — surface the shift function so RoleGuard can gate
           // on TRIAGE_NURSE vs ZONE_NURSE vs CHARGE_NURSE etc.
           currentShiftFunction: (assignment.shiftFunction as ShiftFunction) ?? null,
+          isActingChargeNurse,
         };
         localStorage.setItem('st-auth-user', JSON.stringify(updated));
         set({ user: updated });

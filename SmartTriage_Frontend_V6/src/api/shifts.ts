@@ -91,6 +91,12 @@ export const shiftApi = {
        * colleagues see they're off the floor.
        */
       isOnApprovedLeave: boolean;
+      /**
+       * TRUE when the user currently holds a delegated ("acting") Charge Nurse
+       * authority. Drives showing the shift-management pages to a delegate; the
+       * backend enforces the same delegation in ShiftAssignmentAuthz.canAssign.
+       */
+      isActingChargeNurse?: boolean;
     }>('/shifts/me/current'),
 
   /**

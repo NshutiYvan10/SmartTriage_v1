@@ -12,7 +12,7 @@ import {
   Wind, Droplets, Brain, Clock, User, AlertTriangle, ChevronRight,
   Plus, Send, CheckCircle2, XCircle, Eye, Loader2, RefreshCw, LogOut,
   TrendingUp, Sparkles, Siren, UserCheck, ShieldAlert, Zap, Route, Globe,
-  MapPin, Pencil, History, X,
+  MapPin, Pencil, History, X, Lock,
 } from 'lucide-react';
 import { ClinicalSignsTab } from './ClinicalSignsTab';
 import { SepsisPanel } from './SepsisPanel';
@@ -1221,15 +1221,22 @@ function OverviewTab({ visit, latestVitals, latestTriage, notes, diagnoses, inve
               onClick={goToInitialTriage}
               disabled={!canTriage}
               title={canTriage
-                ? 'Disagree? Open the full triage form to re-triage this patient'
-                : 'Re-triage uses the full triage form, which stays with the Triage Nurse / Charge Nurse on duty.'}
+                ? 'Disagree with the field category? Open the full triage form to re-triage this patient.'
+                : 'Re-triage re-runs the full triage form — a nurse triage function reserved for the Triage Nurse / Charge Nurse on duty. You can Confirm the field category on sight, but not re-triage.'}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg border transition-all ${
                 canTriage
                   ? `${text.body} border-slate-400/50 hover:-translate-y-0.5`
                   : 'text-slate-400 border-slate-200 cursor-not-allowed'
               }`}
             >
-              Re-triage instead
+              {canTriage ? (
+                'Re-triage instead'
+              ) : (
+                <>
+                  <Lock className="w-3 h-3" />
+                  Triage authority required
+                </>
+              )}
             </button>
           </div>
         </div>
