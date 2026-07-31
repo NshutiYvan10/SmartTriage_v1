@@ -1,6 +1,7 @@
 package com.smartTriage.smartTriage_server.module.shift.service;
 
 import com.smartTriage.smartTriage_server.common.enums.EdZone;
+import com.smartTriage.smartTriage_server.common.enums.Role;
 import com.smartTriage.smartTriage_server.common.enums.ShiftFunction;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
 
@@ -91,6 +92,41 @@ public final class ShiftRoleZonePolicy {
             return true;
         } catch (ClinicalBusinessException e) {
             return false;
+        }
+    }
+
+    /**
+     * The ED clinical roster is for clinical staff only. Nurse stations
+     * (CHARGE_NURSE / TRIAGE_NURSE / ZONE_NURSE) require role {@link Role#NURSE};
+     * doctor stations (PRIMARY_DOCTOR / SUPERVISING_DOCTOR / RESIDENT) require
+     * role {@link Role#DOCTOR}. Every other role — admins, registrars,
+     * paramedics, lab technicians, read-only — can never hold a roster slot:
+     * admins are never clinicians, and a non-clinical account counted as zone
+     * coverage would both fake staffing (GAP/THIN pills) and leak zone-scoped
+     * clinical data (patient lists, live zone alerts) to a non-clinical actor.
+     *
+     * <p>Swaps already enforce like-for-like by role; this closes the same
+     * rule over direct assignment, edits, and template rows.
+     */
+    public static void validateRole(Role role, ShiftFunction shiftFunction) {
+        if (role == null) {
+            throw new ClinicalBusinessException("Assignee role is required.");
+        }
+        if (shiftFunction == null) {
+            throw new ClinicalBusinessException("Shift function is required.");
+        }
+        Role required = switch (shiftFunction) {
+            case CHARGE_NURSE, TRIAGE_NURSE, ZONE_NURSE -> Role.NURSE;
+            case PRIMARY_DOCTOR, SUPERVISING_DOCTOR, RESIDENT -> Role.DOCTOR;
+        };
+        if (role != required) {
+            throw new ClinicalBusinessException(
+                    "A " + role + " account cannot hold the " + shiftFunction
+                            + " station — the ED roster is for clinical staff, and "
+                            + shiftFunction + " requires a " + required + " account. "
+                            + (role == Role.HOSPITAL_ADMIN || role == Role.SUPER_ADMIN
+                                    ? "Admins oversee the ED; they are never rostered clinicians."
+                                    : "Pick a " + required + " for this station."));
         }
     }
 }

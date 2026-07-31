@@ -279,6 +279,14 @@ export function Sidebar({ currentView, onNavigate, onCollapse, onExpand, isExpan
         }
         // Doctor Workspace only for DOCTOR
         if (item.id === 'doctor-workspace') return userRole === 'DOCTOR';
+        // A plain triage-station nurse works the pre-triage queue, not a
+        // treatment zone — the zone-scoped Monitoring board and Vitals
+        // Rounds worklist are always empty for her, so hide both. Cross-
+        // zone authority (charge nurse / shift lead) keeps them.
+        if ((item.id === 'monitoring' || item.id === 'vitals-rounds')
+          && currentShiftFunction === 'TRIAGE_NURSE' && !isShiftLead && !isChargeNurse) {
+          return false;
+        }
         // Vitals Rounds is a nursing rounding tool — not a doctor surface.
         if (item.id === 'vitals-rounds') return userRole !== 'DOCTOR' && canAccessPage(userRole, item.pageId);
         // RBAC fix — Triage Queue requires triage authority on today's shift.

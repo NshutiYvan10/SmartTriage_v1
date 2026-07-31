@@ -272,6 +272,10 @@ public class ShiftTemplateService {
         for (ShiftTemplateAssignmentDto dto : dtos) {
             User user = userRepository.findByIdAndIsActiveTrue(dto.getUserId())
                     .orElseThrow(() -> new ResourceNotFoundException("User", "id", dto.getUserId()));
+            // Roster is for clinical staff only — same rule as direct
+            // assignment; templates materialize into real shifts, so a
+            // non-clinical row here would recreate the hole nightly.
+            ShiftRoleZonePolicy.validateRole(user.getRole(), dto.getShiftFunction());
             rows.add(ShiftTemplateAssignment.builder()
                     .template(template)
                     .user(user)

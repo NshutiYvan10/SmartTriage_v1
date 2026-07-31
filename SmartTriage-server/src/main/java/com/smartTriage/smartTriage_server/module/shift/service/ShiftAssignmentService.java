@@ -135,6 +135,10 @@ public class ShiftAssignmentService {
         User user = userRepository.findByIdAndIsActiveTrue(request.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", request.getUserId()));
 
+        // Roster is for clinical staff only — nurse functions need a NURSE,
+        // doctor functions a DOCTOR; admins/registrars/etc. are refused.
+        ShiftRoleZonePolicy.validateRole(user.getRole(), request.getShiftFunction());
+
         LocalDate shiftDate;
         ShiftPeriod shiftPeriod;
 
@@ -185,11 +189,15 @@ public class ShiftAssignmentService {
 
         // Deactivate any existing assignment for this user on this shift —
         // matches the historical behaviour of the today-only path.
+        // saveAndFlush, not save: Hibernate flushes INSERTs before UPDATEs, so
+        // without the flush the replacement row below hits the partial unique
+        // index (uk_shift_user_date_period_active) while this row is still
+        // active in the DB — same trap documented in clearShiftLeadForShift.
         shiftAssignmentRepository.findByUserIdAndShiftDateAndShiftPeriodAndIsActiveTrue(
                 user.getId(), shiftDate, shiftPeriod).ifPresent(existing -> {
                     existing.setActive(false);
                     existing.setEndedAt(Instant.now());
-                    shiftAssignmentRepository.save(existing);
+                    shiftAssignmentRepository.saveAndFlush(existing);
                     log.info("Deactivated previous assignment for user {} on {} {}",
                             user.getEmail(), shiftDate, shiftPeriod);
                 });
@@ -520,9 +528,14 @@ public class ShiftAssignmentService {
         // the existing values when the request didn't include them — and run
         // the clinical rule validator BEFORE mutating. Rejects e.g. an edit
         // that changes function to TRIAGE_NURSE while leaving zone=ACUTE.
+        ShiftFunction prospectiveFunction =
+                request.getShiftFunction() != null ? request.getShiftFunction() : assignment.getShiftFunction();
         ShiftRoleZonePolicy.validate(
-                request.getShiftFunction() != null ? request.getShiftFunction() : assignment.getShiftFunction(),
+                prospectiveFunction,
                 request.getZone() != null ? request.getZone() : assignment.getZone());
+        // An edit must not move the slot onto a station the assignee's role
+        // can't hold (e.g. flipping a nurse's slot to PRIMARY_DOCTOR).
+        ShiftRoleZonePolicy.validateRole(assignment.getUser().getRole(), prospectiveFunction);
 
         if (request.getZone() != null) {
             assignment.setZone(request.getZone());

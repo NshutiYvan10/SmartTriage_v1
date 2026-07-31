@@ -888,7 +888,13 @@ function QuickAssignDrawer({
     // covers KFH/CHUK ED rosters comfortably without paging UX.
     userApi
       .getByHospital(hospitalId, 0, 200)
-      .then((page) => { if (!cancelled) setUsers(page.content ?? []); })
+      // Roster is for clinical staff only (backend enforces the same rule) —
+      // admins/registrars/lab techs/paramedics must never appear as assignees.
+      .then((page) => {
+        if (!cancelled) {
+          setUsers((page.content ?? []).filter((u) => u.role === 'DOCTOR' || u.role === 'NURSE'));
+        }
+      })
       .catch(() => { if (!cancelled) setUsers([]); })
       .finally(() => { if (!cancelled) setLoadingUsers(false); });
     return () => { cancelled = true; };

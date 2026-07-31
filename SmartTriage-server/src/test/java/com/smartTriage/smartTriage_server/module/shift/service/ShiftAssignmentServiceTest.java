@@ -41,11 +41,16 @@ class ShiftAssignmentServiceTest {
     private ShiftAssignment assignment(boolean isLead) {
         Hospital h = mock(Hospital.class);
         when(h.getId()).thenReturn(UUID.randomUUID());
+        // The roster role gate (ShiftRoleZonePolicy.validateRole) runs on
+        // every update — the fixture user must be a NURSE to legally hold
+        // the ZONE_NURSE station, as every real assignee would be.
+        User nurse = new User();
+        nurse.setRole(com.smartTriage.smartTriage_server.common.enums.Role.NURSE);
         return ShiftAssignment.builder()
                 .hospital(h)
                 .shiftDate(LocalDate.now())
                 .shiftPeriod(ShiftPeriod.DAY)
-                .user(new User())
+                .user(nurse)
                 .zone(EdZone.GENERAL)
                 .shiftFunction(ShiftFunction.ZONE_NURSE)
                 .isShiftLead(isLead)
