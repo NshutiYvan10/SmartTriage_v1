@@ -278,6 +278,10 @@ export const labApi = {
     saveBlob(blob, filename);
   },
 
+  /** Fetch the document bytes WITHOUT saving — for the in-app preview. */
+  fetchDocumentBlob: (orderId: string, documentId: string, fallbackName = 'lab-report') =>
+    downloadBlob(`/lab/${orderId}/documents/${documentId}/download`, fallbackName),
+
   deleteDocument: (orderId: string, documentId: string) =>
     del<void>(`/lab/${orderId}/documents/${documentId}`),
 

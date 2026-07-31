@@ -33,6 +33,7 @@ import { ModalPortal } from '@/components/ModalPortal';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPathForRole } from '@/lib/chartNav';
 import { LabDocuments, type LabDocumentsHandle } from '@/modules/lab/LabDocuments';
+import { ReportDocumentsModal } from './ReportDocumentsModal';
 
 /** Minutes since order, with a soft target so overdue studies stand out. */
 const PRIORITY_TARGET_MIN: Record<string, number> = { STAT: 30, URGENT: 120, ROUTINE: 1440 };
@@ -63,6 +64,7 @@ export function ImagingWorklistView() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [reportFor, setReportFor] = useState<InvestigationResponse | null>(null);
+  const [docsFor, setDocsFor] = useState<InvestigationResponse | null>(null);
 
   const load = useCallback(async () => {
     if (!hospitalId) { setLoading(false); return; }
@@ -109,6 +111,10 @@ export function ImagingWorklistView() {
 
   const toPerform = rows.filter((r) => r.status === 'ORDERED');
   const inProgress = rows.filter((r) => r.status === 'IN_PROGRESS');
+  // Kept on the worklist by the backend for 24 h after resulting — the report
+  // file often arrives after the findings are saved, so the tech still needs
+  // a place to attach it and verify the upload landed.
+  const resulted = rows.filter((r) => r.status === 'RESULTED');
 
   return (
     <div className="min-h-full">
@@ -141,6 +147,9 @@ export function ImagingWorklistView() {
             </span>
             <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg font-bold ${text.body}`} style={glassInner}>
               <Activity className="w-3 h-3" /> In progress {inProgress.length}
+            </span>
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg font-bold ${text.body}`} style={glassInner}>
+              <CheckCircle2 className="w-3 h-3" /> Resulted (24 h) {resulted.length}
             </span>
           </div>
         </div>
@@ -197,6 +206,23 @@ export function ImagingWorklistView() {
                 </button>
               )}
             />
+            {resulted.length > 0 && (
+              <WorklistColumn
+                title="Resulted — last 24 h" helper="Report saved — attach or view the report document"
+                icon={CheckCircle2} rows={resulted}
+                glassCard={glassCard} isDark={isDark} text={text}
+                chartHref={(vid) => chartPathForRole(user?.role, vid)}
+                renderActions={(r) => (
+                  <button
+                    type="button"
+                    onClick={() => setDocsFor(r)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white transition-colors"
+                  >
+                    <FileText className="w-3 h-3" /> Report documents
+                  </button>
+                )}
+              />
+            )}
           </div>
         )}
       </div>
@@ -206,6 +232,15 @@ export function ImagingWorklistView() {
           investigation={reportFor}
           onClose={() => setReportFor(null)}
           onSaved={async () => { setReportFor(null); await load(); }}
+        />
+      )}
+      {docsFor && (
+        <ReportDocumentsModal
+          investigationId={docsFor.id}
+          testName={docsFor.testName}
+          patientName={docsFor.patientName}
+          canManage
+          onClose={() => setDocsFor(null)}
         />
       )}
     </div>

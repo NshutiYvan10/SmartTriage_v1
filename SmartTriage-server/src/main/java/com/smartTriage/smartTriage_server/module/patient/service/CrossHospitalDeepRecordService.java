@@ -3,6 +3,7 @@ package com.smartTriage.smartTriage_server.module.patient.service;
 import com.smartTriage.smartTriage_server.common.enums.ClinicalDocumentType;
 import com.smartTriage.smartTriage_server.common.enums.NoteType;
 import com.smartTriage.smartTriage_server.common.exception.ClinicalBusinessException;
+import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.audit.service.AuditService;
 import com.smartTriage.smartTriage_server.module.clinical.repository.ClinicalNoteRepository;
 import com.smartTriage.smartTriage_server.module.clinical.repository.DiagnosisRepository;
@@ -14,10 +15,20 @@ import com.smartTriage.smartTriage_server.module.documentation.repository.Clinic
 import com.smartTriage.smartTriage_server.module.lab.repository.LabOrderRepository;
 import com.smartTriage.smartTriage_server.module.medication.entity.MedicationAdministration;
 import com.smartTriage.smartTriage_server.module.medication.repository.MedicationAdministrationRepository;
+import com.smartTriage.smartTriage_server.module.isolation.entity.InfectionScreening;
+import com.smartTriage.smartTriage_server.module.isolation.repository.InfectionScreeningRepository;
+import com.smartTriage.smartTriage_server.module.lab.entity.LabReportDocument;
+import com.smartTriage.smartTriage_server.module.lab.repository.LabReportDocumentRepository;
 import com.smartTriage.smartTriage_server.module.patient.dto.CrossHospitalDeepRecordResponse;
+import com.smartTriage.smartTriage_server.module.patient.dto.CrossHospitalDeepRecordResponse.DeepDiagnosis;
+import com.smartTriage.smartTriage_server.module.patient.dto.CrossHospitalDeepRecordResponse.DeepLab;
+import com.smartTriage.smartTriage_server.module.patient.dto.CrossHospitalDeepRecordResponse.DeepLabDocument;
 import com.smartTriage.smartTriage_server.module.patient.dto.CrossHospitalDeepRecordResponse.HospitalSection;
+import com.smartTriage.smartTriage_server.module.patient.dto.CrossHospitalDeepRecordResponse.SafetyEvent;
 import com.smartTriage.smartTriage_server.module.patient.dto.CrossHospitalDeepRecordResponse.VisitSummary;
 import com.smartTriage.smartTriage_server.module.patient.dto.CrossHospitalDeepRecordResponse.DischargeSummaryDoc;
+import com.smartTriage.smartTriage_server.module.sepsis.entity.SepsisScreening;
+import com.smartTriage.smartTriage_server.module.sepsis.repository.SepsisScreeningRepository;
 import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
 import com.smartTriage.smartTriage_server.module.patient.entity.PersonIdentity;
 import com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository;
@@ -70,6 +81,9 @@ public class CrossHospitalDeepRecordService {
     private final LabOrderRepository labOrderRepository;
     private final ClinicalDocumentRepository clinicalDocumentRepository;
     private final MedicationAdministrationRepository medicationAdministrationRepository;
+    private final SepsisScreeningRepository sepsisScreeningRepository;
+    private final InfectionScreeningRepository infectionScreeningRepository;
+    private final LabReportDocumentRepository labReportDocumentRepository;
     private final DataSharingConsentService dataSharingConsentService;
     private final BreakTheGlassEventRepository breakTheGlassEventRepository;
     private final UserRepository userRepository;
@@ -148,6 +162,14 @@ public class CrossHospitalDeepRecordService {
 
     // ── break-the-glass forensic record ──
     private void recordBreakTheGlass(PersonIdentity identity, String reason) {
+        // Server-side floor for the justification — the 10-character minimum is a
+        // documented rule (§14.4) and must not live only in the UI; "x" typed
+        // straight at the API is not a clinical justification.
+        if (reason.length() < 10) {
+            throw new ClinicalBusinessException(
+                    "Break-the-glass requires a clinical justification of at least 10 characters "
+                            + "— state briefly why emergency access is needed.");
+        }
         User actor = resolveCurrentUser();
         if (actor == null) {
             // Never serve an unattributed emergency override.
@@ -226,10 +248,16 @@ public class CrossHospitalDeepRecordService {
                         .visitNumber(v.getVisitNumber())
                         .arrivalTime(v.getArrivalTime())
                         .status(v.getStatus() != null ? v.getStatus().name() : null)
+                        .chiefComplaint(v.getChiefComplaint())
+                        .triageCategory(v.getCurrentTriageCategory() != null
+                                ? v.getCurrentTriageCategory().name() : null)
                         .diagnoses(diagnoses(v.getId()))
                         .dischargeSummaries(dischargeSummaries(v.getId(), p.getNationalId()))
                         .labs(labs(v.getId()))
                         .keyNotes(keyNotes(v.getId()))
+                        .diagnosisDetails(diagnosisDetails(v.getId()))
+                        .labDetails(labDetails(v.getId()))
+                        .safetyEvents(safetyEvents(v.getId()))
                         .build());
             }
             sections.add(HospitalSection.builder()
@@ -315,6 +343,197 @@ public class CrossHospitalDeepRecordService {
                             + (n.getContent() != null ? n.getContent() : "")));
         }
         return out;
+    }
+
+    // ── structured detail builders (additive to the flat strings above) ──
+
+    /** Full diagnosis provenance — description, ICD, primary flag, who and when. */
+    private List<DeepDiagnosis> diagnosisDetails(UUID visitId) {
+        List<DeepDiagnosis> out = new ArrayList<>();
+        diagnosisRepository.findByVisitIdAndIsActiveTrueOrderByDiagnosedAtAsc(visitId).forEach(d ->
+                out.add(DeepDiagnosis.builder()
+                        .description(d.getDescription())
+                        .icdCode(d.getIcdCode())
+                        .primary(Boolean.TRUE.equals(d.getIsPrimary()))
+                        .diagnosedByName(d.getDiagnosedByName())
+                        .diagnosedAt(d.getDiagnosedAt())
+                        .build()));
+        return out;
+    }
+
+    /**
+     * Labs/investigations with their RESULT VALUES and status — assembled live on
+     * every fetch, so a result that lands after consent/break-glass shows on the
+     * next open with no extra sync step. Findings text for imaging; value + unit
+     * for labs; severity flags for both.
+     */
+    private List<DeepLab> labDetails(UUID visitId) {
+        List<DeepLab> out = new ArrayList<>();
+        investigationRepository.findByVisitIdAndIsActiveTrueOrderByOrderedAtAsc(visitId).forEach(i -> {
+            String result = i.getResult();
+            if ((result == null || result.isBlank()) && i.getResultNumeric() != null) {
+                result = String.valueOf(i.getResultNumeric());
+            }
+            out.add(DeepLab.builder()
+                    .testName(i.getTestName())
+                    .status(i.getStatus() != null ? i.getStatus().name() : null)
+                    .result(result)
+                    .resultUnit(i.getResultUnit())
+                    .critical(Boolean.TRUE.equals(i.getIsCritical()))
+                    .abnormal(Boolean.TRUE.equals(i.getIsAbnormal()))
+                    .priority(i.getPriority())
+                    .orderedAt(i.getOrderedAt())
+                    .resultedAt(i.getResultedAt())
+                    .documents(documentMeta(labReportDocumentRepository.findMetadataByInvestigation(i.getId())))
+                    .build());
+        });
+        labOrderRepository.findByVisitIdAndInvestigationIsNullAndIsActiveTrueOrderByOrderedAtDesc(visitId)
+                .forEach(l -> out.add(DeepLab.builder()
+                        .testName(l.getTestName())
+                        .status(l.getStatus() != null ? l.getStatus().name() : null)
+                        .result(l.getResultValue())
+                        .resultUnit(l.getResultUnit())
+                        .critical(l.isCritical())
+                        .abnormal(l.isAbnormal())
+                        .priority(l.getPriority() != null ? l.getPriority().name() : null)
+                        .orderedAt(l.getOrderedAt())
+                        .resultedAt(l.getResultedAt())
+                        .documents(documentMeta(labReportDocumentRepository.findMetadataByLabOrder(l.getId())))
+                        .build()));
+        return out;
+    }
+
+    private static List<DeepLabDocument> documentMeta(
+            List<com.smartTriage.smartTriage_server.module.lab.dto.LabReportDocumentResponse> docs) {
+        List<DeepLabDocument> out = new ArrayList<>();
+        docs.forEach(d -> out.add(DeepLabDocument.builder()
+                .id(d.getId() != null ? d.getId().toString() : null)
+                .fileName(d.getFileName())
+                .sizeBytes(d.getSizeBytes())
+                .uploadedByName(d.getUploadedByName())
+                .build()));
+        return out;
+    }
+
+    /**
+     * Stream one attached report document THROUGH the deep-record gate — the
+     * per-hospital document endpoints are zone/hospital-scoped and would 404
+     * for a cross-hospital reader, so the deep record serves its own copies.
+     *
+     * <p>Gate: a live GRANTED consent, or a break-the-glass event by THIS actor
+     * on THIS person within the last hour (the original override covers the
+     * immediate emergency read — a stale one does not). Ownership is verified
+     * document → visit → patient → PersonIdentity before anything is served;
+     * a foreign or unlinked document reads as not-found (scoping as 404).
+     */
+    @Transactional
+    public LabReportDocument getDeepRecordDocument(String nationalId, UUID documentId) {
+        String nid = normalize(nationalId);
+        PersonIdentity identity = nid == null ? null
+                : personIdentityRepository.findByNationalIdAndIsActiveTrue(nid).orElse(null);
+        if (identity == null) {
+            audit("nid=" + mask(nid) + " doc=" + documentId, "DENIED");
+            throw new ResourceNotFoundException("Document", "id", documentId);
+        }
+
+        boolean hasConsent = dataSharingConsentService.getCurrentEffectiveConsent(identity.getId()).isPresent();
+        boolean recentGlass = false;
+        if (!hasConsent) {
+            User actor = resolveCurrentUser();
+            Instant cutoff = Instant.now().minus(java.time.Duration.ofHours(1));
+            recentGlass = actor != null && breakTheGlassEventRepository
+                    .findByPersonIdentityIdAndIsActiveTrueOrderByAccessedAtDesc(identity.getId())
+                    .stream()
+                    .anyMatch(e -> actor.getId().equals(e.getActorUserId())
+                            && e.getAccessedAt() != null && e.getAccessedAt().isAfter(cutoff));
+        }
+        if (!hasConsent && !recentGlass) {
+            audit("nid=" + mask(nid) + " doc=" + documentId, "DENIED");
+            throw new ClinicalBusinessException(
+                    "This document is part of the consent-gated deep record. Open the deep record "
+                            + "(consent, or break-the-glass for an emergency) and retry from there.");
+        }
+
+        LabReportDocument doc = labReportDocumentRepository.findByIdAndIsActiveTrue(documentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Document", "id", documentId));
+        // Ownership: the document's visit must belong to a patient linked to THIS identity.
+        boolean owned = doc.getVisitId() != null && visitRepository.findById(doc.getVisitId())
+                .map(v -> v.getPatient() != null
+                        && v.getPatient().getPersonIdentity() != null
+                        && identity.getId().equals(v.getPatient().getPersonIdentity().getId()))
+                .orElse(false);
+        if (!owned) {
+            audit("nid=" + mask(nid) + " doc=" + documentId, "DENIED");
+            throw new ResourceNotFoundException("Document", "id", documentId);
+        }
+        audit("nid=" + mask(nid) + " doc=" + documentId, hasConsent ? "CONSENT" : "BREAK_THE_GLASS");
+        return doc;
+    }
+
+    /**
+     * Safety-engine context: the latest sepsis screening and infection/isolation
+     * screening for the visit — the first questions a receiving clinician asks
+     * ("were they flagged septic? do they need isolation?").
+     */
+    private List<SafetyEvent> safetyEvents(UUID visitId) {
+        List<SafetyEvent> out = new ArrayList<>();
+        sepsisScreeningRepository
+                .findByVisitIdAndIsActiveTrueOrderByScreenedAtDesc(visitId, PageRequest.of(0, 1))
+                .forEach(s -> out.add(sepsisEvent(s)));
+        List<InfectionScreening> infections =
+                infectionScreeningRepository.findByVisitIdAndIsActiveTrueOrderByScreenedAtDesc(visitId);
+        if (!infections.isEmpty()) {
+            out.add(infectionEvent(infections.get(0)));
+        }
+        return out;
+    }
+
+    private static SafetyEvent sepsisEvent(SepsisScreening s) {
+        String status = s.getSepsisStatus() != null ? s.getSepsisStatus().name() : "NO_SEPSIS";
+        String severity = switch (status) {
+            case "SEPSIS_SUSPECTED", "SEVERE_SEPSIS", "SEPTIC_SHOCK" -> "CRITICAL";
+            case "SIRS_POSITIVE" -> "WARNING";
+            default -> "INFO";
+        };
+        StringBuilder detail = new StringBuilder("qSOFA " + s.getQsofaScore() + " · SIRS " + s.getSirsScore());
+        if (s.getSuspectedInfectionSource() != null && !s.getSuspectedInfectionSource().isBlank()) {
+            detail.append(" · source: ").append(s.getSuspectedInfectionSource());
+        }
+        return SafetyEvent.builder()
+                .kind("SEPSIS_SCREENING")
+                .label(status.replace('_', ' '))
+                .detail(detail.toString())
+                .severity(severity)
+                .at(s.getScreenedAt())
+                .build();
+    }
+
+    private static SafetyEvent infectionEvent(InfectionScreening i) {
+        String risk = i.getRiskLevel() != null ? i.getRiskLevel().name() : "LOW_RISK";
+        String severity = switch (risk) {
+            case "CONFIRMED", "HIGH_RISK" -> "CRITICAL";
+            case "MODERATE_RISK" -> "WARNING";
+            default -> "INFO";
+        };
+        StringBuilder label = new StringBuilder(risk.replace('_', ' '));
+        if (i.getIsolationType() != null) {
+            label.append(" · ").append(i.getIsolationType().name().replace('_', ' ')).append(" precautions");
+        }
+        StringBuilder detail = new StringBuilder();
+        if (i.getSuspectedCondition() != null && !i.getSuspectedCondition().isBlank()) {
+            detail.append(i.getSuspectedCondition());
+        }
+        if (i.getNotifiableDisease() != null) {
+            if (detail.length() > 0) detail.append(" · ");
+            detail.append("notifiable: ").append(i.getNotifiableDisease().name().replace('_', ' '));
+        }
+        return SafetyEvent.builder()
+                .kind("INFECTION_SCREENING")
+                .label(label.toString())
+                .detail(detail.length() > 0 ? detail.toString() : null)
+                .severity(severity)
+                .at(i.getScreenedAt())
+                .build();
     }
 
     private static boolean isActiveMed(MedicationAdministration m) {

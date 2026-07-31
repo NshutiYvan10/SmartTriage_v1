@@ -75,6 +75,10 @@ export const investigationApi = {
     saveBlob(blob, filename);
   },
 
+  /** Fetch the document bytes WITHOUT saving — for the in-app preview. */
+  fetchDocumentBlob: (investigationId: string, documentId: string, fallbackName = 'imaging-report') =>
+    downloadBlob(`/investigations/${investigationId}/documents/${documentId}/download`, fallbackName),
+
   deleteDocument: (investigationId: string, documentId: string) =>
     del<void>(`/investigations/${investigationId}/documents/${documentId}`),
 };

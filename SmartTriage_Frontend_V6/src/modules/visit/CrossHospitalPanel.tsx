@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Globe, Loader2, Lock, ShieldAlert, ShieldCheck, Building2, Stethoscope,
   FlaskConical, FileText, Pill, ChevronRight, User2, CalendarDays, AlertTriangle,
+  Activity,
 } from 'lucide-react';
 import {
   crossHospitalApi,
@@ -20,6 +21,9 @@ import {
   type CrossHospitalHospitalSection,
   type CrossHospitalVisitSummary,
   type CrossHospitalDischargeSummary,
+  type CrossHospitalDiagnosis,
+  type CrossHospitalLab,
+  type CrossHospitalSafetyEvent,
 } from '@/api/crossHospital';
 import { ApiError } from '@/api/client';
 import { useTheme } from '@/hooks/useTheme';
@@ -238,7 +242,7 @@ export function CrossHospitalPanel({ nationalId }: Props) {
       )}
 
       {hospitals.map((h, hi) => (
-        <HospitalSection key={hi} hospital={h} isDark={isDark} text={text} glassCard={glassCard} />
+        <HospitalSection key={hi} hospital={h} nationalId={nationalId} isDark={isDark} text={text} glassCard={glassCard} />
       ))}
 
       {hospitals.length === 0 && (
@@ -304,8 +308,9 @@ function PatientBand({ record, isDark, text, glassCard, totalVisits }: {
 
 // ── one hospital: header + visit timeline ────────────────────────────────────
 
-function HospitalSection({ hospital, isDark, text, glassCard }: {
+function HospitalSection({ hospital, nationalId, isDark, text, glassCard }: {
   hospital: CrossHospitalHospitalSection;
+  nationalId: string;
   isDark: boolean; text: any; glassCard: React.CSSProperties;
 }) {
   const visits = hospital.visits ?? [];
@@ -329,7 +334,7 @@ function HospitalSection({ hospital, isDark, text, glassCard }: {
       ) : (
         <div className={`space-y-2.5 pl-3 border-l-2 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
           {visits.map((v, vi) => (
-            <VisitCard key={vi} visit={v} defaultOpen={vi === 0} isDark={isDark} text={text} />
+            <VisitCard key={vi} visit={v} nationalId={nationalId} defaultOpen={vi === 0} isDark={isDark} text={text} />
           ))}
         </div>
       )}
@@ -339,18 +344,26 @@ function HospitalSection({ hospital, isDark, text, glassCard }: {
 
 // ── one visit: timeline card, expandable ─────────────────────────────────────
 
-function VisitCard({ visit, defaultOpen, isDark, text }: {
-  visit: CrossHospitalVisitSummary; defaultOpen: boolean; isDark: boolean; text: any;
+function VisitCard({ visit, nationalId, defaultOpen, isDark, text }: {
+  visit: CrossHospitalVisitSummary; nationalId: string; defaultOpen: boolean; isDark: boolean; text: any;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const st = statusStyle(visit.status, isDark);
+  // Prefer the structured payloads (values, provenance, status); fall back to
+  // the legacy flat strings so an older backend still renders.
+  const diagDetails = visit.diagnosisDetails ?? [];
+  const labDetails = visit.labDetails ?? [];
+  const safetyEvents = visit.safetyEvents ?? [];
   const diagnoses = visit.diagnoses ?? [];
   const labs = visit.labs ?? [];
   const notes = visit.keyNotes ?? [];
   const summaries = visit.dischargeSummaries ?? [];
+  const dxCount = diagDetails.length || diagnoses.length;
+  const labCount = labDetails.length || labs.length;
   const counts = [
-    diagnoses.length && `${diagnoses.length} dx`,
-    labs.length && `${labs.length} lab${labs.length === 1 ? '' : 's'}`,
+    dxCount && `${dxCount} dx`,
+    labCount && `${labCount} lab${labCount === 1 ? '' : 's'}`,
+    safetyEvents.length && `${safetyEvents.length} screening${safetyEvents.length === 1 ? '' : 's'}`,
     notes.length && `${notes.length} note${notes.length === 1 ? '' : 's'}`,
     summaries.length && `${summaries.length} summary`,
   ].filter(Boolean) as string[];
@@ -370,14 +383,16 @@ function VisitCard({ visit, defaultOpen, isDark, text }: {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-xs font-bold ${text.heading}`}>Visit {visit.visitNumber ?? '—'}</span>
+            {visit.triageCategory && <TriageCategoryChip category={visit.triageCategory} />}
             {visit.status && (
               <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${st.txt}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} /> {titleCase(visit.status.replace(/_/g, ' '))}
               </span>
             )}
           </div>
-          <div className={`flex items-center gap-2 text-[11px] mt-0.5 ${text.muted}`}>
+          <div className={`flex items-center gap-2 text-[11px] mt-0.5 flex-wrap ${text.muted}`}>
             {visit.arrivalTime && <span className="inline-flex items-center gap-1"><CalendarDays className="w-3 h-3" /> {new Date(visit.arrivalTime).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
+            {visit.chiefComplaint && <span className="truncate">CC: {visit.chiefComplaint}</span>}
           </div>
         </div>
         {!open && (
@@ -393,20 +408,36 @@ function VisitCard({ visit, defaultOpen, isDark, text }: {
             <p className={`text-xs ${text.muted}`}>No further clinical detail was recorded for this visit.</p>
           ) : (
             <>
-              {diagnoses.length > 0 && (
+              {safetyEvents.length > 0 && (
                 <div>
-                  <SectionHeader icon={Stethoscope} label="Diagnoses" tone={isDark ? 'text-indigo-300' : 'text-indigo-600'} count={diagnoses.length} text={text} />
+                  <SectionHeader icon={Activity} label="Safety screenings" tone={isDark ? 'text-rose-300' : 'text-rose-600'} count={safetyEvents.length} text={text} />
                   <div className="mt-1.5 space-y-1.5">
-                    {diagnoses.map((d, i) => <DiagnosisRow key={i} raw={d} isDark={isDark} text={text} />)}
+                    {safetyEvents.map((s, i) => <SafetyEventRow key={i} event={s} isDark={isDark} text={text} />)}
                   </div>
                 </div>
               )}
-              {labs.length > 0 && (
+              {dxCount > 0 && (
                 <div>
-                  <SectionHeader icon={FlaskConical} label="Labs & tests" tone={isDark ? 'text-red-300' : 'text-red-600'} count={labs.length} text={text} />
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {labs.map((l, i) => <LabChip key={i} raw={l} isDark={isDark} text={text} />)}
+                  <SectionHeader icon={Stethoscope} label="Diagnoses" tone={isDark ? 'text-indigo-300' : 'text-indigo-600'} count={dxCount} text={text} />
+                  <div className="mt-1.5 space-y-1.5">
+                    {diagDetails.length > 0
+                      ? diagDetails.map((d, i) => <DiagnosisDetailRow key={i} dx={d} isDark={isDark} text={text} />)
+                      : diagnoses.map((d, i) => <DiagnosisRow key={i} raw={d} isDark={isDark} text={text} />)}
                   </div>
+                </div>
+              )}
+              {labCount > 0 && (
+                <div>
+                  <SectionHeader icon={FlaskConical} label="Labs & tests" tone={isDark ? 'text-red-300' : 'text-red-600'} count={labCount} text={text} />
+                  {labDetails.length > 0 ? (
+                    <div className="mt-1.5 space-y-1.5">
+                      {labDetails.map((l, i) => <LabDetailRow key={i} lab={l} nationalId={nationalId} isDark={isDark} text={text} />)}
+                    </div>
+                  ) : (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {labs.map((l, i) => <LabChip key={i} raw={l} isDark={isDark} text={text} />)}
+                    </div>
+                  )}
                 </div>
               )}
               {notes.length > 0 && (
@@ -442,6 +473,195 @@ function SectionHeader({ icon: Icon, label, tone, count, text }: {
     <div className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide ${tone}`}>
       <Icon className="w-3 h-3" /> {label}
       {count != null && <span className={`ml-0.5 font-semibold ${text.muted}`}>({count})</span>}
+    </div>
+  );
+}
+
+/** Triage colour chip — cross-hospital record shows the acuity the other ED assigned. */
+function TriageCategoryChip({ category }: { category: string }) {
+  const c = category.toUpperCase();
+  const cls =
+    c === 'RED' ? 'bg-red-500/15 text-red-500 border-red-500/30'
+    : c === 'ORANGE' ? 'bg-orange-500/15 text-orange-500 border-orange-500/30'
+    : c === 'YELLOW' ? 'bg-amber-500/15 text-amber-600 border-amber-500/30'
+    : c === 'GREEN' ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
+    : 'bg-slate-500/15 text-slate-500 border-slate-500/30';
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded border uppercase tracking-wide ${cls}`}>
+      {c}
+    </span>
+  );
+}
+
+/** Sepsis / infection screening line — label + severity colour + detail. */
+function SafetyEventRow({ event, isDark, text }: { event: CrossHospitalSafetyEvent; isDark: boolean; text: any }) {
+  const sev = (event.severity || 'INFO').toUpperCase();
+  const tone = sev === 'CRITICAL'
+    ? (isDark ? 'bg-red-500/15 border-red-500/30' : 'bg-red-50 border-red-200')
+    : sev === 'WARNING'
+      ? (isDark ? 'bg-amber-500/15 border-amber-500/30' : 'bg-amber-50 border-amber-200')
+      : (isDark ? 'bg-white/[0.03] border-white/10' : 'bg-slate-50 border-slate-200');
+  const iconTone = sev === 'CRITICAL' ? 'text-red-500' : sev === 'WARNING' ? 'text-amber-500' : text.muted;
+  const Icon = event.kind === 'INFECTION_SCREENING' ? ShieldAlert : Activity;
+  const kindLabel = event.kind === 'INFECTION_SCREENING' ? 'Infection / isolation screening' : 'Sepsis screening';
+  return (
+    <div className={`rounded-lg px-2.5 py-2 border ${tone}`}>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${iconTone}`} />
+        <span className={`text-[9px] font-bold uppercase tracking-wide ${text.muted}`}>{kindLabel}</span>
+        {event.label && <span className={`text-xs font-bold ${sev === 'CRITICAL' ? 'text-red-500' : sev === 'WARNING' ? 'text-amber-600' : text.heading}`}>{titleCase(event.label)}</span>}
+        {event.at && (
+          <span className={`ml-auto text-[10px] ${text.muted}`}>
+            {new Date(event.at).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}
+          </span>
+        )}
+      </div>
+      {event.detail && <p className={`text-[11px] mt-0.5 ${text.body}`}>{event.detail}</p>}
+    </div>
+  );
+}
+
+/** Structured diagnosis — description + ICD + primary badge, expandable provenance. */
+function DiagnosisDetailRow({ dx, isDark, text }: { dx: CrossHospitalDiagnosis; isDark: boolean; text: any }) {
+  const [open, setOpen] = useState(false);
+  const hasProvenance = !!(dx.diagnosedByName || dx.diagnosedAt);
+  return (
+    <div className={`rounded-lg ${isDark ? 'bg-white/[0.03]' : 'bg-slate-50'}`}>
+      <button
+        type="button"
+        onClick={() => hasProvenance && setOpen((o) => !o)}
+        aria-expanded={hasProvenance ? open : undefined}
+        className={`w-full text-left px-2.5 py-2 ${hasProvenance ? 'cursor-pointer' : 'cursor-default'}`}
+      >
+        <div className="flex items-start gap-2 flex-wrap">
+          {dx.primary && (
+            <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-500">Primary</span>
+          )}
+          <span className={`text-xs font-medium flex-1 min-w-0 ${text.heading}`}>{dx.description ?? 'Diagnosis'}</span>
+          {dx.icdCode && (
+            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${isDark ? 'bg-white/10 text-slate-300' : 'bg-slate-200 text-slate-600'}`}>{dx.icdCode}</span>
+          )}
+          {hasProvenance && (
+            <ChevronRight className={`w-3 h-3 mt-0.5 transition-transform duration-200 ${text.muted} ${open ? 'rotate-90' : ''}`} />
+          )}
+        </div>
+      </button>
+      {open && hasProvenance && (
+        <p className={`px-2.5 pb-2 text-[10px] ${text.muted}`}>
+          {dx.diagnosedByName && <>Diagnosed by <span className="font-semibold">{dx.diagnosedByName}</span></>}
+          {dx.diagnosedAt && <> · {new Date(dx.diagnosedAt).toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</>}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Structured lab/test — name, status, RESULT + unit, severity, resulted time,
+ *  and the attached report documents (viewable in-app via the gated deep-record door). */
+function LabDetailRow({ lab, nationalId, isDark, text }: {
+  lab: CrossHospitalLab; nationalId: string; isDark: boolean; text: any;
+}) {
+  const critical = lab.critical;
+  const abnormal = !critical && lab.abnormal;
+  const frame = critical
+    ? (isDark ? 'bg-red-500/10 border-red-500/30' : 'bg-red-50 border-red-200')
+    : abnormal
+      ? (isDark ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-50 border-amber-200')
+      : (isDark ? 'bg-white/[0.03] border-white/10' : 'bg-slate-50 border-slate-200');
+  const resulted = (lab.status || '').toUpperCase() === 'RESULTED';
+  const docs = lab.documents ?? [];
+  const [preview, setPreview] = useState<{ url: string; name: string; mime: string } | null>(null);
+  const [busyDoc, setBusyDoc] = useState<string | null>(null);
+  const [docErr, setDocErr] = useState<string | null>(null);
+  const openDoc = async (docId: string, name: string) => {
+    setBusyDoc(docId);
+    setDocErr(null);
+    try {
+      const { blob } = await crossHospitalApi.fetchDeepRecordDocumentBlob(nationalId, docId, name);
+      setPreview({ url: URL.createObjectURL(blob), name, mime: blob.type || '' });
+    } catch (e) {
+      setDocErr(e instanceof Error ? e.message : 'Could not open the report document');
+    } finally {
+      setBusyDoc(null);
+    }
+  };
+  const closePreview = () => setPreview((p) => { if (p) URL.revokeObjectURL(p.url); return null; });
+  useEffect(() => () => setPreview((p) => { if (p) URL.revokeObjectURL(p.url); return null; }), []);
+  return (
+    <div className={`rounded-lg px-2.5 py-2 border ${frame}`}>
+      <div className="flex items-center gap-2 flex-wrap">
+        {critical && <AlertTriangle className="w-3 h-3 text-red-500 flex-shrink-0" />}
+        <span className={`text-xs font-semibold ${text.heading}`}>{lab.testName ?? 'Test'}</span>
+        {lab.status && (
+          <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${
+            resulted
+              ? (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-100 text-emerald-700')
+              : (isDark ? 'bg-white/10 text-slate-300' : 'bg-slate-200 text-slate-600')}`}>
+            {titleCase(lab.status.replace(/_/g, ' '))}
+          </span>
+        )}
+        {critical && <span className="text-[8px] font-bold uppercase tracking-wide text-red-500">Critical</span>}
+        {abnormal && <span className="text-[8px] font-bold uppercase tracking-wide text-amber-600">Abnormal</span>}
+        {lab.resultedAt && (
+          <span className={`ml-auto text-[10px] ${text.muted}`}>
+            {new Date(lab.resultedAt).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}
+          </span>
+        )}
+      </div>
+      {lab.result ? (
+        <p className={`text-xs mt-1 ${critical ? 'text-red-500 font-semibold' : abnormal ? 'text-amber-600 font-semibold' : text.body}`}>
+          {lab.result}{lab.resultUnit ? <span className={`ml-1 text-[10px] ${text.muted}`}>{lab.resultUnit}</span> : null}
+        </p>
+      ) : !resulted ? (
+        <p className={`text-[10px] mt-0.5 ${text.muted}`}>No result yet — updates here automatically once resulted.</p>
+      ) : null}
+      {docs.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {docs.map((d) => (
+            <button
+              key={d.id}
+              type="button"
+              onClick={() => openDoc(d.id, d.fileName ?? 'report')}
+              disabled={busyDoc === d.id}
+              className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-1 rounded-lg border transition-colors ${
+                isDark ? 'border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10' : 'border-cyan-300 text-cyan-700 hover:bg-cyan-50'
+              }`}
+              title={`View ${d.fileName ?? 'report'}${d.uploadedByName ? ` (uploaded by ${d.uploadedByName})` : ''}`}
+            >
+              {busyDoc === d.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
+              {d.fileName ?? 'report'}
+            </button>
+          ))}
+        </div>
+      )}
+      {docErr && <p className="text-[10px] mt-1 font-semibold text-red-500">{docErr}</p>}
+      {preview && (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center p-4 bg-black/70" onClick={closePreview}>
+          <div
+            className={`w-full max-w-4xl rounded-2xl overflow-hidden flex flex-col ${isDark ? 'bg-slate-900' : 'bg-white'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={`px-4 py-3 flex items-center gap-2 ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
+              <FileText className="w-4 h-4 text-cyan-500 flex-shrink-0" />
+              <p className={`flex-1 min-w-0 truncate text-sm font-bold ${text.heading}`}>{preview.name}</p>
+              <button type="button" onClick={closePreview} className={`px-2 py-1 rounded-lg text-xs font-bold ${isDark ? 'hover:bg-white/10 text-white' : 'hover:bg-slate-200 text-slate-700'}`}>
+                Close
+              </button>
+            </div>
+            {preview.mime.includes('pdf') ? (
+              <iframe src={preview.url} title={preview.name} className="w-full h-[78vh] bg-white" />
+            ) : preview.mime.startsWith('image/') ? (
+              <div className="max-h-[78vh] overflow-auto flex items-start justify-center p-4">
+                <img src={preview.url} alt={preview.name} className="max-w-full h-auto rounded-lg" />
+              </div>
+            ) : (
+              <div className={`px-6 py-10 text-center text-sm ${text.muted}`}>
+                This file type can't be previewed in the browser.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

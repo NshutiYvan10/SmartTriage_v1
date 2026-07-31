@@ -5,7 +5,7 @@
  * data-sharing CONSENT capture. All keyed on the patient's national ID — the endpoints span
  * hospitals deliberately and are role-gated + audited server-side.
  */
-import { get, patch, post, put } from './client';
+import { get, patch, post, put, downloadBlob } from './client';
 import type { Page } from './types';
 
 // ── Safety summary (Phase 1) — always available ──
@@ -42,16 +42,62 @@ export interface CrossHospitalDischargeSummary {
   signed: boolean;
 }
 
+export interface CrossHospitalDiagnosis {
+  description: string | null;
+  icdCode: string | null;
+  primary: boolean;
+  diagnosedByName: string | null;
+  diagnosedAt: string | null;
+}
+
+export interface CrossHospitalLabDocument {
+  id: string;
+  fileName: string | null;
+  sizeBytes: number;
+  uploadedByName: string | null;
+}
+
+export interface CrossHospitalLab {
+  testName: string | null;
+  status: string | null;
+  /** Findings text (imaging/ECG) or resulted value (labs); null until resulted. */
+  result: string | null;
+  resultUnit: string | null;
+  critical: boolean;
+  abnormal: boolean;
+  priority: string | null;
+  orderedAt: string | null;
+  resultedAt: string | null;
+  /** Attached report documents (film/scan/PDF) — bytes served by the gated deep-record endpoint. */
+  documents: CrossHospitalLabDocument[] | null;
+}
+
+export interface CrossHospitalSafetyEvent {
+  /** SEPSIS_SCREENING · INFECTION_SCREENING */
+  kind: string;
+  label: string | null;
+  detail: string | null;
+  /** CRITICAL · WARNING · INFO — drives the badge colour. */
+  severity: string | null;
+  at: string | null;
+}
+
 export interface CrossHospitalVisitSummary {
   visitNumber: string | null;
   /** ISO-8601 instant `YYYY-MM-DDTHH:mm:ssZ` (backend `Instant`); safe for `new Date(...)`. */
   arrivalTime: string | null;
   status: string | null;
+  chiefComplaint: string | null;
+  triageCategory: string | null;
   diagnoses: string[] | null;
   dischargeSummaries: CrossHospitalDischargeSummary[] | null;
   /** All labs/investigations, each tagged [CRITICAL]/[ABNORMAL] where applicable. */
   labs: string[] | null;
   keyNotes: string[] | null;
+  /** Structured detail — preferred by the UI over the flat strings above. */
+  diagnosisDetails: CrossHospitalDiagnosis[] | null;
+  labDetails: CrossHospitalLab[] | null;
+  safetyEvents: CrossHospitalSafetyEvent[] | null;
 }
 
 export interface CrossHospitalHospitalSection {
@@ -136,6 +182,13 @@ export const crossHospitalApi = {
     return get<CrossHospitalDeepRecord>(
       `/patient-identity/deep-record?nationalId=${enc(nationalId)}${reason}`);
   },
+
+  /** Fetch one deep-record report document's bytes (for in-app preview) — served under the
+   *  same consent / recent-break-the-glass gate as the record itself. */
+  fetchDeepRecordDocumentBlob: (nationalId: string, documentId: string, fallbackName = 'report') =>
+    downloadBlob(
+      `/patient-identity/deep-record/documents/${enc(documentId)}/download?nationalId=${enc(nationalId)}`,
+      fallbackName),
 };
 
 export const dataSharingConsentApi = {

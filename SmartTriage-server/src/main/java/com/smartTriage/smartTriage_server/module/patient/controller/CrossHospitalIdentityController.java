@@ -1,17 +1,23 @@
 package com.smartTriage.smartTriage_server.module.patient.controller;
 
 import com.smartTriage.smartTriage_server.common.dto.ApiResponse;
+import com.smartTriage.smartTriage_server.module.lab.entity.LabReportDocument;
 import com.smartTriage.smartTriage_server.module.patient.dto.CrossHospitalDeepRecordResponse;
 import com.smartTriage.smartTriage_server.module.patient.dto.CrossHospitalSafetySummaryResponse;
 import com.smartTriage.smartTriage_server.module.patient.service.CrossHospitalDeepRecordService;
 import com.smartTriage.smartTriage_server.module.patient.service.CrossHospitalIdentityService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.UUID;
 
 /**
  * Cross-hospital patient identity (Phase 1). Lets a registrar / clinician at any SmartTriage
@@ -52,6 +58,32 @@ public class CrossHospitalIdentityController {
             @RequestParam(required = false) String breakTheGlassReason) {
         return ResponseEntity.ok(ApiResponse.success(
                 crossHospitalDeepRecordService.getByNationalId(nationalId, breakTheGlassReason)));
+    }
+
+    /**
+     * Stream one report document referenced by the deep record (film/scan/PDF), under the same
+     * gate as the record itself: live consent, or a break-the-glass event by this actor within
+     * the last hour. Ownership (document → visit → patient → identity) is verified server-side;
+     * anything else reads as 404. The per-hospital document endpoints stay hospital-scoped —
+     * this is the only cross-hospital door, and every read is audited with its basis.
+     */
+    @GetMapping("/deep-record/documents/{documentId}/download")
+    @PreAuthorize("@clinicalAuthz.canAccessCrossHospitalDeepRecord(authentication)")
+    public ResponseEntity<byte[]> downloadDeepRecordDocument(
+            @RequestParam String nationalId,
+            @PathVariable UUID documentId) {
+        LabReportDocument doc = crossHospitalDeepRecordService.getDeepRecordDocument(nationalId, documentId);
+        MediaType mediaType;
+        try {
+            mediaType = MediaType.parseMediaType(doc.getContentType());
+        } catch (Exception e) {
+            mediaType = MediaType.APPLICATION_OCTET_STREAM;
+        }
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"" + doc.getFileName().replace("\"", "") + "\"")
+                .body(doc.getContent());
     }
 
     /**

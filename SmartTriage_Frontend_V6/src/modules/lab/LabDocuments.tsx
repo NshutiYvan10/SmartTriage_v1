@@ -13,12 +13,13 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
 import {
-  Paperclip, Upload, Download, Trash2, Loader2, FileText, AlertTriangle, FileCheck2,
+  Paperclip, Upload, Download, Trash2, Loader2, FileText, AlertTriangle, FileCheck2, Eye, X,
 } from 'lucide-react';
 import { labApi, type LabReportDocument } from '@/api/lab';
 import { investigationApi } from '@/api/investigations';
 import { useTheme } from '@/hooks/useTheme';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { ModalPortal } from '@/components/ModalPortal';
 
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,.tif,.tiff,application/pdf,image/png,image/jpeg,image/tiff';
 const MAX_BYTES = 15 * 1024 * 1024;
@@ -57,12 +58,14 @@ export const LabDocuments = forwardRef<LabDocumentsHandle, {
         list: () => investigationApi.listDocuments(investigationId),
         upload: (f: File, d?: string) => investigationApi.uploadDocument(investigationId, f, d),
         download: (id: string, name: string) => investigationApi.downloadDocument(investigationId, id, name),
+        fetchBlob: (id: string, name: string) => investigationApi.fetchDocumentBlob(investigationId, id, name),
         remove: (id: string) => investigationApi.deleteDocument(investigationId, id),
       }
     : {
         list: () => labApi.listDocuments(labOrderId!),
         upload: (f: File, d?: string) => labApi.uploadDocument(labOrderId!, f, d),
         download: (id: string, name: string) => labApi.downloadDocument(labOrderId!, id, name),
+        fetchBlob: (id: string, name: string) => labApi.fetchDocumentBlob(labOrderId!, id, name),
         remove: (id: string) => labApi.deleteDocument(labOrderId!, id),
       }), [labOrderId, investigationId]);
   const [docs, setDocs] = useState<LabReportDocument[]>([]);
@@ -74,12 +77,19 @@ export const LabDocuments = forwardRef<LabDocumentsHandle, {
   const [busyId, setBusyId] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
+  // The upload block is an OFFER, not a demand: open by default only while the
+  // order has no report yet (the performer's primary action); once documents
+  // exist it collapses behind a quiet "+ Attach another report" toggle.
+  const [uploadOpen, setUploadOpen] = useState<boolean | null>(null);
+
   const load = useCallback(async () => {
     if (!labOrderId && !investigationId) return;
     setLoading(true);
     try {
       const data = await doc.list();
-      setDocs(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setDocs(list);
+      setUploadOpen((prev) => (prev === null ? list.length === 0 : prev));
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Failed to load documents');
@@ -122,6 +132,30 @@ export const LabDocuments = forwardRef<LabDocumentsHandle, {
     finally { setBusyId(null); }
   };
 
+  // In-app preview — the report must be READABLE inside the system (PDF/image
+  // rendered in a modal), not download-only; a clinician mid-consult can't be
+  // hunting a downloads folder. Object URL is revoked on close.
+  const [preview, setPreview] = useState<{ url: string; name: string; mime: string; docId: string } | null>(null);
+  const doPreview = async (d: LabReportDocument) => {
+    setBusyId(d.id);
+    setErr(null);
+    try {
+      const { blob } = await doc.fetchBlob(d.id, d.fileName);
+      const mime = blob.type || d.contentType || '';
+      setPreview({ url: URL.createObjectURL(blob), name: d.fileName, mime, docId: d.id });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not open the report for viewing');
+    } finally {
+      setBusyId(null);
+    }
+  };
+  const closePreview = useCallback(() => {
+    setPreview((p) => { if (p) URL.revokeObjectURL(p.url); return null; });
+  }, []);
+  useEffect(() => () => { // unmount safety — never leak the object URL
+    setPreview((p) => { if (p) URL.revokeObjectURL(p.url); return null; });
+  }, []);
+
   // Deleting an attached diagnostic report is destructive and has no undo —
   // gate it behind an in-app confirmation instead of firing on one click.
   const [pendingDelete, setPendingDelete] = useState<LabReportDocument | null>(null);
@@ -163,9 +197,13 @@ export const LabDocuments = forwardRef<LabDocumentsHandle, {
                   {humanSize(d.sizeBytes)}{d.uploadedByName ? ` · ${d.uploadedByName}` : ''}{d.description ? ` · ${d.description}` : ''}
                 </p>
               </div>
+              <button type="button" onClick={() => doPreview(d)} disabled={busyId === d.id}
+                className="p-1.5 rounded-lg hover:bg-cyan-500/15 text-cyan-500" title="View in app">
+                {busyId === d.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
               <button type="button" onClick={() => doDownload(d)} disabled={busyId === d.id}
                 className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-white/10 text-white' : 'hover:bg-slate-200 text-slate-700'}`} title="Download">
-                {busyId === d.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                <Download className="w-3.5 h-3.5" />
               </button>
               {canManage && (
                 <button type="button" onClick={() => setPendingDelete(d)} disabled={busyId === d.id}
@@ -178,7 +216,17 @@ export const LabDocuments = forwardRef<LabDocumentsHandle, {
         </ul>
       )}
 
-      {canManage && (
+      {canManage && !uploadOpen && (
+        <button
+          type="button"
+          onClick={() => setUploadOpen(true)}
+          className={`inline-flex items-center gap-1.5 text-[11px] font-bold ${isDark ? 'text-cyan-300 hover:text-cyan-200' : 'text-cyan-600 hover:text-cyan-700'}`}
+        >
+          <Upload className="w-3 h-3" /> Attach another report
+        </button>
+      )}
+
+      {canManage && !!uploadOpen && (
         <div className="pt-1 space-y-1.5">
           <input ref={fileInput} type="file" accept={ACCEPT}
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
@@ -214,6 +262,46 @@ export const LabDocuments = forwardRef<LabDocumentsHandle, {
         onConfirm={() => pendingDelete && doDelete(pendingDelete)}
         onClose={() => setPendingDelete(null)}
       />
+
+      {/* In-app report viewer — PDF in an iframe, images inline; anything
+          else falls back to download. */}
+      {preview && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-[95] flex items-center justify-center p-4 bg-black/70" onClick={closePreview}>
+            <div
+              className={`w-full max-w-4xl rounded-2xl overflow-hidden flex flex-col ${isDark ? 'bg-slate-900' : 'bg-white'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`px-4 py-3 flex items-center gap-2 ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
+                <FileText className="w-4 h-4 text-cyan-500 flex-shrink-0" />
+                <p className={`flex-1 min-w-0 truncate text-sm font-bold ${text.heading}`}>{preview.name}</p>
+                <button
+                  type="button"
+                  onClick={() => { const d = docs.find((x) => x.id === preview.docId); if (d) void doDownload(d); }}
+                  className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-white/10 text-white' : 'hover:bg-slate-200 text-slate-700'}`}
+                  title="Download"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+                <button type="button" onClick={closePreview} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-white/10 text-white' : 'hover:bg-slate-200 text-slate-700'}`} aria-label="Close preview">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              {preview.mime.includes('pdf') ? (
+                <iframe src={preview.url} title={preview.name} className="w-full h-[78vh] bg-white" />
+              ) : preview.mime.startsWith('image/') ? (
+                <div className="max-h-[78vh] overflow-auto flex items-start justify-center p-4">
+                  <img src={preview.url} alt={preview.name} className="max-w-full h-auto rounded-lg" />
+                </div>
+              ) : (
+                <div className={`px-6 py-10 text-center text-sm ${text.muted}`}>
+                  This file type can't be previewed in the browser — use the download button above.
+                </div>
+              )}
+            </div>
+          </div>
+        </ModalPortal>
+      )}
     </div>
   );
 });

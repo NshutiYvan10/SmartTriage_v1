@@ -428,6 +428,18 @@ public class InvestigationService {
                                 .stream()
                                 .map(ClinicalMapper::toResponse)
                                 .collect(Collectors.toList());
+                // Recently-resulted studies stay on the worklist for 24 h — the report
+                // document (film/scan/PDF) often arrives AFTER the findings are saved,
+                // and without the row the technician had no way to attach or verify it
+                // (the study vanished from the worklist the moment it was resulted).
+                java.time.Instant resultedCutoff = java.time.Instant.now().minus(java.time.Duration.ofHours(24));
+                investigationRepository
+                                .findDiagnosticsWorklist(hospitalId, DIAGNOSTIC_WORKLIST_TYPES,
+                                                EnumSet.of(InvestigationStatus.RESULTED))
+                                .stream()
+                                .filter(i -> i.getResultedAt() != null && i.getResultedAt().isAfter(resultedCutoff))
+                                .map(ClinicalMapper::toResponse)
+                                .forEach(all::add);
                 return scopeToCoveredZones(hospitalId, all);
         }
 

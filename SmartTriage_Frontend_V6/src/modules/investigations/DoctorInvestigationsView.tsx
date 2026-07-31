@@ -30,6 +30,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
 import { LabTestDetailModal } from '@/modules/lab/LabTestDetailModal';
+import { ReportDocumentsModal } from './ReportDocumentsModal';
 
 type DetailTarget = { visitId: string; investigationId: string; testName: string };
 
@@ -115,6 +116,9 @@ export function DoctorInvestigationsView() {
   const [err, setErr] = useState<string | null>(null);
   const [filter, setFilter] = useState<'ALL' | InvestigationStatus>('ALL');
   const [detail, setDetail] = useState<DetailTarget | null>(null);
+  // Imaging/ECG report documents — the film/scan/PDF IS the deliverable for
+  // these, so the doctor must be able to open it right from this roll-up.
+  const [docsFor, setDocsFor] = useState<InvestigationResponse | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -236,6 +240,7 @@ export function DoctorInvestigationsView() {
                 isDark={isDark}
                 text={text}
                 onOpenDetail={setDetail}
+                onOpenDocs={setDocsFor}
               />
             );
           })}
@@ -250,6 +255,15 @@ export function DoctorInvestigationsView() {
           testName={detail.testName}
           onClose={() => setDetail(null)}
           onChanged={load}
+        />
+      )}
+      {docsFor && (
+        <ReportDocumentsModal
+          investigationId={docsFor.id}
+          testName={docsFor.testName}
+          patientName={docsFor.patientName}
+          canManage
+          onClose={() => setDocsFor(null)}
         />
       )}
     </div>
@@ -281,7 +295,7 @@ function FilterChip({
 }
 
 function SectionCard({
-  section, rows, cardClass, glassCard, glassInner, isDark, text, onOpenDetail,
+  section, rows, cardClass, glassCard, glassInner, isDark, text, onOpenDetail, onOpenDocs,
 }: {
   section: Section;
   rows: InvestigationResponse[];
@@ -291,6 +305,7 @@ function SectionCard({
   isDark: boolean;
   text: { heading: string; muted: string; body: string; accent: string; label: string };
   onOpenDetail: (t: DetailTarget) => void;
+  onOpenDocs: (r: InvestigationResponse) => void;
 }) {
   const Icon = section.icon;
   return (
@@ -369,8 +384,9 @@ function SectionCard({
               )}
             </Link>
             {/* Lab tests carry rich per-analyte detail — drill in without leaving
-                this roll-up. Imaging/ECG have no lab record, so just open the visit. */}
-            {r.labRouted && (
+                this roll-up. Imaging/ECG carry the report DOCUMENT instead (the
+                film/scan/PDF is the deliverable) — open its attachments panel. */}
+            {r.labRouted ? (
               <button
                 type="button"
                 onClick={() => onOpenDetail({ visitId: r.visitId, investigationId: r.id, testName: r.testName })}
@@ -379,6 +395,16 @@ function SectionCard({
                 }`}
               >
                 <FileSearch className="w-3 h-3" /> View details
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onOpenDocs(r)}
+                className={`inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold rounded-xl transition-colors ${
+                  isDark ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                <FileSearch className="w-3 h-3" /> Report docs
               </button>
             )}
             <Link
