@@ -107,6 +107,46 @@ button { font-family:inherit; color:inherit; background:none; border:none; curso
 .mini .sc { color:var(--sev,#889); font-size:11.5px; font-weight:700; letter-spacing:.5px; }
 .mini .pv { color:var(--mut); font-size:12px; margin-top:4px; font-variant-numeric:tabular-nums; }
 
+/* ---------- ROUNDS (roaming spot-check cart) ----------
+   One cart, so the active check is the hero and the worklist is a queue
+   beneath it. Rows are ≥56px like every other touch target here. */
+.rd-active { border-left:5px solid var(--sev,#334); }
+.rd-top { display:flex; align-items:flex-start; gap:10px; margin-bottom:12px; }
+.rd-who { font-weight:800; font-size:17px; }
+.rd-meta { color:var(--mut); font-size:12px; margin-top:2px; }
+.rd-label { color:var(--mut); font-size:11.5px; font-weight:700; letter-spacing:.6px;
+            text-transform:uppercase; margin-bottom:8px; }
+.rd-cancel { margin-left:auto; min-height:44px; padding:0 14px; border-radius:12px;
+             background:rgba(229,72,77,.14); color:var(--r); font-weight:700; font-size:13px;
+             border:1px solid rgba(229,72,77,.3); }
+.rd-prog { color:var(--sev,var(--mut)); font-size:12.5px; font-weight:700; margin-top:10px;
+           letter-spacing:.3px; font-variant-numeric:tabular-nums; }
+.rd-idle { display:flex; align-items:center; gap:14px; }
+.rd-idle-ico { width:46px; height:46px; flex:0 0 auto; border-radius:50%; display:flex;
+               align-items:center; justify-content:center; font-size:22px;
+               background:var(--panel2); color:var(--teal); }
+.rd-row { display:flex; align-items:center; gap:10px; min-height:56px;
+          border-bottom:1px solid var(--line); padding:6px 2px; }
+.rd-row:last-child { border-bottom:none; }
+.rd-row-main { min-width:0; flex:1; }
+.rd-row-name { font-weight:700; font-size:14.5px; display:flex; align-items:center; gap:7px; }
+.rd-cat { font-size:10px; font-weight:800; letter-spacing:.5px; border-radius:999px;
+          padding:2px 7px; }
+.rd-cat.cRED { background:rgba(229,72,77,.16); color:var(--r); }
+.rd-cat.cORANGE { background:rgba(240,140,0,.16); color:var(--o); }
+.rd-cat.cYELLOW { background:rgba(232,197,71,.16); color:var(--y); }
+.rd-cat.cGREEN { background:rgba(43,182,115,.16); color:var(--g); }
+.rd-due { color:var(--mut); } .rd-over { color:var(--r); font-weight:700; }
+.rd-go { min-height:48px; min-width:88px; border-radius:12px; font-weight:800; font-size:14px;
+         background:rgba(38,184,206,.16); color:var(--teal);
+         border:1px solid rgba(38,184,206,.34); }
+.rd-go:disabled { background:var(--panel2); color:var(--mut); border-color:var(--line); }
+.rd-hist { display:flex; align-items:center; gap:8px; color:var(--mut); font-size:12.5px;
+           padding:5px 2px; font-variant-numeric:tabular-nums; }
+.rd-hist .dot { width:8px; height:8px; border-radius:50%; background:var(--sev,#556);
+                flex:0 0 auto; }
+.scen:disabled { opacity:.45; }
+
 /* ---------- SIMULATE ---------- */
 .sim-card { border-left:5px solid var(--sev,#334); }
 .sim-head { display:flex; align-items:center; gap:10px; }
@@ -297,6 +337,13 @@ button { font-family:inherit; color:inherit; background:none; border:none; curso
       <div class="card" style="padding:4px 2px;" id="reglist"><div class="reg-note">Loading…</div></div>
     </div>
 
+    <!-- ROUNDS — the roaming General-zone spot-check cart -->
+    <div class="view" id="v-rounds">
+      <div class="h-row"><h2>Vitals rounds &mdash; roaming cart</h2>
+        <div class="sub" id="rd-sub"></div></div>
+      <div id="rd-body"></div>
+    </div>
+
     <!-- SYNC -->
     <div class="view" id="v-sync">
       <div class="h-row"><h2>Backend link &amp; queue</h2><div class="sub" id="sync-url"></div></div>
@@ -331,6 +378,7 @@ button { font-family:inherit; color:inherit; background:none; border:none; curso
   <div id="tabs">
     <button class="tab active" data-v="live" onclick="tabTo('live')"><span class="ico">◉</span>LIVE</button>
     <button class="tab" data-v="sim" onclick="tabTo('sim')"><span class="ico">⚡</span>SIMULATE</button>
+    <button class="tab" data-v="rounds" onclick="tabTo('rounds')" id="tab-rounds" style="display:none;"><span class="ico">⊙</span>ROUNDS</button>
     <button class="tab" data-v="reg" onclick="tabTo('reg')"><span class="ico">▤</span>REGISTRY</button>
     <button class="tab" data-v="sync" onclick="tabTo('sync')"><span class="ico">⇅</span>SYNC<span class="badge" id="qbadge"></span></button>
   </div>
@@ -411,6 +459,12 @@ async function poll() {
   state = await r.json();
   render();
 }
+/* Patient names and visit numbers come from the backend — never interpolate
+   them into HTML raw. */
+function esc(v) {
+  return String(v == null ? "" : v).replace(/[&<>"']/g,
+    ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
 function fmtAge(sec) {
   if (sec == null) return "";
   if (sec < 90) return Math.round(sec) + "s";
@@ -427,7 +481,7 @@ function render() {
   const b = $("qbadge");
   b.style.display = state.queueDepth > 0 ? "block" : "none";
   b.textContent = state.queueDepth;
-  renderLive(); renderSim(); renderSync();
+  renderLive(); renderSim(); renderRoaming(); renderSync();
 }
 
 /* ---------------- LIVE ---------------- */
@@ -469,7 +523,8 @@ function renderLive() {
     return `<div class="mini sev${s.severity}">
       <div class="nm">${s.name}</div>
       <div class="sc">${labelOf(s).toUpperCase()}</div>
-      <div class="pv">HR ${p.heartRate ?? "-"} · SpO2 ${p.spo2 ?? "-"} · ${p.systolicBp ?? "-"}/${p.diastolicBp ?? "-"}</div>
+      <div class="pv">HR ${p.heartRate ?? "-"} · SpO2 ${p.spo2 ?? "-"} · ${p.systolicBp ?? "-"}/${p.diastolicBp ?? "-"}${
+        (p.glucose ?? p.bloodGlucose) != null ? " · glu " + (p.glucose ?? p.bloodGlucose) : ""}</div>
     </div>`;
   }).join("") : `<div class="none" style="grid-column:1/-1; padding:14px; font-size:12.5px;">No simulations running — start one on the Simulate tab.</div>`;
 }
@@ -506,6 +561,126 @@ async function toggleSim(serial) {
   await fetch(`/kiosk/api/sim/${serial}/toggle`, { method:"POST" }); poll();
 }
 
+/* ---------------- ROUNDS (roaming spot-check cart) ---------------- */
+function renderRoaming() {
+  const r = state && state.roaming;
+  $("tab-rounds").style.display = r ? "flex" : "none";
+  if (!r) return;
+  const checking = r.phase === "checking";
+  $("rd-sub").textContent = `${r.name} · ${r.zone} · ${r.completedCount} check${r.completedCount === 1 ? "" : "s"} done`;
+
+  /* One cart, so its state is the headline: who it is on, how far through the
+     observation set, and whether the cuff has reported yet (BP is what ends
+     the check, so it is the honest progress indicator). */
+  const p = r.payload || {};
+  let head;
+  if (checking) {
+    const cuff = r.cuffInSeconds > 0
+      ? `cuff inflating &middot; BP in ${r.cuffInSeconds}s`
+      : (r.bpReported ? "BP recorded &middot; completing" : "cuff cycling");
+    head = `<div class="card rd-active sev${r.severity}">
+      <div class="rd-top">
+        <div><div class="rd-who">${esc(r.patientName) || "patient"}</div>
+             <div class="rd-meta">${labelForScenario(r)} &middot; ${r.elapsed}s &middot; ${r.readingsSent} reading${r.readingsSent === 1 ? "" : "s"} sent</div></div>
+        <button class="rd-cancel" onclick="roamCancel()">Cancel check</button>
+      </div>
+      <div class="vitals">
+        <div class="vt hr"><div class="v">${p.heartRate ?? "--"}</div><div class="l">HR bpm</div></div>
+        <div class="vt spo2"><div class="v">${p.spo2 ?? "--"}</div><div class="l">SpO2 %</div></div>
+        <div class="vt rr"><div class="v">${p.respiratoryRate ?? "--"}</div><div class="l">RESP /min</div></div>
+        <div class="vt temp"><div class="v">${p.temperature ?? "--"}</div><div class="l">TEMP °C</div></div>
+        <div class="vt bp"><div class="v">${p.systolicBp != null ? p.systolicBp + "/" + p.diastolicBp : "···"}</div><div class="l">BP mmHg</div></div>
+      </div>
+      <div class="rd-prog">${cuff}${p.bloodGlucose != null ? " &middot; glucose " + p.bloodGlucose + " mmol/L" : ""}</div>
+    </div>`;
+  } else {
+    const why = !r.staffSession
+      ? "Sign in with staff credentials to run rounds &mdash; a PIN session cannot open a spot check."
+      : (!r.deviceId ? "Waiting to appear in the backend registry&hellip;"
+                     : `Idle &middot; cart is ${esc(r.deviceStatus || "?")} and available to the ward`);
+    head = `<div class="card"><div class="rd-idle">
+      <div class="rd-idle-ico">⊙</div>
+      <div><div class="rd-who">Cart idle</div><div class="rd-meta">${why}</div></div>
+    </div></div>`;
+  }
+
+  /* What the cart will FIND at the next patient — chosen before wheeling over. */
+  const scen = `<div class="card"><div class="rd-label">What the next patient's observations will show</div>
+    <div class="scen-row">${r.scenarios.map(sc =>
+      `<button class="scen s${sc.severity} ${sc.key === r.scenario ? "on" : ""}"
+               onclick="roamScenario('${sc.key}')" ${checking ? "disabled" : ""}>${sc.label}
+         <small>${esc(sc.note || "")}</small></button>`).join("")}</div></div>`;
+
+  /* The worklist IS the clinical reason the cart exists: patients whose recheck
+     is due. Ordered by urgency by the backend; we keep that order. */
+  let list;
+  if (r.worklistError) {
+    const msg = {
+      "no-staff-session": "Staff login required to read the recheck worklist.",
+      "backend-down": "Backend unreachable.",
+      "not-authorised-for-zone": `Your account cannot receive ${esc(r.zone)} alerts &mdash; a ward nurse needs a current shift in that zone.`,
+      "not-authorised-pass-a-zone": "Your account cannot see all zones &mdash; pick a zone.",
+    }[r.worklistError] || esc(r.worklistError);
+    list = `<div class="reg-note">${msg}</div>`;
+  } else if (!r.worklist.length) {
+    list = `<div class="reg-note">${r.worklistAgeSeconds == null
+      ? "Tap Refresh to load the patients due a recheck."
+      : "Nobody is due a recheck in " + esc(r.zone) + " right now."}</div>`;
+  } else {
+    list = r.worklist.map(w => {
+      const due = w.overdue ? `<span class="rd-over">${Math.abs(Math.round(w.minutesUntilDue))}m overdue</span>`
+                            : `<span class="rd-due">due in ${Math.round(w.minutesUntilDue)}m</span>`;
+      const busy = w.checkInProgress || checking;
+      return `<div class="rd-row">
+        <div class="rd-row-main">
+          <div class="rd-row-name">${esc(w.name)} <span class="rd-cat c${esc(w.category)}">${esc(w.category)}</span></div>
+          <div class="rd-meta">${esc(w.visitNumber)}${w.bedCode ? " &middot; " + esc(w.bedCode) : ""} &middot; ${due}</div>
+        </div>
+        <button class="rd-go" ${busy ? "disabled" : ""} onclick="roamStart('${w.visitId}')">
+          ${w.checkInProgress ? "in progress" : "Check"}</button>
+      </div>`;
+    }).join("");
+  }
+
+  const hist = r.history.length ? `<div class="card"><div class="rd-label">This round</div>
+    ${r.history.map(h => `<div class="rd-hist"><span class="dot sev${h.severity}"></span>
+      ${esc(h.patient) || "patient"} &middot; ${esc(h.result)} &middot; ${h.seconds}s</div>`).join("")}</div>` : "";
+
+  $("rd-body").innerHTML = head + scen +
+    `<div class="card"><div class="h-row" style="margin:0 0 6px;">
+       <div class="rd-label">Due a recheck in ${esc(r.zone)}</div>
+       <button class="toggle" onclick="roamWorklist()">↻ Refresh</button></div>${list}</div>` + hist;
+}
+function labelForScenario(r) {
+  const s = (r.scenarios || []).find(x => x.key === r.scenario);
+  return esc(s ? s.label : r.scenario);
+}
+async function roamWorklist() {
+  const res = await fetch("/kiosk/api/roaming/worklist", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ zone: (state.roaming || {}).zone || "" }),
+  }).then(r => r.json()).catch(() => null);
+  if (res && res.error) toast(res.error);
+  poll();
+}
+async function roamStart(visitId) {
+  const res = await fetch("/kiosk/api/roaming/start", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ visitId }),
+  }).then(r => r.json()).catch(() => null);
+  if (res && !res.ok) toast(res.error || "Could not start the check");
+  else toast("Spot check started");
+  poll();
+}
+async function roamCancel() {
+  await fetch("/kiosk/api/roaming/cancel", { method: "POST" });
+  toast("Check cancelled"); poll();
+}
+async function roamScenario(key) {
+  await fetch(`/kiosk/api/roaming/scenario/${key}`, { method: "POST" });
+  poll();
+}
+
 /* ---------------- tabs / REGISTRY ---------------- */
 function tabTo(v) {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.v === v));
@@ -537,6 +712,10 @@ async function loadRegistry() {
         <div class="reg-name">${d.name || d.serial}</div>
         <div class="reg-meta">${d.serial} · ${d.type || ""} · ${d.status || "?"}
           ${d.lastHeartbeatAt ? " · hb " + fmtAge((Date.now() - new Date(d.lastHeartbeatAt)) / 1000) + " ago" : ""}
+          ${/* lastDataAt was fetched and then thrown away, so a device that had
+                posted 3 seconds ago but not heartbeated read as plain dead —
+                exactly how the streaming paramedic monitor hid for days. */""}
+          ${d.lastDataAt ? " · data " + fmtAge((Date.now() - new Date(d.lastDataAt)) / 1000) + " ago" : ""}
           ${d.battery != null ? " · bat " + d.battery + "%" : ""}
           ${d.firmware ? " · fw " + d.firmware : ""}</div>
       </div>

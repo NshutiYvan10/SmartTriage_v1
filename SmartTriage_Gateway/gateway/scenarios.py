@@ -78,6 +78,33 @@ TRIAGE: dict[str, Scenario] = {s.key: s for s in [
                   " and the sepsis screen goes positive"),
 ]}
 
+# ROAMING — the shared General-zone spot-check cart. Not a continuous
+# monitor: one device wheeled between chair patients, taking a single set of
+# observations each time (the backend closes the SPOT_CHECK session itself
+# once HR + SpO2 + a BP have landed). The presets are therefore whole
+# OBSERVATION SETS, chosen to exercise what a rounds nurse actually meets in
+# a chair area — including the one case the zone exists to catch: a patient
+# who looked GREEN at the front door and is quietly deteriorating.
+ROAMING: dict[str, Scenario] = {s.key: s for s in [
+    Scenario("reassuring",   "Reassuring",    0,  74, 98, 15, 36.7, 120, 78, glucose=5.4,
+             ramp_seconds=8.0,
+             note="unchanged since triage — the check simply resets the recheck clock"),
+    Scenario("drifting",     "Drifting",      1, 104, 95, 20, 37.6, 126, 80, glucose=5.8,
+             ramp_seconds=8.0,
+             note="mild derangement — earns a shorter recheck interval, not a move"),
+    Scenario("silent_hypoxia", "Silent hypoxia", 3,  96, 88, 24, 37.1, 118, 74, glucose=5.5,
+             ramp_seconds=8.0,
+             note="SpO2 88 in a chair patient — auto-retriages and raises a"
+                  " GENERAL→RESUS transfer for a bed"),
+    Scenario("occult_sepsis", "Occult sepsis", 4, 126, 91, 28, 38.9,  92, 58, glucose=6.4,
+             ramp_seconds=8.0,
+             note="the chair patient who should never have been in a chair —"
+                  " trips sepsis screening off a single rounds observation set"),
+    Scenario("hypoglycemic", "Hypoglycemia",  3,  98, 96, 18, 36.3, 116, 72, glucose=2.3,
+             ramp_seconds=8.0,
+             note="glucose 2.3 mmol/L found on rounds — fires the hypoglycemia pathway"),
+]}
+
 PARAMEDIC: dict[str, Scenario] = {s.key: s for s in [
     Scenario("stable",        "Stable",   0,  84, 97, 16, 36.9, 126, 80, glucose=5.6),
     Scenario("shock",         "Shock",     3, 132, 92, 28, 36.0,  78, 50, glucose=6.8,
@@ -91,9 +118,17 @@ FAMILIES: dict[str, dict[str, Scenario]] = {
     "bedside": BEDSIDE,
     "triage": TRIAGE,
     "paramedic": PARAMEDIC,
+    "roaming": ROAMING,
 }
 
-DEFAULT_SCENARIO = {"bedside": "normal", "triage": "green", "paramedic": "stable"}
+DEFAULT_SCENARIO = {"bedside": "normal", "triage": "green", "paramedic": "stable",
+                    "roaming": "reassuring"}
+
+#: The only roles devices.yaml may declare. Validated at load so a typo fails
+#: with a readable message instead of either silently becoming a bedside monitor
+#: (FAMILIES.get fallback) or killing the kiosk with a KeyError inside FastAPI's
+#: startup event, which leaves uvicorn up but serving nothing.
+ROLES: tuple[str, ...] = tuple(FAMILIES.keys())
 
 
 def family_for(role: str) -> dict[str, Scenario]:

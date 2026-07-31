@@ -108,6 +108,25 @@ class Forwarder:
                 return "queued"
             return "failed"
 
+    async def heartbeat(self, api_key: str) -> bool:
+        """Beat ONE device's own key. Simulated devices previously never did this
+        — their ONLINE state was a side effect of whichever ingest endpoint they
+        happened to use, so a sim that had nothing to post (an idle roaming cart)
+        or one whose endpoint did not stamp the heartbeat clock (the paramedic
+        monitor) was reported OFFLINE while running perfectly. Never queued: a
+        replayed proof-of-life is a lie about the past."""
+        if self.forced_down:
+            return False
+        try:
+            r = await self._client.post(self._base + HEARTBEAT,
+                                        headers={"X-Device-API-Key": api_key})
+            if r.status_code == 200:
+                self._link_ok()
+                return True
+        except Exception:
+            self.backend_up = False
+        return False
+
     async def passthrough(self, path: str, api_key: str, raw_body: bytes) -> tuple[int, str]:
         """Real-monitor pass-through: same path, same key, byte-identical body.
         Returns (status_code, response_text); on outage the reading is queued

@@ -228,6 +228,17 @@ public class DeviceService {
             com.smartTriage.smartTriage_server.module.iot.dto.DeviceTelemetryRequest req) {
         IoTDevice device = deviceRepository.findByApiKeyAndIsActiveTrue(apiKey)
                 .orElseThrow(() -> new ResourceNotFoundException("IoTDevice", "apiKey", "***"));
+        // Telemetry IS a sign of life. /ingest, /heartbeat and /hospital-registry all
+        // run processHeartbeat, but this path never did — so a PARAMEDIC_MONITOR (the
+        // only device type that speaks /device-telemetry) could stream perfectly every
+        // few seconds and still be reported OFFLINE forever: lastDataAt advanced while
+        // lastHeartbeatAt stayed frozen at registration and the stale-heartbeat
+        // watchdog kept flipping it back. That made the ambulance monitor look dead on
+        // ParamedicHome ("monitors online" counts status ONLINE) and in Monitor
+        // Management. Marked inline rather than via processHeartbeat on purpose: that
+        // method also bed-auto-pairs, which is meaningless for an ambulance monitor and
+        // would run on every single telemetry post.
+        markAliveFromTelemetry(device);
         // Recording gate (V99 — Monitor Management): a paused or out-of-service
         // monitor must NOT overwrite the vitals snapshot. The device keeps
         // posting (its own display is unaffected) and lastDataAt still advances
@@ -250,6 +261,20 @@ public class DeviceService {
         device.setLastVitalsAt(now);
         device.setLastDataAt(now);
         deviceRepository.save(device);
+    }
+
+    /**
+     * A telemetry post proves the device is reachable → advance the heartbeat clock and
+     * lift it out of REGISTERED/OFFLINE. MONITORING is deliberately left alone (it is a
+     * stronger state than ONLINE), matching {@link #processHeartbeat} and
+     * {@code RfidService.tap}.
+     */
+    private void markAliveFromTelemetry(IoTDevice device) {
+        device.setLastHeartbeatAt(Instant.now());
+        if (device.getStatus() == DeviceStatus.REGISTERED || device.getStatus() == DeviceStatus.OFFLINE) {
+            device.setStatus(DeviceStatus.ONLINE);
+            log.info("Device {} came online (telemetry)", device.getSerialNumber());
+        }
     }
 
     /** The latest device-keyed vitals snapshot a paramedic pulls into the EMS field-vitals. */
@@ -664,8 +689,8 @@ public class DeviceService {
                 .monitoringState(com.smartTriage.smartTriage_server.common.enums.MonitoringState.STARTING)
                 .monitoringStateAt(Instant.now())
                 // Spot-checks self-complete on a full validated vitals set
-                // (VitalStreamService) and are timed out by the sweep in
-                // VitalsRecheckService — otherwise identical to a normal
+                // (VitalStreamService.maybeCompleteSpotCheck) and are timed out
+                // by SpotCheckTimeoutSweep — otherwise identical to a normal
                 // session, so the whole ingest/validation/deterioration
                 // pipeline applies unchanged.
                 .sessionType(request.isSpotCheck()

@@ -23,6 +23,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from .auth import AuthManager, Session
 from .config import GatewayConfig
 from .forwarder import Forwarder, INGEST, TELEMETRY, HEARTBEAT, RFID_TAP
+from .roaming import RoamingEngine, RoamingState
 from .scenarios import family_for
 from .simulator import SimulatorEngine, SimState
 
@@ -34,7 +35,12 @@ cfg: GatewayConfig
 fwd: Forwarder
 engine: SimulatorEngine
 auth: AuthManager
+roaming: RoamingEngine | None = None      # the General-zone spot-check cart, if configured
 real_monitors: dict[str, dict] = {}       # serial → {name, last_seen, last_payload, ack}
+#: serial → backend device UUID + status, refreshed from the registry. /monitoring/start
+#: is keyed on the device's UUID, which only the backend knows, so the roaming cart
+#: cannot open a check until it has been seen in the registry at least once.
+device_ids: dict[str, dict] = {}
 _ws_clients: set[WebSocket] = set()
 _event_queue: asyncio.Queue = asyncio.Queue()
 
@@ -60,7 +66,7 @@ def notify(event: dict) -> None:
 # ====================================================================
 @app.on_event("startup")
 async def startup() -> None:
-    global cfg, fwd, engine, auth
+    global cfg, fwd, engine, auth, roaming
     cfg = GatewayConfig.load()
     fwd = Forwarder(cfg.backend_url, cfg.queue_db, notify)
     engine = SimulatorEngine(cfg.tx_interval_seconds, _send_sim, notify)
@@ -71,6 +77,15 @@ async def startup() -> None:
                        gateway_api_key=cfg.gateway_api_key)
 
     for dev in cfg.devices:
+        # The roaming cart is driven by its own engine: it is idle between
+        # patients (heartbeat only) and streams only while a spot check is open,
+        # which the free-running SimulatorEngine has no concept of.
+        if dev.role == "roaming":
+            if roaming is None:
+                roaming = RoamingEngine(dev, cfg.tx_interval_seconds,
+                                        _send_roaming, fwd.heartbeat, notify)
+                asyncio.create_task(roaming.run())
+            continue
         engine.add(dev)
         asyncio.create_task(engine.run(dev.serial))
 
@@ -78,7 +93,75 @@ async def startup() -> None:
     asyncio.create_task(fwd.health_loop())
     asyncio.create_task(auth.refresh_loop())
     asyncio.create_task(_gateway_heartbeat())
+    asyncio.create_task(_sim_heartbeats())
+    asyncio.create_task(_registry_sync())
     asyncio.create_task(_ws_pump())
+
+
+def _clinical_ctx(session: Session | None) -> tuple | None:
+    """(backend_url, staff access token, hospital id) for THIS session, or None.
+
+    Deliberately reads session.backend rather than auth.backend_identity: the
+    AuthManager keeps one shared identity for the appliance, so the global would
+    hand a PIN operator the last nurse's credentials — the spot check would be
+    attributed to a clinician who never touched the cart, and the patient
+    worklist would be readable behind the kiosk PIN. Opening a spot check is a
+    clinical act, so it requires the operator's OWN staff login."""
+    if session is None or session.kind != "staff":
+        return None
+    ident = session.backend
+    if not ident or not ident.access_token or not ident.hospital_id:
+        return None
+    return cfg.backend_url, ident.access_token, ident.hospital_id
+
+
+async def _sim_heartbeats() -> None:
+    """Proof of life for every SIMULATED device, on its own key.
+
+    Nothing did this before: a sim's ONLINE state was a side effect of whichever
+    ingest path it used. /ingest stamps the heartbeat clock, so bedside and
+    triage sims looked fine — but /device-telemetry did not, so the paramedic
+    monitor read OFFLINE forever while streaming, and an idle roaming cart (which
+    posts nothing at all between patients) would be demoted within ~60s and
+    disappear from the nurse's monitor picker. Silent during the outage drill so
+    a severed uplink still looks severed."""
+    while True:
+        if not fwd.forced_down:
+            for dev in cfg.devices:
+                # The roaming cart beats from inside its own loop, but only while
+                # idle — mid-check its /ingest posts already prove it is alive.
+                if dev.role == "roaming":
+                    continue
+                await fwd.heartbeat(dev.api_key)
+        await asyncio.sleep(15)
+
+
+async def _registry_sync() -> None:
+    """Keep serial → backend device UUID + status fresh.
+
+    The roaming cart needs its own UUID to open a spot check (/monitoring/start
+    is keyed on deviceId) and the console shows the backend's view of its status,
+    which is the thing that decides whether a nurse can pick it at all."""
+    while True:
+        devices, err = await auth.fetch_registry()
+        if not err and devices:
+            device_ids.clear()
+            for d in devices:
+                serial = str(d.get("serialNumber", ""))
+                if serial:
+                    device_ids[serial] = {"id": str(d.get("id", "")),
+                                          "status": str(d.get("status", ""))}
+        await asyncio.sleep(20)
+
+
+async def _send_roaming(st: RoamingState, payload: dict) -> str:
+    """Roaming readings are visit-bound observations — queue them if the uplink
+    drops, exactly like a bedside reading, since capturedAt travels inside."""
+    status = await fwd.post(INGEST, st.device.api_key, payload, queue_on_failure=True)
+    notify({"type": "tx", "source": st.device.name, "serial": st.device.serial,
+            "role": "roaming", "scenario": st.scenario_key,
+            "severity": st.severity(), "ack": status, "payload": payload})
+    return status
 
 
 async def _gateway_heartbeat() -> None:
@@ -253,6 +336,8 @@ async def state(request: Request) -> JSONResponse:
         for rm in real_monitors.values()
     ]
     oldest = fwd.queue_oldest_age()
+    reg = device_ids.get(roaming.st.device.serial, {}) if roaming else {}
+    session = _session_of(request)
     return JSONResponse({
         "backendUp": fwd.backend_up,
         "backendUrl": cfg.backend_url,
@@ -264,7 +349,69 @@ async def state(request: Request) -> JSONResponse:
         "drainedTotal": fwd.drained_total,
         "txOk": fwd.tx_ok, "txFail": fwd.tx_fail,
         "sims": sims, "real": reals,
+        "roaming": roaming.snapshot(reg.get("id", ""), reg.get("status", ""),
+                                    _clinical_ctx(session) is not None)
+                   if roaming else None,
     })
+
+
+# ── Roaming cart (General-zone spot checks) ──
+@app.post("/kiosk/api/roaming/worklist")
+async def roaming_worklist(request: Request) -> JSONResponse:
+    """Refresh the list of patients due a recheck, in the cart's zone."""
+    session = _session_of(request)
+    if not session:
+        return _unauthorized()
+    if not roaming:
+        return JSONResponse({"error": "no roaming cart configured"}, status_code=404)
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    err = await roaming.refresh_worklist(_clinical_ctx(session),
+                                        str(body.get("zone", "")))
+    return JSONResponse({"ok": not err, "error": err})
+
+
+@app.post("/kiosk/api/roaming/start")
+async def roaming_start(request: Request) -> JSONResponse:
+    """Wheel the cart to a patient: open a SPOT_CHECK session on their visit."""
+    session = _session_of(request)
+    if not session:
+        return _unauthorized()
+    if not roaming:
+        return JSONResponse({"error": "no roaming cart configured"}, status_code=404)
+    body = await request.json()
+    visit_id = str(body.get("visitId", ""))
+    if not visit_id:
+        return JSONResponse({"ok": False, "error": "visitId required"}, status_code=400)
+    reg = device_ids.get(roaming.st.device.serial, {})
+    ok, err = await roaming.start_check(_clinical_ctx(session), visit_id,
+                                       reg.get("id", ""))
+    return JSONResponse({"ok": ok, "error": err}, status_code=200 if ok else 409)
+
+
+@app.post("/kiosk/api/roaming/cancel")
+async def roaming_cancel(request: Request) -> JSONResponse:
+    session = _session_of(request)
+    if not session:
+        return _unauthorized()
+    if not roaming:
+        return JSONResponse({"error": "no roaming cart configured"}, status_code=404)
+    ok, err = await roaming.cancel_check(_clinical_ctx(session))
+    return JSONResponse({"ok": ok, "error": err})
+
+
+@app.post("/kiosk/api/roaming/scenario/{key}")
+async def roaming_scenario(request: Request, key: str) -> JSONResponse:
+    """Choose what the cart will FIND at the next patient."""
+    if not _session_of(request):
+        return _unauthorized()
+    if not roaming:
+        return JSONResponse({"error": "no roaming cart configured"}, status_code=404)
+    ok = roaming.set_scenario(key)
+    return JSONResponse({"ok": ok}, status_code=200 if ok else 404)
 
 
 @app.post("/kiosk/api/sim/{serial}/scenario/{key}")
