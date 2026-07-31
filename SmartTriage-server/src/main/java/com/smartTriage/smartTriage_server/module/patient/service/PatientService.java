@@ -3,6 +3,7 @@ package com.smartTriage.smartTriage_server.module.patient.service;
 import com.smartTriage.smartTriage_server.common.enums.PregnancyStatus;
 import com.smartTriage.smartTriage_server.common.enums.VisitStatus;
 import com.smartTriage.smartTriage_server.common.exception.DuplicateResourceException;
+import com.smartTriage.smartTriage_server.common.exception.IdentityConflictException;
 import com.smartTriage.smartTriage_server.common.exception.ResourceNotFoundException;
 import com.smartTriage.smartTriage_server.module.hospital.entity.Hospital;
 import com.smartTriage.smartTriage_server.module.hospital.service.HospitalService;
@@ -12,6 +13,7 @@ import com.smartTriage.smartTriage_server.module.patient.dto.RegisterPatientRequ
 import com.smartTriage.smartTriage_server.module.patient.dto.RegisterPatientResponse;
 import com.smartTriage.smartTriage_server.module.patient.dto.UpdatePregnancyStatusRequest;
 import com.smartTriage.smartTriage_server.module.patient.entity.Patient;
+import com.smartTriage.smartTriage_server.module.patient.entity.PersonIdentity;
 import com.smartTriage.smartTriage_server.module.patient.mapper.PatientMapper;
 import com.smartTriage.smartTriage_server.module.patient.repository.MrnSequenceCounterRepository;
 import com.smartTriage.smartTriage_server.module.patient.repository.PatientRepository;
@@ -29,6 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -124,7 +128,25 @@ public class PatientService {
      * rolls back, preventing orphaned patient records with no visit.
      */
     @Transactional
+    /**
+     * Registrar-facing registration. STRICT about RFID cards: a card that already
+     * belongs to another patient is REJECTED (409) rather than silently adopted —
+     * see {@link #assertCardAssignable}.
+     */
     public RegisterPatientResponse registerPatientWithVisit(RegisterPatientRequest request) {
+        return registerPatientWithVisit(request, false);
+    }
+
+    /**
+     * Internal variant. {@code adoptExistingCard} is ONLY set true by the
+     * returning-patient path (RfidService.openVisit), which re-registers a
+     * patient whose card legitimately already anchors their shared identity.
+     * Deliberately NOT a field on the request DTO: it must not be settable by
+     * an API client, or the duplicate-card guard could be bypassed from
+     * outside.
+     */
+    public RegisterPatientResponse registerPatientWithVisit(RegisterPatientRequest request,
+                                                            boolean adoptExistingCard) {
         Hospital hospital = hospitalService.findHospitalOrThrow(request.getHospitalId());
 
         // Duplicate detection across all Tier-1 deterministic identifiers.
@@ -164,7 +186,8 @@ public class PatientService {
                 .build();
         patient.setHospital(hospital);
         patient.setMedicalRecordNumber(generateMRN(hospital.getHospitalCode()));
-        linkSharedIdentity(patient, blankToNull(request.getRfidCardId()));
+        linkSharedIdentity(patient, blankToNull(request.getRfidCardId()),
+                          adoptExistingCard, request.getHospitalId());
         applyStructuredLocation(patient,
                 request.getProvinceId(), request.getDistrictId(),
                 request.getSectorId(), request.getCellId(), request.getVillageId());
@@ -610,9 +633,88 @@ public class PatientService {
      * of re-registered blank. No national ID (e.g. unidentified placeholders) → stays local.
      */
     private void linkSharedIdentity(Patient patient, String rfidCardId) {
+        linkSharedIdentity(patient, rfidCardId, false, null);
+    }
+
+    private void linkSharedIdentity(Patient patient, String rfidCardId,
+                                    boolean adoptExistingCard, java.util.UUID hospitalId) {
+        if (!adoptExistingCard) {
+            assertCardAssignable(rfidCardId, hospitalId);
+        }
         patient.setPersonIdentity(
                 personIdentityService.findOrCreate(patient.getNationalId(), rfidCardId));
     }
+
+    /**
+     * Refuse to register a NEW patient onto an RFID card that another patient already
+     * holds — a wristband must resolve to exactly one person.
+     *
+     * <p>WHY THIS IS NEEDED even though the DB has a unique index: that index is on
+     * {@code person_identities.rfid_card_id}, so it stops two IDENTITIES sharing a card
+     * but not two PATIENTS sharing one identity. And
+     * {@link PersonIdentityService#findOrCreate} deliberately returns the card's existing
+     * identity when the new patient supplies no national ID (the "unidentified placeholder
+     * is now identified" upgrade), so a fresh registration with an in-use card was silently
+     * adopting the other patient's identity. The consequence is not cosmetic: a later tap
+     * resolves through {@code findByPersonIdentityIdAndHospitalIdAndIsActiveTrue(...).get(0)}
+     * — an ARBITRARY one of the two patients — so the desk would open the wrong chart.
+     *
+     * <p>Privacy: the other patient is named ONLY when they are registered at the SAME
+     * hospital as the caller. A card held by a patient at another SmartTriage hospital is
+     * reported without identifying details — the registrar still learns the card is taken
+     * and what to do, without a cross-tenant PHI disclosure.
+     */
+    private void assertCardAssignable(String rfidCardId, java.util.UUID hospitalId) {
+        describeCardHolder(rfidCardId, hospitalId)
+                .ifPresent(holder -> { throw new IdentityConflictException(holder.message()); });
+    }
+
+    /**
+     * Who currently holds this RFID card, as far as {@code hospitalId} is allowed to know.
+     *
+     * <p>Empty means the card is free to assign. Present means it is taken, and
+     * {@link CardHolder#message()} is the registrar-facing explanation.
+     *
+     * <p>PHI scoping is the reason this returns a describing object rather than the Patient:
+     * a holder at ANOTHER hospital is reported as {@code sameHospital=false} with no name, no
+     * MRN and no id. The registrar still learns the card is taken and what to do next, but a
+     * card tap cannot be used to enumerate patients at other hospitals.
+     */
+    @Transactional(readOnly = true)
+    public Optional<CardHolder> describeCardHolder(String rfidCardId, UUID hospitalId) {
+        String card = blankToNull(rfidCardId);
+        if (card == null) return Optional.empty();
+        PersonIdentity identity = personIdentityService.findByRfidCardId(card).orElse(null);
+        if (identity == null) return Optional.empty();
+
+        if (hospitalId != null) {
+            List<Patient> here = patientRepository
+                    .findByPersonIdentityIdAndHospitalIdAndIsActiveTrue(identity.getId(), hospitalId);
+            if (!here.isEmpty()) {
+                Patient owner = here.get(0);
+                String name = String.format("%s %s", nullToEmpty(owner.getFirstName()),
+                        nullToEmpty(owner.getLastName())).trim();
+                return Optional.of(new CardHolder(true, owner.getId(), name,
+                        owner.getMedicalRecordNumber(), String.format(
+                        "This card is already assigned to %s (MRN %s). Tap it on the desk reader to "
+                        + "open their record, or give this patient a different card. To move the card "
+                        + "to this patient, use Replace card on their chart.",
+                        name.isEmpty() ? "another patient" : name, owner.getMedicalRecordNumber())));
+            }
+        }
+        boolean heldElsewhere = !patientRepository
+                .findByPersonIdentityIdAndIsActiveTrue(identity.getId()).isEmpty();
+        if (!heldElsewhere) return Optional.empty();
+        return Optional.of(new CardHolder(false, null, null, null,
+                "This card is already registered to a patient at another SmartTriage hospital. Tap it "
+                + "on the desk reader to open their record here, or give this patient a different card."));
+    }
+
+    /** The current holder of an RFID card, redacted when they are not at the asking hospital. */
+    public record CardHolder(boolean sameHospital, UUID patientId, String patientName,
+                             String medicalRecordNumber, String message) {}
+
+    private static String nullToEmpty(String v) { return v == null ? "" : v; }
 
     /**
      * Resolve any provided Rwanda-location IDs into entity references and

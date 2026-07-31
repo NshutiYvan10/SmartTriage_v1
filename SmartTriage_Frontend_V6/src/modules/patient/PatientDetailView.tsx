@@ -333,12 +333,19 @@ export function PatientDetailView() {
                 <span className={`text-sm font-medium ${text.muted}`}>RFID Card</span>
                 <div className="flex items-center gap-2">
                   <span className={`text-sm font-semibold ${text.heading}`}>{patient.rfidCardId || '—'}</span>
+                  {/* Lost/damaged-card workflow. Was an 11px bare-word link ("Replace") that
+                      registrars could not find — spelled out as a real labelled control so the
+                      replacement path is discoverable at the desk. */}
                   {canManageCard && realPatientId && (
                     <button
                       onClick={() => setShowReplaceCard(true)}
-                      className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 px-2 py-0.5 rounded-xl hover:bg-cyan-500/20 transition-colors"
+                      title={patient.rfidCardId
+                        ? 'Issue a different card to this patient (lost or damaged card)'
+                        : 'Assign an RFID card to this patient'}
+                      className="flex items-center gap-1.5 text-[11px] font-bold text-cyan-600 dark:text-cyan-300 bg-cyan-500/15 border border-cyan-500/30 px-2.5 py-1 rounded-xl hover:bg-cyan-500/25 transition-colors whitespace-nowrap"
                     >
-                      {patient.rfidCardId ? 'Replace' : 'Assign'}
+                      <CreditCard className="w-3 h-3" />
+                      {patient.rfidCardId ? 'Replace card' : 'Assign card'}
                     </button>
                   )}
                 </div>

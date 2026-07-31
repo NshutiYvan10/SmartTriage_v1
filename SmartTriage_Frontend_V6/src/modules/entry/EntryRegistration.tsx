@@ -193,6 +193,8 @@ export function EntryRegistration() {
   const [rfidDevices, setRfidDevices] = useState<RfidDevice[]>([]);
   const [rfidDeviceId, setRfidDeviceId] = useState<string>(() => localStorage.getItem('st-rfid-device') || '');
   const [capturingCard, setCapturingCard] = useState(false);
+  /** Why the last tap-to-capture was refused (card already in use), shown under the field. */
+  const [cardError, setCardError] = useState<string | null>(null);
 
   useEffect(() => {
     const hid = authUser?.hospitalId;
@@ -211,12 +213,22 @@ export function EntryRegistration() {
     if (!rfidDeviceId || !hid) return;
     if (rfidDeviceId) localStorage.setItem('st-rfid-device', rfidDeviceId);
     setCapturingCard(true);
+    setCardError(null);
     let unsub: (() => void) | null = null;
     let timer = 0;
     const stop = () => { if (unsub) unsub(); unsub = null; if (timer) window.clearTimeout(timer); setCapturingCard(false); };
     timer = window.setTimeout(stop, 32000); // a touch beyond the 30s server bind window
     unsub = subscribeToRfidEvents(hid, (e: RfidEvent) => {
       if (e?.type === 'CARD_BIND' && e.cardId) {
+        // A card already assigned to another patient must NOT land in this form — one
+        // wristband, one person. Registration would reject it server-side anyway; saying
+        // so at the tap saves the registrar filling the whole form first.
+        if (e.inUse) {
+          setCardError(e.inUseMessage || 'That card is already assigned to another patient.');
+          stop();
+          return;
+        }
+        setCardError(null);
         setFormData((f) => ({ ...f, rfidCardId: e.cardId }));
         stop();
       }
@@ -932,6 +944,12 @@ export function EntryRegistration() {
                       <option value="">Select desk reader…</option>
                       {rfidDevices.map((d) => <option key={d.id} value={d.id}>{d.deviceName}</option>)}
                     </select>
+                  )}
+                  {cardError && (
+                    <div className="mt-1.5 flex items-start gap-1.5 px-2.5 py-2 rounded-lg bg-rose-500/15 border border-rose-500/30">
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-px" />
+                      <p className="text-[11px] font-semibold text-rose-600 dark:text-rose-300">{cardError}</p>
+                    </div>
                   )}
                   <p className={`text-[11px] ${text.muted} mt-1`}>
                     Becomes this patient's permanent ID across all SmartTriage hospitals.

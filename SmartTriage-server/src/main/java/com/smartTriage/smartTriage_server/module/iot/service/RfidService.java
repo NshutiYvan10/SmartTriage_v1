@@ -86,6 +86,24 @@ public class RfidService {
             device.setRfidBindUntil(null);
             ioTDeviceRepository.save(device);
             if (card != null) {
+                // A card that ALREADY belongs to someone must not be captured onto a second
+                // patient — a wristband has to resolve to exactly one person. Registration
+                // would reject it anyway (PatientService.assertCardAssignable), but telling
+                // the registrar HERE, at the tap, saves them filling a whole form first.
+                var holder = patientService.describeCardHolder(card, hospitalId);
+                if (holder.isPresent()) {
+                    Map<String, Object> busy = new HashMap<>();
+                    busy.put("type", "CARD_BIND");
+                    busy.put("cardId", card);
+                    busy.put("inUse", true);
+                    busy.put("inUseMessage", holder.get().message());
+                    if (holder.get().patientId() != null) {
+                        busy.put("inUsePatientId", holder.get().patientId().toString());
+                        busy.put("inUsePatientName", holder.get().patientName());
+                    }
+                    realTimeEventPublisher.publishRfidEvent(hospitalId, busy);
+                    return RfidTapResponse.builder().result("CARD_IN_USE").build();
+                }
                 realTimeEventPublisher.publishRfidEvent(hospitalId, Map.of("type", "CARD_BIND", "cardId", card));
             }
             return RfidTapResponse.builder().result("CARD_CAPTURED").build();
@@ -234,7 +252,9 @@ public class RfidService {
                 .arrivalMode(request.getArrivalMode())
                 .chiefComplaint(request.getChiefComplaint())
                 .build();
-        return patientService.registerPatientWithVisit(reg);
+        // adoptExistingCard = true: this card ALREADY anchors this identity — we are
+        // re-registering the same person at this hospital, not assigning a taken card.
+        return patientService.registerPatientWithVisit(reg, true);
     }
 
     /**

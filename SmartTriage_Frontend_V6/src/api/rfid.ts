@@ -19,6 +19,13 @@ export interface RfidEvent {
    *  steer the registrar to confirm + resolve that temporary record (goal 4.4). */
   unidentified?: boolean;
   unidentifiedPatientId?: string;
+  /** Tap-to-capture refused: this card already belongs to another patient. The UI must NOT
+   *  fill the card field — a wristband has to resolve to exactly one person. */
+  inUse?: boolean;
+  inUseMessage?: string;
+  /** Only set when the holder is at THIS hospital (cross-hospital holders stay anonymous). */
+  inUsePatientId?: string;
+  inUsePatientName?: string;
 }
 
 export interface RfidDevice {

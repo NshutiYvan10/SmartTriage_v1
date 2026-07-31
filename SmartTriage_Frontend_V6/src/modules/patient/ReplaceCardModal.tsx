@@ -50,7 +50,13 @@ export function ReplaceCardModal({ patientId, patientName, currentCardId, onClos
     const stop = () => { if (unsub) unsub(); unsub = null; if (timer) window.clearTimeout(timer); setCapturing(false); };
     timer = window.setTimeout(stop, 32000);
     unsub = subscribeToRfidEvents(hospitalId, (e: RfidEvent) => {
-      if (e?.type === 'CARD_BIND' && e.cardId) { setNewCard(e.cardId); stop(); }
+      if (e?.type === 'CARD_BIND' && e.cardId) {
+        // Refuse a card that already belongs to someone else, rather than capturing it
+        // and letting the replace call fail after the fact.
+        if (e.inUse) { setError(e.inUseMessage || 'That card is already assigned to another patient.'); stop(); return; }
+        setNewCard(e.cardId);
+        stop();
+      }
     });
     try { await rfidApi.armBindMode(deviceId); } catch { stop(); }
   }, [deviceId, hospitalId]);

@@ -443,6 +443,10 @@ void handleTap(const String& uid) {
     result(true, "PATIENT FOUND", name, sub.length() ? sub : String("Start visit on screen"), beepFound);
   } else if (outcome == "CARD_CAPTURED") {
     result(true, "CARD CAPTURED", uid, "Filled on the form", beepCaptured);
+  } else if (outcome == "CARD_IN_USE") {
+    // Tap-to-capture refused: this card already belongs to another patient. Without this
+    // branch it fell through to "CARD NOT REGISTERED", which says the opposite of the truth.
+    result(false, "CARD ALREADY IN USE", uid, "Use a different card", beepError);
   } else {                               // NOT_FOUND
     result(false, "CARD NOT REGISTERED", uid, "Register patient", beepNotFound);
   }
