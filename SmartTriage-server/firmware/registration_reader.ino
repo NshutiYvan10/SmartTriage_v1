@@ -82,16 +82,35 @@ const char* WIFI_SSID     = "YOUR_WIFI_SSID";
 const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 
 // ======================== Server Configuration ======================
-// Base host of the SmartTriage backend (no trailing slash).
-// The reader now talks to the GATEWAY (Pi), which proxies /iot/rfid/tap to
-// the backend with this device's own key — so the address below never needs
-// to chase the backend laptop's IP again. Prefer the NAME: SERVER_MDNS_HOST
-// is resolved via mDNS after WiFi connects (and re-resolved automatically
-// after 3 consecutive failures); SERVER_HOST is the fixed fallback, which
-// on the Pi's own access point is always http://10.42.0.1:8090.
-const char* SERVER_MDNS_HOST = "smart-triage";   // "" disables name lookup
-const int   SERVER_MDNS_PORT = 8090;
-const char* SERVER_HOST     = "http://10.42.0.1:8090";
+// WHERE TAPS GO — the reader posts DIRECTLY TO THE BACKEND.
+//
+// Both possible targets expose the SAME endpoint (POST /api/v1/iot/rfid/tap)
+// and authenticate with the SAME header (X-Device-API-Key), so switching
+// between them is only the three constants below — no code change.
+//
+//   DIRECT TO BACKEND (this configuration): the desk reader sits on the same
+//     LAN as the backend, so a tap takes one hop instead of two. A tap is
+//     INTERACTIVE — the registrar is standing there waiting for the patient's
+//     chart to open — so removing the proxy removes both latency and a
+//     dependency. (Taps were never queued on the Pi anyway: a replayed stale
+//     tap would open the wrong patient, so the gateway always forwarded them
+//     verbatim and never buffered them. Going direct loses nothing.)
+//
+//   VIA THE PI GATEWAY (previous configuration): set SERVER_MDNS_HOST to
+//     "smart-triage" and the port to 8090. Use that when the Pi is the single
+//     point of egress — devices on the Pi's own access point, or a venue where
+//     the backend is not directly reachable from the registration desk.
+//
+// Either way, prefer the NAME over an address: SERVER_MDNS_HOST is resolved by
+// mDNS once WiFi is up and re-resolved automatically after 3 consecutive send
+// failures, so DHCP reshuffles never strand the reader. Give the hostname
+// WITHOUT the ".local" suffix.
+const char* SERVER_MDNS_HOST = "Nshutis-MacBook-Pro";  // backend host; "" disables name lookup
+const int   SERVER_MDNS_PORT = 8080;                   // backend port (gateway would be 8090)
+// Fixed fallback, used only until mDNS resolves — and if it never does. The
+// backend's IP moves with the network, which is precisely why the name above
+// is the primary mechanism; update this only if you need a hard-coded route.
+const char* SERVER_HOST     = "http://172.20.10.4:8080";
 // Pre-shared device API key — see PROVISIONING above. Sent as X-Device-API-Key.
 const char* DEVICE_API_KEY  = "PASTE_RFID_READER_API_KEY_HERE";
 const char* DEVICE_LABEL    = "Registration Desk";
