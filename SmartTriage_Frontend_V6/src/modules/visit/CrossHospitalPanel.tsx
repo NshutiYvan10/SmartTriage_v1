@@ -24,6 +24,7 @@ import {
   type CrossHospitalDiagnosis,
   type CrossHospitalLab,
   type CrossHospitalSafetyEvent,
+  type CrossHospitalSafetySummary,
 } from '@/api/crossHospital';
 import { ApiError } from '@/api/client';
 import { useTheme } from '@/hooks/useTheme';
@@ -127,6 +128,20 @@ export function CrossHospitalPanel({ nationalId }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Tier 1 of the disclosure ladder: while the deep record is LOCKED, show the
+  // always-available safety floor (allergies / conditions / active meds) right
+  // here — so the flow reads "you already see the safety minimum; breaking the
+  // glass adds the full history", instead of a bare padlock.
+  const [floor, setFloor] = useState<CrossHospitalSafetySummary | null>(null);
+  useEffect(() => {
+    if (!nationalId?.trim() || !record || record.accessGranted || !record.found) { setFloor(null); return; }
+    let alive = true;
+    crossHospitalApi.getSafetySummary(nationalId)
+      .then((s) => { if (alive) setFloor(s); })
+      .catch(() => { if (alive) setFloor(null); });
+    return () => { alive = false; };
+  }, [nationalId, record]);
+
   if (!nationalId?.trim()) {
     return (
       <div className={`rounded-xl p-6 text-center text-sm ${text.muted}`} style={glassCard}>
@@ -165,9 +180,45 @@ export function CrossHospitalPanel({ nationalId }: Props) {
     const mayRecordConsent = canManageConsent(user);
     return (
       <div className="space-y-4">
+        {/* Tier 1 — what everyone already sees, no gate: the cross-hospital safety floor. */}
+        {floor?.found && (
+          <div className="rounded-2xl p-4" style={glassCard}>
+            <div className={`flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>
+              <ShieldCheck className="w-3.5 h-3.5" /> Always visible — cross-hospital safety summary
+            </div>
+            <p className={`text-[11px] mt-1 ${text.muted}`}>
+              The safety minimum needs no consent. Breaking the glass below adds the full history:
+              diagnoses, labs &amp; documents, notes, discharge summaries and safety screenings.
+            </p>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {([
+                ['Allergies', floor.allergies],
+                ['Chronic conditions', floor.chronicConditions],
+                ['Active medications', floor.activeMedications],
+              ] as const).map(([label, items]) => (
+                <div key={label} className={`rounded-xl p-2.5 ${isDark ? 'bg-white/[0.03]' : 'bg-slate-50'}`}>
+                  <p className={`text-[10px] font-bold uppercase tracking-wide ${text.muted}`}>{label}</p>
+                  {(items?.length ?? 0) === 0 ? (
+                    <p className={`text-[11px] mt-1 ${text.muted}`}>None on file</p>
+                  ) : (
+                    <ul className="mt-1 space-y-0.5">
+                      {items!.map((it, i) => (
+                        <li key={i} className={`text-[11px] ${text.body}`}>
+                          {it.detail}
+                          <span className={`ml-1 text-[9px] ${text.muted}`}>({it.sourceHospital})</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="rounded-xl p-6 text-center" style={glassCard}>
           <Lock className="w-10 h-10 mx-auto text-amber-500 mb-3" />
-          <h3 className={`text-sm font-bold ${text.heading}`}>Cross-hospital record is locked</h3>
+          <h3 className={`text-sm font-bold ${text.heading}`}>Deep clinical record is locked</h3>
           <p className={`text-xs ${text.muted} mt-1 max-w-md mx-auto`}>
             This patient is registered at {record.linkedHospitalCount} SmartTriage hospital
             {record.linkedHospitalCount === 1 ? '' : 's'}, but has no active consent to share their

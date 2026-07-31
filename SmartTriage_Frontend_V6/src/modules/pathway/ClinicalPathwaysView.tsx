@@ -13,6 +13,9 @@ import {
   Bug, Wind, Brain, Droplets, Heart, Siren, FileText,
 } from 'lucide-react';
 import { useAuthStore, canActivatePathway } from '@/store/authStore';
+import { visitApi } from '@/api/visits';
+import type { VisitResponse } from '@/api/types';
+import { useCanSeeAllZones } from '@/hooks/useCanSeeAllZones';
 import { PatientContextLine } from '@/components/PatientContextLine';
 import { chartPath } from '@/lib/chartNav';
 import { pathwayApi } from '@/api/pathway';
@@ -124,6 +127,30 @@ export function ClinicalPathwaysView() {
 
   // ── Active visit search for active pathways ──
   const [activeVisitIdInput, setActiveVisitIdInput] = useState('');
+
+  // Current-patient dropdown (same pattern as Consultations/ICU): active visits
+  // scoped to the caller's zones, with a paste-an-ID fallback for edge cases.
+  const access = useCanSeeAllZones();
+  const [pickerVisits, setPickerVisits] = useState<VisitResponse[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  useEffect(() => {
+    if (!hospitalId || access.isLoading) return;
+    let alive = true;
+    setPickerLoading(true);
+    const fetchVisits = access.canSeeAllZones
+      ? visitApi.getActiveByHospital(hospitalId, 0, 200)
+      : visitApi.getActiveForCallerByHospital(hospitalId, 0, 200);
+    fetchVisits
+      .then((pageRes) => { if (alive) setPickerVisits(pageRes.content || []); })
+      .catch(() => { if (alive) setPickerVisits([]); })
+      .finally(() => { if (alive) setPickerLoading(false); });
+    return () => { alive = false; };
+  }, [hospitalId, access.isLoading, access.canSeeAllZones]);
+  const visitLabel = (v: VisitResponse) => {
+    const where = [v.currentEdZone?.replace(/_/g, ' '), v.currentBedLabel ? `Bed ${v.currentBedLabel}` : null]
+      .filter(Boolean).join(' · ');
+    return `${v.patientName} — ${v.visitNumber}${where ? ` · ${where}` : ''}`;
+  };
   const [activeVisitSearched, setActiveVisitSearched] = useState(false);
 
   const errMsg = (err: unknown, fallback: string) =>
@@ -402,15 +429,33 @@ export function ClinicalPathwaysView() {
               </div>
             )}
             {mainView === 'active' && (
-              <div className="flex-1 flex gap-2">
-                <div className="relative flex-1">
+              <div className="flex-1 flex flex-col sm:flex-row gap-2">
+                <select
+                  value={pickerVisits.some((v) => v.id === activeVisitIdInput) ? activeVisitIdInput : ''}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setActiveVisitIdInput(e.target.value);
+                      loadActivePathways(e.target.value);
+                    }
+                  }}
+                  className={`flex-1 px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all ${text.body}`}
+                  style={glassInner}
+                >
+                  <option value="">
+                    {pickerLoading ? 'Loading current patients…'
+                      : pickerVisits.length === 0 ? 'No active patients found — paste a visit ID'
+                      : 'Select a current patient…'}
+                  </option>
+                  {pickerVisits.map((v) => <option key={v.id} value={v.id}>{visitLabel(v)}</option>)}
+                </select>
+                <div className="relative sm:w-56">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
                     type="text"
-                    value={activeVisitIdInput}
+                    value={pickerVisits.some((v) => v.id === activeVisitIdInput) ? '' : activeVisitIdInput}
                     onChange={(e) => setActiveVisitIdInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && loadActivePathways(activeVisitIdInput)}
-                    placeholder="Enter visit ID or visit number (V-…) to view active pathways..."
+                    placeholder="…or paste a visit ID"
                     className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all placeholder-slate-400 ${text.body}`}
                     style={glassInner}
                   />
@@ -419,7 +464,7 @@ export function ClinicalPathwaysView() {
                   onClick={() => loadActivePathways(activeVisitIdInput)}
                   className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-slate-800 to-slate-700 hover:shadow-lg rounded-xl transition-all shadow-md"
                 >
-                  <Search className="w-3.5 h-3.5" /> Search
+                  <Search className="w-3.5 h-3.5" /> Load
                 </button>
               </div>
             )}
@@ -1000,19 +1045,24 @@ export function ClinicalPathwaysView() {
             </div>
             <div className="mb-5">
               <label className={`block text-[11px] font-bold uppercase tracking-wider mb-2 ${text.muted}`}>
-                Visit ID *
+                Patient *
               </label>
-              <input
-                type="text"
+              <select
                 value={activateVisitId}
                 onChange={(e) => setActivateVisitId(e.target.value)}
-                placeholder="Enter the visit ID..."
                 autoFocus
                 className={`w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all ${
-                  isDark ? 'text-white placeholder-slate-500' : 'text-slate-800 placeholder-slate-400'
+                  isDark ? 'text-white' : 'text-slate-800'
                 }`}
                 style={glassInner}
-              />
+              >
+                <option value="">
+                  {pickerLoading ? 'Loading current patients…'
+                    : pickerVisits.length === 0 ? 'No active patients found'
+                    : 'Select the patient for this pathway…'}
+                </option>
+                {pickerVisits.map((v) => <option key={v.id} value={v.id}>{visitLabel(v)}</option>)}
+              </select>
             </div>
             <div className="flex items-center justify-end gap-3">
               <button
